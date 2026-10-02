@@ -291,7 +291,9 @@ node tools/scripts/vbb-merge-edit-bench.cjs <v1> <v2>
   1. 24fps 源阶梯 **24→12**；电影/摄像判定 `blackboxIsMovieLike`
   2. **先探底宽深档** → 不行早弃帧；行则 **宽度二分锁帧**（少白跑 420/400/380）
   3. **试档缓存**；电影向 gifsicle lossy 更积极；O3 后可选 lossy 腾预算再加宽
-- **未上（环境限制）**：GitHub Pages 难开 COOP/COEP → gifski-wasm 多线程暂缓；原生 gifski 进统一桥列为下一步（需装 gifski 二进制）
+- **原生 gifski（已上）**：统一桥 `/ff/gifski/*`（session + encode）；有 gifski 二进制走多线程原生，否则 ffmpeg palette；黑盒无水印时优先，失败回退 wasm
+- **未上（环境限制）**：GitHub Pages 难开 COOP/COEP → gifski-wasm 多线程仍暂缓（原生路径已多线程）
+- **15fps**：未全删。默认阶梯与 ≈30 源仍为 `20→15→12` / `30→15→12`；电影 24 / 屏录 25 已避开 15
 - **单测**：`vbb-blackbox-fps.test.js` 覆盖 24/25 与源码同步
 
 ### 2026-10-02（锁硬约束 · 不分段）

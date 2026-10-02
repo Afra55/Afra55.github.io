@@ -90,6 +90,7 @@
         inspectJs,
         ffmpegJs,
         ytdlpJs,
+        gifskiJs,
         gitServerJs,
         gitOpsJs,
         gitNoopSh,
@@ -109,6 +110,7 @@
         fetchTextAsset("./adb-bridge/device-inspect.js").catch(() => ""),
         fetchTextAsset("./ffmpeg-bridge/server.js").catch(() => ""),
         fetchTextAsset("./ffmpeg-bridge/ytdlp-core.js").catch(() => ""),
+        fetchTextAsset("./ffmpeg-bridge/gifski-core.js").catch(() => ""),
         fetchTextAsset("./git-bridge/server.js").catch(() => ""),
         fetchTextAsset("./git-bridge/git-ops.js").catch(() => ""),
         fetchTextAsset("./git-bridge/noop-editor.sh").catch(() => "#!/bin/sh\nexit 0\n"),
@@ -145,7 +147,7 @@
         "本压缩包必须同时保留：",
         "  - server.js",
         "  - scrcpy-mirror.js / scrcpy-ctrl.js / device-inspect.js / resolve-port.js",
-        "  - ffmpeg-bridge/server.js + ytdlp-core.js",
+        "  - ffmpeg-bridge/server.js + ytdlp-core.js + gifski-core.js",
         "  - git-bridge/server.js + git-ops.js + noop-editor.*",
         "  - fileunlock-bridge/server.js + lock-ops.js（Windows 文件占用解锁）",
         "  - pandoc-bridge/server.js + pandoc-ops.js（Markdown → 任意格式，需本机装 pandoc）",
@@ -172,6 +174,7 @@
       if (resolvePortJs) zip.file("resolve-port.js", resolvePortJs);
       zip.file("ffmpeg-bridge/server.js", ffmpegJs);
       if (ytdlpJs) zip.file("ffmpeg-bridge/ytdlp-core.js", ytdlpJs);
+      if (gifskiJs) zip.file("ffmpeg-bridge/gifski-core.js", gifskiJs);
       zip.file("git-bridge/server.js", gitServerJs);
       zip.file("git-bridge/git-ops.js", gitOpsJs);
       if (gitNoopSh) zip.file("git-bridge/noop-editor.sh", gitNoopSh, { unixPermissions: 0o755 });

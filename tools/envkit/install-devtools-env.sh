@@ -323,7 +323,7 @@ sync_bridges() {
   chmod +x "$BRIDGE_DIR/adb-bridge/start-linux.sh" "$BRIDGE_DIR/adb-bridge/start-mac.command" 2>/dev/null || true
 
   # FFmpeg / yt-dlp
-  for f in server.js ytdlp-core.js start-linux.sh start-mac.command; do
+  for f in server.js ytdlp-core.js gifski-core.js start-linux.sh start-mac.command; do
     info "ffmpeg-bridge/$f"
     download_file "${BASE_URL}/ffmpeg-bridge/$f" "$BRIDGE_DIR/ffmpeg-bridge/$f" || warn "下载失败 $f"
   done
@@ -359,6 +359,7 @@ sync_bridges() {
   for f in \
     "$BRIDGE_DIR/adb-bridge/server.js" \
     "$BRIDGE_DIR/ffmpeg-bridge/server.js" \
+    "$BRIDGE_DIR/ffmpeg-bridge/gifski-core.js" \
     "$BRIDGE_DIR/git-bridge/server.js" \
     "$BRIDGE_DIR/git-bridge/git-ops.js" \
     "$BRIDGE_DIR/fileunlock-bridge/server.js" \

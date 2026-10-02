@@ -1313,6 +1313,225 @@
         return Math.round((100 / cs) * 10) / 10;
       }
 
+      /** 本机桥原生 GIF：探测缓存（失败冷却 20s） */
+      let nativeGifskiProbe = { at: 0, ok: false, base: "", prefix: "/ff", engine: "" };
+      function nativeGifskiToken() {
+        try {
+          return (
+            (window.devtoolsBridgeToken && window.devtoolsBridgeToken.read && window.devtoolsBridgeToken.read()) ||
+            localStorage.getItem("devtools-bridge-token") ||
+            "devtools-bridge"
+          );
+        } catch (_) {
+          return "devtools-bridge";
+        }
+      }
+      function nativeGifskiHeaders(extra = {}) {
+        const t = String(nativeGifskiToken() || "devtools-bridge").trim() || "devtools-bridge";
+        return {
+          "X-Adb-Token": t,
+          "X-Ffmpeg-Token": t,
+          ...extra,
+        };
+      }
+      async function probeNativeGifski(force = false) {
+        const now = Date.now();
+        if (!force && nativeGifskiProbe.at && now - nativeGifskiProbe.at < 20000) {
+          return nativeGifskiProbe;
+        }
+        let base = "http://127.0.0.1:17888";
+        try {
+          base = (
+            localStorage.getItem("devtools-ffmpeg-base") ||
+            localStorage.getItem("devtools-adb-base") ||
+            base
+          ).replace(/\/$/, "");
+        } catch (_) {}
+        const token = nativeGifskiToken();
+        try {
+          if (window.devtoolsBridgeToken?.discoverBase) {
+            const discovered = await window.devtoolsBridgeToken.discoverBase(base, token, { kind: "unified" });
+            if (discovered?.base) base = String(discovered.base).replace(/\/$/, "");
+          }
+        } catch (_) {}
+        const candidates = [
+          { base, prefix: "/ff" },
+          { base: "http://127.0.0.1:17888", prefix: "/ff" },
+          { base: "http://127.0.0.1:17889", prefix: "" },
+        ];
+        for (const c of candidates) {
+          try {
+            const res = await fetch(`${c.base}${c.prefix}/gifski/status`, {
+              method: "GET",
+              headers: nativeGifskiHeaders(),
+              cache: "no-store",
+              mode: "cors",
+            });
+            if (!res.ok) continue;
+            const data = await res.json();
+            if (data?.nativeEncode || data?.ok) {
+              nativeGifskiProbe = {
+                at: now,
+                ok: Boolean(data.nativeEncode),
+                base: c.base,
+                prefix: c.prefix,
+                engine: data.engine || "",
+              };
+              return nativeGifskiProbe;
+            }
+          } catch (_) {}
+        }
+        nativeGifskiProbe = { at: now, ok: false, base: "", prefix: "/ff", engine: "" };
+        return nativeGifskiProbe;
+      }
+
+      /** 同一源文件复用上传会话，黑盒多档试探不重复传片 */
+      const nativeGifskiSessions = new Map();
+      function nativeSessionKey(file) {
+        if (!file) return "";
+        return `${file.name || ""}|${file.size || 0}|${file.lastModified || 0}`;
+      }
+      async function ensureNativeGifskiSession(file, probe) {
+        const key = nativeSessionKey(file);
+        const hit = nativeGifskiSessions.get(key);
+        if (hit && hit.sessionId && Date.now() - hit.at < 40 * 60 * 1000) {
+          hit.at = Date.now();
+          return hit.sessionId;
+        }
+        const url = `${probe.base}${probe.prefix}/gifski/session`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: nativeGifskiHeaders({
+            "X-Filename": encodeURIComponent(file.name || "video.bin"),
+            "Content-Type": "application/octet-stream",
+          }),
+          body: file,
+          mode: "cors",
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.sessionId) {
+          throw new Error(data?.error || `原生会话失败 HTTP ${res.status}`);
+        }
+        nativeGifskiSessions.set(key, { sessionId: data.sessionId, at: Date.now(), base: probe.base, prefix: probe.prefix });
+        return data.sessionId;
+      }
+
+      /**
+       * 统一桥 /ff/gifski：本机多线程原生编码（有 gifski 用 gifski，否则 ffmpeg palette）。
+       * 失败返回 null，由上层回退 wasm。
+       */
+      async function encodeV2gGifNative(opts) {
+        const file = opts.file || v2gSourceFile;
+        if (!file) return null;
+        // 需要水印时不走原生（桥路径未烧水印）
+        if (!opts.skipWatermark && !opts.forceNative) return null;
+        const probe = await probeNativeGifski();
+        if (!probe.ok) return null;
+        const tPhase = performance.now();
+        const fpsCap = opts.allowWide ? 30 : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
+        const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
+        const hardCapW = opts.allowWide
+          ? V2G_ENCODE_HARD_W
+          : Math.max(720, Number(currentMediaPerf().manualWidthCap) || 720);
+        const maxW = Math.min(hardCapW, Math.max(64, Number(opts.maxW) || 360));
+        const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
+        const rawGifski = Number(opts.gifskiQuality);
+        const gifskiQuality = Number.isFinite(rawGifski)
+          ? Math.max(1, Math.min(100, Math.round(rawGifski)))
+          : gifQualityToGifskiQuality(quality);
+        const bright = opts.skipBright
+          ? 0
+          : Number.isFinite(opts.brightness)
+            ? Number(opts.brightness)
+            : readV2gBrightness();
+        let startSec;
+        let span;
+        if (Number.isFinite(opts.startSec) && Number.isFinite(opts.span)) {
+          startSec = Math.max(0, Number(opts.startSec));
+          span = Math.max(0.05, Number(opts.span));
+        } else {
+          ({ startSec, span } = resolveV2gSpan());
+        }
+        const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
+        const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
+        const effSpan = span / speed;
+        const frameCount = Math.max(2, Math.round(effSpan * fps));
+        const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
+        const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
+        const crop = normalizeV2gCrop(opts.crop, srcW, srcH);
+        const effW = crop ? crop.w : srcW;
+        const effH = crop ? crop.h : srcH;
+        const scale = effW > maxW && effW > 0 ? maxW / effW : 1;
+        const outW = effW ? Math.max(2, Math.round((effW * scale) / 2) * 2) : maxW;
+        const outH = effH ? Math.max(2, Math.round((effH * scale) / 2) * 2) : Math.round(outW * 0.75);
+        const stageLabel = (speed > 1 ? `加速${speed.toFixed(2)}× · ` : "") + (opts.stageLabel ? `${opts.stageLabel} · ` : "");
+        const mapProgress = (local, text) => {
+          if (typeof opts.onProgress === "function") opts.onProgress(local, text);
+          else setV2gProgress(true, local, text);
+        };
+        if (aborted()) throw new Error("已取消");
+        mapProgress(0.08, `${stageLabel}连接本机原生编码器…`);
+        const sessionId = await ensureNativeGifskiSession(file, probe);
+        if (aborted()) throw new Error("已取消");
+        mapProgress(0.22, `${stageLabel}本机编码 GIF（多线程）…`);
+        const q = new URLSearchParams();
+        q.set("sessionId", sessionId);
+        q.set("fps", String(fps));
+        q.set("width", String(outW));
+        q.set("quality", String(gifskiQuality));
+        q.set("startSec", String(startSec));
+        q.set("span", String(span));
+        q.set("speed", String(speed));
+        if (Math.abs(bright) >= 0.01) q.set("brightness", String(bright));
+        if (crop) q.set("crop", JSON.stringify({ w: crop.w, h: crop.h, x: crop.x, y: crop.y }));
+        if (Number(opts.lossy) > 0) q.set("lossy", String(Math.round(Number(opts.lossy))));
+        const encUrl = `${probe.base}${probe.prefix}/gifski/encode?${q.toString()}`;
+        const res = await fetch(encUrl, {
+          method: "POST",
+          headers: nativeGifskiHeaders(),
+          mode: "cors",
+        });
+        if (aborted()) throw new Error("已取消");
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          let msg = `原生编码 HTTP ${res.status}`;
+          try {
+            msg = JSON.parse(errText)?.error || msg;
+          } catch (_) {
+            if (errText) msg = errText.slice(0, 200);
+          }
+          throw new Error(msg);
+        }
+        const buf = await res.arrayBuffer();
+        const blob = new Blob([buf], { type: "image/gif" });
+        if (!blob.size) throw new Error("原生编码未产出 GIF");
+        const engine = res.headers.get("X-Gifski-Engine") || probe.engine || "gifski-native";
+        mapProgress(0.99, `${stageLabel}完成`);
+        vbbLog(
+          `[vbb-phase] 原生${engine} ${Math.round(performance.now() - tPhase)}ms · ${fps}fps 宽${outW} ${formatKb(blob.size)} q=${gifskiQuality}`
+        );
+        return {
+          blob,
+          frameCount,
+          span: effSpan,
+          fps,
+          playbackFps: gifEffectivePlaybackFps(fps),
+          speed,
+          outW,
+          outH,
+          framesCapped: false,
+          quality,
+          maxW,
+          maxColors: 0,
+          engine: engine.indexOf("gifski") >= 0 ? "gifski" : "ffmpeg",
+          gifskiQuality,
+          watermark: false,
+          brightness: bright,
+          native: true,
+          multithreaded: res.headers.get("X-Gifski-Multithreaded") === "1",
+        };
+      }
+
       /**
        * 源是否允许冲高帧：未知或源 ≥ 目标即可。
        * 抽帧走 ffmpeg `fps=`；但 25→20 / 25→15 会不规则抽帧，候选列表已避开。
@@ -1721,8 +1940,9 @@
       }
 
       /**
-       * 黑盒 GIF 编码入口：优先 gifski（更小更清晰），失败回退 ffmpeg palettegen 管线。
+       * 黑盒 GIF 编码入口：桥上原生 gifski（多线程）→ wasm gifski → ffmpeg palette。
        * 取消不算失败，直接抛出（不触发回退）。
+       * 需要水印时跳过原生（桥路径暂不烧水印），走 wasm。
        */
       const VBB_RUN_KEY = "devtools-vbb-running";
       async function encodeBlackboxGif(opts) {
@@ -1730,6 +1950,25 @@
         try { localStorage.setItem(VBB_RUN_KEY, "1"); } catch (_) {}
         try {
           if (opts && opts.forceFfmpeg) return await encodeV2gGifFfmpeg(opts);
+          if (opts && opts.forceWasm) {
+            try {
+              return await encodeV2gGifGifski(opts);
+            } catch (err) {
+              if (String(err && err.message) === "已取消") throw err;
+              vbbLog(`[vbb] gifski wasm 不可用，回退 ffmpeg：${err && err.message ? err.message : err}`);
+              return await encodeV2gGifFfmpeg(opts);
+            }
+          }
+          // 原生桥：黑盒默认 skipWatermark，可走本机多线程；需水印则跳过
+          if (opts?.forceNative || opts?.skipWatermark) {
+            try {
+              const native = await encodeV2gGifNative(opts);
+              if (native) return native;
+            } catch (err) {
+              if (String(err && err.message) === "已取消") throw err;
+              vbbLog(`[vbb] 原生 gifski 跳过：${err && err.message ? err.message : err}`);
+            }
+          }
           try {
             return await encodeV2gGifGifski(opts);
           } catch (err) {

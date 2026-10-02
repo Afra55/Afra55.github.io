@@ -37,7 +37,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.5.2";
+const BRIDGE_VERSION = "0.5.3";
 const FEATURES = [
   "local-fs",
   "probe",
@@ -84,6 +84,7 @@ const FEATURES = [
   "segment",
   "split-parts",
   "gif",
+  "gifski",
   "webp",
   "thumb",
   "frames",
@@ -101,6 +102,15 @@ const FEATURES = [
   "ytdlp-probe",
   "ytdlp-download",
 ];
+
+let gifskiCore = null;
+try {
+  gifskiCore = require("./gifski-core");
+} catch (_) {
+  gifskiCore = null;
+}
+
+const GIFSKI_SESSIONS = new Map();
 
 const VIDEO_EXTS = new Set([
   ".mp4",
@@ -140,8 +150,9 @@ function applyCors(headers, origin) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Vary"] = "Origin";
     headers["Access-Control-Allow-Headers"] = "Content-Type, X-Ffmpeg-Token, X-Adb-Token, X-Filename";
-    headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
-    headers["Access-Control-Expose-Headers"] = "Content-Disposition";
+    headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS";
+    headers["Access-Control-Expose-Headers"] =
+      "Content-Disposition, X-Gifski-Engine, X-Gifski-Width, X-Gifski-Fps, X-Gifski-Quality, X-Gifski-Multithreaded";
   }
 }
 
@@ -3956,10 +3967,11 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname.length > 1 && pathname.endsWith("/")) pathname = pathname.replace(/\/+$/, "");
 
     if (req.method === "GET" && pathname === "/health") {
-      const [ffmpeg, ffprobe, ytdlp] = await Promise.all([
+      const [ffmpeg, ffprobe, ytdlp, gifski] = await Promise.all([
         checkBinary("ffmpeg", ["-version"]),
         checkBinary("ffprobe", ["-version"]),
         ytdlpApi ? ytdlpApi.checkYtdlp() : Promise.resolve({ ok: false, error: "模块未加载" }),
+        gifskiCore ? gifskiCore.status() : Promise.resolve({ ok: false, nativeEncode: false, engine: "none" }),
       ]);
       sendJson(
         res,
@@ -3975,11 +3987,16 @@ async function handleRequest(req, res, opts = {}) {
           ffmpeg,
           ffprobe,
           ytdlp,
-          tools: { ffmpeg, ffprobe, ytdlp },
+          gifski,
+          tools: { ffmpeg, ffprobe, ytdlp, gifski },
           setup: {
             ffmpeg: ffmpeg.ok ? "" : ffmpeg.setup || "",
             ffprobe: ffprobe.ok ? "" : ffprobe.setup || "",
             ytdlp: ytdlp.ok ? "" : ytdlp.setup || ytdlp.error || "",
+            gifski:
+              gifski?.gifski?.available
+                ? ""
+                : "可选：安装 gifski 到 PATH，或放到 ffmpeg-bridge/vendor/gifski/；无则用 ffmpeg palette",
           },
           roots: localFsRoots(),
           ytdlpMount: "/ytdlp",
@@ -4208,6 +4225,135 @@ async function handleRequest(req, res, opts = {}) {
       return;
     }
 
+    // —— 原生 GIF（gifski / ffmpeg palette）——
+    const purgeGifskiSessions = () => {
+      const now = Date.now();
+      for (const [id, s] of GIFSKI_SESSIONS) {
+        if (now - (s.at || 0) > 45 * 60 * 1000) {
+          GIFSKI_SESSIONS.delete(id);
+          try {
+            fs.rmSync(s.dir, { recursive: true, force: true });
+          } catch (_) {}
+        }
+      }
+    };
+
+    if (req.method === "GET" && (pathname === "/gifski" || pathname === "/gifski/status")) {
+      if (!gifskiCore) {
+        sendJson(res, 503, { ok: false, error: "gifski 模块未加载" }, origin);
+        return;
+      }
+      const st = await gifskiCore.status();
+      sendJson(res, 200, st, origin);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/gifski/session") {
+      if (!gifskiCore) {
+        sendJson(res, 503, { ok: false, error: "gifski 模块未加载" }, origin);
+        return;
+      }
+      purgeGifskiSessions();
+      const filename = safeUploadFilename(req.headers["x-filename"] || url.searchParams.get("filename") || "upload.bin");
+      const id = `gs-${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
+      const dir = path.join(TMP_ROOT, "gifski", id);
+      fs.mkdirSync(dir, { recursive: true });
+      const inPath = path.join(dir, filename);
+      const size = await saveRequestToFile(req, inPath, 512 * 1024 * 1024);
+      if (size < 32) throw Object.assign(new Error("上传文件过小或为空"), { status: 400 });
+      GIFSKI_SESSIONS.set(id, { id, dir, inPath, filename, size, at: Date.now() });
+      sendJson(res, 200, { ok: true, sessionId: id, size, filename }, origin);
+      return;
+    }
+
+    if (req.method === "DELETE" && pathname.startsWith("/gifski/session/")) {
+      const id = pathname.slice("/gifski/session/".length).split("/")[0];
+      const s = GIFSKI_SESSIONS.get(id);
+      if (s) {
+        GIFSKI_SESSIONS.delete(id);
+        try {
+          fs.rmSync(s.dir, { recursive: true, force: true });
+        } catch (_) {}
+      }
+      sendJson(res, 200, { ok: true }, origin);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/gifski/encode") {
+      if (!gifskiCore) {
+        sendJson(res, 503, { ok: false, error: "gifski 模块未加载" }, origin);
+        return;
+      }
+      purgeGifskiSessions();
+      const q = url.searchParams;
+      const sessionId = String(q.get("sessionId") || q.get("session") || "").trim();
+      let session = sessionId ? GIFSKI_SESSIONS.get(sessionId) : null;
+      let workDir = null;
+      let inPath = "";
+      if (session) {
+        session.at = Date.now();
+        inPath = session.inPath;
+        workDir = session.dir;
+        // 排空可能残留的 body，避免 keep-alive 挂住
+        try {
+          await readBody(req, 64 * 1024);
+        } catch (_) {}
+      } else {
+        const filename = safeUploadFilename(req.headers["x-filename"] || q.get("filename") || "upload.bin");
+        const id = `gs-${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
+        workDir = path.join(TMP_ROOT, "gifski", id);
+        fs.mkdirSync(workDir, { recursive: true });
+        inPath = path.join(workDir, filename);
+        const size = await saveRequestToFile(req, inPath, 512 * 1024 * 1024);
+        if (size < 32) throw Object.assign(new Error("上传文件过小或为空"), { status: 400 });
+      }
+      let crop = null;
+      try {
+        if (q.get("crop")) crop = JSON.parse(String(q.get("crop")));
+      } catch (_) {
+        crop = null;
+      }
+      const encOpts = {
+        fps: Number(q.get("fps") || 20),
+        width: Number(q.get("width") || q.get("maxW") || 420),
+        quality: Number(q.get("quality") || q.get("gifskiQuality") || 90),
+        startSec: Number(q.get("startSec") || 0),
+        span: Number(q.get("span") || q.get("durationSec") || 0),
+        speed: Number(q.get("speed") || 1),
+        brightness: Number(q.get("brightness") || 0),
+        lossy: Number(q.get("lossy") || 0),
+        extra: q.get("extra") === "1" || q.get("extra") === "true",
+        fast: q.get("fast") === "1" || q.get("fast") === "true",
+        denoise: q.get("denoise") !== "0" && q.get("denoise") !== "false",
+        crop,
+      };
+      const outPath = path.join(workDir, `out-${Date.now().toString(36)}.gif`);
+      const result = await gifskiCore.encodeNative(inPath, outPath, encOpts);
+      const data = fs.readFileSync(outPath);
+      try {
+        fs.unlinkSync(outPath);
+      } catch (_) {}
+      if (!session) {
+        try {
+          fs.rmSync(workDir, { recursive: true, force: true });
+        } catch (_) {}
+      }
+      const headers = {
+        "Content-Type": "image/gif",
+        "Content-Length": data.length,
+        "Cache-Control": "no-store",
+        "X-Gifski-Engine": result.engine || "",
+        "X-Gifski-Width": String(result.width || ""),
+        "X-Gifski-Fps": String(result.fps || ""),
+        "X-Gifski-Quality": String(result.quality || ""),
+        "X-Gifski-Multithreaded": result.multithreaded ? "1" : "0",
+      };
+      applyCors(headers, origin);
+      res.writeHead(200, headers);
+      res.end(data);
+      return;
+    }
+
     sendJson(res, 404, { ok: false, error: "未找到接口" }, origin);
   } catch (err) {
     const status = err.status || (/未授权/.test(String(err.message)) ? 401 : 400);
@@ -4255,6 +4401,7 @@ module.exports = {
   findMemoStorageFile,
   findMdmDocFile,
   checkYtdlp: (...args) => (ytdlpApi ? ytdlpApi.checkYtdlp(...args) : Promise.resolve({ ok: false, error: "模块未加载" })),
+  checkGifski: (...args) => (gifskiCore ? gifskiCore.status(...args) : Promise.resolve({ ok: false, nativeEncode: false, engine: "none" })),
 };
 
 if (require.main === module) {
