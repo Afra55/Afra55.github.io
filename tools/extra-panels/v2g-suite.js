@@ -91,26 +91,26 @@
       }
       /**
        * 黑盒：起点 420 宽 · q1 · 上限默认 10MB；整段处理（不为 ≈30s 自动切两段）。
-       * 主档 20→15→12（10MB 下短片优先 20；≈20s 主 15 有余量冲 20；≈30s 主 12）。
+       * 主档按时长+片源：默认 20→15→12；25fps 屏录用 25→12.5（避免 25→20 不规则抽帧「卡卡的」）。
        * SPAN 分档（有效时长 = span/speed）：
-       *   ≤ HIGH_PRIMARY(16s)：主试 20 @ 420
-       *   ≤ MID(24s)：主试 15 @ 420；中长片保 15 可走到 q22/q30（拼接约 22s 勿轻易掉 12）
-       *   > MID：主试 12 @ 420；很松抬 15 再加宽
+       *   ≤ HIGH_PRIMARY(16s)：主试高档（20 或片源整除档如 25）@ 420
+       *   ≤ MID(24s)：主试中档（15 或 12.5）；可走到 q22/q30 保流畅
+       *   > MID：主试低档（12 / 12.5）；很松再抬
        * 「压缩时长」= 倍速缩短成片时长，帧延迟仍按目标 fps 均匀写，不是更顿的原因。
-       * 小于规则：加宽 → 提帧；超过规则：缩宽 → 降质 → 降帧到 12。
+       * 小于规则：加宽 → 提帧；超过规则：缩宽 → 降质 → 降帧。
        * 短片（≤24s）加宽上限直接到源宽/1280，目标贴满 ~99% 预算；长片仍限约 2× 控成本。
-       * 难压：高质量近超限先轻压再深降质；贴满但宽<420 时可降帧换可读宽。
+       * 难压：高质量近超限先轻压再深降质；贴满但宽<420 时可降帧换可读宽（仍只降到片源整除档）。
        */
-      const V2G_BLACKBOX_MAX_FPS = 20;
+      const V2G_BLACKBOX_MAX_FPS = 30;
       const V2G_BLACKBOX_FPS_LIST = [20, 15, 12];
-      /** ≤16s：主打 20fps（10MB 流畅优化） */
+      /** ≤16s：主打高帧（10MB 流畅优化） */
       const V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC = 16;
-      /** ≤24s：走 15 主档（≈20s）；更长走 12 主档（≈30s） */
+      /** ≤24s：走中档；更长走低档 */
       const V2G_BLACKBOX_SHORT_SPAN_SEC = 24;
       const V2G_BLACKBOX_MID_SPAN_SEC = 24;
       /** 产品：单段整段拉满；不因时长自动切片成多条 GIF */
       const V2G_BLACKBOX_OPT_MAX_SPAN_SEC = 36;
-      /** 余量提帧 20fps：≈20s 档有预算也可冲（ffmpeg fps= 可处理 30→20） */
+      /** 默认余量提帧目标（30fps 源等）；25fps 源见 blackboxFpsCandidates */
       const V2G_BLACKBOX_HIGH_FPS = 20;
       const V2G_BLACKBOX_HIGH_FPS_MAX_SPAN = 20;
       const V2G_BLACKBOX_HIGH_FPS_MIN_W = 420;
@@ -1360,13 +1360,14 @@
       }
 
       /**
-       * 源是否允许冲 20fps：源≥20 或未知即可。
-       * 抽帧走 ffmpeg `fps=` 滤波器（非整除隔帧），30→20 可用；不再要求整数分之一。
+       * 源是否允许冲高帧：未知或源 ≥ 目标即可。
+       * 抽帧走 ffmpeg `fps=`；但 25→20 / 25→15 会不规则抽帧，候选列表已避开。
        */
-      function blackboxSrcAllowsHighFps(srcFps) {
+      function blackboxSrcAllowsHighFps(srcFps, targetFps = V2G_BLACKBOX_HIGH_FPS) {
         const src = Number(srcFps) || 0;
+        const t = Number(targetFps) || V2G_BLACKBOX_HIGH_FPS;
         if (src <= 0) return true;
-        return src + 0.5 >= V2G_BLACKBOX_HIGH_FPS;
+        return src + 0.5 >= t;
       }
 
       /**
@@ -1885,40 +1886,51 @@
       }
 
       /**
-       * 按时长选主试帧率：≤16→20；≤24→15；更长→12。
+       * 按时长 + 片源选主试帧率。
+       * 25fps 屏录短片主试 25（整帧），中长主试 12.5（隔帧）；勿主试 20/15（观感顿挫）。
        */
-      function blackboxPrimaryFps(span) {
+      function blackboxPrimaryFps(span, srcFps) {
         const s = Number(span) || 0;
-        if (s <= V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01) return V2G_BLACKBOX_HIGH_FPS;
-        if (s <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01) return 15;
-        return 12;
+        const cands = blackboxFpsCandidates(srcFps);
+        if (!cands.length) return V2G_BLACKBOX_RETRY_MIN_FPS;
+        if (s <= V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01) return cands[0];
+        if (s <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01) {
+          return cands.length >= 2 ? cands[1] : cands[0];
+        }
+        return cands[cands.length - 1];
       }
 
       /**
-       * 黑盒主决策帧率阶梯：20 → 15 → 12（去掉 10）。
+       * 黑盒帧率阶梯：按片源选「时间上均匀」的档，避免屏录不规则抽帧。
+       * - ≈25fps：25 → 12.5（整帧 / 隔一帧）
+       * - ≈30fps：30 → 15 → 12
+       * - 其它：20 → 15 → 12
        */
       function blackboxFpsCandidates(srcFps) {
-        void srcFps;
+        const src = Number(srcFps) || 0;
+        if (src >= 24.2 && src <= 25.8) return [25, 12.5];
+        if (src >= 29.2 && src <= 30.8) return [30, 15, 12];
         return V2G_BLACKBOX_FPS_LIST.slice();
       }
 
-      /** 帧率底线：一律 12fps（超预算靠缩宽/降质；不切片、不用 10fps） */
-      function blackboxFpsFloor(_span) {
-        void _span;
-        return V2G_BLACKBOX_RETRY_MIN_FPS;
+      /** 帧率底线：候选最低档（通常 12 / 12.5） */
+      function blackboxFpsFloor(_span, srcFps) {
+        const cands = blackboxFpsCandidates(srcFps);
+        const last = cands[cands.length - 1];
+        return last > 0 ? last : V2G_BLACKBOX_RETRY_MIN_FPS;
       }
 
-      /** 主试列表：从主档往下（≤16s [20,15,12] / ≈20s [15,12] / ≈30s [12]） */
+      /** 主试列表：从主档往下 */
       function resolveBlackboxFpsList(span, srcFps) {
-        const primary = blackboxPrimaryFps(span);
+        const primary = blackboxPrimaryFps(span, srcFps);
         const list = blackboxFpsCandidates(srcFps).filter((f) => f <= primary + 0.01);
-        return list.length ? list : [V2G_BLACKBOX_RETRY_MIN_FPS];
+        return list.length ? list : [blackboxFpsFloor(span, srcFps)];
       }
 
       /**
-       * 余量提帧候选（finish 加宽之后）：
-       * - ≈30s（>MID）：优先 15
-       * - ≤20s 档：预算松、宽≥420、源允许 → 冲 20（倍速不挡；帧率仍均匀）
+       * 余量提帧候选（finish 加宽之后）：只提到片源整除档。
+       * - ≈30s（>MID）：优先抬到中档（15 / 对 25 源则无更高）
+       * - ≤20s 档：预算松、宽够 → 冲高档（20/25/30）
        */
       function blackboxRaiseFpsCandidates(span, srcFps, width, curSize, speed = 1) {
         const s = Number(span) || 0;
@@ -1927,21 +1939,21 @@
         const size = Number(curSize) || 0;
         void speed;
         const list = [];
-        const srcOk15 = src <= 0 || src >= 15 - 0.5;
-        if (!srcOk15) return list;
+        const cands = blackboxFpsCandidates(srcFps);
         if (s > V2G_BLACKBOX_MID_SPAN_SEC + 0.01) {
-          list.push(15);
+          if (cands.length >= 2) list.push(cands[1]);
           return list;
         }
+        const high = cands[0];
         if (
           s > 0.05 &&
           s <= V2G_BLACKBOX_HIGH_FPS_MAX_SPAN + 0.01 &&
           w >= V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5 &&
-          blackboxSrcAllowsHighFps(src) &&
+          blackboxSrcAllowsHighFps(src, high) &&
           size > 0 &&
           size < V2G_BLACKBOX_MAX_BYTES * 0.88
         ) {
-          list.push(V2G_BLACKBOX_HIGH_FPS);
+          list.push(high);
         }
         return list;
       }
@@ -2523,8 +2535,8 @@
             .sort((a, b) => b - a);
           if (!cands.length) return best;
           const f = cands[0];
-          // 冲 20 时要求宽仍 ≥420：宁可留在 15+更宽，也不为高帧掉到糊字区
-          if (f >= V2G_BLACKBOX_HIGH_FPS - 0.01 && width < V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5) {
+          // 冲高档（≥20，含 25/30）时要求宽仍 ≥420：宁可留在中档+更宽，也不为高帧掉到糊字区
+          if (f >= 18 - 0.01 && width < V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5) {
             return best;
           }
           if (isAborted()) throw new Error("已取消");
@@ -2627,26 +2639,23 @@
           if (isShortFill && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.99) {
             await widenPass("短片有余 · 再加宽吃满");
           }
-          // 可读宽优先：已接近贴满但宽 <420（录屏字偏糊）→ 降一档帧率换宽度
-          // 例外：≤24s（含两段拼接）已是 15 时不降到 12——用户反馈「单段顺、拼接卡」主因就是这档
+          // 可读宽优先：已接近贴满但宽 <420（录屏字偏糊）→ 降到下一档整除帧率换宽度
+          // 例外：已是中档及以上（≥15，或 25 源的 12.5）且 ≤24s 时，不继续降帧换宽
           {
             const curMaxW = Number(cur.maxW) || V2G_BLACKBOX_BASE_W;
             const readableMin = V2G_BLACKBOX_BASE_W;
-            const midKeep15 =
-              effSpan <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01 && fpsNow >= 15 - 0.01;
+            const fpsCands = blackboxFpsCandidates(srcFps);
+            const midKeepFluent =
+              effSpan <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01 &&
+              fpsNow >= (fpsCands.length >= 2 ? fpsCands[1] : 15) - 0.01;
             if (
-              !midKeep15 &&
+              !midKeepFluent &&
               curMaxW < readableMin - 0.5 &&
               cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.88 &&
               !atCap()
             ) {
-              const lowerFps =
-                fpsNow >= V2G_BLACKBOX_HIGH_FPS - 0.01
-                  ? 15
-                  : fpsNow >= 15 - 0.01
-                    ? 12
-                    : 0;
-              const floor = blackboxFpsFloor(effSpan);
+              const lowerFps = fpsCands.find((f) => f < fpsNow - 0.01) || 0;
+              const floor = blackboxFpsFloor(effSpan, srcFps);
               if (lowerFps >= floor - 0.01) {
                 // 0.93 留余量：实测等比换算常略超（12@434≈10.00 被硬闸挡回）
                 const scale = Math.sqrt(
@@ -2758,17 +2767,17 @@
               const keepQ = Number(candidate.quality) || Number(common.quality) || V2G_BLACKBOX_QUALITY;
               const shortFluent = span / speed <= V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
               const midFluent = span / speed <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01;
-              // 短片保 20 / 中长片保 15：勿在硬压里先掉到 13（多一次白跑且观感更差）
+              // ≤24s 保当前档帧率（含 25/12.5）：勿在硬压里先掉帧
               let rf;
               let retryQuality;
-              if ((shortFluent || midFluent) && fps >= 15 - 0.01) {
+              if (shortFluent || midFluent) {
                 rf = fps;
                 retryQuality =
                   keepQ < V2G_BLACKBOX_RETRY_QUALITY
                     ? V2G_BLACKBOX_RETRY_QUALITY
                     : Math.min(30, Math.max(keepQ, V2G_BLACKBOX_RETRY_QUALITY) + 7);
               } else {
-                rf = Math.max(blackboxFpsFloor(span / speed), Math.round(fps * k * 2) / 2);
+                rf = Math.max(blackboxFpsFloor(span / speed, srcFps), Math.round(fps * k * 2) / 2);
                 retryQuality =
                   rf <= V2G_BLACKBOX_RETRY_MIN_FPS + 0.01 && k < 0.92
                     ? V2G_BLACKBOX_RETRY_QUALITY
@@ -2920,14 +2929,14 @@
             stageLabel: `${f}FPS·宽${w}`,
             onProgress: (local, text) => onProgress(0.92 + local * 0.05, text),
           });
-        const fpsFloor = blackboxFpsFloor(span / speed);
+        const fpsFloor = blackboxFpsFloor(span / speed, srcFps);
         const effSpanForPick = span / speed;
         vbbLog(
           `[vbb-phase] 决策 fpsList=${JSON.stringify(fpsList)} srcFps=${srcFps} srcW=${srcW} floorW=${floorW} span=${effSpanForPick.toFixed(1)}s · 全程真实编码判定（无估算）· ${currentMediaPerf().label}`
         );
         // ---- 决策：全部用「真实编码」判定，不用估算；整段处理，不为 ≈30s 自动切两段 ----
-        // ≤24s（≈20s 主打）：先 15 再 12；进预算后 finish 里先加宽，短片源合适再冲 20
-        // >24s（≈30s）：先 12；很松抬 15 再加宽；底线 12，不用 10fps
+        // 默认 ≤16s：20→15→12；25fps 源：25→12.5（整除抽帧，避免 20 顿挫）
+        // ≤24s 中档可走深降质保流畅；>24s 主低档，很松再抬
         const trial = async (fps, w, q) => {
           if (isAborted()) throw new Error("已取消");
           const label = `${fps}FPS·宽${w}${q && q > 1 ? `·q${q}` : ""}`;
@@ -3000,7 +3009,10 @@
               if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
               // 短片高帧 / 中长片保15：1.45× 内也硬压，避免过早放弃流畅帧率
               const hardGate =
-                (shortFluent && fps >= 18 - 0.01) || (midFluent && fps >= 15 - 0.01) ? 1.45 : 1.22;
+                (shortFluent && fps >= 18 - 0.01) ||
+                (midFluent && fps >= blackboxPrimaryFps(effSpanForPick, srcFps) - 0.01)
+                  ? 1.45
+                  : 1.22;
               if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES * hardGate) {
                 vbbLog(
                   `[vbb-phase] ${fps}fps 轻压后 ${formatKb(pressed.blob.size)} → 硬压一轮`
@@ -3011,7 +3023,7 @@
               }
             }
           }
-          // 短片保 20 / 中长片保 15：允许走到 q22/q30；更长（>24s）≥15 只到档15再掉帧
+        // 短片保高档 / 中长片保中档：允许走到 q22/q30；更长片 ≥ 中档只到档15再掉帧
           // 若同帧底宽高质量已 >1.6×，跳过浅降质（q8 多半仍超），直接更深档或换帧
           const floorHigh = tried
             .filter(
@@ -3026,8 +3038,9 @@
             !shortFluent &&
             floorHigh &&
             floorHigh.blob.size > V2G_BLACKBOX_MAX_BYTES * 1.6;
+          const midPrimary = blackboxPrimaryFps(effSpanForPick, srcFps);
           const maxQi =
-            shortFluent || midFluent || fps < 15 - 0.01
+            shortFluent || midFluent || fps < midPrimary - 0.01
               ? V2G_BLACKBOX_QUALITY_LADDER.length - 1
               : 2;
           const qiStart = floorWayOver ? Math.min(2, maxQi) : 1;
@@ -3039,9 +3052,11 @@
           for (let qi = qiStart; qi <= maxQi; qi++) {
             const e = await trial(fps, floorW, V2G_BLACKBOX_QUALITY_LADDER[qi]);
             if (e) return e;
-            // 仍超：短片高帧 / 中长片保15 放宽硬压门槛，少掉到 12
+            // 仍超：短片高帧 / 中长片保中档 放宽硬压门槛
             const hardQiGate =
-              (shortFluent && fps >= 18 - 0.01) || (midFluent && fps >= 15 - 0.01) ? 1.45 : 1.2;
+              (shortFluent && fps >= 18 - 0.01) || (midFluent && fps >= midPrimary - 0.01)
+                ? 1.45
+                : 1.2;
             if (qi >= 2) {
               const last = tried[tried.length - 1];
               if (
@@ -3057,11 +3072,11 @@
                 if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
               }
             }
-            // 仅 >24s：某一深档仍 >1.5× 则别在本帧率耗尽阶梯；中长片继续试 q22/q30 保 15
+            // 仅 >24s：某一深档仍 >1.5× 则别在本帧率耗尽阶梯；中长片继续试 q22/q30
             if (
               !shortFluent &&
               !midFluent &&
-              fps >= 15 - 0.01 &&
+              fps >= midPrimary - 0.01 &&
               qi >= 2 &&
               tried[tried.length - 1]?.blob?.size > V2G_BLACKBOX_MAX_BYTES * 1.5
             ) {
