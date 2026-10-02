@@ -2264,11 +2264,11 @@
           }
         } catch (_) {}
 
-        // O3 常再瘦一点：已在上限内且仍 <95% 时再加宽；短片直接探到源宽吃满，长片仍限约 1.5×
+        // O3 常再瘦一点：已在上限内且仍 <99% 时再加宽；短片直接探到源宽吃满，长片仍限约 1.5×
         try {
           if (
             result.blob.size <= V2G_BLACKBOX_MAX_BYTES &&
-            result.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95 &&
+            result.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.99 &&
             !clipOpts.isAborted?.()
           ) {
           const srcW = Number(clipOpts.srcW) || 0;
@@ -2329,10 +2329,11 @@
               stageLabel: `O3后·${fps}FPS·宽${w}`,
               onProgress: (local, text) => onProgress(0.985 + Math.min(0.01, (local || 0) * 0.01), text),
             });
-            if (enc?.blob && enc.blob.size <= capBytes) {
+            if (enc?.blob && enc.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
               best = { ...enc, compressRounds: 0, maxW: w, speed };
               lo = w;
               if (best.outW > 0 && best.outW < w - 2) break;
+              if (best.blob.size >= capBytes) break;
             } else {
               hiW = w;
             }
@@ -2538,8 +2539,14 @@
         async function finishBlackbox(best, curFps, encodeAtWidthFps, hardMax) {
           if (!best?.blob) return best;
           const startW = Number(best.maxW) || Number(best.outW) || 0;
-          // 已贴满且宽度够可读才跳过；偏窄时继续走「降帧换宽」
-          if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 && startW >= V2G_BLACKBOX_BASE_W - 0.5) {
+          const hardMaxN = Number(hardMax) || startW;
+          // 仅「已贴 ~99%」或「已到加宽上限」才早退；旧 95% 门槛会让短片卡在 420 不吃满
+          if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.99) return best;
+          if (
+            best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 &&
+            startW >= V2G_BLACKBOX_BASE_W - 0.5 &&
+            startW >= hardMaxN - 2
+          ) {
             return best;
           }
           let cur = best;
@@ -2571,7 +2578,8 @@
               Number.isFinite(Number(cur.gifskiQuality)) ? Number(cur.gifskiQuality) : undefined
             );
           const widenPass = async (label) => {
-            if (atCap() || cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return;
+            // 目标贴 ~99%；未到加宽上限时勿因 95% 停探
+            if (atCap() || cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.99) return;
             onProgress(0.95, label);
             const widenMax = resolveWidenMax();
             const wider = await blackboxWidenBest(cur, (w) => encodeKeepQ(fpsNow, w), {
@@ -2592,27 +2600,27 @@
             }
           }
           if (
-            cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 &&
-            (Number(cur.maxW) || 0) >= V2G_BLACKBOX_BASE_W - 0.5
+            cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.99 ||
+            (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 && atCap() && (Number(cur.maxW) || 0) >= V2G_BLACKBOX_BASE_W - 0.5)
           ) {
             return cur;
           }
           // 小于规则：先加宽，再用余量提帧
           await widenPass(isShortFill ? "短片有余 · 加宽吃满预算" : "体积有余 · 自动增宽");
           if (
-            cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 &&
-            (Number(cur.maxW) || 0) >= V2G_BLACKBOX_BASE_W - 0.5
+            cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.99 ||
+            (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 && atCap() && (Number(cur.maxW) || 0) >= V2G_BLACKBOX_BASE_W - 0.5)
           ) {
             return cur;
           }
           // 加宽后再提帧（短片源可整除才冲 20；长片抬 15）
-          if (widthOkForRaise() && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95) {
+          if (widthOkForRaise() && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.99) {
             const srcFpsNow = await detectSourceFps(file).catch(() => 0);
             cur = await raiseBlackboxFps(cur, Number(cur.fps) || fpsNow, encodeKeepQ, srcFpsNow, effSpan);
             fpsNow = Number(cur.fps) || fpsNow;
           }
           // 短片提帧后若又腾出预算（或提帧未动），再加宽一轮吃满
-          if (isShortFill && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95) {
+          if (isShortFill && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.99) {
             await widenPass("短片有余 · 再加宽吃满");
           }
           // 可读宽优先：已接近贴满但宽 <420（录屏字偏糊）→ 降一档帧率换宽度
@@ -2804,22 +2812,24 @@
           const hi = Math.max(lo, Number(maxW) || lo);
           if (lo >= hi - 2) return best;
           const capBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.99);
-          const fits = (c) => Boolean(c?.blob) && c.blob.size <= capBytes;
+          // 接纳上限用硬闸 10MB；0.99 只作探宽目标。否则 420→426 略超 99% 会被整档丢掉
+          const fitsHard = (c) => Boolean(c?.blob) && c.blob.size <= V2G_BLACKBOX_MAX_BYTES;
           let guess = Math.round((lo * Math.min(4, Math.sqrt(capBytes / Math.max(1, best.blob.size)))) / 2) * 2;
           guess = Math.max(lo + 2, Math.min(hi, guess));
           let hiW = hi;
           // 探次按性能档：拉满/桌面 4，均衡 3，省电 2（每次试探都是一整次 gifski）
           const maxProbes = Math.max(2, Math.min(6, Number(currentMediaPerf().widenProbes) || 2));
-          for (let i = 0; i < maxProbes && hiW - lo > 16; i++) {
+          for (let i = 0; i < maxProbes && hiW - lo > 8; i++) {
             if (isAborted()) throw new Error("已取消");
             const w = i === 0 ? guess : Math.round((lo + hiW) / 2 / 2) * 2;
             if (w <= lo || w >= hiW) break;
             onProgress(0.92, `加宽试探 ${w}px`);
             const enc = await encodeAtWidth(w);
-            if (fits(enc)) {
+            if (fitsHard(enc)) {
               best = { ...enc, compressRounds: 0, maxW: w };
               lo = w;
               if (best.outW > 0 && best.outW < w - 2) break; // 已达源宽
+              if (best.blob.size >= capBytes) break; // 已贴 ~99%，停探
               // 按剩余预算收紧上界，避免短片 hardMax=源宽时下一次中点跳到近 2× 白跑
               const headroomGuess =
                 Math.round((lo * Math.min(4, Math.sqrt(capBytes / Math.max(1, best.blob.size)))) / 2) * 2;
