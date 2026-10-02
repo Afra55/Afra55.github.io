@@ -6630,7 +6630,6 @@
           return normalizeV2gCrop(edit.crop, srcW, srcH);
         }
         // 用户进编辑只裁了时长、没开裁画面 → 尊重整幅，禁止再叠「自动去色边」
-        // （502 类雾气/字幕底会被旧逻辑啃到字幕下）
         if (edit && !edit.cropOn && vbbEditIsDirty(edit, duration, srcW, srcH)) {
           return null;
         }
@@ -8639,8 +8638,8 @@
       }
 
       /** 从一帧里估算纯色边框，返回保留区域（不含边框）；无边则 null
-       *  四边各自独立判定：只有一边是纯色边也能裁掉。
-       *  偏保守：容差收紧 + 离群更严 + 边色须像黑/白边（或对边同色），避免深色 UI 被当成边框吃掉。 */
+       *  四边各自独立：任意纯色边（黑/白/灰/绿…）都能裁。
+       *  防误裁：容差与离群从严、单边≤18%、回退 1px；雾气等「看起来像边」但不够纯的行会判失败。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -8651,15 +8650,8 @@
         };
         const near = (a, b) =>
           Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
-        const luma = (c) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-        /** 只认黑边/白边。灰雾、对边同色灰底（西游记云雾）不当 letterbox，否则会裁到字幕下 */
-        const looksLikeBorder = (c) => {
-          if (!c) return false;
-          const y = luma(c);
-          return y <= 28 || y >= 230;
-        };
         /** 该行/该列是否「纯色」，是则返回平均色，否则 null。
-         *  离群 ≤1.2%：只吞压缩噪点，不把状态栏/细线当边框。 */
+         *  离群 ≤1.2%：只吞压缩噪点；真 letterbox 够平，雾气/渐变过不了。 */
         const OUTLIER_RATIO = 0.012;
         const lineColor = (get, n) => {
           let r = 0;
@@ -8674,12 +8666,20 @@
           const avg = { r: r / n, g: g / n, b: b / n };
           const limit = Math.max(1, Math.floor(n * OUTLIER_RATIO));
           let bad = 0;
+          let maxDev = 0;
           for (let i = 0; i < n; i++) {
-            if (!near(get(i), avg)) {
+            const p = get(i);
+            const dr = Math.abs(p.r - avg.r);
+            const dg = Math.abs(p.g - avg.g);
+            const db = Math.abs(p.b - avg.b);
+            maxDev = Math.max(maxDev, dr, dg, db);
+            if (!near(p, avg)) {
               bad += 1;
               if (bad > limit) return null;
             }
           }
+          // 峰值偏差过大也不是「纯色边」（雾气横纹常有局部起伏）
+          if (maxDev > tol + 6) return null;
           return avg;
         };
         const rowAt = (y) => (i) => px(i, y);
@@ -8697,28 +8697,28 @@
         const maxBottom = Math.floor(h * 0.18);
         const maxLeft = Math.floor(w * 0.18);
         const maxRight = Math.floor(w * 0.18);
-        if (looksLikeBorder(cTop)) {
+        if (cTop) {
           while (top < bottom && top < maxTop) {
             const c = lineColor(rowAt(top), w);
             if (!c || !near(c, cTop)) break;
             top++;
           }
         }
-        if (looksLikeBorder(cBottom)) {
+        if (cBottom) {
           while (bottom > top && h - 1 - bottom < maxBottom) {
             const c = lineColor(rowAt(bottom), w);
             if (!c || !near(c, cBottom)) break;
             bottom--;
           }
         }
-        if (looksLikeBorder(cLeft)) {
+        if (cLeft) {
           while (left < right && left < maxLeft) {
             const c = lineColor(colAt(left), h);
             if (!c || !near(c, cLeft)) break;
             left++;
           }
         }
-        if (looksLikeBorder(cRight)) {
+        if (cRight) {
           while (right > left && w - 1 - right < maxRight) {
             const c = lineColor(colAt(right), h);
             if (!c || !near(c, cRight)) break;
@@ -8738,8 +8738,8 @@
       /** 采样多帧取「内容并集」（各边取最浅裁），只裁所有帧都同意是边框的区域；无边框返回 null */
       async function detectVideoCrop(file) {
         if (!file) return null;
-        // v4：仅黑/白边；编辑只裁时长时不走自动裁（见 resolveVbbEncodeCrop）
-        const cacheKey = `v4|${file.name}|${file.size}|${file.lastModified || 0}`;
+        // v5：任意纯色边 + 严纯度；编辑只裁时长时不走自动裁（见 resolveVbbEncodeCrop）
+        const cacheKey = `v5|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         const url = URL.createObjectURL(file);
@@ -10574,7 +10574,7 @@
           try { vbbCropChk.checked = localStorage.getItem("devtools-vbb-auto-crop") === "1"; } catch (_) {}
           vbbCropChk.addEventListener("change", () => {
             try { localStorage.setItem("devtools-vbb-auto-crop", vbbCropChk.checked ? "1" : "0"); } catch (_) {}
-            toast(vbbCropChk.checked ? "已开启：自动裁剪纯色边框" : "已关闭自动裁剪");
+            toast(vbbCropChk.checked ? "已开启：自动裁纯色边" : "已关闭自动裁剪");
           });
         }
         vbbError = $("#vbb-error", root);
