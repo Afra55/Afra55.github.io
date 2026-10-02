@@ -3003,9 +3003,38 @@
         }
       }
 
+      /**
+       * 拼接中间片帧率：保留片源帧率（常见 25/30），不要压成黑盒主档 20。
+       * 旧逻辑 blackboxPrimaryFps(总时长) 会把 25fps 源抽成 20 → 预览/GIF 都「一顿一顿」。
+       * 抽到黑盒目标帧率只在转 GIF 时做一次。
+       */
+      async function resolveVbbMergeFps(items) {
+        let maxFps = 0;
+        await Promise.all(
+          (items || []).map(async (item) => {
+            let f = Number(item?.srcFps) || 0;
+            if (!(f >= 5) && item?.file && typeof detectSourceFps === "function") {
+              f = Number(await detectSourceFps(item.file).catch(() => 0)) || 0;
+              if (f >= 5) item.srcFps = f;
+            }
+            if (f > maxFps) maxFps = f;
+          })
+        );
+        if (!(maxFps >= 12)) maxFps = 30; // 探测失败时用 30，避免默认 20 误伤 25 源
+        const common = [24, 25, 30, 50, 60];
+        let best = Math.round(maxFps);
+        for (const c of common) {
+          if (Math.abs(maxFps - c) <= 1.25) {
+            best = c;
+            break;
+          }
+        }
+        return Math.max(12, Math.min(60, best));
+      }
+
       // 把已选的多个视频按顺序拼接成一个 MP4，再走单段黑盒。
       // 含义：先合为一条成片，再整段黑盒（不是各转 GIF 再拼）。
-      // 只要画面；中间片帧率对齐黑盒主档，避免双重抽帧顿挫。
+      // 只要画面；中间片保留源帧率（25/30…），转 GIF 时再抽到黑盒档，避免双重/错误抽帧顿挫。
       // 各段若做过「编辑」（裁时长/裁画面），拼接时一并带上。
       async function mergeVbbVideosToOne() {
         if (!isVbbBatchMode() || vbbBusy) return;
@@ -3044,11 +3073,8 @@
                 : null;
             return { ...win, crop };
           });
-          const totalSpan = wins.reduce((s, w) => s + Math.max(0, Number(w.span) || 0), 0);
-          const mergeFps = Math.max(
-            12,
-            Math.min(30, Math.round(Number(typeof blackboxPrimaryFps === "function" ? blackboxPrimaryFps(totalSpan) : 20) || 20))
-          );
+          setVbbProgress(true, 0.48, "拼接 · 探测片源帧率…", { busy: true });
+          const mergeFps = await resolveVbbMergeFps(items);
           const vparts = names
             .map((_, i) => {
               const win = wins[i];
@@ -3059,6 +3085,7 @@
                 : "";
               // 片尾按半开区间：duration 略短半帧，避免拼接后再转 GIF 多出片尾后画面
               const mergeDur = Math.max(0.05, span - 0.5 / mergeFps);
+              // fps 放 trim/setpts 之后：先按源时间裁切，再统一到保留的片源帧率
               return (
                 `[${i}:v]trim=start=${start}:duration=${mergeDur},setpts=PTS-STARTPTS,` +
                 `${crop}scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
@@ -3090,7 +3117,12 @@
             "-y",
             "merged.mp4",
           ];
-          setVbbProgress(true, 0.5, `拼接编码中（${mergeFps}fps）…`, { busy: true });
+          setVbbProgress(true, 0.5, `拼接编码中（保留 ${mergeFps}fps）…`, { busy: true });
+          vbbLog(
+            `[vbb-phase] 拼接中间片 ${mergeFps}fps（片源 ${items
+              .map((it) => Number(it.srcFps) || "?")
+              .join("+")}，不再压成黑盒主档）`
+          );
           const code = await ffmpeg.exec(args).catch(() => 1);
           if (abortVbb) throw new Error("已取消");
           if (code !== 0) throw new Error(`拼接失败（code=${code}）`);
