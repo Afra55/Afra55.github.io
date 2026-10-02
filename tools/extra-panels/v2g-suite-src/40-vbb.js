@@ -540,6 +540,7 @@
         return {
           trimStart: 0,
           trimEnd: d,
+          cutouts: [],
           cropOn: false,
           crop: { x: 0, y: 0, w, h },
         };
@@ -550,7 +551,40 @@
         if (!item.edit) {
           item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
         }
+        if (!Array.isArray(item.edit.cutouts)) item.edit.cutouts = [];
         return item.edit;
+      }
+
+      function vbbNormalizeCutouts(list, trimStart, trimEnd) {
+        const fn = window.DevToolsVtrimEditor?.normalizeCutouts;
+        if (typeof fn === "function") return fn(list, trimStart, trimEnd);
+        const a = Math.max(0, Number(trimStart) || 0);
+        const b = Math.max(a + 0.5, Number(trimEnd) || 0);
+        return (Array.isArray(list) ? list : [])
+          .map((c) => ({
+            start: Math.max(a, Number(c?.start) || 0),
+            end: Math.min(b, Number(c?.end) || 0),
+          }))
+          .filter((c) => c.end - c.start >= 0.2)
+          .sort((x, y) => x.start - y.start);
+      }
+
+      function vbbKeepRangesFromEdit(edit, duration) {
+        const fn = window.DevToolsVtrimEditor?.keepRangesFromEdit;
+        if (typeof fn === "function") return fn(edit, duration);
+        const d = Math.max(0, Number(duration) || 0);
+        const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
+        const trimEnd = Math.min(d, Math.max(trimStart + VBB_MIN_SPAN, Number(edit?.trimEnd) || d));
+        const cuts = vbbNormalizeCutouts(edit?.cutouts, trimStart, trimEnd);
+        const keeps = [];
+        let cursor = trimStart;
+        for (const c of cuts) {
+          if (c.start > cursor + 0.04) keeps.push({ start: cursor, end: c.start });
+          cursor = Math.max(cursor, c.end);
+        }
+        if (trimEnd > cursor + 0.04) keeps.push({ start: cursor, end: trimEnd });
+        if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
+        return keeps;
       }
 
       function vbbEditIsDirty(edit, duration, srcW, srcH) {
@@ -559,7 +593,8 @@
         const fullTrim =
           Math.abs(Number(edit.trimStart) || 0) < 0.05 &&
           Math.abs((Number(edit.trimEnd) || 0) - d) < 0.05;
-        if (!fullTrim) return true;
+        const cuts = vbbNormalizeCutouts(edit.cutouts, edit.trimStart, edit.trimEnd);
+        if (!fullTrim || cuts.length) return true;
         if (!edit.cropOn) return false;
         const c = edit.crop || {};
         const w = Math.max(1, Math.round(Number(srcW) || 1));
@@ -579,10 +614,13 @@
         const fullTrim =
           Math.abs(Number(edit.trimStart) || 0) < 0.05 &&
           Math.abs((Number(edit.trimEnd) || 0) - d) < 0.05;
-        if (!fullTrim) {
-          const span = Math.max(0, (Number(edit.trimEnd) || 0) - (Number(edit.trimStart) || 0));
-          bits.push(`裁 ${span.toFixed(1)}s`);
+        const keeps = vbbKeepRangesFromEdit(edit, d);
+        const keepSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
+        const cuts = vbbNormalizeCutouts(edit.cutouts, edit.trimStart, edit.trimEnd);
+        if (!fullTrim || cuts.length) {
+          bits.push(`裁 ${keepSpan.toFixed(1)}s`);
         }
+        if (cuts.length) bits.push(`删${cuts.length}段`);
         if (edit.cropOn) bits.push("裁画面");
         return bits.join(" · ");
       }
@@ -630,6 +668,7 @@
         }
         edit.trimStart = start;
         edit.trimEnd = end;
+        edit.cutouts = vbbNormalizeCutouts(edit.cutouts, start, end);
         const w = Math.max(1, Math.round(Number(srcW) || 1));
         const h = Math.max(1, Math.round(Number(srcH) || 1));
         const c = edit.crop || { x: 0, y: 0, w, h };
@@ -654,13 +693,159 @@
         const edit = item?.edit || (item === null ? vbbSingleEdit : null);
         let startSec = 0;
         let span = Math.max(0, Number(duration) || 0);
+        let keepRanges = [{ start: 0, end: span }];
         if (edit) {
           clampVbbEdit(edit, duration, srcW, srcH);
-          startSec = Number(edit.trimStart) || 0;
-          span = Math.max(VBB_MIN_SPAN, (Number(edit.trimEnd) || span) - startSec);
-          if (startSec + span > duration) span = Math.max(VBB_MIN_SPAN, duration - startSec);
+          keepRanges = vbbKeepRangesFromEdit(edit, duration);
+          startSec = Number(keepRanges[0]?.start) || 0;
+          const last = keepRanges[keepRanges.length - 1];
+          const end = Number(last?.end) || duration;
+          // 单段 keep 时沿用旧语义；多段 keep 由 materialize 拼成一条再编
+          if (keepRanges.length === 1) {
+            span = Math.max(VBB_MIN_SPAN, end - startSec);
+            if (startSec + span > duration) span = Math.max(VBB_MIN_SPAN, duration - startSec);
+          } else {
+            span = keepRanges.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
+          }
         }
-        return { startSec, span, edit };
+        return { startSec, span, edit, keepRanges };
+      }
+
+      /**
+       * 有多段 keep（删中间）时，先拼成一条临时片再黑盒，保证仍是一条 GIF。
+       * @returns {Promise<{ file: File, duration: number, srcW: number, srcH: number, materialized: boolean }>}
+       */
+      async function materializeVbbKeepVideo(file, edit, srcW, srcH, duration, onProgress) {
+        const keeps = vbbKeepRangesFromEdit(edit, duration);
+        if (keeps.length <= 1) {
+          return { file, duration, srcW, srcH, materialized: false };
+        }
+        const ffmpeg =
+          typeof getFfmpegInstance === "function"
+            ? await getFfmpegInstance((r, t) => onProgress?.(r, t || "准备拼接编辑…"))
+            : null;
+        if (!ffmpeg) throw new Error("无法加载编码器以应用「删中间」");
+        const ext = typeof v2gSourceExt === "function" ? v2gSourceExt(file) : "mp4";
+        const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => onProgress?.(0.05, "载入视频…"));
+        const W = Math.max(2, Math.round((Number(srcW) || 720) / 2) * 2);
+        const H = Math.max(2, Math.round((Number(srcH) || 404) / 2) * 2);
+        const parts = [];
+        for (let i = 0; i < keeps.length; i++) {
+          if (abortVbb || abortV2g) throw new Error("已取消");
+          onProgress?.(0.08 + (i / keeps.length) * 0.5, `应用删中间 ${i + 1}/${keeps.length}`);
+          const k = keeps[i];
+          const dur = Math.max(0.05, k.end - k.start);
+          const out = `keep${i}.mp4`;
+          const args = [
+            "-ss",
+            String(k.start),
+            "-i",
+            inName,
+            "-t",
+            String(dur),
+            "-an",
+            "-vf",
+            `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-y",
+            out,
+          ];
+          const code = await ffmpeg.exec(args).catch(() => 1);
+          if (code !== 0) throw new Error(`删中间切片失败（段 ${i + 1}）`);
+          parts.push(out);
+        }
+        onProgress?.(0.65, "拼接保留段…");
+        const listName = "keep-concat.txt";
+        const listBody = parts.map((p) => `file '${p}'`).join("\n");
+        await ffmpeg.writeFile(listName, new TextEncoder().encode(listBody));
+        const merged = "keep-merged.mp4";
+        let code = await ffmpeg
+          .exec(["-f", "concat", "-safe", "0", "-i", listName, "-c", "copy", "-y", merged])
+          .catch(() => 1);
+        if (code !== 0) {
+          // copy 失败则重编码拼接
+          const filter = parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
+          const args = [];
+          parts.forEach((p) => args.push("-i", p));
+          args.push(
+            "-filter_complex",
+            filter,
+            "-map",
+            "[v]",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-y",
+            merged
+          );
+          code = await ffmpeg.exec(args).catch(() => 1);
+        }
+        if (code !== 0) throw new Error("删中间拼接失败");
+        const data = await ffmpeg.readFile(merged);
+        const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+        const bytes = new Uint8Array(raw.byteLength);
+        bytes.set(raw);
+        const outFile = new File([bytes], (file.name || "edit").replace(/\.[^.]+$/, "") + "-cut.mp4", {
+          type: "video/mp4",
+        });
+        const totalSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
+        for (const p of parts) {
+          try {
+            await ffmpeg.deleteFile(p);
+          } catch (_) {}
+        }
+        try {
+          await ffmpeg.deleteFile(listName);
+        } catch (_) {}
+        try {
+          await ffmpeg.deleteFile(merged);
+        } catch (_) {}
+        return { file: outFile, duration: totalSpan, srcW: W, srcH: H, materialized: true };
+      }
+
+      /**
+       * 编码前：多段 keep（删中间）先拼成一条；单段直接用 trim 窗。
+       * @returns {Promise<{ file: File, startSec: number, span: number, srcW: number, srcH: number, edit: any, cutNote: string }>}
+       */
+      async function prepareVbbEncodeSource(file, edit, srcW, srcH, duration, opts = {}) {
+        const fromMark = Boolean(opts.fromMark);
+        let startSec = Math.max(0, Number(opts.startSec) || 0);
+        let span = Math.max(VBB_MIN_SPAN, Number(opts.span) || VBB_MIN_SPAN);
+        let outFile = file;
+        let outW = Math.max(1, Math.round(Number(srcW) || 1));
+        let outH = Math.max(1, Math.round(Number(srcH) || 1));
+        let cutNote = "";
+        if (!fromMark && edit) {
+          const keeps = vbbKeepRangesFromEdit(edit, duration);
+          const cuts = vbbNormalizeCutouts(edit.cutouts, edit.trimStart, edit.trimEnd);
+          if (keeps.length > 1) {
+            const mat = await materializeVbbKeepVideo(file, edit, srcW, srcH, duration, opts.onProgress);
+            outFile = mat.file;
+            startSec = 0;
+            span = Math.max(VBB_MIN_SPAN, Number(mat.duration) || span);
+            outW = mat.srcW;
+            outH = mat.srcH;
+            cutNote = cuts.length ? `删${cuts.length}段` : "删中间";
+          } else if (cuts.length) {
+            cutNote = `删${cuts.length}段`;
+          }
+        }
+        return { file: outFile, startSec, span, srcW: outW, srcH: outH, edit, cutNote };
       }
 
       async function resolveVbbEncodeCrop(file, edit, srcW, srcH, duration) {
@@ -684,12 +869,12 @@
           if (batch) {
             el.append(`「${name || "视频"}」 `, tag);
           } else {
-            el.append(tag, " · 可选裁时长 / 裁画面");
+            el.append(tag, " · 可裁画面 / 时长 / 删中间");
           }
         } else if (batch) {
           el.textContent = `「${name || "视频"}」 · 未编辑`;
         } else {
-          el.textContent = "未编辑 · 可选裁时长 / 裁画面";
+          el.textContent = "未编辑 · 默认可裁画面，也可裁时长 / 删中间";
         }
       }
 
@@ -758,6 +943,9 @@
         const draft = {
           trimStart: item.edit.trimStart,
           trimEnd: item.edit.trimEnd,
+          cutouts: Array.isArray(item.edit.cutouts)
+            ? item.edit.cutouts.map((c) => ({ start: c.start, end: c.end }))
+            : [],
           cropOn: Boolean(item.edit.cropOn),
           crop: item.edit.crop ? { ...item.edit.crop } : { x: 0, y: 0, w: item.srcW, h: item.srcH },
         };
@@ -800,6 +988,7 @@
             file: item.file,
             title: item.file.name || "视频",
             initial: draft,
+            initialMode: "crop",
           });
           editorOpened = true;
           boot.remove();
@@ -808,6 +997,12 @@
             item.edit = {
               trimStart: Number(next.trimStart) || 0,
               trimEnd: Number(next.trimEnd) || item.duration,
+              cutouts: Array.isArray(next.cutouts)
+                ? next.cutouts.map((c) => ({
+                    start: Number(c.start) || 0,
+                    end: Number(c.end) || 0,
+                  }))
+                : [],
               cropOn: Boolean(next.cropOn),
               crop: next.crop
                 ? { ...next.crop }
@@ -1597,21 +1792,47 @@
       function setVbbClipJob(idx, patch = {}) {
         const c = vbbClips[idx];
         if (!c) return;
-        if (patch.status != null) c.jobStatus = patch.status;
+        if (patch.status != null) {
+          c.jobStatus = patch.status;
+          if (patch.status === "running" && !c.jobStartedAt) {
+            c.jobStartedAt = Date.now();
+          }
+          if (patch.status === "done" || patch.status === "error") {
+            if (c.jobStartedAt) {
+              c.encodeMs = Math.max(0, Date.now() - c.jobStartedAt);
+            }
+            c.jobStartedAt = 0;
+          }
+          if (patch.status === "pending") {
+            c.jobStartedAt = 0;
+            c.encodeMs = 0;
+          }
+        }
         if (patch.progress != null) c.jobProgress = Math.max(0, Math.min(1, Number(patch.progress) || 0));
         if (patch.text != null) {
-          const polished = vbbStageText(String(patch.text || ""));
-          c.jobText = polished || String(patch.text || "");
+          let polished = vbbStageText(String(patch.text || "")) || String(patch.text || "");
+          if ((patch.status === "done" || c.jobStatus === "done") && c.encodeMs > 0) {
+            const sec = c.encodeMs >= 10000 ? Math.round(c.encodeMs / 1000) : Math.round(c.encodeMs / 100) / 10;
+            if (!/^\d+(\.\d+)?s$/.test(polished) && !polished.includes("s")) {
+              polished = polished && polished !== "完成" ? `${polished} · ${sec}s` : `完成 · ${sec}s`;
+            }
+          }
+          c.jobText = polished;
+        } else if ((patch.status === "done" || c.jobStatus === "done") && c.encodeMs > 0 && !c.jobText) {
+          const sec = c.encodeMs >= 10000 ? Math.round(c.encodeMs / 1000) : Math.round(c.encodeMs / 100) / 10;
+          c.jobText = `完成 · ${sec}s`;
         }
         const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
         if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
       }
-  
+
       function clearVbbClipJobs() {
         vbbClips.forEach((c) => {
           c.jobStatus = "";
           c.jobProgress = 0;
           c.jobText = "";
+          c.jobStartedAt = 0;
+          c.encodeMs = 0;
         });
       }
   
@@ -1731,6 +1952,11 @@
         bits.push(fmtShortBytes(c.gifBlob.size));
         const videoSec = Number(c.gifDuration) > 0 ? Number(c.gifDuration) : Number(c.span) || 0;
         if (videoSec > 0) bits.push(formatVsplitSpanSec(videoSec));
+        if (Number(c.encodeMs) > 0) {
+          const sec =
+            c.encodeMs >= 10000 ? Math.round(c.encodeMs / 1000) : Math.round(c.encodeMs / 100) / 10;
+          bits.push(`${sec}s`);
+        }
         const extra = simplifyVbbGifNote(c.gifNote, { mobile });
         if (extra) {
           extra.split(" · ").forEach((part) => {
@@ -3069,17 +3295,50 @@
           }
           const W = Math.max(2, Math.round((items[0].srcW || 1280) / 2) * 2);
           const H = Math.max(2, Math.round((items[0].srcH || 720) / 2) * 2);
-          const wins = items.map((item) => {
+          const wins = [];
+          for (let i = 0; i < total; i++) {
+            const item = items[i];
             ensureVbbItemEdit(item);
             const win = resolveVbbEncodeEdits(item, item.file, item.duration, item.srcW, item.srcH);
+            let startSec = win.startSec;
+            let span = win.span;
+            if ((win.keepRanges?.length || 0) > 1) {
+              setVbbProgress(true, 0.42 + (i / total) * 0.05, `拼接 · 应用删中间 ${i + 1}/${total}`, {
+                sub: item.file.name,
+                busy: true,
+              });
+              const mat = await materializeVbbKeepVideo(
+                item.file,
+                win.edit,
+                item.srcW,
+                item.srcH,
+                item.duration,
+                (p, t) =>
+                  setVbbProgress(
+                    true,
+                    0.42 + (i / total) * 0.05 + Math.min(0.04, p * 0.04),
+                    t || "删中间…",
+                    { busy: true }
+                  )
+              );
+              startSec = 0;
+              span = mat.duration;
+              const extM = v2gSourceExt(mat.file);
+              const nmM = `mj${i}.${extM}`;
+              await ffmpeg.writeFile(nmM, await fetchFileBytes(mat.file));
+              try {
+                await ffmpeg.deleteFile(names[i]);
+              } catch (_) {}
+              names[i] = nmM;
+            }
             const crop =
               win.edit?.cropOn && win.edit.crop
                 ? typeof normalizeV2gCrop === "function"
                   ? normalizeV2gCrop(win.edit.crop, item.srcW, item.srcH)
                   : win.edit.crop
                 : null;
-            return { ...win, crop };
-          });
+            wins.push({ ...win, startSec, span, crop });
+          }
           setVbbProgress(true, 0.48, "拼接 · 探测片源帧率…", { busy: true });
           const mergeFps = await resolveVbbMergeFps(items);
           const vparts = names
@@ -3228,6 +3487,8 @@
           jobStatus: "pending",
           jobProgress: 0,
           jobText: "等待中…",
+          jobStartedAt: 0,
+          encodeMs: 0,
         }));
         renderVbbResults();
         let ok = 0;
@@ -3284,6 +3545,26 @@
                   } catch (_) {}
                   await new Promise((r) => setTimeout(r, 50));
                 }
+                const prepared = await prepareVbbEncodeSource(
+                  item.file,
+                  win.edit,
+                  item.srcW,
+                  item.srcH,
+                  item.duration,
+                  {
+                    fromMark: job.fromMark,
+                    startSec: win.startSec,
+                    span: win.span,
+                    onProgress: (local, text) => {
+                      setVbbClipJob(i, {
+                        status: "running",
+                        progress: Math.min(0.12, 0.02 + Math.min(0.1, local) * 0.1),
+                        text: text || "应用删中间…",
+                      });
+                    },
+                  }
+                );
+                // crop 相对原片坐标；删中间成片尺寸≈原片，仍用原宽高归一化
                 const vbbCrop = await resolveVbbEncodeCrop(
                   item.file,
                   win.edit,
@@ -3292,11 +3573,11 @@
                   item.duration
                 );
                 const encoded = await encodeBlackboxClip({
-                  file: item.file,
-                  startSec: win.startSec,
-                  span: win.span,
-                  srcW: item.srcW,
-                  srcH: item.srcH,
+                  file: prepared.file,
+                  startSec: prepared.startSec,
+                  span: prepared.span,
+                  srcW: prepared.srcW,
+                  srcH: prepared.srcH,
                   seed: seedForItem,
                   speedLimitSec: vbbSpeedLimitSec(),
                   crop: vbbCrop,
@@ -3306,7 +3587,7 @@
                     const stage = vbbTickerLine(text) || (conc > 1 ? "并行编码" : "编码");
                     setVbbClipJob(i, {
                       status: "running",
-                      progress: Math.min(0.98, 0.05 + Math.min(0.9, local) * 0.9),
+                      progress: Math.min(0.98, 0.12 + Math.min(0.86, local) * 0.86),
                       text: stage,
                     });
                     const overall = (doneCount + Math.min(0.95, Number(local) || 0)) / total;
@@ -3322,17 +3603,18 @@
                   reuseSeed = {
                     fps: encoded.fps,
                     maxW: encoded.maxW,
-                    span: win.span,
+                    span: prepared.span,
                     speed: Math.max(1, Number(encoded.speed) || 1),
                   };
-                  saveVbbSpanScheme(win.span, reuseSeed, "blackbox");
+                  saveVbbSpanScheme(prepared.span, reuseSeed, "blackbox");
                 }
                 const elapsedSec = (performance.now() - t0) / 1000;
                 const editBits = [];
                 if (job.fromMark) editBits.push("打点");
-                if (win.startSec > 0.05 || Math.abs(win.span - item.duration) > 0.05) {
-                  editBits.push(`裁 ${win.span.toFixed(1)}s`);
+                if (prepared.startSec > 0.05 || Math.abs(prepared.span - item.duration) > 0.05) {
+                  editBits.push(`裁 ${prepared.span.toFixed(1)}s`);
                 }
+                if (prepared.cutNote) editBits.push(prepared.cutNote);
                 if (win.edit?.cropOn) editBits.push("裁画面");
                 vbbClips[i].gifNote = [
                   vbbClips[i].gifNote,
@@ -3483,14 +3765,34 @@
             jobStatus: "pending",
             jobProgress: 0,
             jobText: "等待中…",
+            jobStartedAt: 0,
+            encodeMs: 0,
           },
         ];
         renderVbbResults();
-        const durationLabel = `${win.span.toFixed(1)}s`;
+        let durationLabel = `${win.span.toFixed(1)}s`;
         try {
           await prewarmFfmpegEngine().catch(() => {});
           bumpVbbEncodeProgress(0.03, "整段转换", "准备编码器…");
           setVbbClipJob(0, { status: "running", progress: 0.02, text: "准备编码…" });
+          const prepared = await prepareVbbEncodeSource(
+            vbbSourceFile,
+            win.edit,
+            srcW,
+            srcH,
+            duration,
+            {
+              startSec: win.startSec,
+              span: win.span,
+              onProgress: (local, text) => {
+                const stage = bumpVbbEncodeProgress(Math.min(0.12, local * 0.12), "整段转换", text || "应用删中间…");
+                setVbbClipJob(0, { status: "running", progress: Math.min(0.12, local * 0.12), text: stage });
+              },
+            }
+          );
+          durationLabel = `${prepared.span.toFixed(1)}s`;
+          vbbClips[0].start = prepared.startSec;
+          vbbClips[0].span = prepared.span;
           const vbbCrop = await resolveVbbEncodeCrop(
             vbbSourceFile,
             win.edit,
@@ -3499,20 +3801,20 @@
             duration
           );
           const encoded = await encodeBlackboxClip({
-            file: vbbSourceFile,
-            startSec: win.startSec,
-            span: win.span,
-            srcW,
-            srcH,
+            file: prepared.file,
+            startSec: prepared.startSec,
+            span: prepared.span,
+            srcW: prepared.srcW,
+            srcH: prepared.srcH,
             speedLimitSec: vbbSpeedLimitSec(),
             crop: vbbCrop,
             isAborted: () => abortVbb,
             onProgress: (local, text) => {
-              const p = Math.min(0.98, 0.05 + Math.min(0.93, local) * 0.93);
+              const p = Math.min(0.98, 0.12 + Math.min(0.86, local) * 0.86);
               const stage = bumpVbbEncodeProgress(p, "整段转换", text);
               setVbbClipJob(0, {
                 status: "running",
-                progress: Math.min(0.98, 0.08 + Math.min(0.9, local) * 0.9),
+                progress: Math.min(0.98, 0.12 + Math.min(0.86, local) * 0.86),
                 text: stage,
               });
             },
@@ -3520,7 +3822,10 @@
           if (abortVbb) throw new Error("已取消");
           applyVbbClipEncoded(vbbClips[0], encoded);
           const editBits = [];
-          if (win.startSec > 0.05 || Math.abs(win.span - duration) > 0.05) editBits.push(`裁 ${win.span.toFixed(1)}s`);
+          if (prepared.startSec > 0.05 || Math.abs(prepared.span - duration) > 0.05) {
+            editBits.push(`裁 ${prepared.span.toFixed(1)}s`);
+          }
+          if (prepared.cutNote) editBits.push(prepared.cutNote);
           if (win.edit?.cropOn) editBits.push("裁画面");
           vbbClips[0].gifNote = [
             vbbClips[0].gifNote,

@@ -373,8 +373,53 @@
 .vtrim-preview-wrap.is-film-loading .vtrim-film-loading { display: block; }
 .vtrim-timeline.is-min-span .vtrim-window { border-color: #ff8f6b; }
 
+.vtrim-handle.is-locked {
+  opacity: 0.45;
+  pointer-events: none;
+  filter: grayscale(0.35);
+}
+
+.vtrim-cutouts {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.vtrim-cutout {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--cut-start, 0%);
+  width: calc(var(--cut-end, 0%) - var(--cut-start, 0%));
+  background: color-mix(in srgb, #e85d5d 55%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(180, 40, 40, 0.65);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.vtrim-cutout.is-selected,
+.vtrim-cutout.is-draft {
+  background: color-mix(in srgb, #ff6b6b 72%, transparent);
+  box-shadow: inset 0 0 0 2px rgba(255, 220, 220, 0.75);
+}
+.vtrim-cutout-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  margin-left: -7px;
+  background: #e85d5d;
+  pointer-events: auto;
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 5;
+  border-radius: 3px;
+}
+.vtrim-cutout-handle-start { left: 0; }
+.vtrim-cutout-handle-end { left: 100%; }
+.vtrim-stage.is-mode-cut .vtrim-window { cursor: crosshair; }
 .vtrim-stage.is-mode-crop .vtrim-preview-wrap { cursor: default; }
-.vtrim-stage.is-mode-trim .vtrim-preview-wrap { cursor: grab; }
+.vtrim-stage.is-mode-trim .vtrim-preview-wrap,
+.vtrim-stage.is-mode-cut .vtrim-preview-wrap { cursor: grab; }
 
 .vtrim-export-bar {
   margin-top: 0.85rem;

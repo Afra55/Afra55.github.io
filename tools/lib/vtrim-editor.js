@@ -8,12 +8,18 @@
   if (window.DevToolsVtrimEditor?.open) return;
 
   const MIN_SPAN = 0.5;
+  /** 删中间段最小长度 */
+  const MIN_CUTOUT = 0.2;
+  /** 两段保留区之间最小间隙 */
+  const MIN_KEEP_GAP = 0.25;
   /** 仅贴片头/片尾时吸附；过大易在抬手时「跳一下」 */
   const SNAP_EDGE_SEC = 0.06;
   /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
   const DRAG_SEEK_MS = 72;
   /** 半开片尾：拖拽预览与停播共用，约 1 帧（勿只靠 timeupdate，否则会多播） */
   const END_KEEP_SEC = 1 / 25;
+  /** 半开片头：成片少收约半帧，避免预览落点后 ffmpeg 又多吸前几帧 */
+  const START_KEEP_SEC = 1 / 50;
   let uidSeq = 0;
 
   function toast(msg) {
@@ -92,10 +98,10 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
-      <p class="hint tight vtrim-editor-sub" id="${p("sub")}" hidden>修剪时长 · 裁切画面</p>
+      <p class="hint tight vtrim-editor-sub" id="${p("sub")}" hidden>裁切画面 · 修剪时长 · 删中间</p>
     </header>
     <div class="vtrim-editor-body">
-      <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
+      <div class="vtrim-stage is-mode-crop" id="${p("stage")}">
         <div class="vtrim-preview-wrap" id="${p("preview-wrap")}">
           <video id="${p("video")}" class="vtrim-video" playsinline muted preload="metadata"></video>
           <button type="button" class="vtrim-tap-play" id="${p("tap-play")}" hidden aria-label="播放或暂停"></button>
@@ -120,16 +126,18 @@
         </div>
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.55rem">
           <span class="seg" role="group" aria-label="编辑模式">
-            <button type="button" class="seg-btn is-active" data-vte-mode="trim">修剪时长</button>
-            <button type="button" class="seg-btn" data-vte-mode="crop">裁切画面</button>
+            <button type="button" class="seg-btn is-active" data-vte-mode="crop">裁切画面</button>
+            <button type="button" class="seg-btn" data-vte-mode="trim">修剪时长</button>
+            <button type="button" class="seg-btn" data-vte-mode="cut">删中间</button>
           </span>
           <span class="hint tight" id="${p("mode-hint")}"></span>
         </div>
-        <div class="vtrim-trim-tools" id="${p("trim-tools")}">
-          <div class="vtrim-timeline" id="${p("timeline")}" aria-label="修剪片头片尾">
+        <div class="vtrim-trim-tools" id="${p("trim-tools")}" hidden>
+          <div class="vtrim-timeline" id="${p("timeline")}" aria-label="修剪片头片尾或删除中间段">
             <canvas id="${p("filmstrip")}" class="vtrim-filmstrip" width="640" height="56" aria-hidden="true"></canvas>
             <div class="vtrim-sel" id="${p("sel")}">
               <span class="vtrim-window" id="${p("window")}" aria-hidden="true"></span>
+              <span class="vtrim-cutouts" id="${p("cutouts")}" aria-hidden="true"></span>
               <span class="vtrim-handle vtrim-handle-start" id="${p("handle-start")}" role="slider" aria-label="片头" tabindex="0">
                 <span class="vtrim-handle-tip" id="${p("tip-start")}" hidden>0:00</span>
               </span>
@@ -139,14 +147,19 @@
               <span class="vtrim-playhead" id="${p("playhead")}" aria-hidden="true"></span>
             </div>
           </div>
-          <div class="btn-row tool-actions vtrim-nudge" aria-label="微调时长（可长按）">
+          <div class="btn-row tool-actions vtrim-nudge" id="${p("trim-nudge")}" aria-label="微调时长（可长按）">
             <button type="button" class="ghost-btn" id="${p("nudge-start-m")}" title="片头 −0.1s，可长按">片头−</button>
             <button type="button" class="ghost-btn" id="${p("nudge-start-p")}" title="片头 +0.1s，可长按">片头+</button>
             <button type="button" class="ghost-btn" id="${p("nudge-end-m")}" title="片尾 −0.1s，可长按">片尾−</button>
             <button type="button" class="ghost-btn" id="${p("nudge-end-p")}" title="片尾 +0.1s，可长按">片尾+</button>
           </div>
+          <div class="btn-row tool-actions vtrim-cut-tools" id="${p("cut-tools")}" hidden aria-label="删中间">
+            <button type="button" class="secondary-btn" id="${p("cut-add")}" title="在播放头附近添加一段删除区">添加删除段</button>
+            <button type="button" class="ghost-btn" id="${p("cut-del")}" title="删除当前选中的删除段" disabled>删选中段</button>
+            <button type="button" class="ghost-btn" id="${p("cut-clear")}" title="清空全部删除段">清空</button>
+          </div>
         </div>
-        <div class="vtrim-crop-tools" id="${p("crop-panel")}" hidden>
+        <div class="vtrim-crop-tools" id="${p("crop-panel")}">
           <div class="field-row vtrim-crop-tools-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center">
             <span class="seg" role="group" aria-label="裁剪比例">
               <button type="button" class="seg-btn is-active" data-vte-aspect="free">自由</button>
@@ -264,6 +277,12 @@
     const cropLive = $("crop-live");
     const titleEl = $("title");
     const subEl = $("sub");
+    const cutoutsEl = $("cutouts");
+    const trimNudge = $("trim-nudge");
+    const cutTools = $("cut-tools");
+    const cutAddBtn = $("cut-add");
+    const cutDelBtn = $("cut-del");
+    const cutClearBtn = $("cut-clear");
 
     const filmVideo = document.createElement("video");
     filmVideo.muted = true;
@@ -282,7 +301,11 @@
     let muted = true;
     let aspect = "free";
     let crop = { x: 0, y: 0, w: 1, h: 1 };
-    let editMode = "trim";
+    /** @type {{ start: number, end: number }[]} */
+    let cutouts = [];
+    let selectedCutout = -1;
+    const initMode = String(opts.initialMode || "crop");
+    let editMode = initMode === "trim" || initMode === "cut" ? initMode : "crop";
     let drag = null;
     let cropDrag = null;
     let previewScrub = null;
@@ -302,26 +325,37 @@
 
     const fileName = String(opts.title || file.name || "视频");
     if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
-    if (subEl) subEl.textContent = "修剪时长 · 裁切画面（与「视频修剪」相同交互）";
+    if (subEl) subEl.textContent = "裁切画面 · 修剪时长 · 删中间（可反复改，互相融合）";
 
     function syncActiveHandleUi() {
-      handleStart?.classList.toggle("is-active", activeHandle === "start");
-      handleEnd?.classList.toggle("is-active", activeHandle === "end");
+      handleStart?.classList.toggle("is-active", activeHandle === "start" && editMode !== "cut");
+      handleEnd?.classList.toggle("is-active", activeHandle === "end" && editMode !== "cut");
     }
 
     function syncModeUi() {
       overlay.querySelectorAll("[data-vte-mode]").forEach((btn) => {
         btn.classList.toggle("is-active", btn.dataset.vteMode === editMode);
       });
-      if (trimTools) trimTools.hidden = editMode !== "trim";
+      const showTimeline = editMode === "trim" || editMode === "cut";
+      if (trimTools) trimTools.hidden = !showTimeline;
       if (cropPanel) cropPanel.hidden = editMode !== "crop";
+      if (trimNudge) trimNudge.hidden = editMode !== "trim";
+      if (cutTools) cutTools.hidden = editMode !== "cut";
       if (modeHint) {
         modeHint.textContent =
-          editMode === "crop" ? "拖绿框 · 双击重置" : "点预览播放 · 左右滑 scrub";
+          editMode === "crop"
+            ? "拖绿框 · 双击重置"
+            : editMode === "cut"
+              ? "拖红段删中间 · 可多段"
+              : "拖黄柄裁片头片尾";
       }
       syncCropBoxVisibility();
       stage?.classList.toggle("is-mode-crop", editMode === "crop");
       stage?.classList.toggle("is-mode-trim", editMode === "trim");
+      stage?.classList.toggle("is-mode-cut", editMode === "cut");
+      handleStart?.classList.toggle("is-locked", editMode === "cut");
+      handleEnd?.classList.toggle("is-locked", editMode === "cut");
+      syncCutoutUi();
       scheduleCropLive();
     }
 
@@ -331,6 +365,126 @@
         muteBtn.textContent = muted ? "开声音" : "静音";
         muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
       }
+    }
+
+    function normalizeCutoutsList(list, lo, hi) {
+      const a = Math.max(0, Number(lo) || 0);
+      const b = Math.max(a + MIN_SPAN, Number(hi) || 0);
+      const raw = (Array.isArray(list) ? list : [])
+        .map((c) => ({
+          start: Math.max(a, Number(c?.start) || 0),
+          end: Math.min(b, Number(c?.end) || 0),
+        }))
+        .filter((c) => c.end - c.start >= MIN_CUTOUT)
+        .sort((x, y) => x.start - y.start);
+      const merged = [];
+      for (const c of raw) {
+        const last = merged[merged.length - 1];
+        if (last && c.start <= last.end + 0.02) last.end = Math.max(last.end, c.end);
+        else merged.push({ start: c.start, end: c.end });
+      }
+      return merged;
+    }
+
+    function keepRangesLocal() {
+      const cuts = normalizeCutoutsList(cutouts, startSec, endSec);
+      const keeps = [];
+      let cursor = startSec;
+      for (const c of cuts) {
+        if (c.start > cursor + 0.04) keeps.push({ start: cursor, end: c.start });
+        cursor = Math.max(cursor, c.end);
+      }
+      if (endSec > cursor + 0.04) keeps.push({ start: cursor, end: endSec });
+      if (!keeps.length) keeps.push({ start: startSec, end: endSec });
+      return keeps;
+    }
+
+    function clipCutoutsToWindow() {
+      cutouts = normalizeCutoutsList(cutouts, startSec, endSec);
+      if (selectedCutout >= cutouts.length) selectedCutout = cutouts.length ? cutouts.length - 1 : -1;
+    }
+
+    function syncCutoutUi() {
+      if (cutDelBtn) cutDelBtn.disabled = !(editMode === "cut" && selectedCutout >= 0);
+      paintCutouts();
+    }
+
+    function paintCutouts() {
+      if (!cutoutsEl || !duration) return;
+      cutoutsEl.replaceChildren();
+      const list = normalizeCutoutsList(cutouts, startSec, endSec);
+      list.forEach((c, i) => {
+        const el = document.createElement("span");
+        el.className = "vtrim-cutout" + (i === selectedCutout ? " is-selected" : "");
+        el.dataset.cutIndex = String(i);
+        el.style.setProperty("--cut-start", `${(c.start / duration) * 100}%`);
+        el.style.setProperty("--cut-end", `${(c.end / duration) * 100}%`);
+        const hs = document.createElement("span");
+        hs.className = "vtrim-cutout-handle vtrim-cutout-handle-start";
+        hs.dataset.cutIndex = String(i);
+        hs.dataset.cutEdge = "start";
+        const he = document.createElement("span");
+        he.className = "vtrim-cutout-handle vtrim-cutout-handle-end";
+        he.dataset.cutIndex = String(i);
+        he.dataset.cutEdge = "end";
+        el.append(hs, he);
+        cutoutsEl.appendChild(el);
+      });
+    }
+
+    function addCutoutAtPlayhead() {
+      const mid = clamp(Number(video.currentTime) || (startSec + endSec) / 2, startSec, endSec);
+      const half = Math.max(MIN_CUTOUT / 2, Math.min(1.2, (endSec - startSec) * 0.12));
+      let a = clamp(mid - half, startSec, endSec);
+      let b = clamp(mid + half, startSec, endSec);
+      if (b - a < MIN_CUTOUT) {
+        b = Math.min(endSec, a + MIN_CUTOUT);
+        a = Math.max(startSec, b - MIN_CUTOUT);
+      }
+      cutouts = normalizeCutoutsList([...cutouts, { start: a, end: b }], startSec, endSec);
+      selectedCutout = Math.max(
+        0,
+        cutouts.findIndex((c) => a >= c.start - 0.01 && b <= c.end + 0.01)
+      );
+      if (selectedCutout < 0) selectedCutout = cutouts.length - 1;
+      syncCutoutUi();
+      updateLabels();
+      previewSeek((a + b) / 2, { throttle: false });
+      toast("已添加删除段 · 拖红柄微调");
+    }
+
+    function deleteSelectedCutout() {
+      if (selectedCutout < 0 || selectedCutout >= cutouts.length) return;
+      cutouts = cutouts.filter((_, i) => i !== selectedCutout);
+      selectedCutout = -1;
+      clipCutoutsToWindow();
+      syncCutoutUi();
+      updateLabels();
+    }
+
+    function clearAllCutouts() {
+      cutouts = [];
+      selectedCutout = -1;
+      syncCutoutUi();
+      updateLabels();
+    }
+
+    function setCutoutEdge(index, edge, t) {
+      if (index < 0 || index >= cutouts.length) return;
+      const c = { ...cutouts[index] };
+      if (edge === "start") {
+        c.start = clamp(t, startSec, c.end - MIN_CUTOUT);
+        previewSeek(c.start, { throttle: Boolean(drag) });
+      } else {
+        c.end = clamp(t, c.start + MIN_CUTOUT, endSec);
+        previewSeek(c.end, { throttle: Boolean(drag) });
+      }
+      const next = cutouts.slice();
+      next[index] = c;
+      cutouts = normalizeCutoutsList(next, startSec, endSec);
+      selectedCutout = Math.min(index, cutouts.length - 1);
+      paintCutouts();
+      updateLabels();
     }
 
     function syncAspectUi() {
@@ -461,6 +615,11 @@
       return Math.max(startSec, endSec - END_KEEP_SEC);
     }
 
+    function startKeepSec() {
+      // 半开片头：成片从略晚于预览落点开始，避免多吸前几帧
+      return Math.min(endKeepSec(), startSec + START_KEEP_SEC);
+    }
+
     function previewSeek(t, { throttle = false } = {}) {
       scrubSeekWanted = clamp(t, 0, Math.max(0, duration - END_KEEP_SEC));
       if (!throttle) {
@@ -481,11 +640,18 @@
     function updateLabels() {
       const now = video.currentTime || startSec;
       if (clockEl) clockEl.textContent = `${formatClock(now)} / ${formatClock(duration)}`;
-      const span = Math.max(0, endSec - startSec);
+      const keeps = keepRangesLocal();
+      const keepSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
+      const cutN = normalizeCutoutsList(cutouts, startSec, endSec).length;
       if (rangeLabel) {
-        rangeLabel.textContent = `保留 ${formatClock(span)}（${formatClock(startSec)}–${formatClock(endSec)}）`;
+        if (cutN > 0) {
+          rangeLabel.textContent = `保留 ${formatClock(keepSpan)}（外框 ${formatClock(startSec)}–${formatClock(endSec)} · 删 ${cutN} 段）`;
+        } else {
+          rangeLabel.textContent = `保留 ${formatClock(Math.max(0, endSec - startSec))}（${formatClock(startSec)}–${formatClock(endSec)}）`;
+        }
       }
       syncHandleTips();
+      if (cutDelBtn) cutDelBtn.disabled = !(editMode === "cut" && selectedCutout >= 0);
     }
 
     function paintTimeline() {
@@ -504,10 +670,13 @@
       if (drag?.kind === "start") playT = startSec;
       else if (drag?.kind === "end") playT = endKeepSec();
       else if (drag?.kind === "window") playT = startSec;
+      else if (drag?.kind === "cut-start" && drag.cutIndex >= 0) playT = cutouts[drag.cutIndex]?.start ?? playT;
+      else if (drag?.kind === "cut-end" && drag.cutIndex >= 0) playT = cutouts[drag.cutIndex]?.end ?? playT;
       const pPct = (playT / duration) * 100;
       selEl.style.setProperty("--vtrim-start", `${sPct}%`);
       selEl.style.setProperty("--vtrim-end", `${ePct}%`);
       selEl.style.setProperty("--vtrim-play", `${clamp(pPct, 0, 100)}%`);
+      paintCutouts();
     }
 
     function paintCropLive() {
@@ -675,6 +844,7 @@
       startSec = clamp(t, 0, endSec - MIN_SPAN);
       activeHandle = "start";
       syncActiveHandleUi();
+      clipCutoutsToWindow();
       const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
       timeline?.classList.toggle("is-min-span", atMin);
       if (atMin && Math.abs(prev - startSec) > 0.001) {
@@ -691,6 +861,7 @@
       endSec = clamp(t, startSec + MIN_SPAN, duration);
       activeHandle = "end";
       syncActiveHandleUi();
+      clipCutoutsToWindow();
       const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
       timeline?.classList.toggle("is-min-span", atMin);
       if (atMin && Math.abs(prev - endSec) > 0.001) {
@@ -713,15 +884,32 @@
       updateLabels();
     }
 
-    function finishTrimDrag() {
+    async function finishTrimDrag() {
       if (!drag) return;
       const kind = drag.kind;
-      // 抬手只用已提交的 start/end，不再读 pointer 坐标；不按帧格回跳（否则播放/成片会比预览靠前）
+      // 抬手只用已提交的 start/end，再对齐到浏览器实际显示帧（防预览/成片偏差）
       if (kind === "start") {
-        setStart(quantizeTrimSec(snapEdgeOnly(startSec, "start")), {
-          preview: true,
-          immediateSeek: true,
-        });
+        const want = quantizeTrimSec(snapEdgeOnly(startSec, "start"));
+        startSec = want;
+        try {
+          video.pause();
+        } catch (_) {}
+        scrubSeekWanted = null;
+        if (dragSeekTimer) {
+          clearTimeout(dragSeekTimer);
+          dragSeekTimer = 0;
+        }
+        try {
+          video.currentTime = want;
+        } catch (_) {}
+        await waitSeek(video);
+        // 解码器常落到稍后关键帧；以「用户实际看到的画面」为准，避免成片多吸前面几帧
+        const shown = Number(video.currentTime) || want;
+        startSec = quantizeTrimSec(clamp(Math.max(want, shown), 0, endSec - MIN_SPAN));
+        clipCutoutsToWindow();
+        previewSeek(startSec, { throttle: false });
+        paintTimeline();
+        updateLabels();
       } else if (kind === "end") {
         setEnd(quantizeTrimSec(snapEdgeOnly(endSec, "end")), {
           preview: true,
@@ -733,8 +921,25 @@
         endSec = clamp(startSec + span, startSec + MIN_SPAN, duration);
         endSec = quantizeTrimSec(snapEdgeOnly(endSec, "end"));
         if (endSec - startSec < MIN_SPAN) endSec = Math.min(duration, startSec + MIN_SPAN);
+        clipCutoutsToWindow();
         previewSeek(startSec, { throttle: false });
         paintTimeline();
+        updateLabels();
+      } else if (kind === "cut-start" || kind === "cut-end") {
+        clipCutoutsToWindow();
+        paintCutouts();
+        updateLabels();
+      } else if (kind === "cut-new") {
+        if (drag.cutDraft) {
+          const a = Math.min(drag.cutDraft.a, drag.cutDraft.b);
+          const b = Math.max(drag.cutDraft.a, drag.cutDraft.b);
+          if (b - a >= MIN_CUTOUT) {
+            cutouts = normalizeCutoutsList([...cutouts, { start: a, end: b }], startSec, endSec);
+            selectedCutout = cutouts.length - 1;
+          }
+        }
+        clipCutoutsToWindow();
+        syncCutoutUi();
         updateLabels();
       }
     }
@@ -745,27 +950,50 @@
     }
 
     function hitKind(ratio, target) {
-      if (target === handleStart || target?.classList?.contains("vtrim-handle-start")) return "start";
-      if (target === handleEnd || target?.classList?.contains("vtrim-handle-end")) return "end";
-      if (target === windowEl || target?.classList?.contains("vtrim-window")) return "window";
+      const cutHandle = target?.closest?.(".vtrim-cutout-handle");
+      if (cutHandle && editMode === "cut") {
+        const idx = Number(cutHandle.dataset.cutIndex);
+        const edge = cutHandle.dataset.cutEdge === "end" ? "end" : "start";
+        return { kind: edge === "end" ? "cut-end" : "cut-start", cutIndex: idx };
+      }
+      const cutBody = target?.closest?.(".vtrim-cutout");
+      if (cutBody && editMode === "cut") {
+        return { kind: "cut-select", cutIndex: Number(cutBody.dataset.cutIndex) };
+      }
+      if (editMode === "cut") {
+        // 删中间模式：外框黄柄只读，窗口内拖拽新建删除段
+        const startR = startSec / duration;
+        const endR = endSec / duration;
+        if (ratio >= startR && ratio <= endR) return { kind: "cut-new" };
+        return { kind: "seek" };
+      }
+      if (target === handleStart || target?.classList?.contains("vtrim-handle-start")) return { kind: "start" };
+      if (target === handleEnd || target?.classList?.contains("vtrim-handle-end")) return { kind: "end" };
+      if (target === windowEl || target?.classList?.contains("vtrim-window")) return { kind: "window" };
       const startR = startSec / duration;
       const endR = endSec / duration;
       const pxPad = 0.045;
-      if (Math.abs(ratio - startR) <= pxPad) return "start";
-      if (Math.abs(ratio - endR) <= pxPad) return "end";
-      if (ratio < startR) return "start";
-      if (ratio > endR) return "end";
-      return "seek";
+      if (Math.abs(ratio - startR) <= pxPad) return { kind: "start" };
+      if (Math.abs(ratio - endR) <= pxPad) return { kind: "end" };
+      if (ratio < startR) return { kind: "start" };
+      if (ratio > endR) return { kind: "end" };
+      return { kind: "seek" };
     }
 
     async function seekPlayheadExact(t) {
-      const target = clamp(t, startSec, endKeepSec());
+      let target = clamp(t, startSec, endKeepSec());
+      // 若落在删除段内，跳到下一段保留起点
+      for (const c of normalizeCutoutsList(cutouts, startSec, endSec)) {
+        if (target >= c.start - 0.001 && target < c.end) {
+          target = clamp(c.end, startSec, endKeepSec());
+          break;
+        }
+      }
       scrubSeekWanted = null;
       if (dragSeekTimer) {
         clearTimeout(dragSeekTimer);
         dragSeekTimer = 0;
       }
-      // 先落到目标再 play，避免浏览器从上一关键帧「往前多播几帧」
       try {
         video.pause();
       } catch (_) {}
@@ -808,7 +1036,23 @@
         loopPlayToStart();
         return true;
       }
-      // 到拖片尾预览的同一时刻立刻停，勿等 timeupdate（手机上会晚 3～8 帧）
+      // 跳过删除段
+      for (const c of normalizeCutoutsList(cutouts, startSec, endSec)) {
+        if (cur >= c.start - 0.01 && cur < c.end - 0.001) {
+          playWindowLooping = true;
+          const gen = ++playWindowGen;
+          seekPlayheadExact(c.end)
+            .then(() => {
+              if (closed || gen !== playWindowGen) return;
+              playWindowLooping = false;
+              return video.play();
+            })
+            .catch(() => {
+              playWindowLooping = false;
+            });
+          return true;
+        }
+      }
       if (cur >= endKeepSec() - 0.0005) {
         loopPlayToStart();
         return true;
@@ -856,10 +1100,15 @@
         Math.abs(crop.y) < 2 &&
         Math.abs(crop.w - srcW) < 2 &&
         Math.abs(crop.h - srcH) < 2;
+      const cuts = normalizeCutoutsList(cutouts, startSec, endSec);
       return {
-        trimStart: quantizeTrimSec(startSec),
+        // 片头半开：提交略晚于预览锁定帧，与片尾 END_KEEP 对称
+        trimStart: quantizeTrimSec(startKeepSec()),
         trimEnd: quantizeTrimSec(endSec),
-        // 勾选但全幅仍记 cropOn=false，避免误标「已编辑」
+        cutouts: cuts.map((c) => ({
+          start: quantizeTrimSec(c.start),
+          end: quantizeTrimSec(c.end),
+        })),
         cropOn: enabled && !full,
         crop: {
           x: Math.round(clamp(crop.x, 0, srcW)),
@@ -940,7 +1189,8 @@
     // --- events ---
     overlay.querySelectorAll("[data-vte-mode]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        editMode = btn.dataset.vteMode === "crop" ? "crop" : "trim";
+        const m = btn.dataset.vteMode;
+        editMode = m === "crop" || m === "cut" || m === "trim" ? m : "crop";
         syncModeUi();
         layoutCropBox();
       });
@@ -1006,6 +1256,12 @@
     bindNudgeHold($("nudge-start-p"), () => setStart(startSec + 0.1, { immediateSeek: true }));
     bindNudgeHold($("nudge-end-m"), () => setEnd(endSec - 0.1, { immediateSeek: true }));
     bindNudgeHold($("nudge-end-p"), () => setEnd(endSec + 0.1, { immediateSeek: true }));
+    cutAddBtn?.addEventListener("click", () => addCutoutAtPlayhead());
+    cutDelBtn?.addEventListener("click", () => deleteSelectedCutout());
+    cutClearBtn?.addEventListener("click", () => {
+      clearAllCutouts();
+      toast("已清空删除段");
+    });
     playBtn?.addEventListener("click", () => togglePlay().catch(() => {}));
     muteBtn?.addEventListener("click", () => {
       muted = !muted;
@@ -1021,7 +1277,8 @@
       } catch (_) {}
       const ratio = ratioFromClientX(e.clientX);
       const t = ratio * duration;
-      const kind = hitKind(ratio, e.target);
+      const hit = hitKind(ratio, e.target);
+      const kind = hit.kind;
       timeline?.classList.add("is-dragging");
       if (kind === "start") {
         drag = { kind: "start", pointerId: e.pointerId };
@@ -1042,6 +1299,26 @@
         timeline?.classList.add("is-dragging-window");
         windowEl?.setPointerCapture?.(e.pointerId);
         syncHandleTips();
+      } else if (kind === "cut-select") {
+        selectedCutout = Number(hit.cutIndex) || 0;
+        syncCutoutUi();
+        drag = null;
+        timeline?.classList.remove("is-dragging");
+      } else if (kind === "cut-start" || kind === "cut-end") {
+        selectedCutout = Number(hit.cutIndex) || 0;
+        drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout };
+        timeline?.setPointerCapture?.(e.pointerId);
+        setCutoutEdge(selectedCutout, kind === "cut-end" ? "end" : "start", t);
+      } else if (kind === "cut-new") {
+        const clamped = clamp(t, startSec, endSec);
+        selectedCutout = -1;
+        drag = {
+          kind: "cut-new",
+          pointerId: e.pointerId,
+          cutDraft: { a: clamped, b: clamped },
+        };
+        timeline?.setPointerCapture?.(e.pointerId);
+        previewSeek(clamped, { throttle: false });
       } else {
         previewSeek(clamp(t, startSec, endKeepSec()));
         drag = { kind: "seek", pointerId: e.pointerId };
@@ -1062,15 +1339,33 @@
       const t = ratioFromClientX(e.clientX) * duration;
       if (drag.kind === "start") setStart(t);
       else if (drag.kind === "end") setEnd(t);
-      else previewSeek(clamp(t, startSec, endKeepSec()));
+      else if (drag.kind === "cut-start" || drag.kind === "cut-end") {
+        setCutoutEdge(drag.cutIndex, drag.kind === "cut-end" ? "end" : "start", t);
+      } else if (drag.kind === "cut-new" && drag.cutDraft) {
+        drag.cutDraft.b = clamp(t, startSec, endSec);
+        const a = Math.min(drag.cutDraft.a, drag.cutDraft.b);
+        const b = Math.max(drag.cutDraft.a, drag.cutDraft.b);
+        // 临时画一段预览删除区
+        if (cutoutsEl && duration) {
+          cutoutsEl.querySelectorAll(".vtrim-cutout.is-draft").forEach((n) => n.remove());
+          const el = document.createElement("span");
+          el.className = "vtrim-cutout is-draft is-selected";
+          el.style.setProperty("--cut-start", `${(a / duration) * 100}%`);
+          el.style.setProperty("--cut-end", `${(b / duration) * 100}%`);
+          cutoutsEl.appendChild(el);
+        }
+        previewSeek(b, { throttle: true });
+        updateLabels();
+      } else previewSeek(clamp(t, startSec, endKeepSec()));
     }
     function onTimelinePointerUp(e) {
       if (!drag || drag.pointerId !== e.pointerId) return;
-      finishTrimDrag();
+      const finishing = finishTrimDrag();
       timeline?.classList.remove("is-dragging-window", "is-dragging");
       drag = null;
       syncHandleTips();
       e.preventDefault();
+      Promise.resolve(finishing).catch(() => {});
     }
     timeline?.addEventListener("pointerdown", onTimelinePointerDown);
     timeline?.addEventListener("pointermove", onTimelinePointerMove);
@@ -1255,6 +1550,8 @@
         const initial = opts.initial || {};
         startSec = clamp(Number(initial.trimStart) || 0, 0, Math.max(0, duration - MIN_SPAN));
         endSec = clamp(Number(initial.trimEnd) || duration, startSec + MIN_SPAN, duration || MIN_SPAN);
+        cutouts = normalizeCutoutsList(initial.cutouts || [], startSec, endSec);
+        selectedCutout = -1;
         if (initial.crop && initial.cropOn) {
           crop = {
             x: Number(initial.crop.x) || 0,
@@ -1265,7 +1562,8 @@
           if (cropEnable) cropEnable.checked = true;
         } else {
           crop = { x: 0, y: 0, w: srcW, h: srcH };
-          if (cropEnable) cropEnable.checked = Boolean(initial.cropOn);
+          // 默认启用裁剪框（自由=整幅）；用户缩框后才真正 cropOn
+          if (cropEnable) cropEnable.checked = initial.cropOn !== false;
         }
         syncMuteUi();
         syncAspectUi();
@@ -1297,8 +1595,45 @@
     });
   }
 
+  function normalizeCutouts(list, trimStart, trimEnd) {
+    const a = Math.max(0, Number(trimStart) || 0);
+    const b = Math.max(a + MIN_SPAN, Number(trimEnd) || 0);
+    const raw = (Array.isArray(list) ? list : [])
+      .map((c) => ({
+        start: Math.max(a, Number(c?.start) || 0),
+        end: Math.min(b, Number(c?.end) || 0),
+      }))
+      .filter((c) => c.end - c.start >= MIN_CUTOUT)
+      .sort((x, y) => x.start - y.start);
+    const merged = [];
+    for (const c of raw) {
+      const last = merged[merged.length - 1];
+      if (last && c.start <= last.end + 0.02) last.end = Math.max(last.end, c.end);
+      else merged.push({ start: c.start, end: c.end });
+    }
+    return merged;
+  }
+
+  function keepRangesFromEdit(edit, duration) {
+    const d = Math.max(0, Number(duration) || 0);
+    const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
+    const trimEnd = Math.min(d, Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || d));
+    const cuts = normalizeCutouts(edit?.cutouts, trimStart, trimEnd);
+    const keeps = [];
+    let cursor = trimStart;
+    for (const c of cuts) {
+      if (c.start > cursor + 0.04) keeps.push({ start: cursor, end: c.start });
+      cursor = Math.max(cursor, c.end);
+    }
+    if (trimEnd > cursor + 0.04) keeps.push({ start: cursor, end: trimEnd });
+    if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
+    return keeps;
+  }
+
   window.DevToolsVtrimEditor = {
     open: openEditor,
     ensureCss: ensureVtrimCss,
+    normalizeCutouts,
+    keepRangesFromEdit,
   };
 })();
