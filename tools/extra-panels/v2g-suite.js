@@ -144,7 +144,7 @@
       /** 超预算时的质量让渡阶梯（gifski quality：92→83→73→66→55；ffmpeg 路径等价降色 256→…→96）。
        *  让渡顺序：先收到清晰工作点 420 → 再降质量（同宽）→ 才允许 380 → 再降帧率 → 最后 gifsicle lossy。
        *  降 gifski quality 是「自适应量化」，比固定降到 32 色耐看得多。 */
-      const V2G_BLACKBOX_QUALITY_LADDER = [1, 8, 15, 22, 30];
+      const V2G_BLACKBOX_QUALITY_LADDER = [1, 8, 15, 18, 22, 30];
       /** 满档 gifski quality（q1→92）；加宽门闩以此为准，避免 quality 字段丢失时误加宽 */
       const V2G_BLACKBOX_GIFSKI_BEST =
         typeof gifQualityToGifskiQuality === "function"
@@ -191,33 +191,29 @@
       async function blackboxAcceptBoostIfFits(enc, { onProgress, isAborted, softGate = 1.22, curSize = 0 } = {}) {
         if (!enc?.blob?.size) return null;
         if (enc.blob.size <= V2G_BLACKBOX_MAX_BYTES) return enc;
-        // 抬质试压：默认可试 ~1.65×（约需省 40%）；成片已很松时再放到 1.75
-        let gate = Math.max(softGate, 1.65);
+        // 抬质试压：默认可试到 2×（摄影片硬压常需省很多）；更远则直接放弃
+        let gate = Math.max(softGate, 2);
         const cur = Number(curSize) || 0;
         if (cur > 0 && cur < V2G_BLACKBOX_MAX_BYTES * 0.75) {
-          gate = Math.max(gate, 1.75);
+          gate = Math.max(gate, 2.1);
         }
-        if (enc.blob.size > V2G_BLACKBOX_MAX_BYTES * gate) return null;
-        if (typeof compressGifBlob !== "function" || typeof buildBlackboxSoftCompressArgs !== "function") {
+        if (enc.blob.size > V2G_BLACKBOX_MAX_BYTES * gate) {
+          vbbLog(
+            `[vbb-phase] 抬质跳过试压：原始 ${formatKb(enc.blob.size)} > 门闩 ${gate.toFixed(2)}×预算`
+          );
+          return null;
+        }
+        if (typeof compressGifBlob !== "function" || typeof buildBlackboxHardCompressArgs !== "function") {
           return null;
         }
         const aborted = typeof isAborted === "function" ? isAborted : () => abortV2g;
         let best = enc.blob;
         let rounds = 0;
         try {
-          // 电影 soft → 再加两档更猛 lossy（仍不缩分辨率），专供抬质进预算
-          for (let round = 1; round <= 6; round++) {
+          // 硬压前 4 档（电影 lossy，r≥5 才 scale）——soft 对摄影片省不够
+          for (let round = 1; round <= 4; round++) {
             if (aborted()) throw new Error("已取消");
-            const plan =
-              round <= 4
-                ? buildBlackboxSoftCompressArgs(round, { movie: true })
-                : {
-                    label: "抬质强轻压",
-                    args: `-O3 --lossy=${Math.min(140, 90 + (round - 4) * 25)}`,
-                    round,
-                    lossy: Math.min(140, 90 + (round - 4) * 25),
-                    movie: true,
-                  };
+            const plan = buildBlackboxHardCompressArgs(round, { movie: true });
             const out = await compressGifBlob(
               best,
               "standard",
@@ -242,6 +238,11 @@
               };
             }
           }
+          vbbLog(
+            `[vbb-phase] 抬质轻压未进预算 ${formatKb(enc.blob.size)}→${formatKb(best.size)} · 放弃 q${
+              Number(enc.quality) || "?"
+            }`
+          );
         } catch (err) {
           if (String(err && err.message) === "已取消") throw err;
         }
@@ -3079,7 +3080,43 @@
                   isAborted,
                   curSize: cur.blob.size,
                 });
-                if (!fitted) break;
+                if (!fitted) {
+                  // 整档装不下：试中间 gifski 质量（如 65→70→74），吃掉余量里「半档」清晰度
+                  const curGq = Number(cur.gifskiQuality) || 0;
+                  const nextGq =
+                    Number(enc.gifskiQuality) ||
+                    (typeof gifQualityToGifskiQuality === "function"
+                      ? gifQualityToGifskiQuality(q)
+                      : 0);
+                  const midGq =
+                    curGq > 0 && nextGq > curGq + 3
+                      ? Math.round((curGq + nextGq) / 2)
+                      : 0;
+                  if (!(midGq > curGq)) break;
+                  vbbLog(
+                    `[vbb-phase] 余量抬画质半档 gq${curGq}→${midGq} 宽${w}`
+                  );
+                  const midEnc = await encodeAtWidthFps(fpsNow, w, q, midGq);
+                  if (!midEnc?.blob) break;
+                  let midCand = {
+                    ...midEnc,
+                    compressRounds: 0,
+                    maxW: w,
+                    quality: q,
+                    gifskiQuality: midGq,
+                  };
+                  if (midCand.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+                    const midFit = await blackboxAcceptBoostIfFits(midCand, {
+                      onProgress,
+                      isAborted,
+                      curSize: cur.blob.size,
+                    });
+                    if (!midFit) break;
+                    midCand = midFit;
+                  }
+                  cur = midCand;
+                  break;
+                }
                 cand = fitted;
               }
               cur = cand;
