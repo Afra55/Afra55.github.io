@@ -190,7 +190,9 @@ async function encodeOne(page, videoPath) {
     meta,
     summary: result.summary,
     clips: result.clips,
-    phases: logs.filter((l) => /选定|余量提帧|试 |决策|O3后加宽/.test(l)),
+    phases: logs.filter((l) =>
+      /选定|余量提帧|余量抬画质|跳过加宽|试 |决策|O3后/.test(l)
+    ),
   };
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
