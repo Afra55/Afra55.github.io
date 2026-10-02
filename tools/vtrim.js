@@ -706,8 +706,8 @@
     if (modeHint) {
       modeHint.textContent =
         editMode === "crop"
-          ? "拖绿框裁边框 · 双击重置 · 预览区左右滑 scrub"
-          : "拖黄框两端看时间气泡 · 预览区点按播放 · 左右滑 scrub";
+          ? "拖绿框 · 双击重置"
+          : "点预览播放 · 左右滑 scrub";
     }
     // crop overlay only in crop mode (and when enabled)
     syncCropBoxVisibility();

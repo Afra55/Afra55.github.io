@@ -90,7 +90,7 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
-      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">修剪时长 · 裁切画面</p>
+      <p class="hint tight vtrim-editor-sub" id="${p("sub")}" hidden>修剪时长 · 裁切画面</p>
     </header>
     <div class="vtrim-editor-body">
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
@@ -156,7 +156,7 @@
             <button type="button" class="ghost-btn" id="${p("crop-reset")}" title="恢复为当前比例下的最大裁剪">重置裁剪</button>
             <label class="flag"><input type="checkbox" id="${p("crop-enable")}" checked /> 启用裁剪框</label>
           </div>
-          <p class="hint tight">拖绿框或角点裁边框 · 双击绿框重置 · 关闭裁剪框则只保留修剪时长</p>
+          <p class="hint tight">拖绿框裁切 · 双击重置</p>
           <canvas id="${p("crop-live")}" class="vtrim-crop-live" width="160" height="90" hidden aria-label="裁剪成片预览"></canvas>
         </div>
       </div>
@@ -259,9 +259,7 @@
       if (cropPanel) cropPanel.hidden = editMode !== "crop";
       if (modeHint) {
         modeHint.textContent =
-          editMode === "crop"
-            ? "拖绿框裁边框 · 双击重置 · 预览区左右滑 scrub"
-            : "拖黄框两端看时间气泡 · 预览区点按播放 · 左右滑 scrub";
+          editMode === "crop" ? "拖绿框 · 双击重置" : "点预览播放 · 左右滑 scrub";
       }
       syncCropBoxVisibility();
       stage?.classList.toggle("is-mode-crop", editMode === "crop");
