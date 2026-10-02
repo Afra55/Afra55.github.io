@@ -663,9 +663,14 @@
         return { startSec, span, edit };
       }
 
-      async function resolveVbbEncodeCrop(file, edit, srcW, srcH) {
+      async function resolveVbbEncodeCrop(file, edit, srcW, srcH, duration) {
         if (edit?.cropOn && edit.crop) {
           return normalizeV2gCrop(edit.crop, srcW, srcH);
+        }
+        // 用户进编辑只裁了时长、没开裁画面 → 尊重整幅，禁止再叠「自动去色边」
+        // （502 类雾气/字幕底会被旧逻辑啃到字幕下）
+        if (edit && !edit.cropOn && vbbEditIsDirty(edit, duration, srcW, srcH)) {
+          return null;
         }
         return vbbResolveCrop(file);
       }
@@ -2685,12 +2690,11 @@
         const near = (a, b) =>
           Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
         const luma = (c) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-        /** 边色像黑边/白边，或与对边同色（灰底 letterbox）才裁，避免深色界面「整行纯色」误伤 */
-        const looksLikeBorder = (c, opposite) => {
+        /** 只认黑边/白边。灰雾、对边同色灰底（西游记云雾）不当 letterbox，否则会裁到字幕下 */
+        const looksLikeBorder = (c) => {
           if (!c) return false;
           const y = luma(c);
-          if (y <= 30 || y >= 225) return true;
-          return Boolean(opposite && near(c, opposite));
+          return y <= 28 || y >= 230;
         };
         /** 该行/该列是否「纯色」，是则返回平均色，否则 null。
          *  离群 ≤1.2%：只吞压缩噪点，不把状态栏/细线当边框。 */
@@ -2731,28 +2735,28 @@
         const maxBottom = Math.floor(h * 0.18);
         const maxLeft = Math.floor(w * 0.18);
         const maxRight = Math.floor(w * 0.18);
-        if (looksLikeBorder(cTop, cBottom)) {
+        if (looksLikeBorder(cTop)) {
           while (top < bottom && top < maxTop) {
             const c = lineColor(rowAt(top), w);
             if (!c || !near(c, cTop)) break;
             top++;
           }
         }
-        if (looksLikeBorder(cBottom, cTop)) {
+        if (looksLikeBorder(cBottom)) {
           while (bottom > top && h - 1 - bottom < maxBottom) {
             const c = lineColor(rowAt(bottom), w);
             if (!c || !near(c, cBottom)) break;
             bottom--;
           }
         }
-        if (looksLikeBorder(cLeft, cRight)) {
+        if (looksLikeBorder(cLeft)) {
           while (left < right && left < maxLeft) {
             const c = lineColor(colAt(left), h);
             if (!c || !near(c, cLeft)) break;
             left++;
           }
         }
-        if (looksLikeBorder(cRight, cLeft)) {
+        if (looksLikeBorder(cRight)) {
           while (right > left && w - 1 - right < maxRight) {
             const c = lineColor(colAt(right), h);
             if (!c || !near(c, cRight)) break;
@@ -2772,8 +2776,8 @@
       /** 采样多帧取「内容并集」（各边取最浅裁），只裁所有帧都同意是边框的区域；无边框返回 null */
       async function detectVideoCrop(file) {
         if (!file) return null;
-        // v3：并集裁 + 更严边色，旧缓存会裁多，必须换 key
-        const cacheKey = `v3|${file.name}|${file.size}|${file.lastModified || 0}`;
+        // v4：仅黑/白边；编辑只裁时长时不走自动裁（见 resolveVbbEncodeCrop）
+        const cacheKey = `v4|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         const url = URL.createObjectURL(file);
@@ -3098,7 +3102,13 @@
                   } catch (_) {}
                   await new Promise((r) => setTimeout(r, 50));
                 }
-                const vbbCrop = await resolveVbbEncodeCrop(item.file, win.edit, item.srcW, item.srcH);
+                const vbbCrop = await resolveVbbEncodeCrop(
+                  item.file,
+                  win.edit,
+                  item.srcW,
+                  item.srcH,
+                  item.duration
+                );
                 const encoded = await encodeBlackboxClip({
                   file: item.file,
                   startSec: win.startSec,
@@ -3299,7 +3309,13 @@
           await prewarmFfmpegEngine().catch(() => {});
           bumpVbbEncodeProgress(0.03, "整段转换", "准备编码器…");
           setVbbClipJob(0, { status: "running", progress: 0.02, text: "准备编码…" });
-          const vbbCrop = await resolveVbbEncodeCrop(vbbSourceFile, win.edit, srcW, srcH);
+          const vbbCrop = await resolveVbbEncodeCrop(
+            vbbSourceFile,
+            win.edit,
+            srcW,
+            srcH,
+            duration
+          );
           const encoded = await encodeBlackboxClip({
             file: vbbSourceFile,
             startSec: win.startSec,
@@ -4596,7 +4612,7 @@
           try { vbbCropChk.checked = localStorage.getItem("devtools-vbb-auto-crop") === "1"; } catch (_) {}
           vbbCropChk.addEventListener("change", () => {
             try { localStorage.setItem("devtools-vbb-auto-crop", vbbCropChk.checked ? "1" : "0"); } catch (_) {}
-            toast(vbbCropChk.checked ? "已开启：自动裁剪纯色边框" : "已关闭自动裁剪");
+            toast(vbbCropChk.checked ? "已开启：自动裁黑边/白边" : "已关闭自动裁剪");
           });
         }
         vbbError = $("#vbb-error", root);
