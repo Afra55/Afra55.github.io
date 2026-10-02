@@ -1174,8 +1174,9 @@
     const movie = Boolean(opts && opts.movie);
     // 第 1 轮用纯无损 -O3：--lossy 是 gifsicle 的「有损优化」，会改动像素、画面出颗粒。
     if (r === 1) return { label: "无损优化", args: "-O3", round: 1, lossy: 0, movie };
+    // 电影摄影/渐变：lossy 体积杠杆大，但 >30 易把调色板打成泥色（601 实测）。超预算时宁可多轮轻压。
     const lossy = movie
-      ? Math.min(120, 40 + (r - 2) * 28) // 电影：2轮40, 3轮68, 4轮96…
+      ? Math.min(90, 28 + (r - 2) * 22) // 电影：2轮28, 3轮50, 4轮72…
       : Math.min(75, 25 + (r - 2) * 22); // UI：2轮25, 3轮47, 4轮69
     return { label: movie ? "电影轻压" : "轻柔", args: `-O3 --lossy=${lossy}`, round: r, lossy, movie };
   }
@@ -1183,21 +1184,19 @@
   /**
    * 黑盒最后一档：每轮都有 lossy（对齐 -l 力度），避免首轮纯 O3 白占一轮。
    * 电影片段提高 lossy 起点（实测摄影内容 Medium lossy 可省约 40%，UI 仅约 10%）。
+   * 减色（--colors）一律延后：过早 128 色会把摄影片打成泥色（601/613 实测：画质92 + 每帧~80色）。
    */
   function buildBlackboxHardCompressArgs(round = 1, opts = {}) {
     const r = Math.max(1, Math.round(Number(round) || 1));
     const movie = Boolean(opts && opts.movie);
     if (r === 1) return { label: "无损优化", args: "-O3", round: 1, lossy: 0, movie };
     const level = r <= 3 ? "standard" : "strong";
-    const baseLossy = movie ? (level === "strong" ? 130 : 80) : level === "strong" ? 100 : 60;
-    const lossy = Math.min(200, baseLossy + (r - 1) * (movie ? 25 : 30));
+    const baseLossy = movie ? (level === "strong" ? 110 : 70) : level === "strong" ? 100 : 60;
+    const lossy = Math.min(200, baseLossy + (r - 1) * (movie ? 22 : 30));
     const parts = ["-O3", `--lossy=${lossy}`];
-    // 电影：尽量晚减色（色彩渐变敏感）；UI 仍可 128
-    if (!movie && (level === "strong" || r >= 2)) {
-      parts.push("--colors 128");
-    } else if (movie && r >= 5) {
-      parts.push("--colors 192");
-    }
+    // 减色极伤渐变/肤色：无论电影/UI，都延到很晚；优先靠 lossy + scale 挤预算
+    if (r >= 6) parts.push("--colors 128");
+    else if (r >= 5) parts.push("--colors 192");
     if (r >= 7) parts.push("--scale 0.85");
     else if (r >= 5) parts.push("--scale 0.9");
     return {
@@ -1586,13 +1585,15 @@
     };
   }
 
-  async function compressExistingGifToBlackbox(blob, onProgress, shouldAbort) {
+  async function compressExistingGifToBlackbox(blob, onProgress, shouldAbort, opts = {}) {
     const MAX = blackboxUseMaxBytes();
     if (!blob) throw new Error("没有可压缩的 GIF");
     const isAborted = typeof shouldAbort === "function" ? shouldAbort : () => false;
     if (blob.size <= MAX) {
       return { blob, skipped: true, compressRounds: 0, ok: true, grew: false };
     }
+    // 默认按摄影友好压（晚减色）。屏录可显式 opts.movie=false。
+    const movie = opts && opts.movie === false ? false : true;
     // 允许缩放：用户可关（本地记住），关掉则只降色不缩尺寸
     let allowScale = true;
     try {
@@ -1607,7 +1608,7 @@
     let noGainStreak = 0;
     for (let round = 1; round <= maxRounds; round++) {
       if (isAborted()) throw new Error("已取消");
-      const plan = buildBlackboxHardCompressArgs(round);
+      const plan = buildBlackboxHardCompressArgs(round, { movie });
       const out = await compressGifBlob(
         best,
         "standard",
@@ -1622,7 +1623,7 @@
         if (best.size <= MAX) break;
         continue;
       }
-      // 没变小：也要先走过「降色数(r2起) / 缩分辨率(r5起)」这些能强制缩小的档，
+      // 没变小：也要先走过「降色数(r5起) / 缩分辨率(r5起)」这些能强制缩小的档，
       // 纯 lossy 压不动不代表 colors/scale 压不动；连走多档都无收益才真到下限。
       noGainStreak += 1;
       if (round >= 5 && noGainStreak >= 2) break;

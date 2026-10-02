@@ -183,6 +183,70 @@
         if (Number.isFinite(gq) && gq < V2G_BLACKBOX_GIFSKI_BEST - 1) return false;
         return blackboxLadderQuality(c) <= V2G_BLACKBOX_QUALITY + 0.01;
       }
+      /**
+       * 抬质试编若略超 10MB：允许 gifsicle 轻压进预算后再接受。
+       * 根因：fitFps 在 q22 进预算后，抬到 q15 原始常 12MB+ 被硬拒；随后电影lossy
+       * 把 q22 压到 ~6.5MB 腾出余量，但抬质从不「高档+轻压」，余量白白闲置。
+       */
+      async function blackboxAcceptBoostIfFits(enc, { onProgress, isAborted, softGate = 1.22, curSize = 0 } = {}) {
+        if (!enc?.blob?.size) return null;
+        if (enc.blob.size <= V2G_BLACKBOX_MAX_BYTES) return enc;
+        // 抬质试压：默认可试 ~1.65×（约需省 40%）；成片已很松时再放到 1.75
+        let gate = Math.max(softGate, 1.65);
+        const cur = Number(curSize) || 0;
+        if (cur > 0 && cur < V2G_BLACKBOX_MAX_BYTES * 0.75) {
+          gate = Math.max(gate, 1.75);
+        }
+        if (enc.blob.size > V2G_BLACKBOX_MAX_BYTES * gate) return null;
+        if (typeof compressGifBlob !== "function" || typeof buildBlackboxSoftCompressArgs !== "function") {
+          return null;
+        }
+        const aborted = typeof isAborted === "function" ? isAborted : () => abortV2g;
+        let best = enc.blob;
+        let rounds = 0;
+        try {
+          // 电影 soft → 再加两档更猛 lossy（仍不缩分辨率），专供抬质进预算
+          for (let round = 1; round <= 6; round++) {
+            if (aborted()) throw new Error("已取消");
+            const plan =
+              round <= 4
+                ? buildBlackboxSoftCompressArgs(round, { movie: true })
+                : {
+                    label: "抬质强轻压",
+                    args: `-O3 --lossy=${Math.min(140, 90 + (round - 4) * 25)}`,
+                    round,
+                    lossy: Math.min(140, 90 + (round - 4) * 25),
+                    movie: true,
+                  };
+            const out = await compressGifBlob(
+              best,
+              "standard",
+              (ratio, text) =>
+                typeof onProgress === "function"
+                  ? onProgress(Math.min(0.99, 0.9 + (ratio || 0) * 0.05), text || plan.label || "抬质轻压")
+                  : undefined,
+              { round, plan }
+            );
+            rounds = round;
+            if (out?.size && out.size < best.size) best = out;
+            if (best.size <= V2G_BLACKBOX_MAX_BYTES) {
+              vbbLog(
+                `[vbb-phase] 抬质轻压进预算 ${formatKb(enc.blob.size)}→${formatKb(best.size)} · q${
+                  Number(enc.quality) || "?"
+                }/gq${Number(enc.gifskiQuality) || "?"}`
+              );
+              return {
+                ...enc,
+                blob: best,
+                compressRounds: (Number(enc.compressRounds) || 0) + rounds,
+              };
+            }
+          }
+        } catch (err) {
+          if (String(err && err.message) === "已取消") throw err;
+        }
+        return null;
+      }
       /** 是否触屏（手机/平板）：分块 UI 显示仍以它为准；内存预算改走性能档 */
       function isCoarsePointer() {
         return typeof isCoarsePointerMedia === "function"
@@ -2455,9 +2519,10 @@
         for (let round = 1; round <= maxRounds; round++) {
           if (abortV2g) throw new Error("已取消");
           const before = candidate.blob.size;
+          const movieLike = true; // 黑盒成片默认摄影友好：勿早 --colors
           const plan = isLastTier
-            ? buildBlackboxHardCompressArgs(round)
-            : buildBlackboxSoftCompressArgs(round);
+            ? buildBlackboxHardCompressArgs(round, { movie: movieLike })
+            : buildBlackboxSoftCompressArgs(round, { movie: movieLike });
           const modeTip = isLastTier ? plan.label : "轻柔";
           setV2gProgress(
             true,
@@ -2616,37 +2681,9 @@
           }
         } catch (_) {}
 
-        // 电影向：O3 后再跑一轮中等 lossy（摄影内容体积杠杆大），仍 ≤10MB 则用更小底再加宽
-        try {
-          const srcFpsHint = Number(result.srcFps) || Number(clipOpts.srcFps) || 0;
-          const movie =
-            typeof blackboxIsMovieLike === "function"
-              ? blackboxIsMovieLike(srcFpsHint)
-              : true;
-          if (
-            movie &&
-            result.blob.size <= V2G_BLACKBOX_MAX_BYTES &&
-            result.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.72 &&
-            !clipOpts.isAborted?.()
-          ) {
-            const tLossy = performance.now();
-            const beforeL = result.blob.size;
-            const plan = buildBlackboxSoftCompressArgs(2, { movie: true });
-            const squeezed = await compressGifBlob(result.blob, "standard", null, { plan });
-            if (
-              squeezed?.size > 0 &&
-              squeezed.size < beforeL * 0.97 &&
-              squeezed.size <= V2G_BLACKBOX_MAX_BYTES
-            ) {
-              vbbLog(
-                `[vbb-phase] 电影lossy ${Math.round(performance.now() - tLossy)}ms ${formatKb(
-                  beforeL
-                )}→${formatKb(squeezed.size)}（腾预算加宽）`
-              );
-              result = { ...result, blob: squeezed, compressRounds: (result.compressRounds || 0) + 1 };
-            }
-          }
-        } catch (_) {}
+        // 不再「电影lossy 腾预算」：gifsicle --lossy 会合并调色板（摄影片色数可从数百掉到 <100），
+        // 而随后加宽是干净重编，吃不到 lossy 省下的体积；加宽失败时却留下崩色成片（601：画质92 标签 + 泥色）。
+        // 加宽试探一律基于 O3 成片；超预算时由 blackboxAcceptBoostIfFits / 硬闸再压。
 
         // O3 常再瘦一点：已在上限内且仍 <99% 时再加宽；短片直接探到源宽吃满，长片仍限约 1.5×
         try {
@@ -2673,7 +2710,7 @@
           }
           const onProgress = clipOpts.onProgress || (() => {});
           const comfortO3 = Math.min(hardMax, V2G_BLACKBOX_COMFORT_W);
-          if (quality > V2G_BLACKBOX_QUALITY + 0.01 && result.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.92) {
+          if (quality > V2G_BLACKBOX_QUALITY + 0.01 && result.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
             const at = V2G_BLACKBOX_QUALITY_LADDER.indexOf(quality);
             const targetW = Math.max(curW, comfortO3);
             for (let qi = Math.max(0, at - 1); qi >= 0; qi--) {
@@ -2690,17 +2727,28 @@
                 stageLabel: `${fps}FPS·宽${targetW}·q${q}`,
                 onProgress: (local, text) => onProgress(0.97 + local * 0.02, text),
               });
-              if (!enc?.blob || enc.blob.size > V2G_BLACKBOX_MAX_BYTES) break;
-              result = {
+              if (!enc?.blob) break;
+              let cand = {
                 ...enc,
                 compressRounds: result.compressRounds || 0,
                 maxW: targetW,
                 srcFps: result.srcFps,
+                quality: q,
               };
+              if (cand.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+                const fitted = await blackboxAcceptBoostIfFits(cand, {
+                  onProgress,
+                  isAborted: clipOpts.isAborted,
+                  curSize: result.blob.size,
+                });
+                if (!fitted) break;
+                cand = fitted;
+              }
+              result = cand;
               curW = targetW;
               quality = q;
-              gifskiQuality = Number.isFinite(Number(enc.gifskiQuality))
-                ? Number(enc.gifskiQuality)
+              gifskiQuality = Number.isFinite(Number(cand.gifskiQuality))
+                ? Number(cand.gifskiQuality)
                 : undefined;
             }
           }
@@ -2788,14 +2836,15 @@
         const speed = Math.max(1, Number(result.speed) || 1);
         let best = result;
 
-        // 1) gifsicle 硬压（含缩放档）
+        // 1) gifsicle 硬压（含缩放档）；默认摄影友好（晚减色），避免画质标签高但调色板崩
         if (typeof compressExistingGifToBlackbox === "function") {
           onProgress(0.97, `硬闸压缩到 ${blackboxBudgetLabel()}…`);
           try {
             const c = await compressExistingGifToBlackbox(
               best.blob,
               (ratio, text) => onProgress(0.97 + Math.min(0.01, (ratio || 0) * 0.01), text || "硬闸压缩"),
-              isAborted
+              isAborted,
+              { movie: blackboxIsMovieLike(Number(best.srcFps) || Number(clipOpts?.srcFps) || 0) }
             );
             if (c?.blob && c.blob.size < best.blob.size) {
               best = {
@@ -2858,7 +2907,8 @@
               const c2 = await compressExistingGifToBlackbox(
                 cand.blob,
                 (ratio, text) => onProgress(0.99, text || "硬闸再压"),
-                isAborted
+                isAborted,
+                { movie: blackboxIsMovieLike(Number(best.srcFps) || Number(clipOpts?.srcFps) || 0) }
               );
               if (c2?.blob && c2.blob.size < cand.blob.size) {
                 cand = {
@@ -3023,7 +3073,15 @@
               const enc = await encodeAtWidthFps(fpsNow, w, q);
               if (!enc?.blob) break;
               let cand = { ...enc, compressRounds: 0, maxW: w, quality: q };
-              if (cand.blob.size > V2G_BLACKBOX_MAX_BYTES) break;
+              if (cand.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+                const fitted = await blackboxAcceptBoostIfFits(cand, {
+                  onProgress,
+                  isAborted,
+                  curSize: cur.blob.size,
+                });
+                if (!fitted) break;
+                cand = fitted;
+              }
               cur = cand;
             }
           };
@@ -3141,7 +3199,8 @@
                         swapped.blob,
                         (ratio, text) =>
                           onProgress(0.961 + Math.min(0.01, (ratio || 0) * 0.01), text || "换宽轻压"),
-                        isAborted
+                        isAborted,
+                        { movie: true }
                       );
                       if (c?.blob && c.blob.size < swapped.blob.size) {
                         swapped = {
@@ -3495,7 +3554,8 @@
                 const c = await compressExistingGifToBlackbox(
                   last.blob,
                   (ratio, text) => onProgress(0.4 + Math.min(0.1, (ratio || 0) * 0.1), text || "轻压保宽"),
-                  isAborted
+                  isAborted,
+                  { movie: true }
                 );
                 if (c?.blob && c.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
                   const kept = {

@@ -281,8 +281,9 @@ function buildVideoFilter(opts) {
   if (opts.denoise !== false) parts.push("hqdn3d=1.5:1.5:6:6");
   parts.push(`scale=${width}:-2:flags=lanczos`);
   if (Math.abs(brightness) >= 0.01) {
-    const b = Math.max(-1, Math.min(1, brightness));
-    parts.push(`eq=brightness=${b.toFixed(3)}`);
+    // 与面板一致：乘法提亮（勿用 eq=brightness 加性，同等数值会过曝/发灰）
+    const m = Math.max(0.1, Math.min(3, 1 + Math.max(-1, Math.min(1, brightness))));
+    parts.push(`colorchannelmixer=rr=${m.toFixed(4)}:gg=${m.toFixed(4)}:bb=${m.toFixed(4)}`);
   }
   return parts.join(",");
 }
@@ -315,7 +316,11 @@ function encodeWithGifski(bin, ffmpegBin, inputPath, outPath, rawOpts = {}) {
     const gsArgs = ["-", "-o", outPath, "--quality", String(opts.quality)];
     if (rawOpts.fast === true) gsArgs.push("--fast");
     if (opts.extra > 1 || rawOpts.extra === true) gsArgs.push("--extra");
-    if (opts.lossy > 0) gsArgs.push("--lossy", String(opts.lossy));
+    // gifski 无 --lossy；面板/gifsicle 的 lossy 数值映射到 --lossy-quality（越低越噪）
+    if (opts.lossy > 0) {
+      const lq = Math.max(1, Math.min(100, 100 - Math.round(opts.lossy / 2)));
+      gsArgs.push("--lossy-quality", String(lq));
+    }
     const gs = spawn(bin, gsArgs, { stdio: ["pipe", "ignore", "pipe"] });
     let ffErr = "";
     let gsErr = "";
