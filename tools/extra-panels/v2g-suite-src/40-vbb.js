@@ -2672,8 +2672,8 @@
       }
 
       /** 从一帧里估算纯色边框，返回保留区域（不含边框）；无边则 null
-       *  四边各自独立判定：只有一边是纯色边也能裁掉（旧版用「整条周长最多的颜色」当边框色，
-       *  单边边框时会被内容色挤掉导致整条扫描失败）。 */
+       *  四边各自独立判定：只有一边是纯色边也能裁掉。
+       *  偏保守：容差收紧 + 离群更严 + 边色须像黑/白边（或对边同色），避免深色 UI 被当成边框吃掉。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -2682,11 +2682,19 @@
           const i = (y * w + x) * 4;
           return { r: data[i], g: data[i + 1], b: data[i + 2] };
         };
-        const near = (a, b) => Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
+        const near = (a, b) =>
+          Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
+        const luma = (c) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+        /** 边色像黑边/白边，或与对边同色（灰底 letterbox）才裁，避免深色界面「整行纯色」误伤 */
+        const looksLikeBorder = (c, opposite) => {
+          if (!c) return false;
+          const y = luma(c);
+          if (y <= 30 || y >= 225) return true;
+          return Boolean(opposite && near(c, opposite));
+        };
         /** 该行/该列是否「纯色」，是则返回平均色，否则 null。
-         *  允许极少量离群像素（≤3%）：黑边上的压缩噪点、字幕/进度条的零星像素
-         *  不该让整条边判成「非纯色」——这正是「有时候去黑边不生效」的主因。 */
-        const OUTLIER_RATIO = 0.03;
+         *  离群 ≤1.2%：只吞压缩噪点，不把状态栏/细线当边框。 */
+        const OUTLIER_RATIO = 0.012;
         const lineColor = (get, n) => {
           let r = 0;
           let g = 0;
@@ -2715,45 +2723,57 @@
         let left = 0;
         let right = w - 1;
         const cTop = lineColor(rowAt(0), w);
-        if (cTop) {
-          while (top < bottom) {
+        const cBottom = lineColor(rowAt(h - 1), w);
+        const cLeft = lineColor(colAt(0), h);
+        const cRight = lineColor(colAt(w - 1), h);
+        // 单边最多吃 18%：再深多半是内容区「碰巧纯色」，不是 letterbox
+        const maxTop = Math.floor(h * 0.18);
+        const maxBottom = Math.floor(h * 0.18);
+        const maxLeft = Math.floor(w * 0.18);
+        const maxRight = Math.floor(w * 0.18);
+        if (looksLikeBorder(cTop, cBottom)) {
+          while (top < bottom && top < maxTop) {
             const c = lineColor(rowAt(top), w);
             if (!c || !near(c, cTop)) break;
             top++;
           }
         }
-        const cBottom = lineColor(rowAt(h - 1), w);
-        if (cBottom) {
-          while (bottom > top) {
+        if (looksLikeBorder(cBottom, cTop)) {
+          while (bottom > top && h - 1 - bottom < maxBottom) {
             const c = lineColor(rowAt(bottom), w);
             if (!c || !near(c, cBottom)) break;
             bottom--;
           }
         }
-        const cLeft = lineColor(colAt(0), h);
-        if (cLeft) {
-          while (left < right) {
+        if (looksLikeBorder(cLeft, cRight)) {
+          while (left < right && left < maxLeft) {
             const c = lineColor(colAt(left), h);
             if (!c || !near(c, cLeft)) break;
             left++;
           }
         }
-        const cRight = lineColor(colAt(w - 1), h);
-        if (cRight) {
-          while (right > left) {
+        if (looksLikeBorder(cRight, cLeft)) {
+          while (right > left && w - 1 - right < maxRight) {
             const c = lineColor(colAt(right), h);
             if (!c || !near(c, cRight)) break;
             right--;
           }
         }
+        // 回退 1px，避免贴齐内容抗锯齿被啃掉
+        if (top > 0) top -= 1;
+        if (bottom < h - 1) bottom += 1;
+        if (left > 0) left -= 1;
+        if (right < w - 1) right += 1;
         if (right <= left || bottom <= top) return null;
+        if (top === 0 && left === 0 && right === w - 1 && bottom === h - 1) return null;
         return { left, top, right, bottom, w, h };
       }
 
-      /** 采样多帧取交集，得到源像素坐标的裁剪矩形；无边框返回 null */
+      /** 采样多帧取「内容并集」（各边取最浅裁），只裁所有帧都同意是边框的区域；无边框返回 null */
       async function detectVideoCrop(file) {
         if (!file) return null;
-        const cacheKey = `${file.name}|${file.size}|${file.lastModified || 0}`;
+        // v3：并集裁 + 更严边色，旧缓存会裁多，必须换 key
+        const cacheKey = `v3|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         const url = URL.createObjectURL(file);
@@ -2780,6 +2800,7 @@
           const dur = Number.isFinite(v.duration) ? v.duration : 0;
           const marks = dur > 0.6 ? [0.2, 0.5, 0.8].map((r) => Math.min(dur * r, Math.max(0, dur - 0.05))) : [0];
           let acc = null;
+          let hits = 0;
           for (const t of marks) {
             await new Promise((resolve) => {
               if (Math.abs(v.currentTime - t) < 0.02) { resolve(); return; }
@@ -2788,28 +2809,33 @@
               try { v.currentTime = t; } catch (_) { clearTimeout(to); resolve(); }
             });
             ctx.drawImage(v, 0, 0, cw, ch);
-            const rect = detectFrameContentRect(ctx.getImageData(0, 0, cw, ch), 24);
-            // 某帧没检出边框就跳过（不整体作废）：仍用其余帧的交集，避免场景切换导致完全不裁
+            // tol 14：旧 24 在深色录屏里容易把导航栏/底栏当边框
+            const rect = detectFrameContentRect(ctx.getImageData(0, 0, cw, ch), 14);
             if (!rect) continue;
+            hits += 1;
+            // 内容并集 = 各边取最小裁切量（任一帧有内容就保留）
             acc = acc
               ? {
-                  left: Math.max(acc.left, rect.left),
-                  top: Math.max(acc.top, rect.top),
-                  right: Math.min(acc.right, rect.right),
-                  bottom: Math.min(acc.bottom, rect.bottom),
+                  left: Math.min(acc.left, rect.left),
+                  top: Math.min(acc.top, rect.top),
+                  right: Math.max(acc.right, rect.right),
+                  bottom: Math.max(acc.bottom, rect.bottom),
                   w: rect.w,
                   h: rect.h,
                 }
               : rect;
           }
-          if (acc && acc.right > acc.left && acc.bottom > acc.top) {
+          if (acc && hits > 0 && acc.right > acc.left && acc.bottom > acc.top) {
             const sx = vw / acc.w;
             const sy = vh / acc.h;
-            const x = Math.round(acc.left * sx);
-            const y = Math.round(acc.top * sy);
-            const w = Math.round((acc.right - acc.left + 1) * sx);
-            const h = Math.round((acc.bottom - acc.top + 1) * sy);
-            if (w < vw - 4 || h < vh - 4) result = { x, y, w, h };
+            const x = Math.max(0, Math.round(acc.left * sx));
+            const y = Math.max(0, Math.round(acc.top * sy));
+            let w = Math.round((acc.right - acc.left + 1) * sx);
+            let h = Math.round((acc.bottom - acc.top + 1) * sy);
+            if (x + w > vw) w = vw - x;
+            if (y + h > vh) h = vh - y;
+            // 至少裁掉 6 源像素才算有效，避免缩略图取整抖一下
+            if (w >= 8 && h >= 8 && (w < vw - 6 || h < vh - 6)) result = { x, y, w, h };
           }
         } catch (_) {
           result = null;
