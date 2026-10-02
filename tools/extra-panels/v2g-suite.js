@@ -2934,10 +2934,39 @@
         const fitFps = async (fps) => {
           const shortFluent = effSpanForPick <= V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
           const wTop = Math.max(floorW, Math.min(srcCap, V2G_BLACKBOX_BASE_W));
-          for (let w = wTop; w >= floorW; w -= V2G_BLACKBOX_WIDTH_STEP) {
+          // 体积远超预算时跳过中间宽度（∝w²）：420 已 2× 则 400 多半白跑
+          const WAY_OVER = 1.55;
+          const STILL_OVER_AT_FLOOR = 1.35;
+          for (let w = wTop; w >= floorW; ) {
             const e = await trial(fps, w, V2G_BLACKBOX_QUALITY);
             if (e) return e;
-            if (w - V2G_BLACKBOX_WIDTH_STEP < floorW) break;
+            const last = tried[tried.length - 1];
+            const lastSize = Number(last?.blob?.size) || 0;
+            if (lastSize > V2G_BLACKBOX_MAX_BYTES * WAY_OVER && w > floorW + 0.5) {
+              const estFloor = lastSize * ((floorW / Math.max(1, w)) ** 2);
+              vbbLog(
+                `[vbb-phase] ${fps}fps 宽${w} 远超 ${formatKb(lastSize)} → 跳过中间宽` +
+                  `（估底宽${floorW}≈${formatKb(estFloor)}）`
+              );
+              if (estFloor > V2G_BLACKBOX_MAX_BYTES * STILL_OVER_AT_FLOOR) {
+                // 底宽高质量也很难进：只再试一次底宽作基准，跳过 400 等中间档
+                if (w > floorW + 0.5) {
+                  const eFloor = await trial(fps, floorW, V2G_BLACKBOX_QUALITY);
+                  if (eFloor) return eFloor;
+                }
+                break;
+              }
+              w = floorW;
+              continue;
+            }
+            if (w - V2G_BLACKBOX_WIDTH_STEP < floorW) {
+              if (w > floorW + 0.5) {
+                w = floorW;
+                continue;
+              }
+              break;
+            }
+            w -= V2G_BLACKBOX_WIDTH_STEP;
           }
           // 高质量全面超限：对「最近超限」候选先轻柔压缩进预算，再落入深质量档（少糊字）
           {
@@ -2971,11 +3000,31 @@
             }
           }
           // 短片保 20fps：允许走到 q22/q30；长片 ≥15 仍只让到档 15，再掉帧更划算
+          // 若同帧底宽高质量已 >1.6×，长片跳过浅降质（q8/q15 多半仍超），直接更深档或换帧
+          const floorHigh = tried
+            .filter(
+              (t) =>
+                Math.abs((Number(t.fps) || 0) - fps) < 0.01 &&
+                (Number(t.maxW) || 0) <= floorW + 2 &&
+                (Number(t.quality) || V2G_BLACKBOX_QUALITY) <= V2G_BLACKBOX_QUALITY + 0.01 &&
+                t.blob?.size > V2G_BLACKBOX_MAX_BYTES
+            )
+            .sort((a, b) => a.blob.size - b.blob.size)[0];
+          const floorWayOver =
+            !shortFluent &&
+            floorHigh &&
+            floorHigh.blob.size > V2G_BLACKBOX_MAX_BYTES * 1.6;
           const maxQi =
             shortFluent || fps < 15 - 0.01
               ? V2G_BLACKBOX_QUALITY_LADDER.length - 1
               : 2;
-          for (let qi = 1; qi <= maxQi; qi++) {
+          const qiStart = floorWayOver ? Math.min(2, maxQi) : 1;
+          if (floorWayOver) {
+            vbbLog(
+              `[vbb-phase] ${fps}fps 底宽高质量仍 ${formatKb(floorHigh.blob.size)} → 跳过浅降质，加速换档`
+            );
+          }
+          for (let qi = qiStart; qi <= maxQi; qi++) {
             const e = await trial(fps, floorW, V2G_BLACKBOX_QUALITY_LADDER[qi]);
             if (e) return e;
             // 仍超：短片/高帧放宽硬压门槛（旧 1.2× 会丢掉 20fps@13.7MB）
@@ -2994,6 +3043,18 @@
                 tried.push(pressed);
                 if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
               }
+            }
+            // 长片：某一深档仍 >1.5× 则别在本帧率耗尽阶梯，交给更低 fps
+            if (
+              !shortFluent &&
+              fps >= 15 - 0.01 &&
+              qi >= 2 &&
+              tried[tried.length - 1]?.blob?.size > V2G_BLACKBOX_MAX_BYTES * 1.5
+            ) {
+              vbbLog(
+                `[vbb-phase] ${fps}fps q${V2G_BLACKBOX_QUALITY_LADDER[qi]} 仍远超 → 改试更低帧率`
+              );
+              break;
             }
           }
           return null;
