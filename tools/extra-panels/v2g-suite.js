@@ -6901,21 +6901,44 @@
         }
       }
 
-      function enforceVbbEditPlaybackWindow() {
+      function enforceVbbEditPlaybackWindow(mediaTime) {
         if (isVbbManualMode() || vbbBusy || !vbbVideo?.src) return;
         const item = getActiveVbbEditItem();
         if (!item?.edit || !vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) return;
         const start = Math.max(0, Number(item.edit.trimStart) || 0);
         const end = Math.max(start + VBB_MIN_SPAN, Number(item.edit.trimEnd) || item.duration);
-        const t = Number(vbbVideo.currentTime) || 0;
+        const keep = Math.max(start, end - 1 / 25);
+        const t = Number.isFinite(mediaTime) ? mediaTime : Number(vbbVideo.currentTime) || 0;
         if (t < start - 0.08) {
           applyVbbSeek(start, { keepPlaying: !vbbVideo.paused });
           return;
         }
-        if (t >= end - 0.04) {
-          if (!vbbVideo.paused) applyVbbSeek(start, { keepPlaying: true });
-          else applyVbbSeek(Math.max(start, end - 0.04), { keepPlaying: false });
+        if (t >= keep - 0.0005) {
+          if (!vbbVideo.paused) {
+            try {
+              vbbVideo.pause();
+            } catch (_) {}
+            applyVbbSeek(start, { keepPlaying: true });
+          } else {
+            applyVbbSeek(keep, { keepPlaying: false });
+          }
         }
+      }
+
+      function armVbbEditFrameWatch() {
+        if (typeof vbbVideo?.requestVideoFrameCallback !== "function") return;
+        const onFrame = (_now, meta) => {
+          if (!vbbVideo || vbbVideo.paused || vbbBusy) return;
+          enforceVbbEditPlaybackWindow(Number(meta?.mediaTime));
+          if (!vbbVideo.paused) {
+            try {
+              vbbVideo.requestVideoFrameCallback(onFrame);
+            } catch (_) {}
+          }
+        };
+        try {
+          vbbVideo.requestVideoFrameCallback(onFrame);
+        } catch (_) {}
       }
 
       async function selectVbbBatchItem(idx, { force = false } = {}) {
@@ -11032,6 +11055,7 @@
       vbbVideo?.addEventListener("play", () => {
         vbbPlaying = true;
         if (vbbPlay) vbbPlay.textContent = "暂停";
+        armVbbEditFrameWatch();
       });
       vbbVideo?.addEventListener("pause", () => {
         vbbPlaying = false;

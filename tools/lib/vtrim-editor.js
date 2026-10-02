@@ -12,6 +12,8 @@
   const SNAP_EDGE_SEC = 0.06;
   /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
   const DRAG_SEEK_MS = 72;
+  /** 半开片尾：拖拽预览与停播共用，约 1 帧（勿只靠 timeupdate，否则会多播） */
+  const END_KEEP_SEC = 1 / 25;
   let uidSeq = 0;
 
   function toast(msg) {
@@ -289,6 +291,8 @@
     let scrubSeekInflight = false;
     let dragSeekTimer = 0;
     let playheadRaf = 0;
+    let playWindowGen = 0;
+    let playWindowLooping = false;
     let cropLiveRaf = 0;
     let filmGen = 0;
     let closed = false;
@@ -453,8 +457,12 @@
       } catch (_) {}
     }
 
+    function endKeepSec() {
+      return Math.max(startSec, endSec - END_KEEP_SEC);
+    }
+
     function previewSeek(t, { throttle = false } = {}) {
-      scrubSeekWanted = clamp(t, 0, Math.max(0, duration - 0.04));
+      scrubSeekWanted = clamp(t, 0, Math.max(0, duration - END_KEEP_SEC));
       if (!throttle) {
         if (dragSeekTimer) {
           clearTimeout(dragSeekTimer);
@@ -494,7 +502,7 @@
       // 拖片头/片尾时播放头跟手柄，避免 seek 滞后造成抬手「回弹」
       let playT = Number(video.currentTime) || 0;
       if (drag?.kind === "start") playT = startSec;
-      else if (drag?.kind === "end") playT = Math.max(startSec, endSec - 0.04);
+      else if (drag?.kind === "end") playT = endKeepSec();
       else if (drag?.kind === "window") playT = startSec;
       const pPct = (playT / duration) * 100;
       selEl.style.setProperty("--vtrim-start", `${sPct}%`);
@@ -626,7 +634,7 @@
       }
       if (pauseMain) {
         try {
-          video.currentTime = clamp(wasTime, startSec, Math.max(startSec, endSec - 0.04));
+          video.currentTime = clamp(wasTime, startSec, endKeepSec());
           await waitSeek(video);
           if (!wasPaused) video.play().catch(() => {});
         } catch (_) {}
@@ -689,7 +697,7 @@
         timeline?.classList.add("is-pulse");
         hapticLight();
       }
-      if (preview) previewSeek(Math.max(startSec, endSec - 0.04), { throttle: Boolean(drag) && !immediateSeek });
+      if (preview) previewSeek(endKeepSec(), { throttle: Boolean(drag) && !immediateSeek });
       paintTimeline();
       updateLabels();
     }
@@ -751,7 +759,7 @@
     }
 
     async function seekPlayheadExact(t) {
-      const target = clamp(t, startSec, Math.max(startSec, endSec - 0.04));
+      const target = clamp(t, startSec, endKeepSec());
       scrubSeekWanted = null;
       if (dragSeekTimer) {
         clearTimeout(dragSeekTimer);
@@ -774,16 +782,67 @@
       return target;
     }
 
+    function loopPlayToStart() {
+      if (playWindowLooping) return;
+      playWindowLooping = true;
+      playWindowGen += 1;
+      const gen = playWindowGen;
+      try {
+        video.pause();
+      } catch (_) {}
+      seekPlayheadExact(startSec)
+        .then(() => {
+          if (closed || gen !== playWindowGen) return;
+          return video.play();
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (gen === playWindowGen) playWindowLooping = false;
+        });
+    }
+
+    function clipPlayWindow(mediaTime) {
+      if (closed || !duration || video.paused || playWindowLooping || drag) return false;
+      const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
+      if (cur < startSec - 0.02) {
+        loopPlayToStart();
+        return true;
+      }
+      // 到拖片尾预览的同一时刻立刻停，勿等 timeupdate（手机上会晚 3～8 帧）
+      if (cur >= endKeepSec() - 0.0005) {
+        loopPlayToStart();
+        return true;
+      }
+      return false;
+    }
+
+    function armFrameWatch() {
+      if (typeof video.requestVideoFrameCallback !== "function") return;
+      const gen = playWindowGen;
+      const onFrame = (_now, meta) => {
+        if (closed || gen !== playWindowGen || video.paused || playWindowLooping) return;
+        if (clipPlayWindow(Number(meta?.mediaTime))) return;
+        try {
+          video.requestVideoFrameCallback(onFrame);
+        } catch (_) {}
+      };
+      try {
+        video.requestVideoFrameCallback(onFrame);
+      } catch (_) {}
+    }
+
     async function togglePlay() {
       if (!video.src) return;
       if (video.paused) {
         const cur = Number(video.currentTime) || 0;
-        const needStart =
-          cur < startSec - 0.01 || cur >= endSec - 0.04 || Math.abs(cur - startSec) < 0.02;
+        const keep = endKeepSec();
+        const needStart = cur < startSec - 0.01 || cur >= keep - 0.001 || Math.abs(cur - startSec) < 0.02;
         // 刚拖完片头时 currentTime≈startSec，仍强制精确 seek 再播，锁住用户拖到的位置
+        playWindowLooping = false;
         await seekPlayheadExact(needStart ? startSec : cur);
         await video.play().catch(() => {});
       } else {
+        playWindowGen += 1;
         video.pause();
       }
     }
@@ -815,6 +874,8 @@
       if (closed) return;
       closed = true;
       filmGen += 1;
+      playWindowGen += 1;
+      playWindowLooping = false;
       cancelAnimationFrame(playheadRaf);
       cancelAnimationFrame(cropLiveRaf);
       try {
@@ -982,7 +1043,7 @@
         windowEl?.setPointerCapture?.(e.pointerId);
         syncHandleTips();
       } else {
-        previewSeek(clamp(t, startSec, Math.max(startSec, endSec - 0.04)));
+        previewSeek(clamp(t, startSec, endKeepSec()));
         drag = { kind: "seek", pointerId: e.pointerId };
       }
       e.preventDefault();
@@ -1001,7 +1062,7 @@
       const t = ratioFromClientX(e.clientX) * duration;
       if (drag.kind === "start") setStart(t);
       else if (drag.kind === "end") setEnd(t);
-      else previewSeek(clamp(t, startSec, Math.max(startSec, endSec - 0.04)));
+      else previewSeek(clamp(t, startSec, endKeepSec()));
     }
     function onTimelinePointerUp(e) {
       if (!drag || drag.pointerId !== e.pointerId) return;
@@ -1121,7 +1182,7 @@
       const geom = previewWrap.getBoundingClientRect();
       const span = Math.max(MIN_SPAN, endSec - startSec);
       const delta = (dx / Math.max(1, geom.width)) * span;
-      const target = clamp(previewScrub.startT + delta, startSec, Math.max(startSec, endSec - 0.04));
+      const target = clamp(previewScrub.startT + delta, startSec, endKeepSec());
       scrubSeekWanted = target;
       pumpPreviewScrubSeek();
     });
@@ -1140,6 +1201,7 @@
         playheadRaf = 0;
         return;
       }
+      clipPlayWindow();
       paintTimeline();
       updateLabels();
       if (!video.paused) playheadRaf = requestAnimationFrame(tickPlayhead);
@@ -1147,17 +1209,9 @@
     }
     video.addEventListener("timeupdate", () => {
       if (!duration) return;
-      if (!video.paused) {
-        const cur = Number(video.currentTime) || 0;
-        if (cur < startSec - 0.02) {
-          seekPlayheadExact(startSec).then(() => video.play().catch(() => {}));
-          return;
-        }
-        // 片尾半开：到 end 前约 1 帧就回片头，与成片截断一致
-        if (cur >= endSec - 0.04) {
-          seekPlayheadExact(startSec).then(() => video.play().catch(() => {}));
-          return;
-        }
+      if (clipPlayWindow()) {
+        scheduleCropLive();
+        return;
       }
       if (!playheadRaf) {
         paintTimeline();
@@ -1177,6 +1231,7 @@
     video.addEventListener("play", () => {
       if (playBtn) playBtn.textContent = "暂停";
       previewWrap?.classList.add("is-playing");
+      armFrameWatch();
       if (!playheadRaf) playheadRaf = requestAnimationFrame(tickPlayhead);
     });
 
