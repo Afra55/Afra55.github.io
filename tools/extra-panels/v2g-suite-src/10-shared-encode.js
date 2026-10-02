@@ -1858,6 +1858,7 @@
        * - ≈25fps：25 → 12.5（整帧 / 隔一帧）
        * - ≈30fps：30 → 15 → 12
        * - 其它：20 → 15 → 12
+       * 硬约束单测：tools/lib/vbb-blackbox-fps.js + vbb-blackbox-fps.test.js（改这里必须同步）
        */
       function blackboxFpsCandidates(srcFps) {
         const src = Number(srcFps) || 0;

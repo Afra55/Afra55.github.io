@@ -23,6 +23,7 @@ const STEPS = [
   { name: "registry verify", cmd: "node", args: ["scripts/verify-registry.cjs"] },
   { name: "pure tests", cmd: "node", args: ["test/pure.test.js"] },
   { name: "vbb plan tests", cmd: "node", args: ["vbb-plan.test.js"] },
+  { name: "vbb blackbox fps", cmd: "node", args: ["vbb-blackbox-fps.test.js"] },
   { name: "mdm smoke", cmd: "node", args: ["mdm-smoke.cjs"] },
   { name: "mdm tests", cmd: "node", args: ["test/mdm.test.js"] },
   { name: "adb bridge smoke", cmd: "node", args: ["adb-bridge/smoke-check.js"] },

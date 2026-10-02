@@ -17,6 +17,9 @@ const PORT = Number(process.env.VBB_BENCH_PORT || 8767);
 const OUT_DIR = process.env.VBB_BENCH_OUT || path.join(os.tmpdir(), "vbb-bench");
 const TAG = process.env.VBB_BENCH_TAG || "baseline";
 const MAX_BYTES = 10 * 1024 * 1024;
+const {
+  assertGifFpsAllowed,
+} = require("../lib/vbb-blackbox-fps.js");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -200,6 +203,21 @@ async function encodeOne(page, videoPath) {
       `→ GIF span=${Number(c.span).toFixed(1)}s fps=${c.fps} w=${c.outW || c.maxW} size=${fmtMb(c.size)} ≤10MB=${c.under10} note=${c.note || c.error}`
     );
   }
+
+  // 硬约束：决策日志里的 srcFps 与成片 fps 必须同属整除档（防 25→20 回归）
+  {
+    const decision = logs.find((l) => /决策 fpsList=/.test(l)) || "";
+    const m = /srcFps=([\d.]+)/.exec(decision);
+    const srcFps = m ? Number(m[1]) : 0;
+    if (srcFps >= 24.2 && srcFps <= 25.8) {
+      for (const c of result.clips) {
+        if (c.error || !(c.fps > 0)) continue;
+        assertGifFpsAllowed(srcFps, c.fps, `${name} clip`);
+      }
+      console.log(`✓ fps guard: src≈25 → gif ∈ {25,12.5} ok`);
+    }
+  }
+
   console.log(`elapsed ${(elapsedMs / 1000).toFixed(1)}s → ${outJson}`);
   return row;
 }

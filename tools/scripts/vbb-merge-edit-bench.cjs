@@ -18,6 +18,7 @@ const OUT_DIR = process.env.VBB_BENCH_OUT || path.join(ROOT, "tools/.tmp-vbb-ben
 const TAG = process.env.VBB_BENCH_TAG || "merge-edit";
 const PERF = String(process.env.VBB_PERF || "max").trim() || "max";
 const MOBILE = process.env.VBB_MOBILE === "1";
+const { assertGifFpsAllowed } = require("../lib/vbb-blackbox-fps.js");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -267,6 +268,23 @@ async function main() {
       result.clips.map((c) => `${c.note || c.error} · ${(c.size / 1048576).toFixed(2)}MB`).join(" | ")
     );
     console.log("wrote", outPath);
+    {
+      const decision = logs.find((l) => /决策 fpsList=/.test(l)) || "";
+      const m = /srcFps=([\d.]+)/.exec(decision);
+      const srcFps = m ? Number(m[1]) : 0;
+      if (srcFps >= 24.2 && srcFps <= 25.8) {
+        for (const c of result.clips) {
+          if (c.error) continue;
+          const fps = Number(c.fps) || 0;
+          if (!(fps > 0) && c.note) {
+            const nm = /(\d+(?:\.\d+)?)\s*FPS/i.exec(c.note);
+            if (nm) c.fps = Number(nm[1]);
+          }
+          if (c.fps > 0) assertGifFpsAllowed(srcFps, c.fps, "merge gif");
+        }
+        console.log("✓ fps guard: src≈25 → gif ∈ {25,12.5} ok");
+      }
+    }
     if (!result.clips.length || result.clips.some((c) => c.error || !(c.size > 0))) {
       process.exitCode = 1;
     }

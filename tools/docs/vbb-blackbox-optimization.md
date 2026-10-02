@@ -11,11 +11,29 @@ node tools/bump-version.cjs
 
 ```bash
 node tools/vbb-plan.test.js
+node tools/vbb-blackbox-fps.test.js
 node tools/scripts/vbb-feature-eval.cjs <video1> <video2> [images...]
 node tools/scripts/vbb-bench-local.cjs <video...>
 node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 → 拼接 → 黑盒
 # 结果默认到临时目录；也可用 VBB_BENCH_OUT=tools/.tmp-vbb-bench
 ```
+
+---
+
+## 硬约束（不可破 · 2026-10-02）
+
+> 改策略前先改这里；单测：`node tools/vbb-blackbox-fps.test.js`（已进 CI）。
+
+1. **时间轴优先于标称高帧 / 宽度**：成片 fps 必须落在片源「整除档」  
+   - ≈25fps 源 → 只许 **25 / 12.5**（禁止 20、15）  
+   - ≈30fps 源 → **30 / 15 / 12**  
+   - 其它 → **20 / 15 / 12**
+2. **≤24s 进预算后**：禁止「可读宽优先」再把流畅档降到更低档换宽度  
+3. **拼接产品形态**：始终 **多段 → 一条中间 MP4 → 一条 GIF**（不分段各出 GIF）  
+4. **中间片**：保留片源帧率；抽到黑盒档只在转 GIF 时做一次  
+5. **体积硬闸**：默认 ≤10MB，超限不交付  
+
+主目标排序：**时间轴干净 > 标称高帧 > 宽度 > 少试编**。
 
 ---
 
@@ -26,17 +44,18 @@ node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 �
 | 维度 | 结论 |
 |------|------|
 | 功能面 | `vbb-feature-eval` **13/13 PASS**（工作流、编辑遮罩、打点、切片分析、多选、多图等） |
-| 体积硬闸 | 一键黑盒样本 **≤10MB**（IMG_0087 / IMG_0086 / 502；548+549 拼接后 9.96MB） |
-| 流畅 | 短片保高帧；**25fps 源用 25/12.5 整除档**（勿 25→20）；拼接中间片保留片源帧率 |
-| 性能体感 | 难压 ~22s 拼片桌面拉满约 **9.5 分钟**——慢来自多次真实试编码，不是功能坏了 |
+| 体积硬闸 | 一键黑盒样本 **≤10MB**（IMG_0087 / IMG_0086 / 502；548+549 拼接后 ≤10MB） |
+| 流畅 | **整除档**（25 源 25/12.5）；拼接中间片保留片源帧率；≤24s 禁换宽降档 |
+| 性能体感 | 难压 ~22s 拼片桌面拉满约数分钟——慢来自多次真实试编码 |
 | 未长测项 | 合并 GIF、zip、压缩时长、自动去色边视觉、真机分块/防息屏（可另开） |
 
 本轮修掉并已上线的问题（详见「变更记录」）：
 
 1. 短片加宽 95% 早退 / 0.99 软帽拒收 → 吃不满预算  
-2. 短片硬压掉到 ~14.3fps 发卡 → 优先保 20fps  
+2. 短片硬压掉帧发卡 → 保高档帧率  
 3. 拼接 25→20 先抽卡 → 中间片保留 25/30…  
-4. 手机「自动」偏均衡 → 更倾向拉满  
+4. 25 源 GIF 用 20 不规则抽帧 → 改为 25/12.5  
+5. 手机「自动」偏均衡 → 更倾向拉满  
 
 ---
 
@@ -44,8 +63,8 @@ node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 �
 
 在 **≤ 可配置上限（默认 10MB）** 下，整段黑盒 GIF 尽量：
 
-1. **流畅**：短片优先 20fps；≥18fps 用均匀 delay（避免可变 delay 顿挫）
-2. **清晰**：有余量先加宽再提帧；录屏文字可读优先于盲目冲帧
+1. **流畅**：片源整除档 + 均匀 delay（避免可变 delay / 不规则抽帧顿挫）
+2. **清晰**：有余量先加宽再提帧；但不得破坏硬约束 1–2
 3. **不超限**：硬闸 `enforceBlackboxMaxBytes`，超限不交付
 4. **可预期**：真实试编码决策（不用「拍脑袋估算」定档）
 
@@ -53,22 +72,24 @@ node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 �
 
 | 场景 | 期望 |
 |------|------|
-| 短片 ≤10s | 体积 ≥90% 上限，**或** 已达源宽 |
-| 中片 ~10–20s | 体积 ≥95% 上限 |
-| 难压长片 | ≤上限内优先保宽 ≥420、画质档尽量浅，再考虑 12fps |
+| 短片 ≤10s（25 源） | 优先 **25fps** 进预算；体积尽量贴上限 |
+| 中片 / 拼片 ~16–24s（25 源） | **12.5fps** 整除档；禁再降帧换宽 |
+| 难压长片 | ≤上限内优先保宽与画质，帧率走低档整除 |
 
 ---
 
 ## 当前策略摘要（代码真相）
 
-- **帧率阶梯**：有效时长 `span/speed` → 主档 `≤16s: 20` · `≤24s: 15` · `>24s: 12`；底线 **12**（不再掉 10）
+- **帧率阶梯（按片源）**：≈25 → `25,12.5`；≈30 → `30,15,12`；其它 → `20,15,12`  
+  时长主档：`≤16s` 高档 · `≤24s` 中档 · `>24s` 低档
 - **起点**：宽 420、gifski 近无损（质量档 1）
-- **进预算顺序**：收窄 → 浅降质 → 更低帧 →（必要时）gifsicle
-- **有余量顺序**：加宽 → 提帧（短片冲 20）→ 短片再加宽 → 画质上探 → O3 → O3 后再加宽 → 硬闸
-- **短片加宽上限**：≤24s 探到 `min(源宽, 1280)`，目标约 **99%** 预算；长片仍约 **2×** 控探测成本；接纳以硬闸 10MB 为准（0.99 只作停探目标）
-- **短片保帧（≤16s）**：20fps 可走到更深质量档；压缩时不降帧；短片不做静止帧合并
-- **拼接后转黑盒**：多段按顺序先合成一条 MP4，再整段黑盒；只拼画面；**中间片保留片源帧率**（探测 24/25/30…），转 GIF 时再抽到黑盒档（只抽一次）；各段「编辑」的裁时长/裁画面会带进拼接
-- **性能档**：自动/拉满/均衡/省电；手机自动更倾向拉满（核数 ≥6 抬满）
+- **进预算顺序**：收窄 → 浅降质 → 更低整除档 →（必要时）gifsicle
+- **有余量顺序**：加宽 → 提帧（只提到整除高档）→ 再加宽 → 画质上探 → O3 → 硬闸
+- **短片加宽上限**：≤24s 探到 `min(源宽, 1280)`，目标约 **99%** 预算；接纳以硬闸为准
+- **≤24s 保流畅档**：可走到 q22/q30；硬压不降帧；**不做**「为宽把 15/25 降到更低档」
+- **拼接**：多段按顺序先合成一条 MP4，再整段黑盒（**一条 GIF**）；中间片保留片源帧率；编辑 trim/crop 带进拼接
+- **性能档**：自动/拉满/均衡/省电；手机自动更倾向拉满
+- **规则单测**：`tools/lib/vbb-blackbox-fps.js` · `tools/vbb-blackbox-fps.test.js`
 
 关键常量（名称以源码为准）：`V2G_BLACKBOX_MAX_BYTES`、`V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC`、`V2G_BLACKBOX_MID_SPAN_SEC`、`V2G_BLACKBOX_BASE_W`、`V2G_ENCODE_HARD_W`、`V2G_BLACKBOX_QUALITY_LADDER`。
 
@@ -201,6 +222,8 @@ node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 �
 | `tools/scripts/vbb-feature-eval.cjs` | 功能面自动化测评 |
 | `tools/scripts/vbb-merge-edit-bench.cjs` | 编辑裁切 → 拼接 → 黑盒实测 |
 | `tools/vbb-plan.test.js` | 切片规划单测 |
+| `tools/lib/vbb-blackbox-fps.js` | 帧率硬规则（Node 单测源） |
+| `tools/vbb-blackbox-fps.test.js` | 整除档 / 禁 25→20 / 拼接一条 断言 |
 | `tools/lib/extra-media.js` | 性能档（自动/拉满/均衡/省电） |
 | `tools/extra-panels/v2g-suite-src/README.md` | 分片说明 |
 
@@ -214,6 +237,7 @@ node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 �
 
 ```bash
 node tools/vbb-plan.test.js
+node tools/vbb-blackbox-fps.test.js
 node tools/scripts/vbb-feature-eval.cjs <video1> <video2> [images...]
 node tools/scripts/vbb-bench-local.cjs <videos...>
 node tools/scripts/vbb-merge-edit-bench.cjs <v1> <v2>
@@ -259,6 +283,12 @@ node tools/scripts/vbb-merge-edit-bench.cjs <v1> <v2>
 ## 变更记录
 
 > **追加规则**：日期 + 现象 + 改动 + 复测；**勿删旧条**，只在顶部追加。
+
+### 2026-10-02（锁硬约束 · 不分段）
+
+- **决定**：拼接保持「一条中间片 → 一条 GIF」，不做分段多 GIF
+- **落地**：文档「硬约束」五条；`tools/lib/vbb-blackbox-fps.js` + CI 单测；bench / merge-edit 对 ≈25 源断言成片 ∈ {25,12.5}
+- **主目标排序**：时间轴干净 > 标称高帧 > 宽度 > 少试编
 
 ### 2026-10-02（549 单段卡：25 源整除档）
 

@@ -1905,6 +1905,7 @@
        * - ≈25fps：25 → 12.5（整帧 / 隔一帧）
        * - ≈30fps：30 → 15 → 12
        * - 其它：20 → 15 → 12
+       * 硬约束单测：tools/lib/vbb-blackbox-fps.js + vbb-blackbox-fps.test.js（改这里必须同步）
        */
       function blackboxFpsCandidates(srcFps) {
         const src = Number(srcFps) || 0;
@@ -9179,7 +9180,7 @@
       }
 
       // 把已选的多个视频按顺序拼接成一个 MP4，再走单段黑盒。
-      // 含义：先合为一条成片，再整段黑盒（不是各转 GIF 再拼）。
+      // 产品硬约定：始终「多段 → 一条中间 MP4 → 一条 GIF」；不分段各出一条 GIF。
       // 只要画面；中间片保留源帧率（25/30…），转 GIF 时再抽到黑盒档，避免双重/错误抽帧顿挫。
       // 各段若做过「编辑」（裁时长/裁画面），拼接时一并带上。
       async function mergeVbbVideosToOne() {
