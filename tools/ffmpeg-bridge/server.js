@@ -37,7 +37,20 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.5.4";
+function isAllowedOrigin(origin) {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const u = new URL(origin);
+    // 本机预览 / 本地 bench 任意端口（与统一桥一致）
+    if (u.hostname === "127.0.0.1" || u.hostname === "localhost") return true;
+  } catch (_) {
+    /* ignore */
+  }
+  return false;
+}
+
+const BRIDGE_VERSION = "0.5.5";
 const FEATURES = [
   "local-fs",
   "probe",
@@ -146,7 +159,7 @@ function sendJson(res, status, data, origin) {
 }
 
 function applyCors(headers, origin) {
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  if (isAllowedOrigin(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Vary"] = "Origin";
     headers["Access-Control-Allow-Headers"] = "Content-Type, X-Ffmpeg-Token, X-Adb-Token, X-Filename";
@@ -154,6 +167,7 @@ function applyCors(headers, origin) {
     headers["Access-Control-Expose-Headers"] =
       "Content-Disposition, X-Gifski-Engine, X-Gifski-Width, X-Gifski-Fps, X-Gifski-Quality, X-Gifski-Multithreaded";
   }
+  headers["Access-Control-Allow-Private-Network"] = "true";
 }
 
 function readBody(req, limit = 8 * 1024 * 1024) {
