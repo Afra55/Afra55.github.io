@@ -10,9 +10,33 @@ node tools/bump-version.cjs
 本地回归（可选）：
 
 ```bash
+node tools/vbb-plan.test.js
+node tools/scripts/vbb-feature-eval.cjs <video1> <video2> [images...]
 node tools/scripts/vbb-bench-local.cjs <video...>
+node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 → 拼接 → 黑盒
 # 结果默认到临时目录；也可用 VBB_BENCH_OUT=tools/.tmp-vbb-bench
 ```
+
+---
+
+## 测评结论（2026-10-02）
+
+一句话：**核心流程可用、体积达标；卡顿多来自帧率策略（已修）；慢是试档成本，手机请用「拉满」。**
+
+| 维度 | 结论 |
+|------|------|
+| 功能面 | `vbb-feature-eval` **13/13 PASS**（工作流、编辑遮罩、打点、切片分析、多选、多图等） |
+| 体积硬闸 | 一键黑盒样本 **≤10MB**（IMG_0087 / IMG_0086 / 502；548+549 拼接后 9.96MB） |
+| 流畅 | 短片保 20fps；拼接中间片**保留片源帧率**（勿再压成黑盒主档 20） |
+| 性能体感 | 难压 ~22s 拼片桌面拉满约 **9.5 分钟**——慢来自多次真实试编码，不是功能坏了 |
+| 未长测项 | 合并 GIF、zip、压缩时长、自动去色边视觉、真机分块/防息屏（可另开） |
+
+本轮修掉并已上线的问题（详见「变更记录」）：
+
+1. 短片加宽 95% 早退 / 0.99 软帽拒收 → 吃不满预算  
+2. 短片硬压掉到 ~14.3fps 发卡 → 优先保 20fps  
+3. 拼接 25→20 先抽卡 → 中间片保留 25/30…  
+4. 手机「自动」偏均衡 → 更倾向拉满  
 
 ---
 
@@ -41,8 +65,10 @@ node tools/scripts/vbb-bench-local.cjs <video...>
 - **起点**：宽 420、gifski 近无损（质量档 1）
 - **进预算顺序**：收窄 → 浅降质 → 更低帧 →（必要时）gifsicle
 - **有余量顺序**：加宽 → 提帧（短片冲 20）→ 短片再加宽 → 画质上探 → O3 → O3 后再加宽 → 硬闸
-- **短片加宽上限**：≤24s 探到 `min(源宽, 1280)`，目标约 **99%** 预算；长片仍约 **2×** 控探测成本
-- **拼接后转黑盒**：多段按顺序先合成一条 MP4，再整段黑盒；只拼画面；中间片帧率对齐黑盒主档（20/15/12）；各段「编辑」的裁时长/裁画面会带进拼接
+- **短片加宽上限**：≤24s 探到 `min(源宽, 1280)`，目标约 **99%** 预算；长片仍约 **2×** 控探测成本；接纳以硬闸 10MB 为准（0.99 只作停探目标）
+- **短片保帧（≤16s）**：20fps 可走到更深质量档；压缩时不降帧；短片不做静止帧合并
+- **拼接后转黑盒**：多段按顺序先合成一条 MP4，再整段黑盒；只拼画面；**中间片保留片源帧率**（探测 24/25/30…），转 GIF 时再抽到黑盒档（只抽一次）；各段「编辑」的裁时长/裁画面会带进拼接
+- **性能档**：自动/拉满/均衡/省电；手机自动更倾向拉满（核数 ≥6 抬满）
 
 关键常量（名称以源码为准）：`V2G_BLACKBOX_MAX_BYTES`、`V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC`、`V2G_BLACKBOX_MID_SPAN_SEC`、`V2G_BLACKBOX_BASE_W`、`V2G_ENCODE_HARD_W`、`V2G_BLACKBOX_QUALITY_LADDER`。
 
@@ -61,8 +87,9 @@ node tools/scripts/vbb-bench-local.cjs <video...>
 - 去掉 10fps 底线；主决策 **20 → 15 → 12**
 - 短片曾「先 15 再余量冲 20」，后改为 **≤16s 主试 20**（10MB 下更顺）
 - GIF 厘秒时基：改为 **固定均匀 delay**（20→50ms / 15→70ms / 12→80ms），避免累计取整「一顿一顿」
-- **≥18fps 禁止静止帧合并**（可变 delay 在动作段易顿挫）；15/12 仍可合并省体积（观感有张力，见「未闭环」）
+- **≥18fps 禁止静止帧合并**（可变 delay 在动作段易顿挫）；**短片 ≤16s** 即使 15/12 也不合并；更长片 15/12 仍可合并省体积
 - 「压缩时长」= `setpts` 倍速缩短有效时长；**不应**再被误标成「更卡」的原因
+- **拼接卡顿根因（已修）**：旧逻辑把 25fps 源压成黑盒主档 20 → 中间片与 GIF 都抖；现保留片源帧率
 
 ### C. 宽度与吃满预算
 
@@ -74,7 +101,8 @@ node tools/scripts/vbb-bench-local.cjs <video...>
 ### D. 手机 / 性能 / 内存
 
 - 性能档（自动/拉满/均衡/省电）影响 gifski 帧上限、加宽探次、是否质量上探、批并发
-- 手机分块编码防 OOM；桌面默认少分块
+- 手机分块编码防 OOM；桌面默认少分块；**拉满**=少分块、加宽探更多、多选最多 2 路
+- 手机「自动」：未知机型默认拉满；核数 ≥6 抬满（旧 ≥8 / 默认均衡体感偏慢）
 - 次要选项折叠；布局改为横排紧凑（避免强制竖排全宽）
 
 ### E. 交互与流程
@@ -95,8 +123,12 @@ node tools/scripts/vbb-bench-local.cjs <video...>
 | `a8b7c51` | 默认 10MB 等一揽子 |
 | `512d355` / `c49846d` / `c8ac5b7` | 20fps 主策略演进 |
 | `4a7316c` / `39f59c0` | 均匀 delay、硬闸、顿挫修复 |
-| `3c31dbe` | 拼接纯视频 60fps 中间片（修拼接顿挫） |
+| `3c31dbe` | 拼接纯视频 60fps 中间片（修拼接顿挫；后续改为保留片源帧率） |
 | `51a9b22` | 短片加宽吃满预算 |
+| `920e9d9` | 完整测评：加宽早退/软帽；`vbb-feature-eval` |
+| `16e9c1b` | 短片保 20fps（553） |
+| `d5e4098` | 拼接中间片保留片源帧率（548/549→553） |
+| `29f16f4` | 548+549 实测脚本；手机自动更倾向拉满 |
 
 （完整列表以 `git log -- tools/extra-panels/v2g-suite-src/` 为准。）
 
@@ -134,13 +166,15 @@ node tools/scripts/vbb-bench-local.cjs <video...>
 ### P2 — 策略调参（需更多样本）
 
 4. 是否引入 **18fps** 中间档
-5. **&lt;18fps 静止帧合并** 与顿挫的产品取舍
+5. **长片 &lt;18fps 静止帧合并** 与顿挫的产品取舍（短片已关）
 6. `V2G_BLACKBOX_WIDTH_CAP=900` 未使用——删或接入
+7. 难压长拼片试档次数多 → 体感慢：能否缓存试档 / 更早剪枝
 
 ### P3 — 工程
 
-7. 决策日志统一 `[vbb-phase]`
-8. 联合搜索 (fps×宽×质) 仅 debug
+8. 决策日志统一 `[vbb-phase]`
+9. 联合搜索 (fps×宽×质) 仅 debug
+10. 未长测项补齐：合并 GIF / zip / 压缩时长 / 去色边视觉 / 真机分块
 
 ---
 
@@ -163,12 +197,18 @@ node tools/scripts/vbb-bench-local.cjs <video...>
 | `tools/panels/vbb.html` | 面板 DOM |
 | `tools/styles/panels/vbb.css` | 布局 |
 | `tools/scripts/build-v2g-suite.cjs` | 分片拼接 |
-| `tools/scripts/vbb-bench-local.cjs` | 本地基准 |
+| `tools/scripts/vbb-bench-local.cjs` | 本地一键黑盒基准 |
+| `tools/scripts/vbb-feature-eval.cjs` | 功能面自动化测评 |
+| `tools/scripts/vbb-merge-edit-bench.cjs` | 编辑裁切 → 拼接 → 黑盒实测 |
+| `tools/vbb-plan.test.js` | 切片规划单测 |
+| `tools/lib/extra-media.js` | 性能档（自动/拉满/均衡/省电） |
 | `tools/extra-panels/v2g-suite-src/README.md` | 分片说明 |
 
 ---
 
 ## 完整测评快照（2026-10-02）
+
+> 摘要见文首「测评结论」。本节保留明细，便于对照复测。
 
 命令：
 
@@ -176,6 +216,7 @@ node tools/scripts/vbb-bench-local.cjs <video...>
 node tools/vbb-plan.test.js
 node tools/scripts/vbb-feature-eval.cjs <video1> <video2> [images...]
 node tools/scripts/vbb-bench-local.cjs <videos...>
+node tools/scripts/vbb-merge-edit-bench.cjs <v1> <v2>
 ```
 
 ### 功能面（`vbb-feature-eval`）13/13 PASS
@@ -194,7 +235,7 @@ node tools/scripts/vbb-bench-local.cjs <videos...>
 | 多图 UI + 生成 GIF | ✓ |
 | 桌面编辑层 | ✓ |
 
-未在本轮跑通的重编码路径（需另开长测）：合并 GIF、拼接后转黑盒整段、zip 打包、压缩时长加速、自动去色边视觉回归、真机分块/防息屏。
+未在本轮跑通的重编码路径（需另开长测）：合并 GIF、zip 打包、压缩时长加速、自动去色边视觉回归、真机分块/防息屏。（拼接后转黑盒已在 548+549 实测补齐。）
 
 ### 一键黑盒体积（10MB）
 
@@ -203,15 +244,27 @@ node tools/scripts/vbb-bench-local.cjs <videos...>
 | IMG_0087 6.5s 横屏 | 20fps·**420** · 9.64MB（卡 95% 早退） | 20fps·**426** · **9.91MB** |
 | IMG_0086 7.0s 竖屏难压 | 12.5fps·380 · 9.78MB（~397s） | 未复跑；难压路径仍成立 |
 | 502 28.3s | 12.5fps·404 · 9.79MB | 未复跑 |
+| 553 13.3s（旧拼接产物） | 约 14.3fps·380·q74 | 短片保帧后：**20fps·398·q65·9.97MB** |
+| 548+549 编辑后拼接 ~21.9s | （旧会先 25→20 抖） | 中间片 **25fps**；GIF **12.5fps·440·q55·9.96MB**（~9.5min） |
 
 测评中修掉的编码问题：
 
 1. `finishBlackbox` / 加宽入口用 **95%** 早退 → 短片卡住 420  
-2. `blackboxWidenBest` 用 **0.99 软帽拒收** 合法 ≤10MB 结果（420→426 被丢）→ 改为硬闸接纳、0.99 只作停探目标
+2. `blackboxWidenBest` 用 **0.99 软帽拒收** 合法 ≤10MB 结果（420→426 被丢）→ 改为硬闸接纳、0.99 只作停探目标  
+3. 短片硬压把 15 抽成 ~13.5 → 显示 14.3、观感卡 → 短片保 20fps  
+4. 拼接 `blackboxPrimaryFps(总时长)` 压片源 → 中间片抖 → 保留片源帧率  
 
 ---
 
 ## 变更记录
+
+> **追加规则**：日期 + 现象 + 改动 + 复测；**勿删旧条**，只在顶部追加。
+
+### 2026-10-02（文档：测评结论入库）
+
+- 文首新增「测评结论」总表；策略摘要改为「拼接保留片源帧率 / 短片保帧 / 手机自动拉满」
+- 功能快照补 553、548+549 行；提交路标补 `920e9d9` / `16e9c1b` / `d5e4098` / `29f16f4`
+- 路径速查补 `vbb-feature-eval` / `vbb-merge-edit-bench` / `extra-media.js`
 
 ### 2026-10-02（548+549 实测）
 
@@ -236,6 +289,7 @@ node tools/scripts/vbb-bench-local.cjs <videos...>
 
 - 新增 `tools/scripts/vbb-feature-eval.cjs` 功能面自动化
 - 修短片加宽早退 / 软帽拒收，IMG_0087：420·9.64MB → 426·9.91MB
+- 结论：功能面 13/13；体积达标；见文首「测评结论」
 
 ### 2026-10-02（余量优化）
 
