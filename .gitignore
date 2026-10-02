@@ -2,3 +2,5 @@ _site
 .sass-cache
 tmp/
 tools/adb-bridge/.bridge-instance.lock
+# 运行时自动下载的 gifski CLI（勿提交二进制）
+tools/ffmpeg-bridge/vendor/gifski/
