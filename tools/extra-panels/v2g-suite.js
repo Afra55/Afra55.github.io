@@ -6901,6 +6901,36 @@
         setVbbButtons();
       }
 
+      /** 多选手动排序：from → to（含两端），保持当前预览条目 */
+      function moveVbbBatchItem(from, to) {
+        if (vbbBusy || vbbEditOpening) return false;
+        const n = vbbBatchFiles.length;
+        if (!isVbbBatchMode() || n < 2) return false;
+        if (
+          !Number.isFinite(from) ||
+          !Number.isFinite(to) ||
+          from < 0 ||
+          to < 0 ||
+          from >= n ||
+          to >= n ||
+          from === to
+        ) {
+          return false;
+        }
+        persistActiveVbbMarks();
+        const active = vbbEditBatchIdx >= 0 ? vbbBatchFiles[vbbEditBatchIdx] : null;
+        const [item] = vbbBatchFiles.splice(from, 1);
+        vbbBatchFiles.splice(to, 0, item);
+        if (active) {
+          const next = vbbBatchFiles.indexOf(active);
+          vbbEditBatchIdx = next >= 0 ? next : Math.min(from, vbbBatchFiles.length - 1);
+        }
+        renderVbbBatchList({ keepSelection: true });
+        syncVbbBatchMeta();
+        setVbbButtons();
+        return true;
+      }
+
       /** 从多选列表移除一条：释放预览 URL、清 edit/marks；余 1 条时退回单文件模式 */
       async function removeVbbBatchItem(idx) {
         if (vbbBusy || vbbEditOpening) return;
@@ -7202,6 +7232,28 @@
             e.stopPropagation();
             selectVbbBatchItem(idx).catch((err) => setError(vbbError, err.message || String(err)));
           });
+          const upBtn = document.createElement("button");
+          upBtn.type = "button";
+          upBtn.className = "ghost-btn vbb-batch-row-move";
+          upBtn.setAttribute("aria-label", "上移");
+          upBtn.title = "上移";
+          upBtn.textContent = "↑";
+          upBtn.disabled = vbbBusy || vbbEditOpening || idx === 0;
+          upBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (moveVbbBatchItem(idx, idx - 1)) toast(`已上移到第 ${idx} 位`);
+          });
+          const downBtn = document.createElement("button");
+          downBtn.type = "button";
+          downBtn.className = "ghost-btn vbb-batch-row-move";
+          downBtn.setAttribute("aria-label", "下移");
+          downBtn.title = "下移";
+          downBtn.textContent = "↓";
+          downBtn.disabled = vbbBusy || vbbEditOpening || idx >= vbbBatchFiles.length - 1;
+          downBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (moveVbbBatchItem(idx, idx + 1)) toast(`已下移到第 ${idx + 2} 位`);
+          });
           const removeBtn = document.createElement("button");
           removeBtn.type = "button";
           removeBtn.className = "ghost-btn vbb-batch-row-remove";
@@ -7213,11 +7265,20 @@
             e.stopPropagation();
             removeVbbBatchItem(idx).catch((err) => setError(vbbError, err.message || String(err)));
           });
+          const handle = document.createElement("span");
+          handle.className = "vbb-batch-row-handle";
+          handle.title = "拖拽排序";
+          handle.setAttribute("aria-hidden", "true");
+          handle.textContent = "⋮⋮";
           const actions = document.createElement("div");
           actions.className = "vbb-batch-row-actions";
+          actions.appendChild(upBtn);
+          actions.appendChild(downBtn);
           actions.appendChild(previewBtn);
           if (!isVbbManualMode()) actions.appendChild(btn);
           actions.appendChild(removeBtn);
+          row.draggable = !(vbbBusy || vbbEditOpening);
+          row.appendChild(handle);
           row.appendChild(main);
           row.appendChild(actions);
           row.addEventListener("click", () => {
@@ -7241,8 +7302,8 @@
         ).length;
         const marked = countVbbBatchManualSegments();
         const tip = isVbbManualMode()
-          ? ` · 打点仅作用于当前视频${marked ? ` · 共 ${marked} 段` : ""} · 点 × 可移除`
-          : ` · 点「编辑」裁时长/画面，再「一键黑盒」· 点 × 可移除`;
+          ? ` · 打点仅作用于当前视频${marked ? ` · 共 ${marked} 段` : ""} · ↑↓/拖拽排序 · 点 × 可移除`
+          : ` · ↑↓/拖拽排序 · 点「编辑」裁时长/画面 · 点 × 可移除`;
         vbbMeta.replaceChildren();
         vbbMeta.append(
           `已选 ${vbbBatchFiles.length} 个视频 · 共 ${totalDur.toFixed(1)}s · ${formatKb(totalSize)}`
@@ -10655,6 +10716,65 @@
         vbbPlanList = $("#vbb-plan-list", root);
         vbbList = $("#vbb-list", root);
         vbbBatchList = $("#vbb-batch-list", root);
+        if (vbbBatchList && !vbbBatchList.dataset.vbbSortBound) {
+          vbbBatchList.dataset.vbbSortBound = "1";
+          let dragFrom = -1;
+          vbbBatchList.addEventListener("dragstart", (e) => {
+            const row = e.target?.closest?.(".vbb-batch-row");
+            if (!row || vbbBusy || vbbEditOpening) {
+              e.preventDefault();
+              return;
+            }
+            // 点按钮时不要开拖
+            if (e.target?.closest?.("button")) {
+              e.preventDefault();
+              return;
+            }
+            dragFrom = Number(row.dataset.vbbBatchIdx);
+            try {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", String(dragFrom));
+            } catch (_) {}
+            row.classList.add("is-dragging");
+          });
+          vbbBatchList.addEventListener("dragend", () => {
+            dragFrom = -1;
+            vbbBatchList.querySelectorAll(".vbb-batch-row.is-dragging, .vbb-batch-row.is-drag-over").forEach((el) => {
+              el.classList.remove("is-dragging", "is-drag-over");
+            });
+          });
+          vbbBatchList.addEventListener("dragover", (e) => {
+            const row = e.target?.closest?.(".vbb-batch-row");
+            if (!row) return;
+            e.preventDefault();
+            try {
+              e.dataTransfer.dropEffect = "move";
+            } catch (_) {}
+            vbbBatchList.querySelectorAll(".vbb-batch-row.is-drag-over").forEach((el) => {
+              if (el !== row) el.classList.remove("is-drag-over");
+            });
+            row.classList.add("is-drag-over");
+          });
+          vbbBatchList.addEventListener("dragleave", (e) => {
+            const row = e.target?.closest?.(".vbb-batch-row");
+            if (row && !row.contains(e.relatedTarget)) row.classList.remove("is-drag-over");
+          });
+          vbbBatchList.addEventListener("drop", (e) => {
+            e.preventDefault();
+            const row = e.target?.closest?.(".vbb-batch-row");
+            const to = Number(row?.dataset?.vbbBatchIdx);
+            let from = dragFrom;
+            try {
+              const raw = e.dataTransfer?.getData("text/plain");
+              if (raw !== "" && Number.isFinite(Number(raw))) from = Number(raw);
+            } catch (_) {}
+            vbbBatchList.querySelectorAll(".vbb-batch-row.is-drag-over, .vbb-batch-row.is-dragging").forEach((el) => {
+              el.classList.remove("is-drag-over", "is-dragging");
+            });
+            if (moveVbbBatchItem(from, to)) toast(`已排到第 ${to + 1} 位`);
+            dragFrom = -1;
+          });
+        }
         vbbResultBlock = $("#vbb-result-block", root);
         vbbCustomRow = $("#vbb-custom-row", root);
         vbbTargetSpan = $("#vbb-target-span", root);
