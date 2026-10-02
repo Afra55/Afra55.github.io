@@ -1101,7 +1101,8 @@
           seekPlayheadExact(startSec).then(() => video.play().catch(() => {}));
           return;
         }
-        if (cur >= endSec - 0.05) {
+        // 片尾半开：到 end 前约 1 帧就回片头，与成片截断一致
+        if (cur >= endSec - 0.04) {
           seekPlayheadExact(startSec).then(() => video.play().catch(() => {}));
           return;
         }

@@ -837,9 +837,9 @@
           applyVbbSeek(start, { keepPlaying: !vbbVideo.paused });
           return;
         }
-        if (t >= end - 0.05) {
+        if (t >= end - 0.04) {
           if (!vbbVideo.paused) applyVbbSeek(start, { keepPlaying: true });
-          else applyVbbSeek(Math.max(start, end - 0.05), { keepPlaying: false });
+          else applyVbbSeek(Math.max(start, end - 0.04), { keepPlaying: false });
         }
       }
 
@@ -2976,9 +2976,10 @@
               const crop = win.crop
                 ? `crop=${Math.max(2, win.crop.w)}:${Math.max(2, win.crop.h)}:${Math.max(0, win.crop.x)}:${Math.max(0, win.crop.y)},`
                 : "";
-              // 先按编辑裁时长/画面，再统一尺寸与帧率后 concat
+              // 片尾按半开区间：duration 略短半帧，避免拼接后再转 GIF 多出片尾后画面
+              const mergeDur = Math.max(0.05, span - 0.5 / mergeFps);
               return (
-                `[${i}:v]trim=start=${start}:duration=${span},setpts=PTS-STARTPTS,` +
+                `[${i}:v]trim=start=${start}:duration=${mergeDur},setpts=PTS-STARTPTS,` +
                 `${crop}scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
                 `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,fps=${mergeFps}[v${i}]`
               );

@@ -687,7 +687,7 @@
   
         const { startSec, maxSec, span, hasDuration } = resolveV2gSpan();
         const delay = Math.round(1000 / fps);
-        const naturalFrames = Math.max(2, Math.floor(span * fps) + 1);
+        const naturalFrames = Math.max(2, Math.round(span * fps));
         let frameCount = naturalFrames;
         const framesCapped = false;
   
@@ -1054,8 +1054,8 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
         const effSpan = span / speed;
-        // 不设帧数上限：帧率按所选档位(15/12，短片可余量提 20)；体积由后续压缩(减色/缩放)兜底
-        const naturalFrames = Math.max(2, Math.floor(effSpan * fps) + 1);
+        // 半开区间 [start, end)：不 +1，避免片尾比编辑拖到的位置多出几帧
+        const naturalFrames = Math.max(2, Math.round(effSpan * fps));
         const framesCapped = false;
         const frameCount = naturalFrames;
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
@@ -1130,8 +1130,8 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            // 有片头偏移时禁用 copy（会贴前一关键帧，比编辑预览往前多几帧）；-ss 放 -i 后按解码裁
-            const cutDur = Math.min(span + 0.15, span * 1.05 + 0.05);
+            // 有片头偏移时禁用 copy；时长只多半帧，避免片尾多吃内容
+            const cutDur = span + 0.5 / Math.max(8, fps);
             const cutArgs =
               startSec > 0.05
                 ? [
@@ -1438,7 +1438,8 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
         const effSpan = span / speed;
-        const frameCount = Math.max(2, Math.floor(effSpan * fps) + 1);
+        // 半开区间 [start, end)：不 +1，避免片尾比编辑拖到的位置多出几帧
+        const frameCount = Math.max(2, Math.round(effSpan * fps));
         const framesCapped = false;
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
@@ -1544,7 +1545,7 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            const cutDur = Math.min(span + 0.15, span * 1.05 + 0.05);
+            const cutDur = span + 0.5 / Math.max(8, fps);
             const cutArgs =
               startSec > 0.05
                 ? [
@@ -1624,7 +1625,10 @@
           const encodeChunk = async (chunkStartFrame, chunkFrames) => {
             const startEff = chunkStartFrame / fps; // effSpan 时间轴（秒）
             const ss = encodeSs + startEff * speed; // 原始时间轴
-            const dur = (chunkFrames / fps) * speed + 0.15; // 略多给一点，避免末帧被切
+            const absEnd = encodeSs + encodeT;
+            // 只多半帧防末帧被切；并钳到片尾，避免旧 +0.15s 把片尾后画面带进 GIF
+            const need = (chunkFrames / fps) * speed + 0.5 / Math.max(8, fps);
+            const dur = Math.max(1 / Math.max(8, fps), Math.min(need, absEnd - ss + 0.5 / Math.max(8, fps)));
             // -ss 在 -i 后：与编辑器片头对齐，避免关键帧往前多取
             const baseArgs = ["-i", encodeInput];
             if (ss > 0.001) baseArgs.push("-ss", String(ss));
@@ -6852,9 +6856,9 @@
           applyVbbSeek(start, { keepPlaying: !vbbVideo.paused });
           return;
         }
-        if (t >= end - 0.05) {
+        if (t >= end - 0.04) {
           if (!vbbVideo.paused) applyVbbSeek(start, { keepPlaying: true });
-          else applyVbbSeek(Math.max(start, end - 0.05), { keepPlaying: false });
+          else applyVbbSeek(Math.max(start, end - 0.04), { keepPlaying: false });
         }
       }
 
@@ -8991,9 +8995,10 @@
               const crop = win.crop
                 ? `crop=${Math.max(2, win.crop.w)}:${Math.max(2, win.crop.h)}:${Math.max(0, win.crop.x)}:${Math.max(0, win.crop.y)},`
                 : "";
-              // 先按编辑裁时长/画面，再统一尺寸与帧率后 concat
+              // 片尾按半开区间：duration 略短半帧，避免拼接后再转 GIF 多出片尾后画面
+              const mergeDur = Math.max(0.05, span - 0.5 / mergeFps);
               return (
-                `[${i}:v]trim=start=${start}:duration=${span},setpts=PTS-STARTPTS,` +
+                `[${i}:v]trim=start=${start}:duration=${mergeDur},setpts=PTS-STARTPTS,` +
                 `${crop}scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
                 `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,fps=${mergeFps}[v${i}]`
               );
