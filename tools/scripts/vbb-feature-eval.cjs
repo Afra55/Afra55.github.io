@@ -242,6 +242,218 @@ async function main() {
       JSON.stringify(editOpen.endKeep || {})
     );
 
+    // —— 编辑专项：默认修剪时长 + 绿框常显 + 删中间须点按钮 ——
+    const editSuite = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const waitOverlay = async (ms = 15000) => {
+        const t0 = Date.now();
+        while (Date.now() - t0 < ms) {
+          if (document.querySelector(".vtrim-editor-overlay")) return true;
+          await sleep(40);
+        }
+        return Boolean(document.querySelector(".vtrim-editor-overlay"));
+      };
+      const $ = (suf) => document.querySelector(`.vtrim-editor-overlay [id$='-${suf}']`);
+      const modeActive = () =>
+        document.querySelector(".vtrim-editor-overlay [data-vte-mode].is-active")?.dataset?.vteMode || "";
+
+      document.getElementById("vbb-edit-open")?.click();
+      if (!(await waitOverlay())) return { ok: false, reason: "no-overlay" };
+      await sleep(300);
+
+      const defaultMode = modeActive();
+      const trimTools = $("trim-tools");
+      const cropPanel = $("crop-panel");
+      const cropBox = $("crop-box");
+      const cropEnable = $("crop-enable");
+      const defaultTrimUi =
+        defaultMode === "trim" &&
+        trimTools &&
+        !trimTools.hidden &&
+        cropPanel?.hidden === true;
+      const cropBoxVisible =
+        Boolean(cropEnable?.checked) && Boolean(cropBox) && !cropBox.hidden;
+      const cropInteractiveOnTrim = cropBox?.classList?.contains("is-interactive") === true;
+
+      // 切到裁切画面：绿框可拖
+      document.querySelector('.vtrim-editor-overlay [data-vte-mode="crop"]')?.click();
+      await sleep(80);
+      const cropMode = modeActive() === "crop";
+      const cropPanelShown = cropPanel && !cropPanel.hidden;
+      const cropInteractiveOnCrop = cropBox?.classList?.contains("is-interactive") === true;
+
+      // 切到删中间
+      document.querySelector('.vtrim-editor-overlay [data-vte-mode="cut"]')?.click();
+      await sleep(80);
+      const cutMode = modeActive() === "cut";
+      const cutAdd = $("cut-add");
+      const cutTools = $("cut-tools");
+      const cutToolsShown = cutTools && !cutTools.hidden && Boolean(cutAdd);
+
+      const video = document.querySelector(".vtrim-editor-overlay video");
+      const timeline = document.querySelector(".vtrim-editor-overlay .vtrim-timeline");
+      const cutoutsEl = $("cutouts");
+      const countCuts = () =>
+        cutoutsEl ? cutoutsEl.querySelectorAll(".vtrim-cutout:not(.is-draft)").length : -1;
+
+      // 拖进度：不应新增红段
+      const beforeDrag = countCuts();
+      let dragSeekOk = false;
+      if (video && timeline && video.duration > 1) {
+        const rect = timeline.getBoundingClientRect();
+        const y = rect.top + rect.height / 2;
+        const x0 = rect.left + rect.width * 0.35;
+        const x1 = rect.left + rect.width * 0.65;
+        timeline.dispatchEvent(
+          new PointerEvent("pointerdown", {
+            bubbles: true,
+            clientX: x0,
+            clientY: y,
+            pointerId: 7,
+            pointerType: "touch",
+          })
+        );
+        timeline.dispatchEvent(
+          new PointerEvent("pointermove", {
+            bubbles: true,
+            clientX: x1,
+            clientY: y,
+            pointerId: 7,
+            pointerType: "touch",
+          })
+        );
+        window.dispatchEvent(
+          new PointerEvent("pointerup", {
+            bubbles: true,
+            clientX: x1,
+            clientY: y,
+            pointerId: 7,
+            pointerType: "touch",
+          })
+        );
+        await sleep(220);
+        dragSeekOk = countCuts() === beforeDrag && beforeDrag === 0;
+      }
+
+      // 点「添加删除段」才加红段
+      cutAdd?.click();
+      await sleep(120);
+      const afterAdd = countCuts();
+      const addOk = afterAdd === 1;
+
+      // 再拖空白进度：仍不应变成 2 段
+      if (video && timeline && video.duration > 1) {
+        const rect = timeline.getBoundingClientRect();
+        const y = rect.top + rect.height / 2;
+        const x0 = rect.left + rect.width * 0.4;
+        const x1 = rect.left + rect.width * 0.7;
+        timeline.dispatchEvent(
+          new PointerEvent("pointerdown", {
+            bubbles: true,
+            clientX: x0,
+            clientY: y,
+            pointerId: 8,
+            pointerType: "touch",
+          })
+        );
+        timeline.dispatchEvent(
+          new PointerEvent("pointermove", {
+            bubbles: true,
+            clientX: x1,
+            clientY: y,
+            pointerId: 8,
+            pointerType: "touch",
+          })
+        );
+        window.dispatchEvent(
+          new PointerEvent("pointerup", {
+            bubbles: true,
+            clientX: x1,
+            clientY: y,
+            pointerId: 8,
+            pointerType: "touch",
+          })
+        );
+        await sleep(200);
+      }
+      const afterDragKeep = countCuts() === 1;
+
+      // 完成保存：应带回 cutouts
+      $("done")?.click();
+      await sleep(200);
+      const closed = !document.querySelector(".vtrim-editor-overlay");
+      const badge = document.getElementById("vbb-file-edit-label")?.textContent || "";
+      const savedHint = /删/.test(badge) || /裁/.test(badge);
+
+      return {
+        defaultMode,
+        defaultTrimUi,
+        cropBoxVisible,
+        cropInteractiveOnTrim,
+        cropMode,
+        cropPanelShown,
+        cropInteractiveOnCrop,
+        cutMode,
+        cutToolsShown,
+        beforeDrag,
+        dragSeekOk,
+        afterAdd,
+        addOk,
+        afterDragKeep,
+        closed,
+        badge: badge.slice(0, 80),
+        savedHint,
+      };
+    });
+    check(
+      rows,
+      "edit.default-trim",
+      editSuite.defaultTrimUi === true,
+      JSON.stringify({ mode: editSuite.defaultMode, ui: editSuite.defaultTrimUi })
+    );
+    check(
+      rows,
+      "edit.crop-box-visible",
+      editSuite.cropBoxVisible === true && editSuite.cropInteractiveOnTrim === false,
+      JSON.stringify({
+        visible: editSuite.cropBoxVisible,
+        interactiveOnTrim: editSuite.cropInteractiveOnTrim,
+      })
+    );
+    check(
+      rows,
+      "edit.crop-mode-interactive",
+      editSuite.cropMode && editSuite.cropPanelShown && editSuite.cropInteractiveOnCrop,
+      JSON.stringify({
+        mode: editSuite.cropMode,
+        panel: editSuite.cropPanelShown,
+        interactive: editSuite.cropInteractiveOnCrop,
+      })
+    );
+    check(
+      rows,
+      "edit.cut-drag-no-add",
+      editSuite.cutMode && editSuite.cutToolsShown && editSuite.dragSeekOk,
+      JSON.stringify({
+        cutMode: editSuite.cutMode,
+        tools: editSuite.cutToolsShown,
+        dragSeekOk: editSuite.dragSeekOk,
+        before: editSuite.beforeDrag,
+      })
+    );
+    check(
+      rows,
+      "edit.cut-add-button",
+      editSuite.addOk && editSuite.afterDragKeep,
+      JSON.stringify({ afterAdd: editSuite.afterAdd, keepOne: editSuite.afterDragKeep })
+    );
+    check(
+      rows,
+      "edit.save-cutouts",
+      editSuite.closed && editSuite.savedHint,
+      JSON.stringify({ closed: editSuite.closed, badge: editSuite.badge })
+    );
+
     // 手动打点 UI
     const manual = await page.evaluate(async () => {
       document.getElementById("vbb-workflow-manual")?.click();
