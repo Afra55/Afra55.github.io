@@ -42,7 +42,7 @@ node tools/scripts/vbb-bench-local.cjs <video...>
 - **进预算顺序**：收窄 → 浅降质 → 更低帧 →（必要时）gifsicle
 - **有余量顺序**：加宽 → 提帧（短片冲 20）→ 短片再加宽 → 画质上探 → O3 → O3 后再加宽 → 硬闸
 - **短片加宽上限**：≤24s 探到 `min(源宽, 1280)`，目标约 **99%** 预算；长片仍约 **2×** 控探测成本
-- **拼接后转黑盒**：只拼画面（不带音频 concat）、中间片 60fps + `setpts`，避免 A/V 对齐丢/插帧导致前半段顿挫
+- **拼接后转黑盒**：多段按顺序先合成一条 MP4，再整段黑盒；只拼画面；中间片帧率对齐黑盒主档（20/15/12）；各段「编辑」的裁时长/裁画面会带进拼接
 
 关键常量（名称以源码为准）：`V2G_BLACKBOX_MAX_BYTES`、`V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC`、`V2G_BLACKBOX_MID_SPAN_SEC`、`V2G_BLACKBOX_BASE_W`、`V2G_ENCODE_HARD_W`、`V2G_BLACKBOX_QUALITY_LADDER`。
 
@@ -166,6 +166,10 @@ node tools/scripts/vbb-bench-local.cjs <video...>
 ---
 
 ## 变更记录
+
+### 2026-10-02（续）
+
+- **拼接语义校验**：确认流程是「多段 → 一条 MP4 → 整段黑盒」；拼接时带上各段编辑（trim/crop）；文档策略摘要与实现对齐
 
 ### 2026-10-02
 

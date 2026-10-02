@@ -8690,8 +8690,9 @@
       }
 
       // 把已选的多个视频按顺序拼接成一个 MP4，再走单段黑盒。
-      // 只要画面：音频在 concat 里会为对齐 A/V 复制/丢帧，观感像「前半段一顿一顿」。
-      // 中间片帧率对齐黑盒主档（短片 20 / 中 15 / 长 12），避免 源→60→20 双重抽帧导致第一段顿挫。
+      // 含义：先合为一条成片，再整段黑盒（不是各转 GIF 再拼）。
+      // 只要画面；中间片帧率对齐黑盒主档，避免双重抽帧顿挫。
+      // 各段若做过「编辑」（裁时长/裁画面），拼接时一并带上。
       async function mergeVbbVideosToOne() {
         if (!isVbbBatchMode() || vbbBusy) return;
         abortVbb = false;
@@ -8718,17 +8719,37 @@
           }
           const W = Math.max(2, Math.round((items[0].srcW || 1280) / 2) * 2);
           const H = Math.max(2, Math.round((items[0].srcH || 720) / 2) * 2);
-          const totalSpan = items.reduce((s, it) => s + Math.max(0, Number(it.duration) || 0), 0);
+          const wins = items.map((item) => {
+            ensureVbbItemEdit(item);
+            const win = resolveVbbEncodeEdits(item, item.file, item.duration, item.srcW, item.srcH);
+            const crop =
+              win.edit?.cropOn && win.edit.crop
+                ? typeof normalizeV2gCrop === "function"
+                  ? normalizeV2gCrop(win.edit.crop, item.srcW, item.srcH)
+                  : win.edit.crop
+                : null;
+            return { ...win, crop };
+          });
+          const totalSpan = wins.reduce((s, w) => s + Math.max(0, Number(w.span) || 0), 0);
           const mergeFps = Math.max(
             12,
             Math.min(30, Math.round(Number(typeof blackboxPrimaryFps === "function" ? blackboxPrimaryFps(totalSpan) : 20) || 20))
           );
-          // 每段：统一尺寸 → 重置时基 → CFR=黑盒主档帧率（单次抽帧）
           const vparts = names
-            .map(
-              (_, i) =>
-                `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,setpts=PTS-STARTPTS,fps=${mergeFps}[v${i}]`
-            )
+            .map((_, i) => {
+              const win = wins[i];
+              const start = Math.max(0, Number(win.startSec) || 0);
+              const span = Math.max(0.05, Number(win.span) || 0.05);
+              const crop = win.crop
+                ? `crop=${Math.max(2, win.crop.w)}:${Math.max(2, win.crop.h)}:${Math.max(0, win.crop.x)}:${Math.max(0, win.crop.y)},`
+                : "";
+              // 先按编辑裁时长/画面，再统一尺寸与帧率后 concat
+              return (
+                `[${i}:v]trim=start=${start}:duration=${span},setpts=PTS-STARTPTS,` +
+                `${crop}scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
+                `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,fps=${mergeFps}[v${i}]`
+              );
+            })
             .join(";");
           const vlist = names.map((_, i) => `[v${i}]`).join("");
           const baseArgs = [];
