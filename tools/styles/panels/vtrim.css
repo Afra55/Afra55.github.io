@@ -420,7 +420,7 @@
 }
 .vtrim-cutout-handle-start { left: 0; }
 .vtrim-cutout-handle-end { left: 100%; }
-.vtrim-stage.is-mode-cut .vtrim-window { cursor: crosshair; }
+.vtrim-stage.is-mode-cut .vtrim-window { cursor: grab; }
 .vtrim-stage.is-mode-crop .vtrim-preview-wrap { cursor: default; }
 .vtrim-stage.is-mode-trim .vtrim-preview-wrap,
 .vtrim-stage.is-mode-cut .vtrim-preview-wrap { cursor: grab; }

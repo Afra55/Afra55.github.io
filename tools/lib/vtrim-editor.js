@@ -346,7 +346,7 @@
           editMode === "crop"
             ? "拖绿框 · 双击重置"
             : editMode === "cut"
-              ? "拖红段删中间 · 可多段"
+              ? "点「添加删除段」· 再拖红柄微调"
               : "拖黄柄裁片头片尾";
       }
       syncCropBoxVisibility();
@@ -931,18 +931,6 @@
         clipCutoutsToWindow();
         paintCutouts();
         updateLabels();
-      } else if (kind === "cut-new") {
-        if (drag.cutDraft) {
-          const a = Math.min(drag.cutDraft.a, drag.cutDraft.b);
-          const b = Math.max(drag.cutDraft.a, drag.cutDraft.b);
-          if (b - a >= MIN_CUTOUT) {
-            cutouts = normalizeCutoutsList([...cutouts, { start: a, end: b }], startSec, endSec);
-            selectedCutout = cutouts.length - 1;
-          }
-        }
-        clipCutoutsToWindow();
-        syncCutoutUi();
-        updateLabels();
       }
     }
 
@@ -963,10 +951,7 @@
         return { kind: "cut-select", cutIndex: Number(cutBody.dataset.cutIndex) };
       }
       if (editMode === "cut") {
-        // 删中间模式：外框黄柄只读，窗口内拖拽新建删除段
-        const startR = startSec / duration;
-        const endR = endSec / duration;
-        if (ratio >= startR && ratio <= endR) return { kind: "cut-new" };
+        // 删中间：空白处只 scrub 进度；红段须点「添加删除段」创建
         return { kind: "seek" };
       }
       if (target === handleStart || target?.classList?.contains("vtrim-handle-start")) return { kind: "start" };
@@ -1311,16 +1296,6 @@
         drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout };
         timeline?.setPointerCapture?.(e.pointerId);
         setCutoutEdge(selectedCutout, kind === "cut-end" ? "end" : "start", t);
-      } else if (kind === "cut-new") {
-        const clamped = clamp(t, startSec, endSec);
-        selectedCutout = -1;
-        drag = {
-          kind: "cut-new",
-          pointerId: e.pointerId,
-          cutDraft: { a: clamped, b: clamped },
-        };
-        timeline?.setPointerCapture?.(e.pointerId);
-        previewSeek(clamped, { throttle: false });
       } else {
         previewSeek(clamp(t, startSec, endKeepSec()));
         drag = { kind: "seek", pointerId: e.pointerId };
@@ -1343,21 +1318,6 @@
       else if (drag.kind === "end") setEnd(t);
       else if (drag.kind === "cut-start" || drag.kind === "cut-end") {
         setCutoutEdge(drag.cutIndex, drag.kind === "cut-end" ? "end" : "start", t);
-      } else if (drag.kind === "cut-new" && drag.cutDraft) {
-        drag.cutDraft.b = clamp(t, startSec, endSec);
-        const a = Math.min(drag.cutDraft.a, drag.cutDraft.b);
-        const b = Math.max(drag.cutDraft.a, drag.cutDraft.b);
-        // 临时画一段预览删除区
-        if (cutoutsEl && duration) {
-          cutoutsEl.querySelectorAll(".vtrim-cutout.is-draft").forEach((n) => n.remove());
-          const el = document.createElement("span");
-          el.className = "vtrim-cutout is-draft is-selected";
-          el.style.setProperty("--cut-start", `${(a / duration) * 100}%`);
-          el.style.setProperty("--cut-end", `${(b / duration) * 100}%`);
-          cutoutsEl.appendChild(el);
-        }
-        previewSeek(b, { throttle: true });
-        updateLabels();
       } else previewSeek(clamp(t, startSec, endKeepSec()));
     }
     function onTimelinePointerUp(e) {
