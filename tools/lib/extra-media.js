@@ -1166,32 +1166,47 @@
   /**
    * 黑盒高帧档轻柔压缩（对齐 -l 基线）：每轮都带 lossy，不减色/缩放，优先保住 12FPS。
    * 附带 -O3，但不单独占一轮。
+   * @param {number} [round]
+   * @param {{ movie?: boolean }} [opts] 电影片段：lossy 更积极（摄影内容 lossy 体积杠杆远大于纯 UI）
    */
-  function buildBlackboxSoftCompressArgs(round = 1) {
+  function buildBlackboxSoftCompressArgs(round = 1, opts = {}) {
     const r = Math.max(1, Math.round(Number(round) || 1));
+    const movie = Boolean(opts && opts.movie);
     // 第 1 轮用纯无损 -O3：--lossy 是 gifsicle 的「有损优化」，会改动像素、画面出颗粒。
-    // 体积优先靠「无损重编更小」（见 v2g-suite.js 的 encodeAndCompressBlackboxTier），实在不行才 lossy。
-    if (r === 1) return { label: "无损优化", args: "-O3", round: 1, lossy: 0 };
-    const lossy = Math.min(75, 25 + (r - 2) * 22); // 2轮25, 3轮47, 4轮69
-    return { label: "轻柔", args: `-O3 --lossy=${lossy}`, round: r, lossy };
+    if (r === 1) return { label: "无损优化", args: "-O3", round: 1, lossy: 0, movie };
+    const lossy = movie
+      ? Math.min(120, 40 + (r - 2) * 28) // 电影：2轮40, 3轮68, 4轮96…
+      : Math.min(75, 25 + (r - 2) * 22); // UI：2轮25, 3轮47, 4轮69
+    return { label: movie ? "电影轻压" : "轻柔", args: `-O3 --lossy=${lossy}`, round: r, lossy, movie };
   }
 
-  /** 黑盒最后一档：每轮都有 lossy（对齐 -l 力度），避免首轮纯 O3 白占一轮 */
-  function buildBlackboxHardCompressArgs(round = 1) {
+  /**
+   * 黑盒最后一档：每轮都有 lossy（对齐 -l 力度），避免首轮纯 O3 白占一轮。
+   * 电影片段提高 lossy 起点（实测摄影内容 Medium lossy 可省约 40%，UI 仅约 10%）。
+   */
+  function buildBlackboxHardCompressArgs(round = 1, opts = {}) {
     const r = Math.max(1, Math.round(Number(round) || 1));
-    // 第 1 轮同样先纯无损（原因见 buildBlackboxSoftCompressArgs）
-    if (r === 1) return { label: "无损优化", args: "-O3", round: 1, lossy: 0 };
+    const movie = Boolean(opts && opts.movie);
+    if (r === 1) return { label: "无损优化", args: "-O3", round: 1, lossy: 0, movie };
     const level = r <= 3 ? "standard" : "strong";
-    const baseLossy = level === "strong" ? 100 : 60;
-    const lossy = Math.min(200, baseLossy + (r - 1) * 30);
+    const baseLossy = movie ? (level === "strong" ? 130 : 80) : level === "strong" ? 100 : 60;
+    const lossy = Math.min(200, baseLossy + (r - 1) * (movie ? 25 : 30));
     const parts = ["-O3", `--lossy=${lossy}`];
-    if (level === "strong" || r >= 2) {
-      // 不再降到 64 色（会明显「掉色」）；最低 128
+    // 电影：尽量晚减色（色彩渐变敏感）；UI 仍可 128
+    if (!movie && (level === "strong" || r >= 2)) {
       parts.push("--colors 128");
+    } else if (movie && r >= 5) {
+      parts.push("--colors 192");
     }
     if (r >= 7) parts.push("--scale 0.85");
     else if (r >= 5) parts.push("--scale 0.9");
-    return { label: level === "strong" ? "强力" : "标准", args: parts.join(" "), round: r, lossy };
+    return {
+      label: movie ? (level === "strong" ? "电影强压" : "电影标准") : level === "strong" ? "强力" : "标准",
+      args: parts.join(" "),
+      round: r,
+      lossy,
+      movie,
+    };
   }
 
   function gifCompressSummary(originalSize, beforeSize, afterSize, round) {

@@ -9,12 +9,24 @@ const MID_SPAN_SEC = 24;
 const DEFAULT_FPS_LIST = [20, 15, 12];
 const RETRY_MIN_FPS = 12;
 
-/** ≈25 → 25/12.5；≈30 → 30/15/12；其它 → 20/15/12 */
+/** ≈24 电影 → 24/12；≈25 屏录 → 25/12.5；≈30 → 30/15/12；其它 → 20/15/12 */
 function blackboxFpsCandidates(srcFps) {
   const src = Number(srcFps) || 0;
-  if (src >= 24.2 && src <= 25.8) return [25, 12.5];
+  if (src >= 23.5 && src < 24.5) return [24, 12];
+  if (src >= 24.5 && src <= 25.8) return [25, 12.5];
   if (src >= 29.2 && src <= 30.8) return [30, 15, 12];
   return DEFAULT_FPS_LIST.slice();
+}
+
+/** 电影/摄像内容（非典型 25 屏录）→ 压缩更敢用 lossy */
+function blackboxIsMovieLike(srcFps) {
+  const src = Number(srcFps) || 0;
+  if (!(src > 0)) return true;
+  if (src >= 23.5 && src < 24.5) return true;
+  if (src >= 29.2 && src <= 30.8) return true;
+  if (src >= 47 && src <= 60.5) return true;
+  if (src >= 24.5 && src <= 25.8) return false;
+  return true;
 }
 
 function blackboxPrimaryFps(span, srcFps) {
@@ -39,10 +51,6 @@ function resolveBlackboxFpsList(span, srcFps) {
   return list.length ? list : [blackboxFpsFloor(span, srcFps)];
 }
 
-/**
- * 成片标称 fps 是否落在片源允许集合（含 GIF 厘秒量化后的有效值）。
- * 例：15 → 有效 ≈14.3；12 → 12.5；12.5 → 12.5；25 → 25。
- */
 function gifEffectivePlaybackFps(fps) {
   const f = Math.max(1, Number(fps) || 15);
   const cs = Math.max(1, Math.round(100 / f));
@@ -72,7 +80,6 @@ function assertGifFpsAllowed(srcFps, outFps, label = "gif fps") {
   return true;
 }
 
-/** ≤24s 中档及以上视为「流畅档」，禁止为换宽再降到更低档 */
 function isFluentTierFps(span, srcFps, fps) {
   const s = Number(span) || 0;
   if (s > MID_SPAN_SEC + 0.01) return false;
@@ -86,6 +93,7 @@ module.exports = {
   MID_SPAN_SEC,
   DEFAULT_FPS_LIST,
   blackboxFpsCandidates,
+  blackboxIsMovieLike,
   blackboxPrimaryFps,
   blackboxFpsFloor,
   resolveBlackboxFpsList,
