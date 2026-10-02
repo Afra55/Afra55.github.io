@@ -94,7 +94,7 @@
        * 主档 20→15→12（10MB 下短片优先 20；≈20s 主 15 有余量冲 20；≈30s 主 12）。
        * SPAN 分档（有效时长 = span/speed）：
        *   ≤ HIGH_PRIMARY(16s)：主试 20 @ 420
-       *   ≤ MID(24s)：主试 15 @ 420；余量先加宽再冲 20
+       *   ≤ MID(24s)：主试 15 @ 420；中长片保 15 可走到 q22/q30（拼接约 22s 勿轻易掉 12）
        *   > MID：主试 12 @ 420；很松抬 15 再加宽
        * 「压缩时长」= 倍速缩短成片时长，帧延迟仍按目标 fps 均匀写，不是更顿的原因。
        * 小于规则：加宽 → 提帧；超过规则：缩宽 → 降质 → 降帧到 12。
@@ -2628,10 +2628,14 @@
             await widenPass("短片有余 · 再加宽吃满");
           }
           // 可读宽优先：已接近贴满但宽 <420（录屏字偏糊）→ 降一档帧率换宽度
+          // 例外：≤24s（含两段拼接）已是 15 时不降到 12——用户反馈「单段顺、拼接卡」主因就是这档
           {
             const curMaxW = Number(cur.maxW) || V2G_BLACKBOX_BASE_W;
             const readableMin = V2G_BLACKBOX_BASE_W;
+            const midKeep15 =
+              effSpan <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01 && fpsNow >= 15 - 0.01;
             if (
+              !midKeep15 &&
               curMaxW < readableMin - 0.5 &&
               cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.88 &&
               !atCap()
@@ -2753,10 +2757,11 @@
               const rw = Math.max(V2G_BLACKBOX_RETRY_MIN_W, Math.floor((width * k) / 2) * 2);
               const keepQ = Number(candidate.quality) || Number(common.quality) || V2G_BLACKBOX_QUALITY;
               const shortFluent = span / speed <= V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
-              // 短片（≤16s）保帧率：15→13.5 / 20→16 会明显卡；优先同帧率减色，再走 gifsicle
+              const midFluent = span / speed <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01;
+              // 短片保 20 / 中长片保 15：勿在硬压里先掉到 13（多一次白跑且观感更差）
               let rf;
               let retryQuality;
-              if (shortFluent && fps >= 15 - 0.01) {
+              if ((shortFluent || midFluent) && fps >= 15 - 0.01) {
                 rf = fps;
                 retryQuality =
                   keepQ < V2G_BLACKBOX_RETRY_QUALITY
@@ -2773,7 +2778,11 @@
                 vbbLog(
                   `[vbb-phase] 超预算 ${formatKb(candidate.blob.size)} → 无损重编 ${rf}fps 宽${rw}${
                     retryQuality !== keepQ ? ` 减色q${retryQuality}` : ""
-                  }${shortFluent && Math.abs(rf - fps) < 0.01 ? " · 短片保帧" : "（避免 --lossy）"}`
+                  }${
+                    (shortFluent || midFluent) && Math.abs(rf - fps) < 0.01
+                      ? " · 保帧率"
+                      : "（避免 --lossy）"
+                  }`
                 );
                 const retry = await encodeAt(rf, rw, progressBase, 0.18, `${rf}FPS·宽${rw}·无损重编`, retryQuality);
                 if (!(retry.blob.size > V2G_BLACKBOX_MAX_BYTES)) return retry;
@@ -2933,6 +2942,8 @@
         // 对某帧率做「宽度 420→400→380 →（近超限则先轻压）→ 底线宽度上降质量档」
         const fitFps = async (fps) => {
           const shortFluent = effSpanForPick <= V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
+          // 中长片（约 16~24s，含两段拼接）优先保 15：单段短片是 20，拼成 12 会明显「卡卡的」
+          const midFluent = effSpanForPick <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01;
           const wTop = Math.max(floorW, Math.min(srcCap, V2G_BLACKBOX_BASE_W));
           // 体积远超预算时跳过中间宽度（∝w²）：420 已 2× 则 400 多半白跑
           const WAY_OVER = 1.55;
@@ -2987,8 +2998,9 @@
               let pressed = await compressAt(overs[0], fps, false, 0.55);
               tried.push(pressed);
               if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
-              // 短片高帧：1.45× 内也硬压，避免 20fps@13.7MB 因旧 1.22 门槛被直接放弃
-              const hardGate = shortFluent && fps >= 18 - 0.01 ? 1.45 : 1.22;
+              // 短片高帧 / 中长片保15：1.45× 内也硬压，避免过早放弃流畅帧率
+              const hardGate =
+                (shortFluent && fps >= 18 - 0.01) || (midFluent && fps >= 15 - 0.01) ? 1.45 : 1.22;
               if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES * hardGate) {
                 vbbLog(
                   `[vbb-phase] ${fps}fps 轻压后 ${formatKb(pressed.blob.size)} → 硬压一轮`
@@ -2999,8 +3011,8 @@
               }
             }
           }
-          // 短片保 20fps：允许走到 q22/q30；长片 ≥15 仍只让到档 15，再掉帧更划算
-          // 若同帧底宽高质量已 >1.6×，长片跳过浅降质（q8/q15 多半仍超），直接更深档或换帧
+          // 短片保 20 / 中长片保 15：允许走到 q22/q30；更长（>24s）≥15 只到档15再掉帧
+          // 若同帧底宽高质量已 >1.6×，跳过浅降质（q8 多半仍超），直接更深档或换帧
           const floorHigh = tried
             .filter(
               (t) =>
@@ -3015,7 +3027,7 @@
             floorHigh &&
             floorHigh.blob.size > V2G_BLACKBOX_MAX_BYTES * 1.6;
           const maxQi =
-            shortFluent || fps < 15 - 0.01
+            shortFluent || midFluent || fps < 15 - 0.01
               ? V2G_BLACKBOX_QUALITY_LADDER.length - 1
               : 2;
           const qiStart = floorWayOver ? Math.min(2, maxQi) : 1;
@@ -3027,8 +3039,9 @@
           for (let qi = qiStart; qi <= maxQi; qi++) {
             const e = await trial(fps, floorW, V2G_BLACKBOX_QUALITY_LADDER[qi]);
             if (e) return e;
-            // 仍超：短片/高帧放宽硬压门槛（旧 1.2× 会丢掉 20fps@13.7MB）
-            const hardQiGate = shortFluent && fps >= 18 - 0.01 ? 1.45 : 1.2;
+            // 仍超：短片高帧 / 中长片保15 放宽硬压门槛，少掉到 12
+            const hardQiGate =
+              (shortFluent && fps >= 18 - 0.01) || (midFluent && fps >= 15 - 0.01) ? 1.45 : 1.2;
             if (qi >= 2) {
               const last = tried[tried.length - 1];
               if (
@@ -3044,9 +3057,10 @@
                 if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
               }
             }
-            // 长片：某一深档仍 >1.5× 则别在本帧率耗尽阶梯，交给更低 fps
+            // 仅 >24s：某一深档仍 >1.5× 则别在本帧率耗尽阶梯；中长片继续试 q22/q30 保 15
             if (
               !shortFluent &&
+              !midFluent &&
               fps >= 15 - 0.01 &&
               qi >= 2 &&
               tried[tried.length - 1]?.blob?.size > V2G_BLACKBOX_MAX_BYTES * 1.5
