@@ -184,14 +184,16 @@
         return blackboxLadderQuality(c) <= V2G_BLACKBOX_QUALITY + 0.01;
       }
       /**
-       * 抬质试编若略超 10MB：允许 gifsicle 轻压进预算后再接受。
-       * 根因：fitFps 在 q22 进预算后，抬到 q15 原始常 12MB+ 被硬拒；随后电影lossy
-       * 把 q22 压到 ~6.5MB 腾出余量，但抬质从不「高档+轻压」，余量白白闲置。
+       * 抬质试编若略超 10MB：尽量无损进预算后再接受。
+       * 历史：9a98dc6 用硬压前 4 档（movie lossy≈92–176）硬塞满档 → 标签 q92 但密麻颗粒
+       * （617/618：满 256 色调色板 + 近 10MB，典型 lossy 抖动噪点，非 --colors 泥色）。
+       * 规则：满画质只许 -O3；非满档最多 O3 + 一轮很轻 soft；O3 后禁止再叠 lossy 留底。
+       * 干净次档进预算 > 脏满档贴上限。
        */
       async function blackboxAcceptBoostIfFits(enc, { onProgress, isAborted, softGate = 1.22, curSize = 0 } = {}) {
         if (!enc?.blob?.size) return null;
         if (enc.blob.size <= V2G_BLACKBOX_MAX_BYTES) return enc;
-        // 抬质试压：默认可试到 2×（摄影片硬压常需省很多）；更远则直接放弃
+        // 抬质试压：默认可试到 2×；更远则直接放弃（勿靠大 lossy 硬塞）
         let gate = Math.max(softGate, 2);
         const cur = Number(curSize) || 0;
         if (cur > 0 && cur < V2G_BLACKBOX_MAX_BYTES * 0.75) {
@@ -203,17 +205,25 @@
           );
           return null;
         }
-        if (typeof compressGifBlob !== "function" || typeof buildBlackboxHardCompressArgs !== "function") {
+        if (typeof compressGifBlob !== "function") return null;
+        const aborted = typeof isAborted === "function" ? isAborted : () => abortV2g;
+        const isBest = blackboxQualityIsBest(enc);
+        // 满档：只 -O3。非满档：O3 + 至多一轮电影轻压（lossy≈28），禁止 hard movie 高档。
+        const plans = [];
+        if (typeof buildBlackboxSoftCompressArgs === "function") {
+          plans.push(buildBlackboxSoftCompressArgs(1, { movie: true })); // -O3
+          if (!isBest) plans.push(buildBlackboxSoftCompressArgs(2, { movie: true })); // lossy≈28
+        } else if (typeof buildBlackboxHardCompressArgs === "function") {
+          plans.push(buildBlackboxHardCompressArgs(1, { movie: true }));
+        } else {
           return null;
         }
-        const aborted = typeof isAborted === "function" ? isAborted : () => abortV2g;
         let best = enc.blob;
         let rounds = 0;
         try {
-          // 硬压前 4 档（电影 lossy，r≥5 才 scale）——soft 对摄影片省不够
-          for (let round = 1; round <= 4; round++) {
+          for (let i = 0; i < plans.length; i++) {
             if (aborted()) throw new Error("已取消");
-            const plan = buildBlackboxHardCompressArgs(round, { movie: true });
+            const plan = plans[i];
             const out = await compressGifBlob(
               best,
               "standard",
@@ -221,15 +231,22 @@
                 typeof onProgress === "function"
                   ? onProgress(Math.min(0.99, 0.9 + (ratio || 0) * 0.05), text || plan.label || "抬质轻压")
                   : undefined,
-              { round, plan }
+              { round: plan.round || i + 1, plan }
             );
-            rounds = round;
+            rounds = i + 1;
             if (out?.size && out.size < best.size) best = out;
             if (best.size <= V2G_BLACKBOX_MAX_BYTES) {
+              // 满档且本轮带了 lossy：拒绝留底（防以后改 plans 误放行）
+              if (isBest && Number(plan.lossy) > 0) {
+                vbbLog(
+                  `[vbb-phase] 抬质满档拒绝lossy留底 · lossy=${plan.lossy} ${formatKb(best.size)}`
+                );
+                return null;
+              }
               vbbLog(
                 `[vbb-phase] 抬质轻压进预算 ${formatKb(enc.blob.size)}→${formatKb(best.size)} · q${
                   Number(enc.quality) || "?"
-                }/gq${Number(enc.gifskiQuality) || "?"}`
+                }/gq${Number(enc.gifskiQuality) || "?"}${isBest ? " ·满档仅O3" : " ·禁硬lossy"}`
               );
               return {
                 ...enc,
@@ -239,9 +256,9 @@
             }
           }
           vbbLog(
-            `[vbb-phase] 抬质轻压未进预算 ${formatKb(enc.blob.size)}→${formatKb(best.size)} · 放弃 q${
+            `[vbb-phase] 抬质未进预算（禁lossy颗粒） ${formatKb(enc.blob.size)}→${formatKb(best.size)} · 放弃 q${
               Number(enc.quality) || "?"
-            }`
+            }/gq${Number(enc.gifskiQuality) || "?"}${isBest ? " ·满档" : ""}`
           );
         } catch (err) {
           if (String(err && err.message) === "已取消") throw err;
