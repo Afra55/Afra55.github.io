@@ -18,6 +18,7 @@ const PORT = Number(process.env.VBB_BENCH_PORT || 8767);
 const OUT_DIR = process.env.VBB_BENCH_OUT || path.join(os.tmpdir(), "vbb-bench");
 const TAG = process.env.VBB_BENCH_TAG || "baseline";
 const MOBILE = /^(1|true|yes)$/i.test(String(process.env.VBB_BENCH_MOBILE || ""));
+const FPS_CAP = Number(process.env.VBB_BENCH_FPS_CAP || 0);
 const MAX_BYTES = 10 * 1024 * 1024;
 const {
   assertGifFpsAllowed,
@@ -100,14 +101,16 @@ async function encodeOne(page, videoPath) {
     waitUntil: "domcontentloaded",
     timeout: 180000,
   });
-  await page.evaluate((mobile) => {
+  await page.evaluate((mobile, fpsCap) => {
     try {
       localStorage.setItem("devtools-vbb-debug", "1");
+      if (fpsCap > 0) localStorage.setItem("devtools-vbb-fps-cap", String(fpsCap));
+      else localStorage.removeItem("devtools-vbb-fps-cap");
       if (mobile) {
         localStorage.setItem("devtools-media-perf-v1", "max");
       }
     } catch (_) {}
-  }, MOBILE);
+  }, MOBILE, FPS_CAP);
   await page.waitForFunction(
     () => window.__devtoolsBootReady && Boolean(document.getElementById("vbb-file")),
     { timeout: 90000 }

@@ -3086,7 +3086,18 @@
           new Promise((r) => setTimeout(() => r(0), 1500)),
         ]);
         // 整除档从高到低：先最高帧，超限再按宽/画质让渡后降帧
-        const fpsList = resolveBlackboxFpsList(span / speed, srcFps);
+        let fpsList = resolveBlackboxFpsList(span / speed, srcFps);
+        let fpsCapDbg = 0;
+        try {
+          if (VBB_DEBUG) {
+            fpsCapDbg = Number(localStorage.getItem("devtools-vbb-fps-cap")) || 0;
+            if (fpsCapDbg > 0) {
+              const next = fpsList.filter((f) => Number(f) <= fpsCapDbg + 0.01);
+              if (next.length) fpsList = next;
+              vbbLog(`[vbb-phase] debug fps cap=${fpsCapDbg} → ${JSON.stringify(fpsList)}`);
+            }
+          }
+        } catch (_) {}
         if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
         const tried = [];
         const common = {
@@ -3303,7 +3314,7 @@
           if (isLong && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.75 && fpsNow < 15 - 0.01) {
             const srcFpsEarly = await detectSourceFps(file).catch(() => 0);
             const raised = await raiseBlackboxFps(cur, fpsNow, encodeKeepQ, srcFpsEarly, effSpan, {
-              maxFps: 15,
+              maxFps: fpsCapDbg > 0 ? Math.min(15, fpsCapDbg) : 15,
             });
             if (raised?.blob) {
               cur = raised;
@@ -3339,7 +3350,14 @@
           // 加宽后再提帧（短片源可整除才冲 20；长片抬 15）
           if (widthOkForRaise() && qualityIsBest() && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.99) {
             const srcFpsNow = await detectSourceFps(file).catch(() => 0);
-            cur = await raiseBlackboxFps(cur, Number(cur.fps) || fpsNow, encodeKeepQ, srcFpsNow, effSpan);
+            cur = await raiseBlackboxFps(
+              cur,
+              Number(cur.fps) || fpsNow,
+              encodeKeepQ,
+              srcFpsNow,
+              effSpan,
+              fpsCapDbg > 0 ? { maxFps: fpsCapDbg } : undefined
+            );
             fpsNow = Number(cur.fps) || fpsNow;
           }
           // 短片提帧后若又腾出预算（或提帧未动），再加宽一轮吃满（手机跳过：少一次完整编码）
