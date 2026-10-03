@@ -9,11 +9,11 @@ const MID_SPAN_SEC = 24;
 const DEFAULT_FPS_LIST = [20, 15, 12];
 const RETRY_MIN_FPS = 12;
 
-/** ≈24 电影 → 24/12；≈25 屏录 → 25/12.5；≈30 → 30/15/12；其它 → 20/15/12 */
+/** ≈24 电影 → 24/15/12；≈25 屏录 → 25/15/12.5；≈30 → 30/15/12；其它 → 20/15/12。15 必含。 */
 function blackboxFpsCandidates(srcFps) {
   const src = Number(srcFps) || 0;
-  if (src >= 23.5 && src < 24.5) return [24, 12];
-  if (src >= 24.5 && src <= 25.8) return [25, 12.5];
+  if (src >= 23.5 && src < 24.5) return [24, 15, 12];
+  if (src >= 24.5 && src <= 25.8) return [25, 15, 12.5];
   if (src >= 29.2 && src <= 30.8) return [30, 15, 12];
   return DEFAULT_FPS_LIST.slice();
 }

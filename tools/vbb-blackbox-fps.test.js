@@ -23,11 +23,13 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg || "assert failed");
 }
 
-assert(JSON.stringify(blackboxFpsCandidates(24)) === JSON.stringify([24, 12]), "24 电影 → 24/12");
-assert(JSON.stringify(blackboxFpsCandidates(23.976)) === JSON.stringify([24, 12]), "23.976 → 24/12");
-assert(JSON.stringify(blackboxFpsCandidates(25)) === JSON.stringify([25, 12.5]), "25 屏录 → 25/12.5");
+assert(JSON.stringify(blackboxFpsCandidates(24)) === JSON.stringify([24, 15, 12]), "24 电影 → 24/15/12");
+assert(JSON.stringify(blackboxFpsCandidates(23.976)) === JSON.stringify([24, 15, 12]), "23.976 → 24/15/12");
+assert(JSON.stringify(blackboxFpsCandidates(25)) === JSON.stringify([25, 15, 12.5]), "25 屏录 → 25/15/12.5");
 assert(JSON.stringify(blackboxFpsCandidates(30)) === JSON.stringify([30, 15, 12]), "30 → 30/15/12");
 assert(JSON.stringify(blackboxFpsCandidates(0)) === JSON.stringify([20, 15, 12]), "未知默认");
+assert(blackboxFpsCandidates(24).includes(15), "24 源必须含 15");
+assert(blackboxFpsCandidates(25).includes(15), "25 源必须含 15");
 assert(!blackboxFpsCandidates(25).includes(20), "25 源不得含 20");
 assert(!blackboxFpsCandidates(24).includes(20), "24 源不得含 20");
 
@@ -41,7 +43,9 @@ assert(blackboxPrimaryFps(10, 24) === 24, "电影短片主试 24");
 assert(blackboxPrimaryFps(20, 24) === 24, "电影长片仍先试最高整除档 24");
 assert(blackboxPrimaryFps(30, 30) === 30, "30fps 源一律先 30");
 assert(blackboxPrimaryFps(10, 25) === 25, "屏录短片主试 25");
-assert(JSON.stringify(resolveBlackboxFpsList(10, 24)) === JSON.stringify([24, 12]), "电影短片列表");
+assert(JSON.stringify(resolveBlackboxFpsList(10, 24)) === JSON.stringify([24, 15, 12]), "电影短片列表含 15");
+assertGifFpsAllowed(24, 15, "电影 15");
+assertGifFpsAllowed(25, 15, "屏录 15");
 assert(JSON.stringify(resolveBlackboxFpsList(30, 30)) === JSON.stringify([30, 15, 12]), "30 源长片仍含高档");
 
 assert(gifEffectivePlaybackFps(24) === 25, "24→厘秒4→25 有效（GIF 限制）");
@@ -64,12 +68,12 @@ assert(HIGH_PRIMARY_SPAN_SEC === 16 && MID_SPAN_SEC === 24, "时长分档");
   const encPath = path.join(__dirname, "extra-panels/v2g-suite-src/10-shared-encode.js");
   const src = fs.readFileSync(encPath, "utf8");
   assert(
-    /src\s*>=\s*23\.5\s*&&\s*src\s*<\s*24\.5\s*\)\s*return\s*\[\s*24\s*,\s*12\s*\]/.test(src),
-    "源码须含 24→[24,12]"
+    /src\s*>=\s*23\.5\s*&&\s*src\s*<\s*24\.5\s*\)\s*return\s*\[\s*24\s*,\s*15\s*,\s*12\s*\]/.test(src),
+    "源码须含 24→[24,15,12]"
   );
   assert(
-    /src\s*>=\s*24\.5\s*&&\s*src\s*<=\s*25\.8\s*\)\s*return\s*\[\s*25\s*,\s*12\.5\s*\]/.test(src),
-    "源码须含 25→[25,12.5]"
+    /src\s*>=\s*24\.5\s*&&\s*src\s*<=\s*25\.8\s*\)\s*return\s*\[\s*25\s*,\s*15\s*,\s*12\.5\s*\]/.test(src),
+    "源码须含 25→[25,15,12.5]"
   );
   assert(/blackboxIsMovieLike/.test(src), "须有电影向判定");
   assert(/bisectWidthAtQuality|trialCache/.test(src), "须有宽度二分/试档缓存");

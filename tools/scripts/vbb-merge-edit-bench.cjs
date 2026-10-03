@@ -282,7 +282,7 @@ async function main() {
           }
           if (c.fps > 0) assertGifFpsAllowed(srcFps, c.fps, "merge gif");
         }
-        console.log("✓ fps guard: src≈25 → gif ∈ {25,12.5} ok");
+        console.log("✓ fps guard: src≈25 → gif ∈ {25,15,12.5} ok");
       }
     }
     if (!result.clips.length || result.clips.some((c) => c.error || !(c.size > 0))) {

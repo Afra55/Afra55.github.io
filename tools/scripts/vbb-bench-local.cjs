@@ -272,13 +272,13 @@ async function encodeOne(page, videoPath) {
         if (c.error || !(c.fps > 0)) continue;
         assertGifFpsAllowed(srcFps, c.fps, `${name} clip`);
       }
-      console.log(`✓ fps guard: src≈24 → gif ∈ {24,12} ok`);
+      console.log(`✓ fps guard: src≈24 → gif ∈ {24,15,12} ok`);
     } else if (srcFps >= 24.5 && srcFps <= 25.8) {
       for (const c of result.clips) {
         if (c.error || !(c.fps > 0)) continue;
         assertGifFpsAllowed(srcFps, c.fps, `${name} clip`);
       }
-      console.log(`✓ fps guard: src≈25 → gif ∈ {25,12.5} ok`);
+      console.log(`✓ fps guard: src≈25 → gif ∈ {25,15,12.5} ok`);
     }
   }
 
