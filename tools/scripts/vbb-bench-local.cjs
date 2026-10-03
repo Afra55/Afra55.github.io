@@ -5,6 +5,7 @@
  * 本地黑盒 GIF 实测：对给定视频跑 #vbb 一键黑盒，打印 fps/宽/体积。
  * 用法：node tools/scripts/vbb-bench-local.cjs [video1] [video2] ...
  * 环境：VBB_BENCH_OUT=结果目录；VBB_BENCH_TAG=标签（写进 json）
+ *       VBB_BENCH_MOBILE=1 → 模拟手机触屏 + 性能拉满 + 强制 wasm（贴近真机单路）
  */
 
 const http = require("http");
@@ -16,6 +17,7 @@ const ROOT = path.resolve(__dirname, "../..");
 const PORT = Number(process.env.VBB_BENCH_PORT || 8767);
 const OUT_DIR = process.env.VBB_BENCH_OUT || path.join(os.tmpdir(), "vbb-bench");
 const TAG = process.env.VBB_BENCH_TAG || "baseline";
+const MOBILE = /^(1|true|yes)$/i.test(String(process.env.VBB_BENCH_MOBILE || ""));
 const MAX_BYTES = 10 * 1024 * 1024;
 const {
   assertGifFpsAllowed,
@@ -95,21 +97,52 @@ async function encodeOne(page, videoPath) {
   const t0 = Date.now();
 
   await page.goto(`http://127.0.0.1:${PORT}/tools/index.html?debug#vbb`, {
-    waitUntil: "networkidle0",
-    timeout: 120000,
+    waitUntil: "domcontentloaded",
+    timeout: 180000,
   });
-  await page.evaluate(() => {
+  await page.evaluate((mobile) => {
     try {
       localStorage.setItem("devtools-vbb-debug", "1");
+      if (mobile) {
+        localStorage.setItem("devtools-media-perf-v1", "max");
+      }
     } catch (_) {}
-  });
+  }, MOBILE);
   await page.waitForFunction(
     () => window.__devtoolsBootReady && Boolean(document.getElementById("vbb-file")),
     { timeout: 90000 }
   );
 
-  // 桌面档：拉满 widen / 质量上探
-  await page.setViewport({ width: 1280, height: 900, isMobile: false, hasTouch: false });
+  if (MOBILE) {
+    // 模拟手机：触屏 + 小视口；强制 wasm，避免本机桥把「手机单路」测成桌面原生
+    await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    await page.evaluate(() => {
+      try {
+        window.matchMedia = ((orig) => {
+          return (query) => {
+            const q = String(query || "");
+            if (/pointer:\s*coarse/i.test(q)) {
+              return { matches: true, media: q, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; } };
+            }
+            return orig.call(window, query);
+          };
+        })(window.matchMedia.bind(window));
+      } catch (_) {}
+      try {
+        if (typeof setMediaPerfMode === "function") setMediaPerfMode("max");
+        const sel = document.getElementById("vbb-perf");
+        if (sel) {
+          sel.value = "max";
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      } catch (_) {}
+      // 黑盒入口强制 wasm（贴近手机无桥；encodeBlackboxGif 读此开关）
+      window.__VBB_FORCE_WASM = true;
+    });
+  } else {
+    // 桌面档：拉满 widen / 质量上探
+    await page.setViewport({ width: 1280, height: 900, isMobile: false, hasTouch: false });
+  }
 
   const input = await page.$("#vbb-file");
   await input.uploadFile(videoPath);
@@ -119,7 +152,30 @@ async function encodeOne(page, videoPath) {
   }, { timeout: 60000 });
 
   const meta = await page.evaluate(() => document.getElementById("vbb-meta")?.textContent || "");
+  const perfInfo = await page.evaluate(() => {
+    const p = typeof mediaPerfProfile === "function" ? mediaPerfProfile() : {};
+    const coarse =
+      typeof isCoarsePointerMedia === "function"
+        ? isCoarsePointerMedia()
+        : (() => {
+            try {
+              return window.matchMedia("(pointer: coarse)").matches;
+            } catch (_) {
+              return false;
+            }
+          })();
+    return {
+      coarse,
+      tier: p.tier,
+      label: p.label,
+      batchConcurrency: p.batchConcurrency,
+      encodeConcurrency: p.encodeConcurrency,
+      widenProbes: p.widenProbes,
+      preferChunkByDefault: p.preferChunkByDefault,
+    };
+  });
   console.log("meta:", meta);
+  console.log("perf:", JSON.stringify(perfInfo));
 
   const logs = [];
   const onConsole = (msg) => {

@@ -2120,7 +2120,10 @@
         try { localStorage.setItem(VBB_RUN_KEY, "1"); } catch (_) {}
         try {
           if (opts && opts.forceFfmpeg) return await encodeV2gGifFfmpeg(opts);
-          if (opts && opts.forceWasm) {
+          const forceWasm =
+            Boolean(opts && opts.forceWasm) ||
+            (typeof window !== "undefined" && Boolean(window.__VBB_FORCE_WASM));
+          if (forceWasm) {
             try {
               return await encodeV2gGifGifski(opts);
             } catch (err) {
@@ -2692,7 +2695,12 @@
           }
           const onProgress = clipOpts.onProgress || (() => {});
           const comfortO3 = Math.min(hardMax, V2G_BLACKBOX_COMFORT_W);
-          if (quality > V2G_BLACKBOX_QUALITY + 0.01 && result.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+          // 手机：finish 已抬过一档，O3 后再连抬会拖垮 wasm；桌面保留
+          if (
+            !isCoarsePointer() &&
+            quality > V2G_BLACKBOX_QUALITY + 0.01 &&
+            result.blob.size <= V2G_BLACKBOX_MAX_BYTES
+          ) {
             const at = V2G_BLACKBOX_QUALITY_LADDER.indexOf(quality);
             const targetW = Math.max(curW, comfortO3);
             for (let qi = Math.max(0, at - 1); qi >= 0; qi--) {
@@ -3054,10 +3062,18 @@
             const qNow = blackboxLadderQuality(cur);
             if (!(qNow > V2G_BLACKBOX_QUALITY + 0.01)) return;
             if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.98) return;
+            const coarse = isCoarsePointer();
+            // 手机：已用大半预算就别再连编抬质（防 wasm OOM、把单路拖慢）
+            if (coarse && cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.88) {
+              vbbLog(`[vbb-phase] 手机加速：已用≥88%预算 → 跳过抬质`);
+              return;
+            }
             const w = Number(cur.maxW) || V2G_BLACKBOX_COMFORT_W;
             const at = V2G_BLACKBOX_QUALITY_LADDER.indexOf(qNow);
             const startQi = at > 0 ? at - 1 : -1;
-            for (let qi = startQi; qi >= 0; qi--) {
+            // 手机只试上一档；桌面可连抬到满档
+            const qiMin = coarse ? startQi : 0;
+            for (let qi = startQi; qi >= qiMin; qi--) {
               if (isAborted()) throw new Error("已取消");
               const q = V2G_BLACKBOX_QUALITY_LADDER[qi];
               onProgress(0.94, `余量抬画质 · q${q}`);
@@ -3074,6 +3090,10 @@
                   curSize: cur.blob.size,
                 });
                 if (!fitted) {
+                  if (coarse) {
+                    vbbLog(`[vbb-phase] 手机加速：抬一档未进预算 → 跳过半档`);
+                    break;
+                  }
                   // 整档装不下：试中间 gifski 质量（如 65→70→74），吃掉余量里「半档」清晰度
                   const curGq = Number(cur.gifskiQuality) || 0;
                   const nextGq =
@@ -3113,6 +3133,7 @@
                 cand = fitted;
               }
               cur = cand;
+              if (coarse) break;
             }
           };
           const qualityIsBest = () => blackboxQualityIsBest(cur);
@@ -3154,19 +3175,13 @@
             return cur;
           }
           // 小于规则：先抬画质到满档，再加宽，再用余量提帧
-          const qBeforeBoost = blackboxLadderQuality(cur);
-          const gqBeforeBoost = Number(cur.gifskiQuality) || 0;
           await boostQualityPass();
-          await widenPass(isShortFill ? "短片有余 · 加宽吃满预算" : "体积有余 · 自动增宽");
-          // 手机：抬质没动就别再编一轮；桌面仍可加宽后再抬
-          if (
-            !isCoarsePointer() ||
-            blackboxLadderQuality(cur) < qBeforeBoost - 0.01 ||
-            (Number(cur.gifskiQuality) || 0) > gqBeforeBoost + 1
-          ) {
+          // 手机：未满档不加宽；桌面可加宽后再抬一轮
+          if (!isCoarsePointer()) {
+            await widenPass(isShortFill ? "短片有余 · 加宽吃满预算" : "体积有余 · 自动增宽");
             await boostQualityPass();
           } else {
-            vbbLog(`[vbb-phase] 手机加速：抬质未动 → 跳过第二轮抬质`);
+            vbbLog(`[vbb-phase] 手机加速：跳过加宽/第二轮抬质（单路稳妥）`);
           }
           if (
             cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.99 ||
@@ -3250,7 +3265,10 @@
                   if (swapped.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
                     cur = { ...swapped, compressRounds: swapped.compressRounds || 0, maxW: targetW };
                     fpsNow = lowerFps;
-                    if (cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95) {
+                    if (
+                      !isCoarsePointer() &&
+                      cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95
+                    ) {
                       await widenPass("降帧后 · 再加宽");
                     }
                     break;
@@ -3261,8 +3279,9 @@
           }
           if (!cur?.blob) return cur;
           // 帧率也到顶、预算仍有富余 → gifski 质量从 92 上探到 100（源很窄/很短时用得上）
-          // 省电/均衡不做：多一次编码就多一份 wasm 堆占用
+          // 省电/均衡/手机不做：多一次编码就多一份 wasm 堆占用，拖慢单路
           if (
+            !isCoarsePointer() &&
             currentMediaPerf().allowQualityBoost &&
             cur.blob.size < V2G_BLACKBOX_WIDEN_BYTES &&
             (Number(cur.gifskiQuality) || 0) < 100 &&
