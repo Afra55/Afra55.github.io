@@ -1449,6 +1449,21 @@
         );
         return run;
       }
+      /** 让出主线程，避免连续 wasm/试档把滑动事件饿死 */
+      function yieldToUi() {
+        return new Promise((resolve) => {
+          let done = false;
+          const go = () => {
+            if (done) return;
+            done = true;
+            resolve();
+          };
+          if (typeof scheduler !== "undefined" && typeof scheduler.yield === "function") {
+            scheduler.yield().then(go, go);
+          }
+          requestAnimationFrame(() => setTimeout(go, 0));
+        });
+      }
       /** 懒加载 gifski wasm（ES module）；失败不缓存，下次重试 */
       function loadGifskiMods() {
         if (!gifskiModPromise) {
@@ -2088,7 +2103,9 @@
             // 一律显式写 delay（毫秒→厘秒）：20→50ms / 15→70ms / 12→80ms 固定均匀
             if (!durations) durations = buildUniformGifDurationsMs(encodedFrames, fps);
             const mergedView = view.subarray(0, encodedFrames * stride);
-            // gifski.encode 是同步 wasm 调用，期间主线程会卡住；共享 memory 不可并发 → 上锁
+            // gifski.encode 是同步 wasm：先让出一帧给滚动，再编码
+            await yieldToUi();
+            if (aborted()) throw new Error("已取消");
             const gifBytes = await withGifskiEncodeLock(() =>
               mod.encode(mergedView, encodedFrames, outW, outH, undefined, durations, gifskiQuality)
             );
@@ -2121,6 +2138,7 @@
               const { blob: cb, n } = await encodeChunk(startFrame, cFrames);
               totalFrames += n;
               chunks.push(cb);
+              await yieldToUi();
               mapProgress(base + 0.4 / chunkCount, `${stageLabel}分段 ${k + 1}/${chunkCount} · gifski 编码完成`);
               vbbLog(
                 `[vbb-phase] gifski 分段 ${k + 1}/${chunkCount} · ${n}帧 ${formatKb(cb.size)}（累计 ${Math.round(performance.now() - tPhase)}ms）`
@@ -3593,6 +3611,8 @@
           return Math.max(1, Math.min(2, Number(p.encodeConcurrency) || 2));
         };
         const trial = async (fps, w, q) => {
+          if (isAborted()) throw new Error("已取消");
+          await yieldToUi();
           if (isAborted()) throw new Error("已取消");
           const qq = q && q > 1 ? q : V2G_BLACKBOX_QUALITY;
           const key = `${Number(fps)}|${Number(w)}|${qq}`;
@@ -8226,6 +8246,7 @@
       function restoreVbbScrollLater(top) {
         const root = vbbScrollRoot();
         const apply = () => {
+          if (isVbbUserScrolling() || vbbBusy) return;
           vbbProgrammaticScroll = true;
           writeVbbScrollTop(root, top);
           requestAnimationFrame(() => {
@@ -8247,6 +8268,8 @@
       }
   
       function runVbbLayoutUpdate(mutator, { pin = false } = {}) {
+        // 编码中禁止把滚动钉回去，否则处理时整页像卡死、滑不动
+        if (vbbBusy) return mutator();
         if (pin && shouldPinVbbScroll() && !isVbbUserScrolling()) return pinVbbViewport(mutator);
         return mutator();
       }
@@ -8665,7 +8688,9 @@
           c.jobText = vbbStageText(String(patch.text || "")) || String(patch.text || "");
         }
         const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
-        if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
+        if (row && !(vbbBusy && isVbbUserScrolling() && patch.status !== "done" && patch.status !== "error")) {
+          syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
+        }
       }
 
       function clearVbbClipJobs() {
@@ -8690,6 +8715,7 @@
       function startVbbWaitClock() {
         if (vbbWaitClockTimer) return;
         vbbWaitClockTimer = setInterval(() => {
+          if (typeof isVbbUserScrolling === "function" && isVbbUserScrolling()) return;
           let pending = false;
           vbbClips.forEach((c, i) => {
             if (c.jobStatus !== "pending") return;

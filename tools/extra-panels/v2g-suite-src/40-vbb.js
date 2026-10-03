@@ -1374,6 +1374,7 @@
       function restoreVbbScrollLater(top) {
         const root = vbbScrollRoot();
         const apply = () => {
+          if (isVbbUserScrolling() || vbbBusy) return;
           vbbProgrammaticScroll = true;
           writeVbbScrollTop(root, top);
           requestAnimationFrame(() => {
@@ -1395,6 +1396,8 @@
       }
   
       function runVbbLayoutUpdate(mutator, { pin = false } = {}) {
+        // 编码中禁止把滚动钉回去，否则处理时整页像卡死、滑不动
+        if (vbbBusy) return mutator();
         if (pin && shouldPinVbbScroll() && !isVbbUserScrolling()) return pinVbbViewport(mutator);
         return mutator();
       }
@@ -1813,7 +1816,9 @@
           c.jobText = vbbStageText(String(patch.text || "")) || String(patch.text || "");
         }
         const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
-        if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
+        if (row && !(vbbBusy && isVbbUserScrolling() && patch.status !== "done" && patch.status !== "error")) {
+          syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
+        }
       }
 
       function clearVbbClipJobs() {
@@ -1838,6 +1843,7 @@
       function startVbbWaitClock() {
         if (vbbWaitClockTimer) return;
         vbbWaitClockTimer = setInterval(() => {
+          if (typeof isVbbUserScrolling === "function" && isVbbUserScrolling()) return;
           let pending = false;
           vbbClips.forEach((c, i) => {
             if (c.jobStatus !== "pending") return;
