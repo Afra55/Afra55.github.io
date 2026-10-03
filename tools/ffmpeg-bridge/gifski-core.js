@@ -304,20 +304,38 @@ function buildFfmpegInputArgs(inputPath, opts) {
 
 /**
  * 用原生 gifski（经 ffmpeg y4m 管道）编码。
- * quality: 1-100；原生 gifski 默认多线程。
+ * quality: 1-100；显式 --threads（并行试档时按 inflight 均分核；不传 --fast）。
+ */
+let gifskiInflight = 0;
+
+function gifskiThreadCount() {
+  const cpus = Math.max(1, (os.cpus() || []).length || 4);
+  const share = Math.max(1, gifskiInflight);
+  // 单任务多进程：并行试档时均分核，避免两路各占满核互相挤
+  return Math.max(2, Math.min(cpus, Math.ceil(cpus / share)));
+}
+
+/**
+ * 用原生 gifski（经 ffmpeg y4m 管道）编码。
+ * quality: 1-100；显式 --threads（默认开多线程，不传 --fast）。
  */
 function encodeWithGifski(bin, ffmpegBin, inputPath, outPath, rawOpts = {}) {
   const opts = normalizeEncodeOpts(rawOpts);
+  gifskiInflight += 1;
+  const auto = gifskiThreadCount();
+  const want = Math.round(Number(rawOpts.threads) || 0);
+  const threads = Math.max(2, Math.min(32, want > 0 ? Math.min(want, auto) : auto));
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     const vf = buildVideoFilter({ ...opts, denoise: rawOpts.denoise !== false });
     const ffArgs = [...buildFfmpegInputArgs(inputPath, opts), "-an", "-vf", vf, "-f", "yuv4mpegpipe", "-"];
     const ff = spawn(ffmpegBin, ffArgs, { stdio: ["ignore", "pipe", "pipe"] });
-    const gsArgs = ["-", "-o", outPath, "--quality", String(opts.quality)];
+    const gsArgs = ["-", "-o", outPath, "--quality", String(opts.quality), "--threads", String(threads)];
     if (rawOpts.fast === true) gsArgs.push("--fast");
     if (opts.extra > 1 || rawOpts.extra === true) gsArgs.push("--extra");
-    // gifski 无 --lossy；面板/gifsicle 的 lossy 数值映射到 --lossy-quality（越低越噪）
-    if (opts.lossy > 0) {
+    // 仅在明确要求时才把面板 lossy 映射到 gifski --lossy-quality（会打噪点）。
+    // 满画质黑盒不得走这条；quality≥90 时忽略误传的 lossy。
+    if (opts.lossy > 0 && opts.quality < 90) {
       const lq = Math.max(1, Math.min(100, 100 - Math.round(opts.lossy / 2)));
       gsArgs.push("--lossy-quality", String(lq));
     }
@@ -332,8 +350,12 @@ function encodeWithGifski(bin, ffmpegBin, inputPath, outPath, rawOpts = {}) {
       gsErr += String(d);
       if (gsErr.length > 4000) gsErr = gsErr.slice(-2000);
     });
-    ff.on("error", reject);
-    gs.on("error", reject);
+    const done = (fn) => {
+      gifskiInflight = Math.max(0, gifskiInflight - 1);
+      fn();
+    };
+    ff.on("error", (err) => done(() => reject(err)));
+    gs.on("error", (err) => done(() => reject(err)));
     ff.stdout.pipe(gs.stdin);
     ff.on("close", (code) => {
       if (code !== 0 && !gs.killed) {
@@ -344,19 +366,24 @@ function encodeWithGifski(bin, ffmpegBin, inputPath, outPath, rawOpts = {}) {
     });
     gs.on("close", (code) => {
       if (code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 32) {
-        resolve({
-          ok: true,
-          engine: "gifski-native",
-          path: outPath,
-          size: fs.statSync(outPath).size,
-          fps: opts.fps,
-          width: opts.width,
-          quality: opts.quality,
-          multithreaded: true,
-        });
+        done(() =>
+          resolve({
+            ok: true,
+            engine: "gifski-native",
+            path: outPath,
+            size: fs.statSync(outPath).size,
+            fps: opts.fps,
+            width: opts.width,
+            quality: opts.quality,
+            multithreaded: true,
+            threads,
+          })
+        );
         return;
       }
-      reject(new Error(`gifski 失败 code=${code} ff=${ffErr.slice(0, 200)} gs=${gsErr.slice(0, 300)}`));
+      done(() =>
+        reject(new Error(`gifski 失败 code=${code} ff=${ffErr.slice(0, 200)} gs=${gsErr.slice(0, 300)}`))
+      );
     });
   });
 }

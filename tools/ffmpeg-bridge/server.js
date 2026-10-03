@@ -50,7 +50,7 @@ function isAllowedOrigin(origin) {
   return false;
 }
 
-const BRIDGE_VERSION = "0.5.5";
+const BRIDGE_VERSION = "0.5.6";
 const FEATURES = [
   "local-fs",
   "probe",
@@ -4373,6 +4373,7 @@ async function handleRequest(req, res, opts = {}) {
         speed: Number(q.get("speed") || 1),
         brightness: Number(q.get("brightness") || 0),
         lossy: Number(q.get("lossy") || 0),
+        threads: Number(q.get("threads") || 0),
         extra: q.get("extra") === "1" || q.get("extra") === "true",
         fast: q.get("fast") === "1" || q.get("fast") === "true",
         denoise: q.get("denoise") !== "0" && q.get("denoise") !== "false",

@@ -36,7 +36,8 @@ node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 �
 6. **宽度策略（2026-10-02）**：420 清晰工作点；380 硬底；超限先守 420 再降质；余量先抬画质再加宽（禁「更宽更糊」）
 7. **调色板 / 摄影色**：勿过早 `gifsicle --colors 128`；**禁止**「电影 lossy 腾预算再加宽」（见 `e95ca7e`）
 8. **抬质吃满**：略超限可轻压进预算；整档装不下试中间 gq 半档；阶梯含 **q18**（见 `9a98dc6`）
-9. **满画质禁 lossy 留底**：抬质到 gq≈92 时 `blackboxAcceptBoostIfFits` **只许 -O3**；禁止再叠 movie hard lossy（密麻颗粒，调色板仍满 256）。干净次档 > 脏满档贴 10MB
+9. **满画质禁 lossy 留底**：gq≈92（及已进预算成片）**只许 -O3**；禁止 `compressExistingGifToBlackbox` 硬压 / movie lossy / 过早 `--colors` 留底。干净次档 > 脏满档贴 10MB
+10. **单任务并行**：UI 一次只跑一个用户任务；桌面原生 gifski 下同一任务内试档最多 2 路；手机 / wasm 回退保持 1 路
 
 主目标排序：**时间轴干净 > 标称高帧 > 420 清晰（画质） > 加宽 > 少试编**。
 
@@ -64,7 +65,8 @@ node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 �
 6. 难压片「更宽更糊」→ 未满档不加宽（gq 门闩）  
 7. 601 泥色 → 勿早减色、取消电影lossy腾预算（`e95ca7e`）  
 8. 6.5MB 停画质65 → 抬质可轻压/半档/q18（`9a98dc6`）  
-9. 画质92 密麻颗粒 → 满档抬质禁 movie hard lossy，仅 O3（2026-10-03） 
+9. 画质92 密麻颗粒 → 满档抬质禁 movie hard lossy，仅 O3（2026-10-03）  
+10. 画质92 仍脏 → 近超限/硬闸/换宽误走硬压；满档一律 O3，减色延到 r8+（2026-10-03 午） 
 
 ---
 
@@ -99,9 +101,10 @@ node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 �
   （画质未满时跳过加宽，禁止「442 宽 · q65」这类宽而不清）
 - **抬质细则**：
   1. 抬到更高 ladder 档时，原始略超 10MB → `blackboxAcceptBoostIfFits` 试压进预算（不再硬拒）
-  2. **满画质（gq≈92）只许 -O3**；非满档最多 O3 + 一轮很轻 soft（lossy≈28）；**禁止**硬压前 4 档 movie lossy 留底（617/618 颗粒）
+  2. **满画质（gq≈92）只许 -O3**（抬质 / 近超限保 420 / 硬闸第一步 / 换宽轻压 / `compressAt` 均同）；非满档最多 O3 + 一轮很轻 soft（lossy≈28）；**禁止**硬压 movie lossy 留底
   3. 整档仍装不下 → 试 **中间 gq 半档**（如 65→~70）
   4. 阶梯含 **q18**（`V2G_BLACKBOX_QUALITY_LADDER = [1,8,15,18,22,30]`）
+  5. 硬压 `--colors` 延到 **r8/r9**（192/128）；满档 `qualityBest` 时 `compressExistingGifToBlackbox` 强制 `mode=o3`
 - **调色板禁令（`e95ca7e`）**：**取消** finish/O3 后「电影 lossy 腾预算再加宽」；lossy 会合并调色板，加宽失败时留下泥色成片（601）
 - **拼接**：多段 → 一条中间 MP4 → 一条 GIF；中间片保留片源帧率
 - **规则单测**：`tools/lib/vbb-blackbox-fps.js` · `tools/vbb-blackbox-fps.test.js`
@@ -234,13 +237,13 @@ node tools/scripts/vbb-merge-edit-bench.cjs <video1> <video2>   # 编辑裁切 �
 
 ## 明天强刷复测（必做 · 约 15–30 分钟）
 
-> 目标版本：**`v2026.10.02-235625`**（含 `e95ca7e` 调色板 + `9a98dc6` 抬质；编码逻辑自 `234525` 起已齐）。先确认页脚/关于页版本号，再测。
+> 目标版本：`v2026.10.03-111710`（满档禁硬压 + 单任务双路试档）。先确认页脚版本号，再测。
 
 ### 强刷步骤
 
 1. 打开 [https://afra55.github.io/tools/](https://afra55.github.io/tools/)（或本地 `python3 -m http.server 8080` → `http://localhost:8080/tools/`）
 2. **硬刷新**：Chrome/Edge `Ctrl+Shift+R`（或清站点缓存）；若装了 SW，在 DevTools → Application → Service Workers 点 **Unregister** 后再刷新
-3. 确认顶栏/页脚 **TOOLS_BUILD ≥ `2026.10.02-234525`**（当前文档入库为 `235625`）；不对就再强刷一次
+3. 确认顶栏/页脚 **TOOLS_BUILD ≥ `2026.10.03-111710`**；不对就再强刷一次；本机桥请重启一次（gifski `--threads`）
 4. 进 **#vbb 黑盒**，性能档用 **拉满**，上限 **10MB**
 
 ### 验收清单
@@ -262,7 +265,7 @@ $env:VBB_BENCH_TAG="retest-1003"
 node tools/scripts/vbb-bench-local.cjs <601视频> <原6.5MB那条> <其它...>
 ```
 
-看日志关键字：`抬质轻压进预算` / `余量抬画质半档` / `跳过加宽：画质档`；**不应**再出现「电影lossy腾预算」路径。
+看日志关键字：`抬质轻压进预算` / `干净轻压保 420` / `单任务并行试档` / `余量抬画质半档` / `跳过加宽：画质档`；**不应**再出现「电影lossy腾预算」、满档 `电影lossy`、或近超限后仍 `硬压` 留底。
 
 ---
 
@@ -375,6 +378,17 @@ node tools/scripts/vbb-merge-edit-bench.cjs <v1> <v2>
 ## 变更记录
 
 > **追加规则**：日期 + 现象 + 改动 + 复测；**勿删旧条**，只在顶部追加。
+
+### 2026-10-03（残留脏像素路径清扫 + 单任务双路试档）
+
+- **现象**：抬质闸门修完后，满档仍可能脏：`fitFps` 近超限「轻压保 420」、硬闸、换宽 1.06、`compressAt(isLast)` 仍走 `compressExistingGifToBlackbox` **movie hard lossy**；标签画质 92。
+- **改动**：
+  1. 上述路径满档只 **-O3**（`qualityBest` → `mode=o3`）；抬质失败保留干净次档
+  2. 硬压 `--colors` 延到 r8/r9；满档禁止无必要 lossy/减色
+  3. 原生 gifski **显式 `--threads`**（并行时按 inflight 均分核）；quality≥90 忽略误传 `--lossy-quality`
+  4. 桌面+本机桥：同一任务内 **q1 与下一档最多 2 路并行**；手机 / wasm **禁止**（双份 RGBA）
+  5. **不**改成同时编多个用户任务；ffmpeg y4m→gifski 管道本就重叠，wasm 抽帧与编码重叠属大改未做
+- **复测**：强刷 `#vbb` + 重启本机桥；对照旧 617/618 颗粒；控制台应见 `干净轻压保 420` 或 `单任务并行试档`，满档不应再 `电影lossy`
 
 ### 2026-10-03（满画质禁抬质 lossy 颗粒）
 

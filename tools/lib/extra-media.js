@@ -1194,11 +1194,11 @@
     const baseLossy = movie ? (level === "strong" ? 110 : 70) : level === "strong" ? 100 : 60;
     const lossy = Math.min(200, baseLossy + (r - 1) * (movie ? 22 : 30));
     const parts = ["-O3", `--lossy=${lossy}`];
-    // 减色极伤渐变/肤色：无论电影/UI，都延到很晚；优先靠 lossy + scale 挤预算
-    if (r >= 6) parts.push("--colors 128");
-    else if (r >= 5) parts.push("--colors 192");
-    if (r >= 7) parts.push("--scale 0.85");
-    else if (r >= 5) parts.push("--scale 0.9");
+    // 减色极伤渐变/肤色：再往后挪（r8/r9）。过早 128 会把摄影片打成泥色（601）。
+    if (r >= 9) parts.push("--colors 128");
+    else if (r >= 8) parts.push("--colors 192");
+    if (r >= 10) parts.push("--scale 0.85");
+    else if (r >= 8) parts.push("--scale 0.9");
     return {
       label: movie ? (level === "strong" ? "电影强压" : "电影标准") : level === "strong" ? "强力" : "标准",
       args: parts.join(" "),
@@ -1533,6 +1533,7 @@
         manualFpsCap: 30,
         manualWidthCap: 1280,
         batchConcurrency: 2,
+        encodeConcurrency: 2,
       };
     }
     if (tier === "max") {
@@ -1551,6 +1552,7 @@
         manualWidthCap: 1280,
         // 多选批处理：2 路并行（各一路 FFmpeg Worker；gifski/gifsicle 共享 wasm 上锁）
         batchConcurrency: 2,
+        encodeConcurrency: 2,
       };
     }
     if (tier === "balanced") {
@@ -1567,6 +1569,7 @@
         manualFpsCap: 24,
         manualWidthCap: 960,
         batchConcurrency: 1,
+        encodeConcurrency: 1,
       };
     }
     return {
@@ -1582,6 +1585,7 @@
       manualFpsCap: 15,
       manualWidthCap: 720,
       batchConcurrency: 1,
+      encodeConcurrency: 1,
     };
   }
 
@@ -1594,13 +1598,16 @@
     }
     // 默认按摄影友好压（晚减色）。屏录可显式 opts.movie=false。
     const movie = opts && opts.movie === false ? false : true;
+    const qualityBest = Boolean(opts && opts.qualityBest);
+    // 满画质成片禁止 lossy/减色硬塞：只 -O3。mode=soft 仅非满档轻压。
+    const mode = qualityBest ? "o3" : String((opts && opts.mode) || "hard");
     // 允许缩放：用户可关（本地记住），关掉则只降色不缩尺寸
     let allowScale = true;
     try {
       allowScale = localStorage.getItem("devtools-gifbb-scale-v1") !== "0";
     } catch (_) {}
-    // 不缩放时最多走前 4 档（lossy + colors，无 --scale）
-    const maxRounds = allowScale ? blackboxMaxRounds() : 4;
+    const maxRounds =
+      mode === "o3" ? 1 : mode === "soft" ? 3 : allowScale ? blackboxMaxRounds() : 4;
     // 始终保留「最小」结果：单轮 gifsicle 可能因源调色板/透明/去抖动反而变大，
     // 绝不能把变大的文件当作结果返回。
     let best = blob;
@@ -1608,7 +1615,10 @@
     let noGainStreak = 0;
     for (let round = 1; round <= maxRounds; round++) {
       if (isAborted()) throw new Error("已取消");
-      const plan = buildBlackboxHardCompressArgs(round, { movie });
+      const plan =
+        mode === "soft" || mode === "o3"
+          ? buildBlackboxSoftCompressArgs(round, { movie })
+          : buildBlackboxHardCompressArgs(round, { movie });
       const out = await compressGifBlob(
         best,
         "standard",
@@ -1623,10 +1633,10 @@
         if (best.size <= MAX) break;
         continue;
       }
-      // 没变小：也要先走过「降色数(r5起) / 缩分辨率(r5起)」这些能强制缩小的档，
-      // 纯 lossy 压不动不代表 colors/scale 压不动；连走多档都无收益才真到下限。
+      // 没变小：也要先走过「降色数 / 缩分辨率」这些能强制缩小的档（现已延到 r8）。
       noGainStreak += 1;
-      if (round >= 5 && noGainStreak >= 2) break;
+      if (mode === "o3") break;
+      if (round >= 8 && noGainStreak >= 2) break;
       if (noGainStreak >= 4) break;
     }
     return {

@@ -240,6 +240,7 @@
               manualFpsCap: isCoarsePointer() ? 15 : 30,
               manualWidthCap: isCoarsePointer() ? 720 : 1280,
               batchConcurrency: isCoarsePointer() ? 1 : 2,
+              encodeConcurrency: isCoarsePointer() ? 1 : 2,
               label: isCoarsePointer() ? "省电" : "桌面",
             };
       }
@@ -1647,7 +1648,11 @@
         q.set("speed", String(speed));
         if (Math.abs(bright) >= 0.01) q.set("brightness", String(bright));
         if (crop) q.set("crop", JSON.stringify({ w: crop.w, h: crop.h, x: crop.x, y: crop.y }));
-        if (Number(opts.lossy) > 0) q.set("lossy", String(Math.round(Number(opts.lossy))));
+        if (Number(opts.lossy) > 0 && gifskiQuality < 90) {
+          q.set("lossy", String(Math.round(Number(opts.lossy))));
+        }
+        const cores = Math.max(2, Math.min(16, Number(navigator.hardwareConcurrency) || 8));
+        q.set("threads", String(cores));
         const encUrl = `${probe.base}${probe.prefix}/gifski/encode?${q.toString()}`;
         const res = await fetch(encUrl, {
           method: "POST",
@@ -2491,9 +2496,13 @@
           if (abortV2g) throw new Error("已取消");
           const before = candidate.blob.size;
           const movieLike = true; // 黑盒成片默认摄影友好：勿早 --colors
-          const plan = isLastTier
-            ? buildBlackboxHardCompressArgs(round, { movie: movieLike })
-            : buildBlackboxSoftCompressArgs(round, { movie: movieLike });
+          const isBest = blackboxQualityIsBest(candidate);
+          const plan = isBest
+            ? buildBlackboxSoftCompressArgs(1, { movie: movieLike })
+            : isLastTier
+              ? buildBlackboxHardCompressArgs(round, { movie: movieLike })
+              : buildBlackboxSoftCompressArgs(round, { movie: movieLike });
+          if (isBest && round > 1) break;
           const modeTip = isLastTier ? plan.label : "轻柔";
           setV2gProgress(
             true,
@@ -2575,7 +2584,7 @@
       }
   
       /** 「沿用方案」缓存版本：编码参数/分配算法变更时递增，旧缓存自动失效（避免沿用旧的低帧率） */
-      const VBB_SPAN_SCHEME_VER = 5;
+      const VBB_SPAN_SCHEME_VER = 6;
 
       function loadVbbSpanScheme(span, speed = 1) {
         const hit = loadVbbSpanSchemes()[vbbSpanSchemeKey(span, speed)];
@@ -2815,7 +2824,11 @@
               best.blob,
               (ratio, text) => onProgress(0.97 + Math.min(0.01, (ratio || 0) * 0.01), text || "硬闸压缩"),
               isAborted,
-              { movie: blackboxIsMovieLike(Number(best.srcFps) || Number(clipOpts?.srcFps) || 0) }
+              {
+                movie: blackboxIsMovieLike(Number(best.srcFps) || Number(clipOpts?.srcFps) || 0),
+                qualityBest: blackboxQualityIsBest(best),
+                mode: blackboxQualityIsBest(best) ? "o3" : "hard",
+              }
             );
             if (c?.blob && c.blob.size < best.blob.size) {
               best = {
@@ -2879,7 +2892,11 @@
                 cand.blob,
                 (ratio, text) => onProgress(0.99, text || "硬闸再压"),
                 isAborted,
-                { movie: blackboxIsMovieLike(Number(best.srcFps) || Number(clipOpts?.srcFps) || 0) }
+                {
+                  movie: blackboxIsMovieLike(Number(best.srcFps) || Number(clipOpts?.srcFps) || 0),
+                  qualityBest: blackboxQualityIsBest(cand),
+                  mode: blackboxQualityIsBest(cand) ? "o3" : "hard",
+                }
               );
               if (c2?.blob && c2.blob.size < cand.blob.size) {
                 cand = {
@@ -3198,27 +3215,15 @@
                   if (!wideEnough) continue;
                   if (
                     swapped.blob.size > V2G_BLACKBOX_MAX_BYTES &&
-                    swapped.blob.size <= V2G_BLACKBOX_MAX_BYTES * 1.06 &&
-                    typeof compressExistingGifToBlackbox === "function"
+                    swapped.blob.size <= V2G_BLACKBOX_MAX_BYTES * 1.06
                   ) {
-                    try {
-                      const c = await compressExistingGifToBlackbox(
-                        swapped.blob,
-                        (ratio, text) =>
-                          onProgress(0.961 + Math.min(0.01, (ratio || 0) * 0.01), text || "换宽轻压"),
-                        isAborted,
-                        { movie: true }
-                      );
-                      if (c?.blob && c.blob.size < swapped.blob.size) {
-                        swapped = {
-                          ...swapped,
-                          blob: c.blob,
-                          compressRounds: (swapped.compressRounds || 0) + (c.compressRounds || 0),
-                        };
-                      }
-                    } catch (err) {
-                      if (String(err && err.message) === "已取消") throw err;
-                    }
+                    const fitted = await blackboxAcceptBoostIfFits(swapped, {
+                      onProgress,
+                      isAborted,
+                      softGate: 1.08,
+                      curSize: cur.blob.size,
+                    });
+                    if (fitted) swapped = fitted;
                   }
                   if (swapped.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
                     cur = { ...swapped, compressRounds: swapped.compressRounds || 0, maxW: targetW };
@@ -3315,12 +3320,17 @@
           const maxRounds = isLastFps ? V2G_BLACKBOX_MAX_COMPRESS_ROUNDS : V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS;
           let cur = candidate;
           const movie = blackboxIsMovieLike(srcFps);
+          const isBest = blackboxQualityIsBest(candidate);
           for (let round = 1; round <= maxRounds; round++) {
             if (isAborted()) throw new Error("已取消");
             const before = cur.blob.size;
-            const plan = isLastFps
-              ? buildBlackboxHardCompressArgs(round, { movie })
-              : buildBlackboxSoftCompressArgs(round, { movie });
+            // 满画质禁止 lossy/减色硬塞；只 -O3，进不去就留给降质阶梯。
+            const plan = isBest
+              ? buildBlackboxSoftCompressArgs(1, { movie })
+              : isLastFps
+                ? buildBlackboxHardCompressArgs(round, { movie })
+                : buildBlackboxSoftCompressArgs(round, { movie });
+            if (isBest && round > 1) break;
           const tComp = performance.now();
           const out = await compressGifBlob(
             cur.blob,
@@ -3453,6 +3463,13 @@
         );
         // ---- 决策：真实编码；锁流畅档 → 宽度二分贴预算 → 再降质；电影向更敢用 lossy 保帧 ----
         const trialCache = new Map();
+        const blackboxSingleTaskEncodeConcurrency = () => {
+          if (isCoarsePointer()) return 1;
+          if (!nativeGifskiProbe.ok) return 1;
+          const p = currentMediaPerf();
+          if (p.tier === "eco" || p.tier === "balanced") return 1;
+          return Math.max(1, Math.min(2, Number(p.encodeConcurrency) || 2));
+        };
         const trial = async (fps, w, q) => {
           if (isAborted()) throw new Error("已取消");
           const qq = q && q > 1 ? q : V2G_BLACKBOX_QUALITY;
@@ -3540,41 +3557,44 @@
               ? 1.12
               : 1.08;
 
-          // ① 满画质 @ 420（清晰工作点）
+          // ① 满画质 @ 420（清晰工作点）；桌面原生可并行预编下一档
           {
+            const qNext = V2G_BLACKBOX_QUALITY_LADDER[1];
+            const conc = blackboxSingleTaskEncodeConcurrency();
+            if (conc >= 2 && qNext > V2G_BLACKBOX_QUALITY) {
+              vbbLog(
+                `[vbb-phase] 单任务并行试档 conc=2 · ${fps}fps ${comfortW}px q${V2G_BLACKBOX_QUALITY}+q${qNext}`
+              );
+              await Promise.all([
+                trial(fps, comfortW, V2G_BLACKBOX_QUALITY),
+                trial(fps, comfortW, qNext),
+              ]);
+            }
             const e = await trial(fps, comfortW, V2G_BLACKBOX_QUALITY);
             if (e) {
               vbbLog(`[vbb-phase] ${fps}fps 满画质@${comfortW} 已进预算`);
               return e;
             }
-            // 近超限：只做 gifsicle 轻压，禁止「无损重编」缩到 380
-            const last = tried[tried.length - 1];
+            // 近超限：只 O3（满档）或 O3+很轻 soft（非满档），禁止 hard movie lossy 保 420
+            const hqKey = `${Number(fps)}|${Number(comfortW)}|${V2G_BLACKBOX_QUALITY}`;
+            const last = trialCache.get(hqKey) || tried[tried.length - 1];
             if (
               last?.blob?.size > V2G_BLACKBOX_MAX_BYTES &&
-              last.blob.size <= V2G_BLACKBOX_MAX_BYTES * softPressGate &&
-              typeof compressExistingGifToBlackbox === "function"
+              last.blob.size <= V2G_BLACKBOX_MAX_BYTES * softPressGate
             ) {
               vbbLog(
-                `[vbb-phase] ${fps}fps ${comfortW}px 近超限 ${formatKb(last.blob.size)} → gifsicle 轻压保 420`
+                `[vbb-phase] ${fps}fps ${comfortW}px 近超限 ${formatKb(last.blob.size)} → 干净轻压保 420`
               );
-              try {
-                const c = await compressExistingGifToBlackbox(
-                  last.blob,
-                  (ratio, text) => onProgress(0.4 + Math.min(0.1, (ratio || 0) * 0.1), text || "轻压保宽"),
-                  isAborted,
-                  { movie: true }
-                );
-                if (c?.blob && c.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
-                  const kept = {
-                    ...last,
-                    blob: c.blob,
-                    compressRounds: (Number(last.compressRounds) || 0) + 1,
-                    maxW: comfortW,
-                  };
-                  tried.push(kept);
-                  return kept;
-                }
-              } catch (_) {}
+              const fitted = await blackboxAcceptBoostIfFits(last, {
+                onProgress,
+                isAborted,
+                softGate: Math.max(softPressGate, 1.12),
+                curSize: 0,
+              });
+              if (fitted) {
+                tried.push(fitted);
+                return fitted;
+              }
             }
           }
 
@@ -3662,6 +3682,7 @@
           return null;
         };
         let chosen = null;
+        await probeNativeGifski();
         // 按 resolveBlackboxFpsList 的主档顺序试（≤24s 15→12 / ≈30s 仅 12）
         for (const fps of fpsList) {
           const c = await fitFps(fps);
