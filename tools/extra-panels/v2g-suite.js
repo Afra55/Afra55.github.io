@@ -92,7 +92,7 @@
       /**
        * 黑盒：起点 420 宽 · q1（gifski 92）· 上限默认 10MB；整段处理。
        * 帧率只走片源整除档（先最高档）：24→12；25→12.5；30→15→12；其它 20→15→12。
-       * 超限让渡（本路径仅黑盒）：最高帧 @420 @92 → 同宽降到画质≥80（q8/gq83）
+       * 超限让渡（本路径仅黑盒）：最高帧 @420 @92 → 同宽降到画质≥80（q1/4/6/8 → 92/88/86/83）
        *   → 400 从 92 再降到 ≥80 → 380 同样 → 再降一档整除帧，从头走宽/画质。
        * 只有最低整除档 + 380 仍超，才允许画质 <80。
        * 非黑盒「视频转 GIF / 切片高清 GIF」不走这套，按用户帧率/宽度/质量编码。
@@ -141,9 +141,9 @@
       // 质量档位：1 = 最高画质。gifski 路径 → gifQualityToGifskiQuality(1) = 92（近无损）；
       // ffmpeg 回退路径 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
       const V2G_BLACKBOX_QUALITY = 1;
-      /** 超预算时的质量让渡阶梯（gifski：92→83→74→…→55）。黑盒在降帧前只走到 ≥80（q8）。 */
-      const V2G_BLACKBOX_QUALITY_LADDER = [1, 8, 15, 18, 22, 30];
-      /** 未到最低帧率前，画质不得低于约 80（阶梯上是 q8→gq83；下一档 q15→74） */
+      /** 超预算时的质量让渡阶梯（gifski：92→88→86→83→74→…→55）。降帧前只走到 ≥80。 */
+      const V2G_BLACKBOX_QUALITY_LADDER = [1, 4, 6, 8, 15, 18, 22, 30];
+      /** 未到最低帧率前，画质不得低于约 80（q8→gq83）。92 与 83 之间有 q4≈88、q6≈86。 */
       const V2G_BLACKBOX_QUALITY_KEEP_MIN_GQ = 80;
       /** 超限收窄：420 → 400 → 380（偶数） */
       const V2G_BLACKBOX_LETGO_WIDTHS = [420, 400, 380];
@@ -4442,6 +4442,18 @@
         return box;
       }
   
+      function formatPendingWaitText(job) {
+        const status = job?.jobStatus || "";
+        const t = String(job?.jobText || "").trim();
+        const isWait = !t || t === "等待中…" || t === "等待中";
+        if (status !== "pending" || !isWait) return "";
+        const origin = Number(job.jobQueuedAt) || 0;
+        if (!(origin > 0)) return "";
+        const ms = Math.max(0, Date.now() - origin);
+        const sec = ms >= 10000 ? Math.round(ms / 1000) : Math.max(0.1, Math.round(ms / 100) / 10);
+        return `${sec}s`;
+      }
+
       function syncClipProgressDom(box, job) {
         if (!box) return;
         const status = job?.jobStatus || "";
@@ -4469,7 +4481,10 @@
           fill.classList.toggle("is-busy", running);
         }
         if (textEl) {
+          const waitLabel =
+            typeof formatPendingWaitText === "function" ? formatPendingWaitText(job) : "";
           textEl.textContent =
+            waitLabel ||
             job.jobText ||
             (status === "pending"
               ? "等待中…"
@@ -8647,30 +8662,59 @@
         }
         if (patch.progress != null) c.jobProgress = Math.max(0, Math.min(1, Number(patch.progress) || 0));
         if (patch.text != null) {
-          let polished = vbbStageText(String(patch.text || "")) || String(patch.text || "");
-          if ((patch.status === "done" || c.jobStatus === "done") && c.encodeMs > 0) {
-            const sec = c.encodeMs >= 10000 ? Math.round(c.encodeMs / 1000) : Math.round(c.encodeMs / 100) / 10;
-            if (!/^\d+(\.\d+)?s$/.test(polished) && !polished.includes("s")) {
-              polished = polished && polished !== "完成" ? `${polished} · ${sec}s` : `完成 · ${sec}s`;
-            }
-          }
-          c.jobText = polished;
-        } else if ((patch.status === "done" || c.jobStatus === "done") && c.encodeMs > 0 && !c.jobText) {
-          const sec = c.encodeMs >= 10000 ? Math.round(c.encodeMs / 1000) : Math.round(c.encodeMs / 100) / 10;
-          c.jobText = `完成 · ${sec}s`;
+          c.jobText = vbbStageText(String(patch.text || "")) || String(patch.text || "");
         }
         const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
         if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
       }
 
       function clearVbbClipJobs() {
+        stopVbbWaitClock();
         vbbClips.forEach((c) => {
           c.jobStatus = "";
           c.jobProgress = 0;
           c.jobText = "";
           c.jobStartedAt = 0;
+          c.jobQueuedAt = 0;
           c.encodeMs = 0;
         });
+      }
+
+      let vbbWaitClockTimer = 0;
+      function stopVbbWaitClock() {
+        if (vbbWaitClockTimer) {
+          clearInterval(vbbWaitClockTimer);
+          vbbWaitClockTimer = 0;
+        }
+      }
+      function startVbbWaitClock() {
+        if (vbbWaitClockTimer) return;
+        vbbWaitClockTimer = setInterval(() => {
+          let pending = false;
+          vbbClips.forEach((c, i) => {
+            if (c.jobStatus !== "pending") return;
+            pending = true;
+            const label = formatPendingWaitText(c);
+            if (!label) return;
+            const row = vbbList?.querySelector(`[data-vbb-clip="${i}"]`);
+            if (!row) return;
+            const textEl = row.querySelector(".vsplit-clip-progress-text");
+            if (textEl) textEl.textContent = label;
+            const meta = row.querySelector(".vbb-clip-meta");
+            if (meta && !c.gifBlob) meta.textContent = label;
+          });
+          if (!pending) stopVbbWaitClock();
+        }, 250);
+      }
+      function vbbPendingJobFields() {
+        return {
+          jobStatus: "pending",
+          jobProgress: 0,
+          jobText: "等待中…",
+          jobQueuedAt: Date.now(),
+          jobStartedAt: 0,
+          encodeMs: 0,
+        };
       }
   
       function resetVbbAbort() {
@@ -8769,7 +8813,10 @@
       function formatVbbClipMeta(c, { mobile = false } = {}) {
         if (c.error && !c.gifBlob) return c.error;
         if (!c.gifBlob) {
-          if (c.jobStatus === "running" || c.jobStatus === "pending") return c.jobText || "";
+          if (c.jobStatus === "running" || c.jobStatus === "pending") {
+            const waitLabel = formatPendingWaitText(c);
+            return waitLabel || c.jobText || "";
+          }
           return c.error || "";
         }
         // 顺序固定：帧率 · 尺寸 · 体积 · 时长（其余附加信息尽量少）
@@ -8789,11 +8836,6 @@
         bits.push(fmtShortBytes(c.gifBlob.size));
         const videoSec = Number(c.gifDuration) > 0 ? Number(c.gifDuration) : Number(c.span) || 0;
         if (videoSec > 0) bits.push(formatVsplitSpanSec(videoSec));
-        if (Number(c.encodeMs) > 0) {
-          const sec =
-            c.encodeMs >= 10000 ? Math.round(c.encodeMs / 1000) : Math.round(c.encodeMs / 100) / 10;
-          bits.push(`${sec}s`);
-        }
         const extra = simplifyVbbGifNote(c.gifNote, { mobile });
         if (extra) {
           extra.split(" · ").forEach((part) => {
@@ -8848,6 +8890,7 @@
       }
   
       function clearVbbResults() {
+        stopVbbWaitClock();
         vbbClips.forEach((c) => {
           try {
             if (c.gifUrl) URL.revokeObjectURL(c.gifUrl);
@@ -9626,6 +9669,7 @@
             vbbList.appendChild(buildVbbClipRow(c, idx));
           });
           setVbbButtons();
+          if (vbbClips.some((c) => c.jobStatus === "pending")) startVbbWaitClock();
         }, { pin });
       }
   
@@ -9756,9 +9800,7 @@
           gifNote: "",
           gifDuration: 0,
           error: "",
-          jobStatus: "pending",
-          jobProgress: 0,
-          jobText: "等待中…",
+          ...vbbPendingJobFields(),
         }));
         renderVbbResults();
         try {
@@ -10323,11 +10365,7 @@
           gifNote: "",
           gifDuration: 0,
           error: "",
-          jobStatus: "pending",
-          jobProgress: 0,
-          jobText: "等待中…",
-          jobStartedAt: 0,
-          encodeMs: 0,
+          ...vbbPendingJobFields(),
         }));
         renderVbbResults();
         let ok = 0;
@@ -10460,7 +10498,6 @@
                   ...editBits,
                   encoded.speed > 1 ? `加速${Number(encoded.speed).toFixed(1)}×` : "",
                   conc > 1 ? `${conc}路并行` : "",
-                  `耗时${elapsedSec.toFixed(1)}s${usedSeed ? "·沿用" : ""}`,
                 ]
                   .filter(Boolean)
                   .join(" · ");
@@ -10601,11 +10638,7 @@
             gifNote: "",
             gifDuration: 0,
             error: "",
-            jobStatus: "pending",
-            jobProgress: 0,
-            jobText: "等待中…",
-            jobStartedAt: 0,
-            encodeMs: 0,
+            ...vbbPendingJobFields(),
           },
         ];
         renderVbbResults();
@@ -10880,9 +10913,7 @@
             gifNote: "",
             gifDuration: 0,
             error: "",
-            jobStatus: "pending",
-            jobProgress: 0,
-            jobText: "等待中…",
+            ...vbbPendingJobFields(),
           }));
           renderVbbResults();
           const vbbCrop = await vbbResolveCrop(vbbSourceFile);

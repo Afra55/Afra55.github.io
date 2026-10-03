@@ -1810,30 +1810,59 @@
         }
         if (patch.progress != null) c.jobProgress = Math.max(0, Math.min(1, Number(patch.progress) || 0));
         if (patch.text != null) {
-          let polished = vbbStageText(String(patch.text || "")) || String(patch.text || "");
-          if ((patch.status === "done" || c.jobStatus === "done") && c.encodeMs > 0) {
-            const sec = c.encodeMs >= 10000 ? Math.round(c.encodeMs / 1000) : Math.round(c.encodeMs / 100) / 10;
-            if (!/^\d+(\.\d+)?s$/.test(polished) && !polished.includes("s")) {
-              polished = polished && polished !== "完成" ? `${polished} · ${sec}s` : `完成 · ${sec}s`;
-            }
-          }
-          c.jobText = polished;
-        } else if ((patch.status === "done" || c.jobStatus === "done") && c.encodeMs > 0 && !c.jobText) {
-          const sec = c.encodeMs >= 10000 ? Math.round(c.encodeMs / 1000) : Math.round(c.encodeMs / 100) / 10;
-          c.jobText = `完成 · ${sec}s`;
+          c.jobText = vbbStageText(String(patch.text || "")) || String(patch.text || "");
         }
         const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
         if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
       }
 
       function clearVbbClipJobs() {
+        stopVbbWaitClock();
         vbbClips.forEach((c) => {
           c.jobStatus = "";
           c.jobProgress = 0;
           c.jobText = "";
           c.jobStartedAt = 0;
+          c.jobQueuedAt = 0;
           c.encodeMs = 0;
         });
+      }
+
+      let vbbWaitClockTimer = 0;
+      function stopVbbWaitClock() {
+        if (vbbWaitClockTimer) {
+          clearInterval(vbbWaitClockTimer);
+          vbbWaitClockTimer = 0;
+        }
+      }
+      function startVbbWaitClock() {
+        if (vbbWaitClockTimer) return;
+        vbbWaitClockTimer = setInterval(() => {
+          let pending = false;
+          vbbClips.forEach((c, i) => {
+            if (c.jobStatus !== "pending") return;
+            pending = true;
+            const label = formatPendingWaitText(c);
+            if (!label) return;
+            const row = vbbList?.querySelector(`[data-vbb-clip="${i}"]`);
+            if (!row) return;
+            const textEl = row.querySelector(".vsplit-clip-progress-text");
+            if (textEl) textEl.textContent = label;
+            const meta = row.querySelector(".vbb-clip-meta");
+            if (meta && !c.gifBlob) meta.textContent = label;
+          });
+          if (!pending) stopVbbWaitClock();
+        }, 250);
+      }
+      function vbbPendingJobFields() {
+        return {
+          jobStatus: "pending",
+          jobProgress: 0,
+          jobText: "等待中…",
+          jobQueuedAt: Date.now(),
+          jobStartedAt: 0,
+          encodeMs: 0,
+        };
       }
   
       function resetVbbAbort() {
@@ -1932,7 +1961,10 @@
       function formatVbbClipMeta(c, { mobile = false } = {}) {
         if (c.error && !c.gifBlob) return c.error;
         if (!c.gifBlob) {
-          if (c.jobStatus === "running" || c.jobStatus === "pending") return c.jobText || "";
+          if (c.jobStatus === "running" || c.jobStatus === "pending") {
+            const waitLabel = formatPendingWaitText(c);
+            return waitLabel || c.jobText || "";
+          }
           return c.error || "";
         }
         // 顺序固定：帧率 · 尺寸 · 体积 · 时长（其余附加信息尽量少）
@@ -1952,11 +1984,6 @@
         bits.push(fmtShortBytes(c.gifBlob.size));
         const videoSec = Number(c.gifDuration) > 0 ? Number(c.gifDuration) : Number(c.span) || 0;
         if (videoSec > 0) bits.push(formatVsplitSpanSec(videoSec));
-        if (Number(c.encodeMs) > 0) {
-          const sec =
-            c.encodeMs >= 10000 ? Math.round(c.encodeMs / 1000) : Math.round(c.encodeMs / 100) / 10;
-          bits.push(`${sec}s`);
-        }
         const extra = simplifyVbbGifNote(c.gifNote, { mobile });
         if (extra) {
           extra.split(" · ").forEach((part) => {
@@ -2011,6 +2038,7 @@
       }
   
       function clearVbbResults() {
+        stopVbbWaitClock();
         vbbClips.forEach((c) => {
           try {
             if (c.gifUrl) URL.revokeObjectURL(c.gifUrl);
@@ -2789,6 +2817,7 @@
             vbbList.appendChild(buildVbbClipRow(c, idx));
           });
           setVbbButtons();
+          if (vbbClips.some((c) => c.jobStatus === "pending")) startVbbWaitClock();
         }, { pin });
       }
   
@@ -2919,9 +2948,7 @@
           gifNote: "",
           gifDuration: 0,
           error: "",
-          jobStatus: "pending",
-          jobProgress: 0,
-          jobText: "等待中…",
+          ...vbbPendingJobFields(),
         }));
         renderVbbResults();
         try {
@@ -3486,11 +3513,7 @@
           gifNote: "",
           gifDuration: 0,
           error: "",
-          jobStatus: "pending",
-          jobProgress: 0,
-          jobText: "等待中…",
-          jobStartedAt: 0,
-          encodeMs: 0,
+          ...vbbPendingJobFields(),
         }));
         renderVbbResults();
         let ok = 0;
@@ -3623,7 +3646,6 @@
                   ...editBits,
                   encoded.speed > 1 ? `加速${Number(encoded.speed).toFixed(1)}×` : "",
                   conc > 1 ? `${conc}路并行` : "",
-                  `耗时${elapsedSec.toFixed(1)}s${usedSeed ? "·沿用" : ""}`,
                 ]
                   .filter(Boolean)
                   .join(" · ");
@@ -3764,11 +3786,7 @@
             gifNote: "",
             gifDuration: 0,
             error: "",
-            jobStatus: "pending",
-            jobProgress: 0,
-            jobText: "等待中…",
-            jobStartedAt: 0,
-            encodeMs: 0,
+            ...vbbPendingJobFields(),
           },
         ];
         renderVbbResults();
@@ -4043,9 +4061,7 @@
             gifNote: "",
             gifDuration: 0,
             error: "",
-            jobStatus: "pending",
-            jobProgress: 0,
-            jobText: "等待中…",
+            ...vbbPendingJobFields(),
           }));
           renderVbbResults();
           const vbbCrop = await vbbResolveCrop(vbbSourceFile);

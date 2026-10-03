@@ -170,6 +170,18 @@
         return box;
       }
   
+      function formatPendingWaitText(job) {
+        const status = job?.jobStatus || "";
+        const t = String(job?.jobText || "").trim();
+        const isWait = !t || t === "等待中…" || t === "等待中";
+        if (status !== "pending" || !isWait) return "";
+        const origin = Number(job.jobQueuedAt) || 0;
+        if (!(origin > 0)) return "";
+        const ms = Math.max(0, Date.now() - origin);
+        const sec = ms >= 10000 ? Math.round(ms / 1000) : Math.max(0.1, Math.round(ms / 100) / 10);
+        return `${sec}s`;
+      }
+
       function syncClipProgressDom(box, job) {
         if (!box) return;
         const status = job?.jobStatus || "";
@@ -197,7 +209,10 @@
           fill.classList.toggle("is-busy", running);
         }
         if (textEl) {
+          const waitLabel =
+            typeof formatPendingWaitText === "function" ? formatPendingWaitText(job) : "";
           textEl.textContent =
+            waitLabel ||
             job.jobText ||
             (status === "pending"
               ? "等待中…"
