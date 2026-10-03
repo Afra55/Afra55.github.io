@@ -2695,11 +2695,12 @@
           }
           const onProgress = clipOpts.onProgress || (() => {});
           const comfortO3 = Math.min(hardMax, V2G_BLACKBOX_COMFORT_W);
-          // 手机：finish 已抬过一档，O3 后再连抬会拖垮 wasm；桌面保留
+          // finish 已抬过；O3 后再连抬是重复白跑。手机禁用；桌面仅在仍有余量且未到顶时试一档
           if (
             !isCoarsePointer() &&
+            !result.boostHitCeiling &&
             quality > V2G_BLACKBOX_QUALITY + 0.01 &&
-            result.blob.size <= V2G_BLACKBOX_MAX_BYTES
+            result.blob.size <= V2G_BLACKBOX_MAX_BYTES * 0.88
           ) {
             const at = V2G_BLACKBOX_QUALITY_LADDER.indexOf(quality);
             const targetW = Math.max(curW, comfortO3);
@@ -3057,21 +3058,26 @@
               blackboxLadderQuality(cur),
               Number.isFinite(Number(cur.gifskiQuality)) ? Number(cur.gifskiQuality) : undefined
             );
-          /** 有余量先抬画质到满档（同宽），禁止「宽一点但糊」 */
+          /** 有余量先抬画质到满档（同宽），禁止「宽一点但糊」。失败即停，避免连抬白跑。 */
+          let boostHitCeiling = Boolean(best.boostHitCeiling);
           const boostQualityPass = async () => {
             const qNow = blackboxLadderQuality(cur);
             if (!(qNow > V2G_BLACKBOX_QUALITY + 0.01)) return;
-            if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.98) return;
+            if (boostHitCeiling) return;
+            if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.92) {
+              vbbLog(`[vbb-phase] 加速：已用≥92%预算 → 停抬质（保流畅档/420）`);
+              boostHitCeiling = true;
+              return;
+            }
             const coarse = isCoarsePointer();
-            // 手机：已用大半预算就别再连编抬质（防 wasm OOM、把单路拖慢）
             if (coarse && cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.88) {
               vbbLog(`[vbb-phase] 手机加速：已用≥88%预算 → 跳过抬质`);
+              boostHitCeiling = true;
               return;
             }
             const w = Number(cur.maxW) || V2G_BLACKBOX_COMFORT_W;
             const at = V2G_BLACKBOX_QUALITY_LADDER.indexOf(qNow);
             const startQi = at > 0 ? at - 1 : -1;
-            // 手机只试上一档；桌面可连抬到满档
             const qiMin = coarse ? startQi : 0;
             for (let qi = startQi; qi >= qiMin; qi--) {
               if (isAborted()) throw new Error("已取消");
@@ -3090,11 +3096,16 @@
                   curSize: cur.blob.size,
                 });
                 if (!fitted) {
-                  if (coarse) {
-                    vbbLog(`[vbb-phase] 手机加速：抬一档未进预算 → 跳过半档`);
+                  boostHitCeiling = true;
+                  // 半档仅在仍有明显余量时试一次；已近满则停（保当前流畅+已抬清晰）
+                  if (coarse || cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.82) {
+                    vbbLog(
+                      `[vbb-phase] 加速：上一档未进预算 → 停抬质（沿用 q${blackboxLadderQuality(
+                        cur
+                      )}/gq${Number(cur.gifskiQuality) || "?"}）`
+                    );
                     break;
                   }
-                  // 整档装不下：试中间 gifski 质量（如 65→70→74），吃掉余量里「半档」清晰度
                   const curGq = Number(cur.gifskiQuality) || 0;
                   const nextGq =
                     Number(enc.gifskiQuality) ||
@@ -3174,12 +3185,17 @@
           ) {
             return cur;
           }
-          // 小于规则：先抬画质到满档，再加宽，再用余量提帧
+          // 小于规则：先抬画质（同宽保流畅），满档才加宽
           await boostQualityPass();
-          // 手机：未满档不加宽；桌面可加宽后再抬一轮
           if (!isCoarsePointer()) {
+            const wBefore = Number(cur.maxW) || 0;
             await widenPass(isShortFill ? "短片有余 · 加宽吃满预算" : "体积有余 · 自动增宽");
-            await boostQualityPass();
+            const widened = (Number(cur.maxW) || 0) > wBefore + 2;
+            if (widened && !boostHitCeiling && qualityIsBest()) {
+              await boostQualityPass();
+            } else if (!widened) {
+              vbbLog(`[vbb-phase] 加速：未加宽/抬质已到顶 → 跳过第二轮抬质`);
+            }
           } else {
             vbbLog(`[vbb-phase] 手机加速：跳过加宽/第二轮抬质（单路稳妥）`);
           }
@@ -3187,7 +3203,7 @@
             cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.99 ||
             (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 && atCap() && (Number(cur.maxW) || 0) >= V2G_BLACKBOX_BASE_W - 0.5)
           ) {
-            return cur;
+            return { ...cur, boostHitCeiling };
           }
           // 加宽后再提帧（短片源可整除才冲 20；长片抬 15）
           if (widthOkForRaise() && qualityIsBest() && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.99) {
@@ -3296,7 +3312,7 @@
             );
             if (hi?.blob?.size && hi.blob.size <= V2G_BLACKBOX_MAX_BYTES) cur = hi;
           }
-          return cur;
+          return { ...cur, boostHitCeiling };
         }
   
         const encodeAt = async (fps, maxW, progressBase, progressSpan, stageLabel, quality, gifskiQuality) => {
@@ -3533,6 +3549,25 @@
             `[vbb-phase] 试 ${label} → ${formatKb(enc.blob.size)}${enc.blob.size <= V2G_BLACKBOX_MAX_BYTES ? " ✓" : " ✗"}`
           );
           return enc.blob.size <= V2G_BLACKBOX_MAX_BYTES ? enc : null;
+        };
+        const cacheEncodeAtWidthFps = async (f, w, q, gq) => {
+          const qq = Number.isFinite(Number(q)) && Number(q) > 1 ? Number(q) : V2G_BLACKBOX_QUALITY;
+          const customGq = Number.isFinite(Number(gq));
+          const key = customGq
+            ? `${Number(f)}|${Number(w)}|${qq}|g${Math.round(Number(gq))}`
+            : `${Number(f)}|${Number(w)}|${qq}`;
+          if (trialCache.has(key)) {
+            const cached = trialCache.get(key);
+            vbbLog(
+              `[vbb-phase] 试 ${f}FPS·宽${w}${qq > 1 ? `·q${qq}` : ""}${
+                customGq ? `·gq${Math.round(Number(gq))}` : ""
+              } → ${formatKb(cached.blob.size)}（缓存）`
+            );
+            return { ...cached, compressRounds: cached.compressRounds || 0, maxW: w };
+          }
+          const enc = await encodeAtWidthFps(f, w, qq, customGq ? gq : undefined);
+          if (enc?.blob) trialCache.set(key, enc);
+          return enc;
         };
         /** 同帧率：按 w² 估起点，再二分宽度（少白跑阶梯宽） */
         const bisectWidthAtQuality = async (fps, quality, wLo, wHi) => {
@@ -3843,13 +3878,12 @@
             chosen.fps,
             (f, w, q, gq) => {
               const useQ = Number.isFinite(Number(q)) ? Number(q) : qKeep;
-              // 改档时不要沿用旧 gifskiQuality，否则抬质会编出「q1 标签 + gq65」假成功
               const useGq = Number.isFinite(Number(gq))
                 ? Number(gq)
                 : useQ === qKeep
                   ? gqKeep
                   : undefined;
-              return encodeAtWidthFps(f, w, useQ, useGq);
+              return cacheEncodeAtWidthFps(f, w, useQ, useGq);
             },
             srcCap
           );
