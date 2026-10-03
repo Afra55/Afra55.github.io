@@ -71,6 +71,10 @@
         const V2G_BLACKBOX_WIDTH_CAP = 900;
         /** 黑盒编码的硬宽度上限（一键黑盒可放宽到这里，短视频预算用不完时可换更高清晰度） */
         const V2G_ENCODE_HARD_W = 1280;
+        /** 非黑盒 GIF：用户可选最高帧率（黑盒仍只走整除档 ≤30） */
+        const V2G_MANUAL_MAX_FPS = 60;
+        /** 非黑盒「质量 1」对应 gifski 100；黑盒满档仍是 q1→92 */
+        const V2G_MANUAL_GIFSKI_BEST = 100;
         /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率 */
       const V2G_BLACKBOX_MIN_ACCEPT_W = 380;
       /** 实测超预算时「无损重编」的绝对下限（宽度 px / 帧率）：宁可到这两个底线，也不轻易用 gifsicle --lossy */
@@ -148,6 +152,11 @@
           }
         }
         return maxQi;
+      }
+      function manualGifskiQuality(quality) {
+        const q = Math.min(30, Math.max(1, Number(quality) || 1));
+        if (q <= 1) return V2G_MANUAL_GIFSKI_BEST;
+        return typeof gifQualityToGifskiQuality === "function" ? gifQualityToGifskiQuality(q) : 90;
       }
       /**
        * 抬质试编若略超 10MB：尽量无损进预算后再接受。
@@ -326,7 +335,7 @@
       /** 防误触软顶（%）；实际无业务硬限 */
       const V2G_BRIGHT_SOFT_MAX = 999;
       const V2G_DEFAULT_META =
-        "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。默认 20FPS / 宽480 / 最好质量。关闭页面会释放本次视频和 GIF；编码器缓存可在侧栏一键清理。";
+        "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。默认 60FPS / 宽1280 / gifski 100。关闭页面会释放本次视频和 GIF；编码器缓存可在侧栏一键清理。";
       let v2gBrightPreviewTimer = 0;
       let v2gBrightPreviewToken = 0;
       let v2gBrightFrameReady = false;
@@ -768,9 +777,9 @@
       async function sampleV2gFrames(opts) {
         const video = opts.video || v2gVideo;
         if (!video) throw new Error("视频未找到");
-        const fps = Math.min(30, Math.max(2, Number(opts.fps) || 8));
-        const maxW = Math.min(1280, Math.max(64, Number(opts.maxW) || 360));
-        const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
+        const fps = Math.min(V2G_MANUAL_MAX_FPS, Math.max(2, Number(opts.fps) || 60));
+        const maxW = Math.min(V2G_ENCODE_HARD_W, Math.max(64, Number(opts.maxW) || V2G_ENCODE_HARD_W));
+        const quality = Math.min(30, Math.max(1, Number(opts.quality) || 1));
         const progressBase = Number(opts.progressBase) || 0;
         const progressSpan = Number(opts.progressSpan) || 1;
         const stageLabel = opts.stageLabel || "";
@@ -916,7 +925,7 @@
                 outH = ctx.canvas.height;
                 gif = new GIF({
                   workers: opts.workers || 2,
-                  quality: Math.min(30, Math.max(1, Number(opts.quality) || 12)),
+                  quality: Math.min(30, Math.max(1, Number(opts.quality) || 1)),
                   width: outW,
                   height: outH,
                   workerScript,
@@ -925,7 +934,7 @@
                 });
                 activeV2gGifs.add(gif);
               }
-              const delay = Math.round(1000 / Math.min(30, Math.max(2, Number(opts.fps) || 8)));
+              const delay = Math.round(1000 / Math.min(V2G_MANUAL_MAX_FPS, Math.max(2, Number(opts.fps) || 60)));
               gif.addFrame(ctx, { delay, copy: true });
             },
           });
@@ -1124,7 +1133,7 @@
         const tPhase = performance.now();
         const file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
-        const fpsCap = opts.allowWide ? 30 : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
+        const fpsCap = opts.allowWide ? V2G_MANUAL_MAX_FPS : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
         const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
         const hardCapW = opts.allowWide
           ? V2G_ENCODE_HARD_W
@@ -1607,7 +1616,7 @@
         const probe = await probeNativeGifski();
         if (!probe.ok) return null;
         const tPhase = performance.now();
-        const fpsCap = opts.allowWide ? 30 : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
+        const fpsCap = opts.allowWide ? V2G_MANUAL_MAX_FPS : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
         const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
         const hardCapW = opts.allowWide
           ? V2G_ENCODE_HARD_W
@@ -1767,7 +1776,7 @@
         const tPhase = performance.now();
         const file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
-        const fpsCap = opts.allowWide ? 30 : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
+        const fpsCap = opts.allowWide ? V2G_MANUAL_MAX_FPS : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
         const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
         const hardCapW = opts.allowWide
           ? V2G_ENCODE_HARD_W

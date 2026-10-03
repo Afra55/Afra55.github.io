@@ -77,6 +77,10 @@ assert(HIGH_PRIMARY_SPAN_SEC === 16 && MID_SPAN_SEC === 24, "时长分档");
   assert(/V2G_BLACKBOX_QUALITY_KEEP_MIN_GQ\s*=\s*80/.test(src), "降帧前画质底须 ≥80");
   const v2gUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/20-v2g-ui.js"), "utf8");
   assert(!/manualFpsCap/.test(v2gUi), "非黑盒视频转 GIF 不得套性能档帧率帽");
+  assert(/gifskiQuality:\s*manualGifskiQuality/.test(v2gUi), "非黑盒须走 gifski 100 满档");
+  const v2gHtml = fs.readFileSync(path.join(__dirname, "panels/v2g.html"), "utf8");
+  assert(/value="60" selected/.test(v2gHtml), "非黑盒默认 60fps");
+  assert(/value="1280" selected/.test(v2gHtml), "非黑盒默认宽 1280");
   const vsplitUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/30-vsplit.js"), "utf8");
   assert(!/manualFpsCap/.test(vsplitUi), "非黑盒切片 GIF 不得套性能档帧率帽");
   assert(

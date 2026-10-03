@@ -214,7 +214,7 @@
       }
   
       function fitSize(srcW, srcH, maxW) {
-        const widthCap = Math.min(1280, Math.max(64, Number(maxW) || 480));
+        const widthCap = Math.min(1280, Math.max(64, Number(maxW) || 1280));
         if (srcW <= widthCap) return { width: srcW, height: srcH };
         const scale = widthCap / srcW;
         return {
@@ -290,8 +290,8 @@
         let cleanupWorker = null;
   
         try {
-          const maxW = Number(gifWidth?.value) || 480;
-          const quality = Math.min(30, Math.max(1, Number(gifQuality?.value) || 10));
+          const maxW = Number(gifWidth?.value) || 1280;
+          const quality = Math.min(30, Math.max(1, Number(gifQuality?.value) || 1));
           let outW = 0;
           let outH = 0;
           frames.forEach((frame) => {
