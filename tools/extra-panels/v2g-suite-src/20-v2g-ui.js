@@ -23,9 +23,8 @@
             toast(`视频约 ${formatKb(v2gSourceFile.size)}，手机上可能较慢或内存不足`);
           }
           await prewarmFfmpegEngine().catch(() => {});
-          const perf = currentMediaPerf();
-          const fps = Math.min(perf.manualFpsCap || 30, Math.max(2, Number(v2gFps?.value) || 8));
-          const maxW = Math.min(perf.manualWidthCap || 1280, Math.max(64, Number(v2gWidth?.value) || 360));
+          const fps = Math.max(2, Number(v2gFps?.value) || 8);
+          const maxW = Math.max(64, Number(v2gWidth?.value) || 360);
           const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
           // 非黑盒也走 gifski 优先（画质/体积更好），失败回退 ffmpeg；allowWide 放开 UI 上限
           const result = await encodeBlackboxGif({
@@ -98,9 +97,8 @@
         setV2gProgress(true, 0.02, "准备抽帧并编码 WebP…");
   
         try {
-          const perf = currentMediaPerf();
-          const fps = Math.min(perf.manualFpsCap || 30, Math.max(2, Number(v2gFps?.value) || 8));
-          const maxW = Math.min(perf.manualWidthCap || 1280, Math.max(64, Number(v2gWidth?.value) || 360));
+          const fps = Math.max(2, Number(v2gFps?.value) || 8);
+          const maxW = Math.max(64, Number(v2gWidth?.value) || 360);
           const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
           const result = await encodeV2gWebp({ fps, maxW, quality });
           applyV2gOutput(result.blob, { resetCompress: true, format: "webp" });

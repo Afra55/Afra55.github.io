@@ -30,12 +30,9 @@ function blackboxIsMovieLike(srcFps) {
 }
 
 function blackboxPrimaryFps(span, srcFps) {
-  const s = Number(span) || 0;
+  void span;
   const cands = blackboxFpsCandidates(srcFps);
-  if (!cands.length) return RETRY_MIN_FPS;
-  if (s <= HIGH_PRIMARY_SPAN_SEC + 0.01) return cands[0];
-  if (s <= MID_SPAN_SEC + 0.01) return cands.length >= 2 ? cands[1] : cands[0];
-  return cands[cands.length - 1];
+  return cands[0] || RETRY_MIN_FPS;
 }
 
 function blackboxFpsFloor(span, srcFps) {
@@ -46,9 +43,8 @@ function blackboxFpsFloor(span, srcFps) {
 }
 
 function resolveBlackboxFpsList(span, srcFps) {
-  const primary = blackboxPrimaryFps(span, srcFps);
-  const list = blackboxFpsCandidates(srcFps).filter((f) => f <= primary + 0.01);
-  return list.length ? list : [blackboxFpsFloor(span, srcFps)];
+  const cands = blackboxFpsCandidates(srcFps);
+  return cands.length ? cands.slice() : [blackboxFpsFloor(span, srcFps)];
 }
 
 function gifEffectivePlaybackFps(fps) {

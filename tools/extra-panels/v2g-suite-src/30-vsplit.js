@@ -2070,9 +2070,8 @@
         if (vsplitAbort) vsplitAbort.hidden = false;
         setError(vsplitError, "");
         revokeVsplitGifOutputs();
-        const perf = currentMediaPerf();
-        const fps = Math.min(perf.manualFpsCap || 30, Math.max(2, Number(vsplitFps?.value) || 15));
-        const maxW = Math.min(perf.manualWidthCap || 1280, Math.max(64, Number(vsplitWidth?.value) || 480));
+        const fps = Math.max(2, Number(vsplitFps?.value) || 15);
+        const maxW = Math.max(64, Number(vsplitWidth?.value) || 480);
         const quality = Math.min(30, Math.max(1, Number(vsplitQuality?.value) || 5));
         const srcW = vsplitVideo?.videoWidth || 0;
         const srcH = vsplitVideo?.videoHeight || 0;

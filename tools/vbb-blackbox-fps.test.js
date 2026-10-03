@@ -38,9 +38,11 @@ assert(blackboxIsMovieLike(25) === false, "25 是屏录向");
 assert(blackboxIsMovieLike(0) === true, "未知默认电影向");
 
 assert(blackboxPrimaryFps(10, 24) === 24, "电影短片主试 24");
-assert(blackboxPrimaryFps(20, 24) === 12, "电影中长主试 12");
+assert(blackboxPrimaryFps(20, 24) === 24, "电影长片仍先试最高整除档 24");
+assert(blackboxPrimaryFps(30, 30) === 30, "30fps 源一律先 30");
 assert(blackboxPrimaryFps(10, 25) === 25, "屏录短片主试 25");
 assert(JSON.stringify(resolveBlackboxFpsList(10, 24)) === JSON.stringify([24, 12]), "电影短片列表");
+assert(JSON.stringify(resolveBlackboxFpsList(30, 30)) === JSON.stringify([30, 15, 12]), "30 源长片仍含高档");
 
 assert(gifEffectivePlaybackFps(24) === 25, "24→厘秒4→25 有效（GIF 限制）");
 assertGifFpsAllowed(24, 24, "电影 24");
@@ -71,6 +73,12 @@ assert(HIGH_PRIMARY_SPAN_SEC === 16 && MID_SPAN_SEC === 24, "时长分档");
   );
   assert(/blackboxIsMovieLike/.test(src), "须有电影向判定");
   assert(/bisectWidthAtQuality|trialCache/.test(src), "须有宽度二分/试档缓存");
+  assert(/V2G_BLACKBOX_LETGO_WIDTHS\s*=\s*\[\s*420\s*,\s*400\s*,\s*380\s*\]/.test(src), "须有 420→400→380");
+  assert(/V2G_BLACKBOX_QUALITY_KEEP_MIN_GQ\s*=\s*80/.test(src), "降帧前画质底须 ≥80");
+  const v2gUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/20-v2g-ui.js"), "utf8");
+  assert(!/manualFpsCap/.test(v2gUi), "非黑盒视频转 GIF 不得套性能档帧率帽");
+  const vsplitUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/30-vsplit.js"), "utf8");
+  assert(!/manualFpsCap/.test(vsplitUi), "非黑盒切片 GIF 不得套性能档帧率帽");
   assert(
     /产品硬约定：始终|一条中间 MP4|不分段各出一条 GIF/.test(
       fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/40-vbb.js"), "utf8")
