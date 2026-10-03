@@ -92,9 +92,10 @@
       /**
        * 黑盒：起点 420 宽 · q1（gifski 92）· 上限默认 10MB；整段处理。
        * 帧率阶梯必含 15：24→15→12；25→15→12.5；30→15→12；其它 20→15→12。
-       * 超限让渡（本路径仅黑盒）：最高帧 @420 @92 → 同宽降到画质≥80（q1/4/6/8 → 92/88/86/83）
-       *   → 400 从 92 再降到 ≥80 → 380 同样 → 再降一档整除帧，从头走宽/画质。
-       * 只有最低整除档 + 380 仍超，才允许画质 <80。
+       * 超限让渡（本路径仅黑盒）：短片（≤10s）最高帧 @420 @92 → 同宽降到画质≥80
+       *   → 面积外推跳过注定超限的 400/380 → 再降整除帧（15 必试）。
+       * 长片：420 允许 q<80 保帧，不先缩宽；时长×fps 过大则跳过该高档（15 仍试）。
+       * 细档 q4/q6 仅体积已贴预算（≤1.18×）时才打。
        * 非黑盒「视频转 GIF / 切片高清 GIF」不走这套，按用户帧率/宽度/质量编码。
        * 有余量：先抬画质到满档 → 再加宽（禁止「宽一点但糊」）。
        */
@@ -143,8 +144,15 @@
       const V2G_BLACKBOX_QUALITY = 1;
       /** 超预算时的质量让渡阶梯（gifski：92→88→86→83→74→…→55）。降帧前只走到 ≥80。 */
       const V2G_BLACKBOX_QUALITY_LADDER = [1, 4, 6, 8, 15, 18, 22, 30];
-      /** 未到最低帧率前，画质不得低于约 80（q8→gq83）。92 与 83 之间有 q4≈88、q6≈86。 */
+      /** 未到最低帧率前，画质不得低于约 80（q8→gq83）。仅 ≤10s 短片；长片优先保帧。 */
       const V2G_BLACKBOX_QUALITY_KEEP_MIN_GQ = 80;
+      /** ≤此时长才守 80 再掉帧（601 15.8s 不算短） */
+      const V2G_BLACKBOX_KEEP_Q_MAX_SPAN_SEC = 10;
+      const V2G_BLACKBOX_FINE_NEAR_BUDGET = 1.18;
+      const V2G_BLACKBOX_AREA_SKIP_SLACK = 1.12;
+      const V2G_BLACKBOX_HIGH_FPS_FRAME_SKIP = 420;
+      /** wasm 单段帧上限，避免 700 帧 OOM（用户选「1 块」也强制切开） */
+      const V2G_GIFSKI_WASM_MAX_FRAMES = 240;
       /** 超限收窄：420 → 400 → 380（偶数） */
       const V2G_BLACKBOX_LETGO_WIDTHS = [420, 400, 380];
       /** 满档 gifski quality（q1→92）；加宽门闩以此为准，避免 quality 字段丢失时误加宽 */
@@ -1896,12 +1904,18 @@
         const perf = currentMediaPerf();
         const preferSingle =
           !perf.preferChunkByDefault || perf.tier === "desktop" || perf.tier === "max";
+        const wasmSafeMax = Math.max(
+          80,
+          Math.min(
+            V2G_GIFSKI_WASM_MAX_FRAMES,
+            gifskiMaxFrames(),
+            Math.max(1, Math.floor((384 * 1024 * 1024) / Math.max(1, perFrameBytes * 3)))
+          )
+        );
         if (forcedChunks >= 1) {
-          // 用户显式指定块数（手机端输入框）：完全尊重，1 = 单次编码（可能因内存不足失败）
           chunkMax = Math.max(1, Math.ceil(frameCount / Math.min(forcedChunks, frameCount)));
           chunkCount = Math.ceil(frameCount / chunkMax);
         } else if (preferSingle) {
-          // 桌面 / 拉满 / 关闭默认分块：尽量单次；仅当峰值估算超上限才自动分块
           const peakCap = Math.max(1, Math.floor(gifskiSinglePassPeakBytes() / (perFrameBytes * 3)));
           const hardMax = Math.max(1, Math.min(gifskiMaxFrames(), peakCap));
           if (frameCount <= hardMax) {
@@ -1912,10 +1926,15 @@
             chunkCount = Math.ceil(frameCount / chunkMax);
           }
         } else {
-          // 省电 / 均衡默认：按内存预算保守分块（防 OOM）
           const budgetFrames = Math.max(1, Math.floor(gifskiRawBudget() / perFrameBytes));
           chunkMax = Math.max(1, Math.min(gifskiMaxFrames(), budgetFrames));
           chunkCount = Math.ceil(frameCount / chunkMax);
+        }
+        // wasm 路径：即使用户选 1 块，超安全帧数也强制切开（502 类 700 帧会 OOM）
+        if (chunkMax > wasmSafeMax && frameCount > wasmSafeMax) {
+          chunkMax = wasmSafeMax;
+          chunkCount = Math.ceil(frameCount / chunkMax);
+          vbbLog(`[vbb-phase] wasm 强制分块 ${chunkCount}×${chunkMax} 帧（防 OOM，原单段 ${frameCount}）`);
         }
         vbbLog(
           `[vbb-phase] gifski 分块 chunkCount=${chunkCount} chunkMax=${chunkMax} 帧${frameCount} 每帧${formatKb(
@@ -2347,8 +2366,40 @@
         return cands[0] || V2G_BLACKBOX_RETRY_MIN_FPS;
       }
 
+      function blackboxKeepQualityUntilFloor(span) {
+        return (Number(span) || 0) <= V2G_BLACKBOX_KEEP_Q_MAX_SPAN_SEC + 0.01;
+      }
+      function blackboxShouldSkipFineQi(qi, lastOverRatio) {
+        const i = Number(qi);
+        if (i !== 1 && i !== 2) return false;
+        return (Number(lastOverRatio) || 0) > V2G_BLACKBOX_FINE_NEAR_BUDGET;
+      }
+      function blackboxEstSizeAtWidth(size, fromW, toW) {
+        const a = Math.max(1, Number(fromW) || 1);
+        const b = Math.max(1, Number(toW) || 1);
+        return (Number(size) || 0) * ((b * b) / (a * a));
+      }
+      function blackboxShouldSkipNarrowerWidth(lastSize, lastW, nextW, budget) {
+        const est = blackboxEstSizeAtWidth(lastSize, lastW, nextW);
+        return est > (Number(budget) || 0) * V2G_BLACKBOX_AREA_SKIP_SLACK;
+      }
+      function blackboxShouldSkipHighFpsByDuration(fps, span) {
+        const f = Number(fps) || 0;
+        const s = Number(span) || 0;
+        if (Math.abs(f - 15) < 0.2) return false;
+        if (!(s > 0) || !(f > 0)) return false;
+        return s * f > V2G_BLACKBOX_HIGH_FPS_FRAME_SKIP + 0.01;
+      }
+      function blackboxShouldSkipFpsByCal(fps, calFps, calSize, budget) {
+        const f = Number(fps) || 0;
+        if (Math.abs(f - 15) < 0.2) return false;
+        const cf = Math.max(0.01, Number(calFps) || 0);
+        const estQ8 = (((Number(calSize) || 0) * f) / cf) * 0.9;
+        return estQ8 > (Number(budget) || 0) * 1.08;
+      }
+
       /**
-       * 黑盒帧率阶梯：按片源选「时间上均匀」的档，避免不规则抽帧。
+       * 黑盒帧率阶梯：按片源选档，15 必含。
        * - ≈24fps 电影：24 → 15 → 12（15 必试，不从 24 直接跳 12）
        * - ≈25fps 屏录：25 → 15 → 12.5
        * - ≈30fps：30 → 15 → 12
@@ -3596,12 +3647,7 @@
           });
         const fpsFloor = blackboxFpsFloor(span / speed, srcFps);
         const effSpanForPick = span / speed;
-        vbbLog(
-          `[vbb-phase] 决策 fpsList=${JSON.stringify(fpsList)} srcFps=${srcFps} srcW=${srcW} floorW=${floorW} span=${effSpanForPick.toFixed(1)}s · ${
-            blackboxIsMovieLike(srcFps) ? "电影向" : "屏录向"
-          } · ${currentMediaPerf().label}`
-        );
-        // ---- 决策：真实编码；锁流畅档 → 宽度二分贴预算 → 再降质；电影向更敢用 lossy 保帧 ----
+        // ---- 决策：真实编码；短片守 80 掉帧；长片 420 可降质保帧 ----
         const trialCache = new Map();
         const blackboxSingleTaskEncodeConcurrency = () => {
           if (isCoarsePointer()) return 1;
@@ -3715,6 +3761,12 @@
             (Number(tried[tried.length - 1]?.blob?.size) || 0) / V2G_BLACKBOX_MAX_BYTES;
           const tryQualities = async (w, qiFrom, qiTo) => {
             for (let qi = qiFrom; qi <= qiTo; qi++) {
+              if (blackboxShouldSkipFineQi(qi, lastOverRatio())) {
+                vbbLog(
+                  `[vbb-phase] 细档跳过 q${V2G_BLACKBOX_QUALITY_LADDER[qi]}：已 ${lastOverRatio().toFixed(2)}×，未贴预算`
+                );
+                continue;
+              }
               const q = V2G_BLACKBOX_QUALITY_LADDER[qi];
               const e = await trial(fps, w, q);
               if (e) {
@@ -3752,6 +3804,7 @@
             }
             return null;
           };
+          const shortKeepQ = blackboxKeepQualityUntilFloor(effSpanForPick);
           const w0 = widthSteps[0];
           const qKeep = V2G_BLACKBOX_QUALITY_LADDER[keepMaxQi];
           const conc = blackboxSingleTaskEncodeConcurrency();
@@ -3764,6 +3817,7 @@
               trial(fps, w0, qKeep),
             ]);
           }
+          let lastWTried = 0;
           for (let wi = 0; wi < widthSteps.length; wi++) {
             const w = widthSteps[wi];
             if (
@@ -3777,8 +3831,30 @@
               );
               continue;
             }
-            vbbLog(`[vbb-phase] ${fps}fps 让渡宽 ${w}px · 画质 92→≥80`);
-            const hit = await tryQualities(w, 0, keepMaxQi);
+            if (wi > 0 && lastWTried > 0) {
+              const lastSize = Number(tried[tried.length - 1]?.blob?.size) || 0;
+              if (blackboxShouldSkipNarrowerWidth(lastSize, lastWTried, w, V2G_BLACKBOX_MAX_BYTES)) {
+                const est = blackboxEstSizeAtWidth(lastSize, lastWTried, w);
+                vbbLog(
+                  `[vbb-phase] 面积外推跳过 ${w}px：${lastWTried}px ${formatKb(lastSize)} → 估 ${formatKb(est)}`
+                );
+                continue;
+              }
+            }
+            if (!shortKeepQ && !isFloorFps && wi > 0) {
+              vbbLog(`[vbb-phase] 长片 ${fps}fps 保 420 不缩宽 → 降帧`);
+              break;
+            }
+            vbbLog(
+              `[vbb-phase] ${fps}fps 让渡宽 ${w}px · 画质 ${
+                shortKeepQ || isFloorFps ? "92→≥80" : "92→可<80（保帧）"
+              }`
+            );
+            let hit = await tryQualities(w, 0, keepMaxQi);
+            if (!hit && (!shortKeepQ || isFloorFps) && wi === 0) {
+              hit = await tryQualities(w, keepMaxQi + 1, V2G_BLACKBOX_QUALITY_LADDER.length - 1);
+            }
+            lastWTried = w;
             if (hit) return hit;
           }
           if (isFloorFps) {
@@ -3795,14 +3871,39 @@
               if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
             }
           } else {
-            vbbLog(`[vbb-phase] ${fps}fps 420/400/380 @≥80 仍超 → 降整除帧`);
+            vbbLog(
+              `[vbb-phase] ${fps}fps ${shortKeepQ ? "420/400/380 @≥80 仍超" : "420 含<80 仍超"} → 降整除帧`
+            );
           }
           return null;
         };
         let chosen = null;
         await probeNativeGifski();
-        // 整除档从高到低：每档走 420→400→380 @画质≥80，再降帧
+        const shortKeepQPick = blackboxKeepQualityUntilFloor(effSpanForPick);
+        vbbLog(
+          `[vbb-phase] 决策 fpsList=${JSON.stringify(fpsList)} srcFps=${srcFps} srcW=${srcW} floorW=${floorW} span=${effSpanForPick.toFixed(1)}s · ${
+            blackboxIsMovieLike(srcFps) ? "电影向" : "屏录向"
+          } · ${currentMediaPerf().label} · ${shortKeepQPick ? "短片守80掉帧" : "长片保帧可<80"}`
+        );
+        // 整除档从高到低：短片每档 420→外推跳宽 @≥80；长片 420 可降质
         for (const fps of fpsList) {
+          if (blackboxShouldSkipHighFpsByDuration(fps, effSpanForPick)) {
+            vbbLog(
+              `[vbb-phase] 跳过 ${fps}fps：时长×帧≈${Math.round(effSpanForPick * fps)} 超长片穷举门槛（15 仍试）`
+            );
+            continue;
+          }
+          const cal = tried[tried.length - 1];
+          if (
+            cal?.blob?.size &&
+            Number(cal.fps) > 0 &&
+            blackboxShouldSkipFpsByCal(fps, cal.fps, cal.blob.size, V2G_BLACKBOX_MAX_BYTES)
+          ) {
+            vbbLog(
+              `[vbb-phase] 外推跳过 ${fps}fps：${cal.fps}fps ${formatKb(cal.blob.size)} 估仍超`
+            );
+            continue;
+          }
           const c = await fitFps(fps);
           if (c) {
             chosen = { enc: c, fps };

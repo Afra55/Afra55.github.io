@@ -17,6 +17,12 @@ const {
   isFluentTierFps,
   HIGH_PRIMARY_SPAN_SEC,
   MID_SPAN_SEC,
+  blackboxKeepQualityUntilFloor,
+  blackboxShouldSkipFineQi,
+  blackboxShouldSkipNarrowerWidth,
+  blackboxShouldSkipHighFpsByDuration,
+  blackboxShouldSkipFpsByCal,
+  KEEP_Q_MAX_SPAN_SEC,
 } = require("./lib/vbb-blackbox-fps.js");
 
 function assert(cond, msg) {
@@ -63,6 +69,19 @@ assert(threw, "24 源不得成片 20");
 
 assert(isFluentTierFps(10, 24, 24), "电影短片 24 流畅");
 assert(HIGH_PRIMARY_SPAN_SEC === 16 && MID_SPAN_SEC === 24, "时长分档");
+assert(KEEP_Q_MAX_SPAN_SEC === 10, "守80仅≤10s");
+assert(blackboxKeepQualityUntilFloor(6.5) === true, "0087 短片守80");
+assert(blackboxKeepQualityUntilFloor(15.8) === false, "601 长片不守80掉帧");
+assert(blackboxShouldSkipFineQi(1, 1.4) === true, "远超预算跳 q4");
+assert(blackboxShouldSkipFineQi(1, 1.1) === false, "贴预算打细档");
+assert(blackboxShouldSkipFineQi(3, 2) === false, "q8 不跳");
+assert(blackboxShouldSkipNarrowerWidth(13.25e6, 420, 400, 10e6) === true, "面积外推跳 400");
+assert(blackboxShouldSkipNarrowerWidth(12.86e6, 420, 380, 10e6) === false, "贴线不跳 380");
+assert(blackboxShouldSkipHighFpsByDuration(25, 28.3) === true, "28s@25 跳过高档穷举");
+assert(blackboxShouldSkipHighFpsByDuration(15, 28.3) === false, "15 必试");
+assert(blackboxShouldSkipHighFpsByDuration(20, 15.8) === false, "16s@20 仍试");
+assert(blackboxShouldSkipFpsByCal(20, 25, 27e6, 10e6) === true, "25@27MB 外推 20 仍超");
+assert(blackboxShouldSkipFpsByCal(15, 25, 27e6, 10e6) === false, "标定后 15 仍试");
 
 {
   const encPath = path.join(__dirname, "extra-panels/v2g-suite-src/10-shared-encode.js");
@@ -78,7 +97,11 @@ assert(HIGH_PRIMARY_SPAN_SEC === 16 && MID_SPAN_SEC === 24, "时长分档");
   assert(/blackboxIsMovieLike/.test(src), "须有电影向判定");
   assert(/bisectWidthAtQuality|trialCache/.test(src), "须有宽度二分/试档缓存");
   assert(/V2G_BLACKBOX_LETGO_WIDTHS\s*=\s*\[\s*420\s*,\s*400\s*,\s*380\s*\]/.test(src), "须有 420→400→380");
-  assert(/V2G_BLACKBOX_QUALITY_KEEP_MIN_GQ\s*=\s*80/.test(src), "降帧前画质底须 ≥80");
+  assert(/V2G_BLACKBOX_QUALITY_KEEP_MIN_GQ\s*=\s*80/.test(src), "短片降帧前画质底须 ≥80");
+  assert(/V2G_BLACKBOX_KEEP_Q_MAX_SPAN_SEC\s*=\s*10/.test(src), "守80仅≤10s");
+  assert(/blackboxShouldSkipNarrowerWidth/.test(src), "须有面积外推跳宽");
+  assert(/blackboxShouldSkipHighFpsByDuration/.test(src), "须有长片跳过高档穷举");
+  assert(/V2G_GIFSKI_WASM_MAX_FRAMES/.test(src), "须有 wasm 分块安全帧上限");
   assert(/V2G_BLACKBOX_QUALITY_LADDER\s*=\s*\[\s*1\s*,\s*4\s*,\s*6\s*,\s*8\s*,/.test(src), "92–83 须有细档 q4/q6");
   const v2gUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/20-v2g-ui.js"), "utf8");
   assert(!/manualFpsCap/.test(v2gUi), "非黑盒视频转 GIF 不得套性能档帧率帽");
