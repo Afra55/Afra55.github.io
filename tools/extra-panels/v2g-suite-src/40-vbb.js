@@ -2099,7 +2099,9 @@
           if (batch && isVbbManualMode()) {
             vbbWorkflowHint.textContent = VBB_BATCH_MANUAL_HINT;
           } else if (batch) {
-            vbbWorkflowHint.textContent = `多选下请用整段或手动打点。点「编辑」单独裁时长/裁画面；可切到「手动打点」按当前视频打点。旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`;
+            vbbWorkflowHint.textContent = isCoarsePointer()
+              ? `多选下请用整段或手动打点。点「编辑」单独裁时长/裁画面；可切到「手动打点」按当前视频打点。手机一次只转一路，性能全给当前任务。`
+              : `多选下请用整段或手动打点。点「编辑」单独裁时长/裁画面；可切到「手动打点」按当前视频打点。旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`;
           } else {
             vbbWorkflowHint.textContent = VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
           }

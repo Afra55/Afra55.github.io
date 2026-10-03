@@ -292,6 +292,8 @@
             };
       }
       function resolveBatchConcurrency(total) {
+        // 手机强制单路：多选也逐个转，避免两路抢内存拖慢当前任务
+        if (isCoarsePointer()) return 1;
         const n = Math.max(1, Math.min(3, Math.floor(Number(currentMediaPerf().batchConcurrency) || 1)));
         return Math.max(1, Math.min(n, Math.max(1, Number(total) || 1)));
       }
@@ -2796,9 +2798,13 @@
           let hiW = widenMax;
           const capBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.99);
           const baseProbes = Math.max(1, Number(currentMediaPerf().widenProbes) || 2);
-          const maxProbes = isShortFill
-            ? Math.max(3, Math.min(6, baseProbes + 2))
-            : Math.max(1, Math.min(3, baseProbes));
+          const coarsePhone = isCoarsePointer();
+          // 手机单路：加宽探次压到 ≤2，把时间留给当前这一次编码
+          const maxProbes = coarsePhone
+            ? Math.max(1, Math.min(2, baseProbes))
+            : isShortFill
+              ? Math.max(3, Math.min(6, baseProbes + 2))
+              : Math.max(1, Math.min(3, baseProbes));
           for (let i = 0; i < maxProbes && hiW - lo > 16; i++) {
             if (clipOpts.isAborted?.()) break;
             const w =
@@ -3195,9 +3201,20 @@
             return cur;
           }
           // 小于规则：先抬画质到满档，再加宽，再用余量提帧
+          const qBeforeBoost = blackboxLadderQuality(cur);
+          const gqBeforeBoost = Number(cur.gifskiQuality) || 0;
           await boostQualityPass();
           await widenPass(isShortFill ? "短片有余 · 加宽吃满预算" : "体积有余 · 自动增宽");
-          await boostQualityPass();
+          // 手机：抬质没动就别再编一轮；桌面仍可加宽后再抬
+          if (
+            !isCoarsePointer() ||
+            blackboxLadderQuality(cur) < qBeforeBoost - 0.01 ||
+            (Number(cur.gifskiQuality) || 0) > gqBeforeBoost + 1
+          ) {
+            await boostQualityPass();
+          } else {
+            vbbLog(`[vbb-phase] 手机加速：抬质未动 → 跳过第二轮抬质`);
+          }
           if (
             cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.99 ||
             (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 && atCap() && (Number(cur.maxW) || 0) >= V2G_BLACKBOX_BASE_W - 0.5)
@@ -3210,8 +3227,13 @@
             cur = await raiseBlackboxFps(cur, Number(cur.fps) || fpsNow, encodeKeepQ, srcFpsNow, effSpan);
             fpsNow = Number(cur.fps) || fpsNow;
           }
-          // 短片提帧后若又腾出预算（或提帧未动），再加宽一轮吃满
-          if (isShortFill && qualityIsBest() && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.99) {
+          // 短片提帧后若又腾出预算（或提帧未动），再加宽一轮吃满（手机跳过：少一次完整编码）
+          if (
+            isShortFill &&
+            !isCoarsePointer() &&
+            qualityIsBest() &&
+            cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.99
+          ) {
             await widenPass("短片有余 · 再加宽吃满");
           }
           // 可读宽优先：已接近贴满但宽 <420（录屏字偏糊）→ 降到下一档整除帧率换宽度
@@ -3646,7 +3668,20 @@
           }
 
           // ② 同宽 420 降画质阶梯（先守宽再让量化；不在此步 compressAt 缩宽）
-          for (let qi = 1; qi <= maxQi; qi++) {
+          // 手机：满档远超预算时跳过中间档，少白跑几次完整 gifski
+          let qiStart = 1;
+          if (isCoarsePointer()) {
+            const over = tried[tried.length - 1];
+            const ratio = (Number(over?.blob?.size) || 0) / V2G_BLACKBOX_MAX_BYTES;
+            if (ratio > 1.8) qiStart = Math.min(maxQi, 3);
+            else if (ratio > 1.45) qiStart = Math.min(maxQi, 2);
+            if (qiStart > 1) {
+              vbbLog(
+                `[vbb-phase] 手机加速：满档 ${ratio.toFixed(2)}×预算 → 从 q${V2G_BLACKBOX_QUALITY_LADDER[qiStart]} 起试`
+              );
+            }
+          }
+          for (let qi = qiStart; qi <= maxQi; qi++) {
             const q = V2G_BLACKBOX_QUALITY_LADDER[qi];
             const e = await trial(fps, comfortW, q);
             if (e) {
@@ -3665,6 +3700,20 @@
                 `[vbb-phase] ${fps}fps q${q}@${comfortW} 仍远超 → 改试更低帧率`
               );
               break;
+            }
+            // 手机：某一档仍 >1.6× 预算，再跳一档
+            if (
+              isCoarsePointer() &&
+              qi < maxQi &&
+              tried[tried.length - 1]?.blob?.size > V2G_BLACKBOX_MAX_BYTES * 1.6
+            ) {
+              const jump = Math.min(maxQi, qi + 1);
+              if (jump > qi) {
+                vbbLog(
+                  `[vbb-phase] 手机加速：q${q} 仍远超 → 跳到 q${V2G_BLACKBOX_QUALITY_LADDER[jump]}`
+                );
+                qi = jump - 1;
+              }
             }
           }
 
@@ -8885,7 +8934,9 @@
           if (batch && isVbbManualMode()) {
             vbbWorkflowHint.textContent = VBB_BATCH_MANUAL_HINT;
           } else if (batch) {
-            vbbWorkflowHint.textContent = `多选下请用整段或手动打点。点「编辑」单独裁时长/裁画面；可切到「手动打点」按当前视频打点。旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`;
+            vbbWorkflowHint.textContent = isCoarsePointer()
+              ? `多选下请用整段或手动打点。点「编辑」单独裁时长/裁画面；可切到「手动打点」按当前视频打点。手机一次只转一路，性能全给当前任务。`
+              : `多选下请用整段或手动打点。点「编辑」单独裁时长/裁画面；可切到「手动打点」按当前视频打点。旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`;
           } else {
             vbbWorkflowHint.textContent = VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
           }

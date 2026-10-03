@@ -1519,8 +1519,10 @@
    */
   function mediaPerfProfile(mode = readMediaPerfMode()) {
     const tier = resolveMediaPerfTier(mode);
+    const coarse = isCoarsePointerMedia();
+    let profile;
     if (tier === "desktop") {
-      return {
+      profile = {
         tier,
         mode,
         label: "桌面",
@@ -1535,9 +1537,8 @@
         batchConcurrency: 2,
         encodeConcurrency: 2,
       };
-    }
-    if (tier === "max") {
-      return {
+    } else if (tier === "max") {
+      profile = {
         tier,
         mode,
         label: "拉满",
@@ -1550,13 +1551,12 @@
         singlePassPeakBytes: 1.0 * GB,
         manualFpsCap: 30,
         manualWidthCap: 1280,
-        // 多选批处理：2 路并行（各一路 FFmpeg Worker；gifski/gifsicle 共享 wasm 上锁）
+        // 桌面多选可 2 路；手机见下方 coarse 钳制（一次只跑一路）
         batchConcurrency: 2,
         encodeConcurrency: 2,
       };
-    }
-    if (tier === "balanced") {
-      return {
+    } else if (tier === "balanced") {
+      profile = {
         tier,
         mode,
         label: "均衡",
@@ -1571,22 +1571,34 @@
         batchConcurrency: 1,
         encodeConcurrency: 1,
       };
+    } else {
+      profile = {
+        tier: "eco",
+        mode,
+        label: "省电",
+        gifskiRawBudget: 32 * MB,
+        gifskiMaxFrames: 240,
+        widenProbes: 2,
+        allowQualityBoost: false,
+        preferChunkByDefault: true,
+        singlePassPeakBytes: 0.2 * GB,
+        manualFpsCap: 15,
+        manualWidthCap: 720,
+        batchConcurrency: 1,
+        encodeConcurrency: 1,
+      };
     }
-    return {
-      tier: "eco",
-      mode,
-      label: "省电",
-      gifskiRawBudget: 32 * MB,
-      gifskiMaxFrames: 240,
-      widenProbes: 2,
-      allowQualityBoost: false,
-      preferChunkByDefault: true,
-      singlePassPeakBytes: 0.2 * GB,
-      manualFpsCap: 15,
-      manualWidthCap: 720,
-      batchConcurrency: 1,
-      encodeConcurrency: 1,
-    };
+    // 手机：一次只跑一个用户任务，核/内存全给当前这一路（wasm 不能真多线程并行两路）
+    if (coarse) {
+      profile = {
+        ...profile,
+        batchConcurrency: 1,
+        encodeConcurrency: 1,
+        // 少探宽 = 少次完整 gifski，单路更快；拉满仍尽量单次不分块
+        widenProbes: Math.min(2, Number(profile.widenProbes) || 2),
+      };
+    }
+    return profile;
   }
 
   async function compressExistingGifToBlackbox(blob, onProgress, shouldAbort, opts = {}) {
