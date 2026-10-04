@@ -51,6 +51,7 @@
       let gifeCropStage;
       let gifeCropCanvas;
       let gifeCropBox;
+      let gifeCropDetails;
       let gifeApply;
       let gifeDownload;
       let gifePreview;
@@ -58,7 +59,7 @@
       let gifeProgressFill;
       let gifeProgressText;
       const GIFE_DEFAULT_META =
-        "拖进度看当前帧，拖黄柄去片头片尾；删中间：进度到该帧 →「添加删除段」（红段），或「删除起点 / 删除终点」。只改时长走原文件删帧，不糊画面。";
+        "拖进度看当前帧，拖黄柄去片头片尾；删中间：进度到该帧 →「添加删除段」（红段）。默认不裁画面；需要时再打开「裁剪画面」。只改时长走原文件删帧。";
       /** @type {{ canvas: HTMLCanvasElement, delay: number }[]} */
       let gifeFrames = [];
       let gifeSrcW = 0;
@@ -97,7 +98,12 @@
         if (gifeProgressText) gifeProgressText.textContent = text || `${pct}%`;
       }
   
+      function gifeCropEnabled() {
+        return !!(gifeCropDetails && gifeCropDetails.open);
+      }
+
       function readGifeCropPct() {
+        if (!gifeCropEnabled()) return { x: 0, y: 0, w: 100, h: 100 };
         const x = Math.max(0, Math.min(99, Number(gifeCropX?.value) || 0));
         const y = Math.max(0, Math.min(99, Number(gifeCropY?.value) || 0));
         let w = Math.max(1, Math.min(100, Number(gifeCropW?.value) || 100));
@@ -107,22 +113,24 @@
         return { x, y, w, h };
       }
   
-      function setGifeCropPct(x, y, w, h) {
+      function setGifeCropPct(x, y, w, h, opts) {
         if (gifeCropX) gifeCropX.value = String(Math.round(x * 10) / 10);
         if (gifeCropY) gifeCropY.value = String(Math.round(y * 10) / 10);
         if (gifeCropW) gifeCropW.value = String(Math.round(w * 10) / 10);
         if (gifeCropH) gifeCropH.value = String(Math.round(h * 10) / 10);
-        paintGifeCropEditor();
+        if (!opts || opts.paint !== false) paintGifeCropEditor();
       }
   
       function gifeCropRectPx() {
+        if (!gifeCropEnabled()) {
+          return { x: 0, y: 0, w: Math.max(1, gifeSrcW), h: Math.max(1, gifeSrcH) };
+        }
         const p = readGifeCropPct();
-        return {
-          x: Math.round((p.x / 100) * gifeSrcW),
-          y: Math.round((p.y / 100) * gifeSrcH),
-          w: Math.max(1, Math.round((p.w / 100) * gifeSrcW)),
-          h: Math.max(1, Math.round((p.h / 100) * gifeSrcH)),
-        };
+        const x = Math.round((p.x / 100) * gifeSrcW);
+        const y = Math.round((p.y / 100) * gifeSrcH);
+        const w = Math.max(1, Math.min(gifeSrcW - x, Math.round((p.w / 100) * gifeSrcW)));
+        const h = Math.max(1, Math.min(gifeSrcH - y, Math.round((p.h / 100) * gifeSrcH)));
+        return { x, y, w, h };
       }
   
       function paintGifeCropEditor() {
@@ -130,11 +138,14 @@
           if (gifeCropEditor) gifeCropEditor.hidden = true;
           return;
         }
+        if (gifeCropDrag) return;
         if (gifeCropEditor) gifeCropEditor.hidden = false;
         const src = (gifeFrames[gifeCursor] || gifeFrames[0]).canvas;
         const stageW = Math.max(160, Math.round(gifeCropStage.clientWidth || 320));
-        const stageH = Math.max(160, Math.round(stageHFromWidth(stageW, gifeSrcW, gifeSrcH)));
-        const fit = Math.min(stageW / gifeSrcW, stageH / gifeSrcH);
+        const stageH = Math.max(160, Math.round(gifeCropStage.clientHeight || 280));
+        // 留边距，整幅裁剪时四边手柄仍可抓住
+        const pad = 14;
+        const fit = Math.min((stageW - pad * 2) / Math.max(1, gifeSrcW), (stageH - pad * 2) / Math.max(1, gifeSrcH));
         const dw = gifeSrcW * fit;
         const dh = gifeSrcH * fit;
         const ox = (stageW - dw) / 2;
@@ -149,6 +160,14 @@
         ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
         ctx.fillRect(0, 0, stageW, stageH);
         ctx.drawImage(src, ox, oy, dw, dh);
+        const cropOn = gifeCropEnabled();
+        gifeCropStage.classList.toggle("crop-off", !cropOn);
+        gifeCropStage.classList.add("has-image");
+        if (!cropOn) {
+          gifeCropBox.hidden = true;
+          gifeCropStage._gifeGeom = { ox, oy, dw, dh, fit, sw: gifeSrcW, sh: gifeSrcH, box: { x: ox, y: oy, w: dw, h: dh } };
+          return;
+        }
         const p = readGifeCropPct();
         const box = {
           x: ox + (p.x / 100) * dw,
@@ -161,13 +180,7 @@
         gifeCropBox.style.top = `${box.y}px`;
         gifeCropBox.style.width = `${box.w}px`;
         gifeCropBox.style.height = `${box.h}px`;
-        gifeCropStage.classList.add("has-image");
         gifeCropStage._gifeGeom = { ox, oy, dw, dh, fit, sw: gifeSrcW, sh: gifeSrcH, box };
-      }
-  
-      function stageHFromWidth(stageW, srcW, srcH) {
-        if (!(srcW > 0 && srcH > 0)) return 280;
-        return Math.max(160, Math.min(360, Math.round((stageW * srcH) / srcW)));
       }
   
       function detectGifContentBounds(canvas) {
@@ -346,9 +359,10 @@
         if (gifeFile) gifeFile.value = "";
         if (gifeTrimHead) gifeTrimHead.value = "0";
         if (gifeTrimTail) gifeTrimTail.value = "0";
-        setGifeCropPct(0, 0, 100, 100);
+        setGifeCropPct(0, 0, 100, 100, { paint: false });
+        if (gifeCropDetails) gifeCropDetails.open = false;
         if (gifeCropEditor) gifeCropEditor.hidden = true;
-        if (gifeCropStage) gifeCropStage.classList.remove("has-image", "is-dragging");
+        if (gifeCropStage) gifeCropStage.classList.remove("has-image", "is-dragging", "crop-off");
         if (gifeTrim) gifeTrim.hidden = true;
         setGifeProgress(false, 0, "");
         setError(gifeError, "");
@@ -537,7 +551,12 @@
         const keepMs = keep.reduce((s, i) => s + Math.max(20, Number(gifeFrames[i]?.delay) || 100), 0);
         const cutN = gifeNormalizeCuts().length;
         const cutNote = cutN ? ` · 中间删 ${cutN} 段` : "";
-        gifeMeta.textContent = `${gifeSourceName.replace(/\.gif$/i, "")} · ${gifeSrcW}×${gifeSrcH} · ${n} 帧 · 约 ${(gifeTotalMs / 1000).toFixed(2)}s · 保留 ${remain} 帧（约 ${(keepMs / 1000).toFixed(2)}s）${cutNote}`;
+        const rect = gifeCropRectPx();
+        const cropNote =
+          gifeCropEnabled() && !gifeIsIdentityCrop(rect)
+            ? ` · 裁画面 ${rect.w}×${rect.h}`
+            : "";
+        gifeMeta.textContent = `${gifeSourceName.replace(/\.gif$/i, "")} · ${gifeSrcW}×${gifeSrcH} · ${n} 帧 · 约 ${(gifeTotalMs / 1000).toFixed(2)}s · 保留 ${remain} 帧（约 ${(keepMs / 1000).toFixed(2)}s）${cutNote}${cropNote}`;
       }
 
       function gifeTrimValues() {
@@ -1132,6 +1151,7 @@
   
       function autoGifeCrop() {
         if (!gifeFrames.length) return;
+        if (gifeCropDetails && !gifeCropDetails.open) gifeCropDetails.open = true;
         const bounds = detectGifContentBounds(gifeFrames[0].canvas);
         setGifeCropPct(
           (bounds.x / gifeSrcW) * 100,
@@ -1143,13 +1163,29 @@
         toast("已按首帧检测黑边");
       }
   
-      function applyGifeBoxToInputs(box, geom) {
-        const x = Math.max(0, Math.min(geom.sw, (box.x - geom.ox) / geom.fit));
-        const y = Math.max(0, Math.min(geom.sh, (box.y - geom.oy) / geom.fit));
-        const w = Math.max(1, Math.min(geom.sw - x, box.w / geom.fit));
-        const h = Math.max(1, Math.min(geom.sh - y, box.h / geom.fit));
-        setGifeCropPct((x / geom.sw) * 100, (y / geom.sh) * 100, (w / geom.sw) * 100, (h / geom.sh) * 100);
-        syncGifeMeta();
+      function applyGifeBoxToInputs(box, geom, opts) {
+        const fit = geom.fit || 1;
+        let x = (box.x - geom.ox) / fit;
+        let y = (box.y - geom.oy) / fit;
+        let w = box.w / fit;
+        let h = box.h / fit;
+        x = Math.max(0, Math.min(geom.sw, x));
+        y = Math.max(0, Math.min(geom.sh, y));
+        w = Math.max(1, Math.min(geom.sw - x, w));
+        h = Math.max(1, Math.min(geom.sh - y, h));
+        // 贴边时强制整幅，避免百分比取整后拖不满
+        if (x <= 0.5) x = 0;
+        if (y <= 0.5) y = 0;
+        if (x + w >= geom.sw - 0.5) w = geom.sw - x;
+        if (y + h >= geom.sh - 0.5) h = geom.sh - y;
+        setGifeCropPct(
+          (x / geom.sw) * 100,
+          (y / geom.sh) * 100,
+          (w / geom.sw) * 100,
+          (h / geom.sh) * 100,
+          { paint: opts?.paint !== false }
+        );
+        if (!opts || opts.sync !== false) syncGifeMeta();
       }
   
       bindPanel("gife", () => {
@@ -1184,6 +1220,7 @@
             gifeCropH = $("#gife-crop-h");
             gifeAutoCrop = $("#gife-auto-crop");
             gifeResetCrop = $("#gife-reset-crop");
+            gifeCropDetails = $("#gife-crop-details");
             gifeCropEditor = $("#gife-crop-editor");
             gifeCropStage = $("#gife-crop-stage");
             gifeCropCanvas = $("#gife-crop-canvas");
@@ -1208,6 +1245,14 @@
         setGifeCropPct(0, 0, 100, 100);
         syncGifeMeta();
       });
+      gifeCropDetails?.addEventListener("toggle", () => {
+        if (!gifeCropEnabled()) {
+          gifeCropDrag = null;
+          gifeCropStage?.classList.remove("is-dragging");
+        }
+        paintGifeCropEditor();
+        syncGifeMeta();
+      });
       [gifeTrimHead, gifeTrimTail].forEach((el) => {
         el?.addEventListener("input", () => {
           stopGifePlay();
@@ -1217,6 +1262,7 @@
       });
       [gifeCropX, gifeCropY, gifeCropW, gifeCropH].forEach((el) => {
         el?.addEventListener("input", () => {
+          if (!gifeCropEnabled() && gifeCropDetails) gifeCropDetails.open = true;
           syncGifeMeta();
           paintGifeCropEditor();
         });
@@ -1239,6 +1285,7 @@
       gifeCutClear?.addEventListener("click", clearGifeCuts);
       bindGifeTimeline();
       gifeCropStage?.addEventListener("pointerdown", (e) => {
+        if (!gifeCropEnabled()) return;
         const box = e.target.closest("#gife-crop-box");
         if (!box || box.hidden || !gifeFrames.length) return;
         const geom = gifeCropStage._gifeGeom;
@@ -1249,6 +1296,7 @@
         gifeCropDrag = {
           handle,
           kind: handle ? "resize" : "pan",
+          pointerId: e.pointerId,
           x0: e.clientX,
           y0: e.clientY,
           box0: { ...geom.box },
@@ -1257,52 +1305,54 @@
         e.preventDefault();
       });
       gifeCropStage?.addEventListener("pointermove", (e) => {
-        if (!gifeCropDrag) return;
+        if (!gifeCropDrag || gifeCropDrag.pointerId !== e.pointerId) return;
         const dx = e.clientX - gifeCropDrag.x0;
         const dy = e.clientY - gifeCropDrag.y0;
         const geom = gifeCropDrag.geom;
         const img = { x: geom.ox, y: geom.oy, w: geom.dw, h: geom.dh };
+        const minSide = Math.max(8, 2 * (geom.fit || 1));
         let next = { ...gifeCropDrag.box0 };
         if (gifeCropDrag.kind === "pan") {
-          next.x = gifeCropDrag.box0.x + dx;
-          next.y = gifeCropDrag.box0.y + dy;
-          next.x = Math.max(img.x, Math.min(img.x + img.w - next.w, next.x));
-          next.y = Math.max(img.y, Math.min(img.y + img.h - next.h, next.y));
+          next.x = Math.max(img.x, Math.min(img.x + img.w - next.w, gifeCropDrag.box0.x + dx));
+          next.y = Math.max(img.y, Math.min(img.y + img.h - next.h, gifeCropDrag.box0.y + dy));
         } else {
           const h = gifeCropDrag.handle;
-          if (h.includes("e")) next.w = gifeCropDrag.box0.w + dx;
+          let x = gifeCropDrag.box0.x;
+          let y = gifeCropDrag.box0.y;
+          let w = gifeCropDrag.box0.w;
+          let ht = gifeCropDrag.box0.h;
+          if (h.includes("e")) w = Math.min(img.x + img.w - x, Math.max(minSide, w + dx));
+          if (h.includes("s")) ht = Math.min(img.y + img.h - y, Math.max(minSide, ht + dy));
           if (h.includes("w")) {
-            next.w = gifeCropDrag.box0.w - dx;
-            next.x = gifeCropDrag.box0.x + dx;
+            const nx = Math.max(img.x, Math.min(x + w - minSide, x + dx));
+            w = x + w - nx;
+            x = nx;
           }
-          if (h.includes("s")) next.h = gifeCropDrag.box0.h + dy;
           if (h.includes("n")) {
-            next.h = gifeCropDrag.box0.h - dy;
-            next.y = gifeCropDrag.box0.y + dy;
+            const ny = Math.max(img.y, Math.min(y + ht - minSide, y + dy));
+            ht = y + ht - ny;
+            y = ny;
           }
-          next.w = Math.max(24, next.w);
-          next.h = Math.max(24, next.h);
-          if (h.includes("w")) next.x = gifeCropDrag.box0.x + gifeCropDrag.box0.w - next.w;
-          if (h.includes("n")) next.y = gifeCropDrag.box0.y + gifeCropDrag.box0.h - next.h;
-          next.x = Math.max(img.x, Math.min(img.x + img.w - next.w, next.x));
-          next.y = Math.max(img.y, Math.min(img.y + img.h - next.h, next.y));
-          next.w = Math.min(next.w, img.x + img.w - next.x);
-          next.h = Math.min(next.h, img.y + img.h - next.y);
+          next = { x, y, w, h: ht };
         }
         gifeCropBox.style.left = `${next.x}px`;
         gifeCropBox.style.top = `${next.y}px`;
         gifeCropBox.style.width = `${next.w}px`;
         gifeCropBox.style.height = `${next.h}px`;
-        applyGifeBoxToInputs(next, geom);
+        geom.box = next;
+        applyGifeBoxToInputs(next, geom, { paint: false, sync: false });
       });
       const endGifeCropDrag = (e) => {
-        if (!gifeCropDrag) return;
+        if (!gifeCropDrag || (e && gifeCropDrag.pointerId !== e.pointerId)) return;
         gifeCropStage?.classList.remove("is-dragging");
         try {
           gifeCropStage?.releasePointerCapture?.(e.pointerId);
         } catch (_) {}
+        const last = gifeCropDrag.geom?.box;
+        const geom = gifeCropDrag.geom;
         gifeCropDrag = null;
-        paintGifeCropEditor();
+        if (last && geom) applyGifeBoxToInputs(last, geom, { paint: true, sync: true });
+        else paintGifeCropEditor();
       };
       gifeCropStage?.addEventListener("pointerup", endGifeCropDrag);
       gifeCropStage?.addEventListener("pointercancel", endGifeCropDrag);

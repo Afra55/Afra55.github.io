@@ -2,7 +2,7 @@
   <div class="panel-head gif-tool-head">
     <p class="gif-tool-kicker">GIF</p>
     <h1>GIF 编辑</h1>
-    <p class="gif-tool-lead">拖进度看当前帧，用黄柄去片头/片尾；要删中间就拖到那一帧点「添加删除段」（红段），也可标记删除起止。只裁时长尽量不重编码，体积不涨。</p>
+    <p class="gif-tool-lead">拖进度看当前帧，用黄柄去片头/片尾；要删中间就拖到那一帧点「添加删除段」（红段）。默认只裁时长、不裁画面；需要裁画面时再打开下方「裁剪画面」。</p>
   </div>
   <div class="panel-body gif-tool-body">
     <div class="gif-tool-card">
@@ -69,18 +69,23 @@
           </div>
         </details>
 
-        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
-          <label for="gife-crop-x">裁剪 X%</label>
-          <input id="gife-crop-x" class="mono meta-input" type="number" min="0" max="99" value="0" />
-          <label for="gife-crop-y">Y%</label>
-          <input id="gife-crop-y" class="mono meta-input" type="number" min="0" max="99" value="0" />
-          <label for="gife-crop-w">W%</label>
-          <input id="gife-crop-w" class="mono meta-input" type="number" min="1" max="100" value="100" />
-          <label for="gife-crop-h">H%</label>
-          <input id="gife-crop-h" class="mono meta-input" type="number" min="1" max="100" value="100" />
-          <button type="button" class="ghost-btn" id="gife-auto-crop" disabled title="自动检测黑边并填入裁剪区域">自动去黑边</button>
-          <button type="button" class="ghost-btn" id="gife-reset-crop" disabled>重置裁剪</button>
-        </div>
+        <details class="gife-crop-advanced" id="gife-crop-details">
+          <summary>裁剪画面（可选）</summary>
+          <p class="hint tight" style="margin-top:0.45rem">默认不裁画面。打开后拖绿框选区域，可拖到整幅；也可自动去黑边。</p>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+            <label for="gife-crop-x">裁剪 X%</label>
+            <input id="gife-crop-x" class="mono meta-input" type="number" min="0" max="99" value="0" />
+            <label for="gife-crop-y">Y%</label>
+            <input id="gife-crop-y" class="mono meta-input" type="number" min="0" max="99" value="0" />
+            <label for="gife-crop-w">W%</label>
+            <input id="gife-crop-w" class="mono meta-input" type="number" min="1" max="100" value="100" />
+            <label for="gife-crop-h">H%</label>
+            <input id="gife-crop-h" class="mono meta-input" type="number" min="1" max="100" value="100" />
+            <button type="button" class="ghost-btn" id="gife-auto-crop" disabled title="自动检测黑边并填入裁剪区域">自动去黑边</button>
+            <button type="button" class="ghost-btn" id="gife-reset-crop" disabled>重置为整幅</button>
+          </div>
+        </details>
+
         <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
           <button type="button" class="primary-btn" id="gife-apply" disabled>应用并导出</button>
           <a class="secondary-btn" id="gife-download" href="#" download="edited.gif" hidden>下载编辑后 GIF</a>
