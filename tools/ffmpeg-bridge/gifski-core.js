@@ -276,7 +276,8 @@ function buildVideoFilter(opts) {
     const y = Math.max(0, Math.round(Number(crop.y) || 0));
     parts.push(`crop=${Math.round(crop.w)}:${Math.round(crop.h)}:${x}:${y}`);
   }
-  if (speed > 1.01) parts.push(`setpts=PTS/${speed}`);
+  if (speed > 1.01) parts.push(`setpts=(PTS-STARTPTS)/${speed}`);
+  else parts.push("setpts=PTS-STARTPTS");
   parts.push(`fps=${fps}`);
   if (opts.denoise !== false) parts.push("hqdn3d=1.5:1.5:6:6");
   parts.push(`scale=${width}:-2:flags=lanczos`);
@@ -304,33 +305,31 @@ function buildFfmpegInputArgs(inputPath, opts) {
 
 /**
  * 用原生 gifski（经 ffmpeg y4m 管道）编码。
- * quality: 1-100；显式 --threads（并行试档时按 inflight 均分核；不传 --fast）。
+ * gifski 1.34 无 --threads（内部 rayon）；乱传会直接失败并误走 wasm。
  */
 let gifskiInflight = 0;
 
-function gifskiThreadCount() {
-  const cpus = Math.max(1, (os.cpus() || []).length || 4);
-  const share = Math.max(1, gifskiInflight);
-  // 单任务多进程：并行试档时均分核，避免两路各占满核互相挤
-  return Math.max(2, Math.min(cpus, Math.ceil(cpus / share)));
-}
-
 /**
  * 用原生 gifski（经 ffmpeg y4m 管道）编码。
- * quality: 1-100；显式 --threads（默认开多线程，不传 --fast）。
+ * 显式 -r/--fps，避免 y4m 时戳/默认 20fps 把片头 PTS 拉成数秒 delay。
  */
 function encodeWithGifski(bin, ffmpegBin, inputPath, outPath, rawOpts = {}) {
   const opts = normalizeEncodeOpts(rawOpts);
   gifskiInflight += 1;
-  const auto = gifskiThreadCount();
-  const want = Math.round(Number(rawOpts.threads) || 0);
-  const threads = Math.max(2, Math.min(32, want > 0 ? Math.min(want, auto) : auto));
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     const vf = buildVideoFilter({ ...opts, denoise: rawOpts.denoise !== false });
     const ffArgs = [...buildFfmpegInputArgs(inputPath, opts), "-an", "-vf", vf, "-f", "yuv4mpegpipe", "-"];
     const ff = spawn(ffmpegBin, ffArgs, { stdio: ["ignore", "pipe", "pipe"] });
-    const gsArgs = ["-", "-o", outPath, "--quality", String(opts.quality), "--threads", String(threads)];
+    const gsArgs = [
+      "-",
+      "-o",
+      outPath,
+      "--quality",
+      String(opts.quality),
+      "-r",
+      String(opts.fps),
+    ];
     if (rawOpts.fast === true) gsArgs.push("--fast");
     if (opts.extra > 1 || rawOpts.extra === true) gsArgs.push("--extra");
     // 仅在明确要求时才把面板 lossy 映射到 gifski --lossy-quality（会打噪点）。
@@ -376,7 +375,7 @@ function encodeWithGifski(bin, ffmpegBin, inputPath, outPath, rawOpts = {}) {
             width: opts.width,
             quality: opts.quality,
             multithreaded: true,
-            threads,
+            threads: Math.max(1, (os.cpus() || []).length || 4),
           })
         );
         return;

@@ -1300,7 +1300,7 @@
           }
   
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
-          const speedFilter = speed > 1 ? `setpts=PTS/${speed},` : "";
+          const speedFilter = speed > 1 ? `setpts=(PTS-STARTPTS)/${speed},` : "setpts=PTS-STARTPTS,";
           // 噪点：源有颗粒 + 大幅下采样（如 1170→300 是 4 倍）时，bicubic 会混叠、GIF 看着全是噪点。
           // 先轻度 hqdn3d 降噪、再用 lanczos 缩放。若 wasm 核心未编入 hqdn3d，exec 返回非 0，下面自动回退重跑。
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
@@ -1477,6 +1477,29 @@
         const durations = new Uint32Array(n);
         durations.fill(ms);
         return durations;
+      }
+
+      /**
+       * gifski-wasm（jamsinclair）把 durations[最后一帧] 当成第 0 帧 PTS。
+       * 片尾静止合并若把剩余时长叠在末帧，会变成「片头冻住几秒」。
+       * 把末帧改回一拍，差额加到倒数第二帧，片尾仍能停住、片头按一帧 delay 开拍。
+       */
+      function durationsForGifskiWasmPts(durations) {
+        const n = durations?.length || 0;
+        if (n < 2) return durations;
+        const out = durations instanceof Uint32Array ? new Uint32Array(durations) : Uint32Array.from(durations);
+        const last = out[n - 1];
+        const tick = Math.max(10, out[0] || 50);
+        out[n - 1] = tick;
+        if (last > tick) out[n - 2] += last - tick;
+        return out;
+      }
+
+      function gifskiWasmDurationsAreUniform(durations) {
+        if (!durations || durations.length < 2) return true;
+        const a = durations[0];
+        for (let i = 1; i < durations.length; i++) if (durations[i] !== a) return false;
+        return true;
       }
 
       /** 标称 fps 经 GIF 厘秒量化后的有效播放 fps（20→20，15→≈14.3，12→12.5） */
@@ -2001,7 +2024,7 @@
           }
 
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
-          const speedFilter = speed > 1 ? `setpts=PTS/${speed},` : "";
+          const speedFilter = speed > 1 ? `setpts=(PTS-STARTPTS)/${speed},` : "setpts=PTS-STARTPTS,";
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
           const buildRawArgs = (denoise) => {
             const chain =
@@ -2078,8 +2101,19 @@
             // gifski.encode 是同步 wasm：先让出一帧给滚动，再编码
             await yieldToUi();
             if (aborted()) throw new Error("已取消");
+            const fpsInt = Math.max(1, Math.round(fps));
+            const canPassFps = gifskiWasmDurationsAreUniform(durations) && Math.abs(fps - fpsInt) < 0.01;
+            const wasmDurations = canPassFps ? undefined : durationsForGifskiWasmPts(durations);
             const gifBytes = await withGifskiEncodeLock(() =>
-              mod.encode(mergedView, encodedFrames, outW, outH, undefined, durations, gifskiQuality)
+              mod.encode(
+                mergedView,
+                encodedFrames,
+                outW,
+                outH,
+                canPassFps ? fpsInt : undefined,
+                wasmDurations,
+                gifskiQuality
+              )
             );
             if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
             return { blob: new Blob([gifBytes], { type: "image/gif" }), n, mergedOut: encodedFrames };

@@ -114,6 +114,19 @@ assert(blackboxShouldSkipFpsByCal(15, 25, 27e6, 10e6) === false, "标定后 15 �
   const gifskiCore = fs.readFileSync(path.join(__dirname, "ffmpeg-bridge/gifski-core.js"), "utf8");
   assert(!/srcSpan\s*\+\s*0\.05/.test(gifskiCore), "原生 gifski 不得再给片尾 +50ms");
   assert(/-ss"[\s\S]{0,80}opts\.startSec/.test(gifskiCore), "原生裁剪须有 -ss");
+  assert(/setpts=PTS-STARTPTS/.test(gifskiCore), "原生须复位 PTS，避免片头 delay 被 start_time 拉长");
+  assert(/"-r"[\s\S]{0,40}opts\.fps/.test(gifskiCore), "原生 gifski 须显式 -r fps");
+  assert(!/gsArgs[\s\S]{0,220}--threads/.test(gifskiCore), "gifski 1.34 不得传 --threads");
+  assert(/durationsForGifskiWasmPts/.test(src), "wasm 须修正末帧 delay 当片头 PTS");
+  assert(/canPassFps \? fpsInt : undefined/.test(src), "均匀 delay 须走 fps 参数而非 durations");
+  {
+    const m = src.match(/function durationsForGifskiWasmPts\([\s\S]*?return out;\s*\}/);
+    assert(m, "须能抽出 durationsForGifskiWasmPts");
+    const fn = new Function(`${m[0]}; return durationsForGifskiWasmPts;`)();
+    const got = fn([50, 50, 2900]);
+    assert(got[0] === 50 && got[1] === 2900 && got[2] === 50, "末帧 2.9s 须挪到倒数第二帧");
+    assert(got[got.length - 1] === 50, "wasm 第 0 帧 PTS 须为一拍");
+  }
   assert(/blackboxShouldSkipNarrowerWidth/.test(src), "须有面积外推跳宽");
   assert(/blackboxShouldSkipHighFpsByDuration/.test(src), "须有长片跳过高档穷举");
   assert(/V2G_GIFSKI_WASM_MAX_FRAMES/.test(src), "须有 wasm 分块安全帧上限");
