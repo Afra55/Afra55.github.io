@@ -154,7 +154,7 @@
             <button type="button" class="ghost-btn" id="${p("nudge-end-p")}" title="片尾 +0.1s，可长按">片尾+</button>
           </div>
           <div class="btn-row tool-actions vtrim-cut-tools" id="${p("cut-tools")}" hidden aria-label="删中间">
-            <button type="button" class="secondary-btn" id="${p("cut-add")}" title="在播放头附近添加一段删除区">添加删除段</button>
+            <button type="button" class="secondary-btn" id="${p("cut-add")}" title="从进度条当前位置起添加删除区（当前帧=删除起点）">添加删除段</button>
             <button type="button" class="ghost-btn" id="${p("cut-del")}" title="删除当前选中的删除段" disabled>删选中段</button>
             <button type="button" class="ghost-btn" id="${p("cut-clear")}" title="清空全部删除段">清空</button>
           </div>
@@ -346,7 +346,7 @@
           editMode === "crop"
             ? "拖绿框 · 双击重置"
             : editMode === "cut"
-              ? "点「添加删除段」· 再拖红柄微调"
+              ? "拖进度到要删的起点 · 点「添加删除段」· 再拖红柄调终点"
               : "拖黄柄裁片头片尾";
       }
       syncCropBoxVisibility();
@@ -433,24 +433,30 @@
     }
 
     function addCutoutAtPlayhead() {
-      const mid = clamp(Number(video.currentTime) || (startSec + endSec) / 2, startSec, endSec);
-      const half = Math.max(MIN_CUTOUT / 2, Math.min(1.2, (endSec - startSec) * 0.12));
-      let a = clamp(mid - half, startSec, endSec);
-      let b = clamp(mid + half, startSec, endSec);
-      if (b - a < MIN_CUTOUT) {
-        b = Math.min(endSec, a + MIN_CUTOUT);
-        a = Math.max(startSec, b - MIN_CUTOUT);
+      const t = clamp(Number(video.currentTime) || startSec, startSec, endKeepSec());
+      const existing = normalizeCutoutsList(cutouts, startSec, endSec);
+      if (existing.some((c) => t >= c.start - 0.01 && t < c.end - 0.01)) {
+        toast("当前进度已在删除段内，请拖到要删的起点");
+        return;
       }
+      const remain = endSec - t;
+      if (remain < MIN_CUTOUT - 0.001) {
+        toast("请把进度拖到要删除的起点（后面至少留 0.2s）");
+        return;
+      }
+      const want = Math.max(MIN_CUTOUT, Math.min(2.4, (endSec - startSec) * 0.12, remain));
+      const a = t;
+      const b = Math.min(endSec, a + want);
       cutouts = normalizeCutoutsList([...cutouts, { start: a, end: b }], startSec, endSec);
       selectedCutout = Math.max(
         0,
-        cutouts.findIndex((c) => a >= c.start - 0.01 && b <= c.end + 0.01)
+        cutouts.findIndex((c) => a >= c.start - 0.05 && a <= c.end + 0.05)
       );
       if (selectedCutout < 0) selectedCutout = cutouts.length - 1;
       syncCutoutUi();
       updateLabels();
-      previewSeek((a + b) / 2, { throttle: false });
-      toast("已添加删除段 · 拖红柄微调");
+      previewSeek(a, { throttle: false });
+      toast("已从当前进度添加删除段 · 拖红柄调终点");
     }
 
     function deleteSelectedCutout() {
@@ -1589,6 +1595,9 @@
     }
     if (trimEnd > cursor + 0.04) keeps.push({ start: cursor, end: trimEnd });
     if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
+    // 半开片尾：预览停在 endKeep=trimEnd-1/25，成片必须同样收掉，否则 GIF 会多出黄柄后几帧
+    const last = keeps[keeps.length - 1];
+    if (last) last.end = Math.max(last.start + 0.05, last.end - END_KEEP_SEC);
     return keeps;
   }
 
@@ -1597,5 +1606,7 @@
     ensureCss: ensureVtrimCss,
     normalizeCutouts,
     keepRangesFromEdit,
+    END_KEEP_SEC,
+    START_KEEP_SEC,
   };
 })();

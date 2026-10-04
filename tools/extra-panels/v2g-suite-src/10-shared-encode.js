@@ -1243,8 +1243,8 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            // 有片头偏移时禁用 copy；时长只多半帧，避免片尾多吃内容
-            const cutDur = span + 0.5 / Math.max(8, fps);
+            // 时长不加正垫：半开 [start, start+span)，避免片尾多吃编辑没预览到的帧
+            const cutDur = span;
             const cutArgs =
               startSec > 0.05
                 ? [
@@ -1946,7 +1946,7 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            const cutDur = span + 0.5 / Math.max(8, fps);
+            const cutDur = span;
             const cutArgs =
               startSec > 0.05
                 ? [
@@ -2027,9 +2027,9 @@
             const startEff = chunkStartFrame / fps; // effSpan 时间轴（秒）
             const ss = encodeSs + startEff * speed; // 原始时间轴
             const absEnd = encodeSs + encodeT;
-            // 只多半帧防末帧被切；并钳到片尾，避免旧 +0.15s 把片尾后画面带进 GIF
-            const need = (chunkFrames / fps) * speed + 0.5 / Math.max(8, fps);
-            const dur = Math.max(1 / Math.max(8, fps), Math.min(need, absEnd - ss + 0.5 / Math.max(8, fps)));
+            // 钳到片尾，不再 +半帧，避免末段把编辑黄柄后的画面带进 GIF
+            const need = (chunkFrames / fps) * speed;
+            const dur = Math.max(1 / Math.max(8, fps), Math.min(need, Math.max(0, absEnd - ss)));
             // -ss 在 -i 后：与编辑器片头对齐，避免关键帧往前多取
             const baseArgs = ["-i", encodeInput];
             if (ss > 0.001) baseArgs.push("-ss", String(ss));

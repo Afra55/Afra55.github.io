@@ -19,6 +19,7 @@ const OUT_DIR = process.env.VBB_BENCH_OUT || path.join(os.tmpdir(), "vbb-bench")
 const TAG = process.env.VBB_BENCH_TAG || "baseline";
 const MOBILE = /^(1|true|yes)$/i.test(String(process.env.VBB_BENCH_MOBILE || ""));
 const FPS_CAP = Number(process.env.VBB_BENCH_FPS_CAP || 0);
+const QUALITY_FIRST = /^(1|true|yes)$/i.test(String(process.env.VBB_BENCH_QUALITY_FIRST || ""));
 const MAX_BYTES = 10 * 1024 * 1024;
 const {
   assertGifFpsAllowed,
@@ -101,20 +102,27 @@ async function encodeOne(page, videoPath) {
     waitUntil: "domcontentloaded",
     timeout: 180000,
   });
-  await page.evaluate((mobile, fpsCap) => {
+  await page.evaluate((mobile, fpsCap, qualityFirst) => {
     try {
       localStorage.setItem("devtools-vbb-debug", "1");
       if (fpsCap > 0) localStorage.setItem("devtools-vbb-fps-cap", String(fpsCap));
       else localStorage.removeItem("devtools-vbb-fps-cap");
+      localStorage.setItem("devtools-vbb-quality-first", qualityFirst ? "1" : "0");
       if (mobile) {
         localStorage.setItem("devtools-media-perf-v1", "max");
       }
     } catch (_) {}
-  }, MOBILE, FPS_CAP);
+  }, MOBILE, FPS_CAP, QUALITY_FIRST);
   await page.waitForFunction(
     () => window.__devtoolsBootReady && Boolean(document.getElementById("vbb-file")),
     { timeout: 90000 }
   );
+  await page.evaluate((on) => {
+    const el = document.getElementById("vbb-quality-first");
+    if (!el) return;
+    el.checked = on;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }, QUALITY_FIRST);
 
   if (MOBILE) {
     // 模拟手机：触屏 + 小视口；强制 wasm，避免本机桥把「手机单路」测成桌面原生
@@ -268,6 +276,29 @@ async function encodeOne(page, videoPath) {
   // 硬约束：决策日志里的 srcFps 与成片 fps 必须同属整除档（防 25→20 回归）
   {
     const decision = logs.find((l) => /决策 fpsList=/.test(l)) || "";
+    if (QUALITY_FIRST) {
+      if (!/画质优先守80/.test(decision)) {
+        throw new Error(`${name}: 画质优先未写入决策日志`);
+      }
+      for (const c of result.clips) {
+        if (c.error) continue;
+        const qm = /画质\s*(\d+)/.exec(c.note || "");
+        const gq = qm ? Number(qm[1]) : 0;
+        const atFloorW = (Number(c.outW) || Number(c.maxW) || 999) <= 381;
+        const atFloorFps = Number(c.fps) > 0 && Number(c.fps) <= 12.6;
+        if (gq > 0 && gq < 80 && !(atFloorW && atFloorFps)) {
+          throw new Error(`${name}: 画质优先成片 gq=${gq} 且未到底档`);
+        }
+      }
+    } else {
+      const span = Number(result.clips[0]?.span) || Number(result.video.duration) || 0;
+      if (span > 10.1 && decision && !/长片保帧可<80/.test(decision)) {
+        throw new Error(`${name}: 默认长片未走保帧路径`);
+      }
+      if (span <= 10 && decision && !/短片守80掉帧/.test(decision)) {
+        throw new Error(`${name}: 默认短片未走守80路径`);
+      }
+    }
     const m = /srcFps=([\d.]+)/.exec(decision);
     const srcFps = m ? Number(m[1]) : 0;
     if (srcFps >= 23.5 && srcFps < 24.5) {

@@ -290,14 +290,14 @@ function buildVideoFilter(opts) {
 
 function buildFfmpegInputArgs(inputPath, opts) {
   const args = ["-hide_banner", "-loglevel", "error", "-y"];
-  if (opts.startSec > 0.05) {
+  // -ss 放在 -i 之后按解码时钟裁；-t 不加正垫，片尾与编辑半开预览对齐
+  args.push("-i", inputPath);
+  if (opts.startSec > 0.001) {
     args.push("-ss", String(opts.startSec));
   }
-  args.push("-i", inputPath);
   if (opts.span > 0.05) {
-    // 加速时按源时长截取，再靠 setpts 压缩
     const srcSpan = opts.speed > 1.01 ? opts.span * opts.speed : opts.span;
-    args.push("-t", String(srcSpan + 0.05));
+    args.push("-t", String(srcSpan));
   }
   return args;
 }

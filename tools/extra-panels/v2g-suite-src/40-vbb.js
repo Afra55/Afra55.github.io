@@ -594,6 +594,12 @@
         }
         if (trimEnd > cursor + 0.04) keeps.push({ start: cursor, end: trimEnd });
         if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
+        const endKeep =
+          Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
+            ? window.DevToolsVtrimEditor.END_KEEP_SEC
+            : 1 / 25;
+        const lastKeep = keeps[keeps.length - 1];
+        if (lastKeep) lastKeep.end = Math.max(lastKeep.start + 0.05, lastKeep.end - endKeep);
         return keeps;
       }
 

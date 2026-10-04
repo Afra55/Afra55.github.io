@@ -107,8 +107,13 @@ assert(blackboxShouldSkipFpsByCal(15, 25, 27e6, 10e6) === false, "标定后 15 �
   const vbbUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/40-vbb.js"), "utf8");
   assert(/devtools-vbb-quality-first/.test(vbbUi), "黑盒面板须记住画质优先");
   assert(/qualityFirst:\s*vbbQualityFirstOn\(\)/.test(vbbUi), "黑盒编码须传入画质优先");
-  const vbbHtml = fs.readFileSync(path.join(__dirname, "panels/vbb.html"), "utf8");
-  assert(/id="vbb-quality-first"/.test(vbbHtml), "须有画质优先开关");
+  const vtrimEd = fs.readFileSync(path.join(__dirname, "lib/vtrim-editor.js"), "utf8");
+  assert(/END_KEEP_SEC\s*=\s*1\s*\/\s*25/.test(vtrimEd), "编辑预览片尾半开 1/25s");
+  assert(/last\.end\s*=\s*Math\.max\([\s\S]{0,80}END_KEEP_SEC/.test(vtrimEd), "keepRanges 成片须收掉预览半开片尾");
+  assert(/from currentTime|a = t|当前进度/.test(vtrimEd) && /addCutoutAtPlayhead/.test(vtrimEd), "删中间从播放头起");
+  const gifskiCore = fs.readFileSync(path.join(__dirname, "ffmpeg-bridge/gifski-core.js"), "utf8");
+  assert(!/srcSpan\s*\+\s*0\.05/.test(gifskiCore), "原生 gifski 不得再给片尾 +50ms");
+  assert(/-ss"[\s\S]{0,80}opts\.startSec/.test(gifskiCore), "原生裁剪须有 -ss");
   assert(/blackboxShouldSkipNarrowerWidth/.test(src), "须有面积外推跳宽");
   assert(/blackboxShouldSkipHighFpsByDuration/.test(src), "须有长片跳过高档穷举");
   assert(/V2G_GIFSKI_WASM_MAX_FRAMES/.test(src), "须有 wasm 分块安全帧上限");

@@ -50,7 +50,7 @@ function isAllowedOrigin(origin) {
   return false;
 }
 
-const BRIDGE_VERSION = "0.5.6";
+const BRIDGE_VERSION = "0.5.7";
 const FEATURES = [
   "local-fs",
   "probe",

@@ -335,11 +335,20 @@ async function main() {
         dragSeekOk = countCuts() === beforeDrag && beforeDrag === 0;
       }
 
-      // 点「添加删除段」才加红段
+      // 点「添加删除段」才加红段；起点=点击时的进度
+      const tAtAdd = Number(video?.currentTime) || 0;
       cutAdd?.click();
       await sleep(120);
       const afterAdd = countCuts();
       const addOk = afterAdd === 1;
+      let cutStartAtPlayhead = false;
+      let cutStartSec = -1;
+      const firstCut = cutoutsEl?.querySelector(".vtrim-cutout:not(.is-draft)");
+      if (firstCut && video?.duration > 0) {
+        const pct = parseFloat(getComputedStyle(firstCut).getPropertyValue("--cut-start"));
+        cutStartSec = (Number.isFinite(pct) ? pct : 0) / 100 * video.duration;
+        cutStartAtPlayhead = Math.abs(cutStartSec - tAtAdd) <= 0.25;
+      }
 
       // 再拖空白进度：仍不应变成 2 段
       if (video && timeline && video.duration > 1) {
@@ -399,7 +408,26 @@ async function main() {
         dragSeekOk,
         afterAdd,
         addOk,
+        tAtAdd,
+        cutStartSec,
+        cutStartAtPlayhead,
         afterDragKeep,
+        trimTailKeep:
+          typeof window.DevToolsVtrimEditor?.keepRangesFromEdit === "function"
+            ? (() => {
+                const end = 4;
+                const ks = window.DevToolsVtrimEditor.keepRangesFromEdit(
+                  { trimStart: 0.5, trimEnd: end, cutouts: [] },
+                  10
+                );
+                const last = ks[ks.length - 1];
+                return {
+                  lastEnd: last?.end,
+                  expected: end - 1 / 25,
+                  ok: Math.abs((last?.end || 0) - (end - 1 / 25)) < 0.015,
+                };
+              })()
+            : { ok: false, reason: "no-keepRanges" },
         closed,
         badge: badge.slice(0, 80),
         savedHint,
@@ -446,6 +474,21 @@ async function main() {
       "edit.cut-add-button",
       editSuite.addOk && editSuite.afterDragKeep,
       JSON.stringify({ afterAdd: editSuite.afterAdd, keepOne: editSuite.afterDragKeep })
+    );
+    check(
+      rows,
+      "edit.cut-starts-at-playhead",
+      editSuite.cutStartAtPlayhead === true,
+      JSON.stringify({
+        tAtAdd: Number(editSuite.tAtAdd).toFixed(2),
+        cutStart: Number(editSuite.cutStartSec).toFixed(2),
+      })
+    );
+    check(
+      rows,
+      "edit.trim-end-half-open",
+      editSuite.trimTailKeep?.ok === true,
+      JSON.stringify(editSuite.trimTailKeep || {})
     );
     check(
       rows,
