@@ -27,9 +27,20 @@
       let gifeError;
   let gifeTrimHead;
   let gifeTrimTail;
-  let gifeTrimStrip;
-  let gifeTrimTrack;
+  let gifeTrim;
   let gifeTrimHint;
+  let gifePlay;
+  let gifePrev;
+  let gifeNext;
+  let gifeMarkStart;
+  let gifeMarkEnd;
+  let gifeClock;
+  let gifeTimeline;
+  let gifeFilmstrip;
+  let gifeWindow;
+  let gifeHandleStart;
+  let gifeHandleEnd;
+  let gifePlayheadEl;
       let gifeCropX;
       let gifeCropY;
       let gifeCropW;
@@ -47,7 +58,7 @@
       let gifeProgressFill;
       let gifeProgressText;
       const GIFE_DEFAULT_META =
-        "裁剪画面（去黑边或裁掉一部分）、去掉前几帧或后几帧，再导出为新 GIF。";
+        "拖进度看当前帧，拖黄柄或点「设为起点 / 设为终点」去掉片头片尾；也可裁画面、去黑边后导出。";
       /** @type {{ canvas: HTMLCanvasElement, delay: number }[]} */
       let gifeFrames = [];
       let gifeSrcW = 0;
@@ -56,6 +67,12 @@
       let gifeOutUrl = "";
       let gifeBusy = false;
       let gifeCropDrag = null;
+      let gifeCursor = 0;
+      let gifeCumMs = [0];
+      let gifeTotalMs = 0;
+      let gifePlaying = false;
+      let gifePlayTimer = 0;
+      let gifeTrimDrag = null;
   
       function setGifeProgress(visible, ratio, text) {
         if (!gifeProgress) return;
@@ -99,7 +116,7 @@
           return;
         }
         if (gifeCropEditor) gifeCropEditor.hidden = false;
-        const src = gifeFrames[0].canvas;
+        const src = (gifeFrames[gifeCursor] || gifeFrames[0]).canvas;
         const stageW = Math.max(160, Math.round(gifeCropStage.clientWidth || 320));
         const stageH = Math.max(160, Math.round(stageHFromWidth(stageW, gifeSrcW, gifeSrcH)));
         const fit = Math.min(stageW / gifeSrcW, stageH / gifeSrcH);
@@ -248,6 +265,12 @@
         if (gifeApply) gifeApply.disabled = !ready;
         if (gifeAutoCrop) gifeAutoCrop.disabled = !ready;
         if (gifeResetCrop) gifeResetCrop.disabled = !ready;
+        if (gifePlay) gifePlay.disabled = !ready;
+        if (gifePrev) gifePrev.disabled = !ready;
+        if (gifeNext) gifeNext.disabled = !ready;
+        if (gifeMarkStart) gifeMarkStart.disabled = !ready;
+        if (gifeMarkEnd) gifeMarkEnd.disabled = !ready;
+        if (gifePlay) gifePlay.textContent = gifePlaying ? "暂停" : "预览保留段";
       }
   
       function revokeGifeOut() {
@@ -265,10 +288,34 @@
         }
       }
   
+      function stopGifePlay() {
+        gifePlaying = false;
+        if (gifePlayTimer) {
+          clearTimeout(gifePlayTimer);
+          gifePlayTimer = 0;
+        }
+        setGifeButtons();
+      }
+
+      function rebuildGifeTiming() {
+        gifeCumMs = [0];
+        let t = 0;
+        for (const f of gifeFrames) {
+          t += Math.max(20, Number(f.delay) || 100);
+          gifeCumMs.push(t);
+        }
+        gifeTotalMs = t;
+      }
+
       function clearGife() {
+        stopGifePlay();
         gifeFrames = [];
         gifeSrcW = 0;
         gifeSrcH = 0;
+        gifeCursor = 0;
+        gifeCumMs = [0];
+        gifeTotalMs = 0;
+        gifeTrimDrag = null;
         revokeGifeOut();
         if (gifeFile) gifeFile.value = "";
         if (gifeTrimHead) gifeTrimHead.value = "0";
@@ -276,124 +323,252 @@
         setGifeCropPct(0, 0, 100, 100);
         if (gifeCropEditor) gifeCropEditor.hidden = true;
         if (gifeCropStage) gifeCropStage.classList.remove("has-image", "is-dragging");
+        if (gifeTrim) gifeTrim.hidden = true;
         setGifeProgress(false, 0, "");
         setError(gifeError, "");
         if (gifeMeta) gifeMeta.textContent = GIFE_DEFAULT_META;
+        if (gifeClock) gifeClock.textContent = "—";
         gifeBusy = false;
-        renderGifeTrimStrip();
+        layoutGifeTimeline();
         setGifeButtons();
       }
-  
+
       function syncGifeMeta() {
         if (!gifeMeta || !gifeFrames.length) return;
-        const head = Math.max(0, Number(gifeTrimHead?.value) || 0);
-        const tail = Math.max(0, Number(gifeTrimTail?.value) || 0);
-        const remain = Math.max(0, gifeFrames.length - head - tail);
-        const totalMs = gifeFrames.reduce((s, f) => s + f.delay, 0);
-        gifeMeta.textContent = `${gifeSourceName.replace(/\.gif$/i, "")} · ${gifeSrcW}×${gifeSrcH} · ${gifeFrames.length} 帧 · 约 ${(totalMs / 1000).toFixed(2)}s · 导出约 ${remain} 帧`;
+        const { head, tail, n, start, end } = gifeTrimValues();
+        const remain = Math.max(0, n - head - tail);
+        const keepMs = gifeCumMs[end + 1] - gifeCumMs[start];
+        gifeMeta.textContent = `${gifeSourceName.replace(/\.gif$/i, "")} · ${gifeSrcW}×${gifeSrcH} · ${n} 帧 · 约 ${(gifeTotalMs / 1000).toFixed(2)}s · 保留 ${remain} 帧（约 ${(keepMs / 1000).toFixed(2)}s）`;
       }
 
-      // ---- 首尾帧可视化裁剪（缩略图条 + 两端滑块，和数字输入双向同步） ----
       function gifeTrimValues() {
         const n = gifeFrames.length;
-        const head = Math.max(0, Math.min(n, Number(gifeTrimHead?.value) || 0));
-        const tail = Math.max(0, Math.min(n - head, Number(gifeTrimTail?.value) || 0));
-        return { head, tail, n };
+        if (n < 1) return { head: 0, tail: 0, n: 0, start: 0, end: 0 };
+        const head = Math.max(0, Math.min(n - 1, Number(gifeTrimHead?.value) || 0));
+        const tail = Math.max(0, Math.min(n - head - 1, Number(gifeTrimTail?.value) || 0));
+        const start = head;
+        const end = n - tail - 1;
+        return { head, tail, n, start, end };
       }
 
-      function positionGifeTrimHandles() {
-        if (!gifeTrimTrack) return;
-        const cells = gifeTrimTrack.querySelectorAll(".gife-trim-frame");
-        if (!cells.length) return;
-        const { head, tail, n } = gifeTrimValues();
-        const headCell = cells[Math.min(n - 1, head)];
-        const tailCell = cells[Math.max(0, n - tail - 1)];
-        const a = document.getElementById("gife-trim-handle-head");
-        const b = document.getElementById("gife-trim-handle-tail");
-        if (a && headCell) a.style.left = headCell.offsetLeft - 5 + "px";
-        if (b && tailCell) b.style.left = tailCell.offsetLeft + tailCell.offsetWidth + 5 + "px";
+      function writeGifeTrim(head, tail) {
+        const n = gifeFrames.length;
+        if (n < 1) return;
+        const h = Math.max(0, Math.min(n - 1, head));
+        const t = Math.max(0, Math.min(n - h - 1, tail));
+        if (gifeTrimHead) gifeTrimHead.value = String(h);
+        if (gifeTrimTail) gifeTrimTail.value = String(t);
+        syncGifeMeta();
+        layoutGifeTimeline();
       }
 
-      function renderGifeTrimStrip() {
-        if (!gifeTrimStrip || !gifeTrimTrack) return;
-        if (!gifeFrames.length) {
-          gifeTrimStrip.hidden = true;
-          if (gifeTrimHint) gifeTrimHint.hidden = true;
+      function gifeFrameAtTime(ms) {
+        const n = gifeFrames.length;
+        if (n < 1) return 0;
+        const t = Math.max(0, Math.min(gifeTotalMs - 0.001, ms));
+        let lo = 0;
+        let hi = n - 1;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (gifeCumMs[mid] <= t) lo = mid;
+          else hi = mid - 1;
+        }
+        return lo;
+      }
+
+      function layoutGifeTimeline() {
+        if (!gifeTimeline) return;
+        if (!gifeFrames.length) return;
+        const { start, end, n } = gifeTrimValues();
+        const startPct = gifeTotalMs > 0 ? (gifeCumMs[start] / gifeTotalMs) * 100 : 0;
+        const endPct = gifeTotalMs > 0 ? (gifeCumMs[end + 1] / gifeTotalMs) * 100 : 100;
+        const cur = Math.max(0, Math.min(n - 1, gifeCursor));
+        const playPct = gifeTotalMs > 0
+          ? ((gifeCumMs[cur] + (gifeFrames[cur].delay || 0) * 0.5) / gifeTotalMs) * 100
+          : 0;
+        gifeTimeline.style.setProperty("--gife-start", `${startPct}%`);
+        gifeTimeline.style.setProperty("--gife-end", `${endPct}%`);
+        gifeTimeline.style.setProperty("--gife-play", `${playPct}%`);
+        if (gifeClock) {
+          const t = gifeCumMs[cur] / 1000;
+          const kept = cur >= start && cur <= end;
+          gifeClock.textContent = `第 ${cur + 1}/${n} 帧 · ${t.toFixed(2)}s${kept ? "" : " · 将去掉"}`;
+        }
+      }
+
+      function setGifeCursor(i, { paint = true, clampToKeep = false } = {}) {
+        const n = gifeFrames.length;
+        if (n < 1) return;
+        const { start, end } = gifeTrimValues();
+        let next = Math.max(0, Math.min(n - 1, i));
+        if (clampToKeep) next = Math.max(start, Math.min(end, next));
+        gifeCursor = next;
+        layoutGifeTimeline();
+        if (paint) paintGifeCropEditor();
+      }
+
+      function paintGifeFilmstrip() {
+        if (!gifeFilmstrip || !gifeTimeline || !gifeFrames.length) return;
+        const cssW = Math.max(160, Math.round(gifeTimeline.clientWidth || 320));
+        const cssH = 56;
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        gifeFilmstrip.width = Math.round(cssW * dpr);
+        gifeFilmstrip.height = Math.round(cssH * dpr);
+        const ctx = gifeFilmstrip.getContext("2d");
+        if (!ctx) return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
+        ctx.fillRect(0, 0, cssW, cssH);
+        const n = gifeFrames.length;
+        const samples = Math.max(6, Math.min(n, Math.floor(cssW / 22)));
+        const cellW = cssW / samples;
+        for (let s = 0; s < samples; s++) {
+          const i = Math.min(n - 1, Math.round((s / Math.max(1, samples - 1)) * (n - 1)));
+          const src = gifeFrames[i].canvas;
+          const dw = cellW;
+          const dh = cssH;
+          const fit = Math.max(dw / src.width, dh / src.height);
+          const sw = dw / fit;
+          const sh = dh / fit;
+          const sx = (src.width - sw) / 2;
+          const sy = (src.height - sh) / 2;
+          ctx.drawImage(src, sx, sy, sw, sh, s * cellW, 0, dw, dh);
+        }
+      }
+
+      function showGifeTrimUi() {
+        if (gifeTrim) gifeTrim.hidden = !gifeFrames.length;
+        requestAnimationFrame(() => {
+          paintGifeFilmstrip();
+          layoutGifeTimeline();
+          paintGifeCropEditor();
+        });
+      }
+
+      function playGifeKeepRange() {
+        if (!gifeFrames.length) return;
+        if (gifePlaying) {
+          stopGifePlay();
           return;
         }
-        gifeTrimStrip.hidden = false;
-        if (gifeTrimHint) gifeTrimHint.hidden = false;
-        const { head, tail, n } = gifeTrimValues();
-        gifeTrimTrack.querySelectorAll(".gife-trim-frame").forEach((el) => el.remove());
-        const ref = gifeTrimTrack.firstChild;
-        for (let i = 0; i < n; i++) {
-          const cell = document.createElement("div");
-          cell.className = "gife-trim-frame";
-          cell.dataset.i = String(i);
-          if (i < head || i >= n - tail) cell.classList.add("is-cut");
-          const src = gifeFrames[i].canvas;
-          const c = document.createElement("canvas");
-          c.width = 44;
-          c.height = 34;
-          c.getContext("2d").drawImage(src, 0, 0, src.width, src.height, 0, 0, 44, 34);
-          cell.appendChild(c);
-          gifeTrimTrack.insertBefore(cell, ref);
-        }
-        requestAnimationFrame(positionGifeTrimHandles);
+        const { start, end } = gifeTrimValues();
+        gifePlaying = true;
+        setGifeButtons();
+        if (gifeCursor < start || gifeCursor > end) setGifeCursor(start);
+        else paintGifeCropEditor();
+        const tick = () => {
+          if (!gifePlaying) return;
+          const range = gifeTrimValues();
+          const delay = Math.max(40, gifeFrames[gifeCursor]?.delay || 100);
+          gifePlayTimer = window.setTimeout(() => {
+            if (!gifePlaying) return;
+            const next = gifeCursor >= range.end ? range.start : gifeCursor + 1;
+            setGifeCursor(next, { clampToKeep: true });
+            tick();
+          }, delay);
+        };
+        tick();
       }
 
-      function bindGifeTrimStrip() {
-        if (!gifeTrimTrack || gifeTrimTrack.dataset.trimBound) return;
-        gifeTrimTrack.dataset.trimBound = "1";
-        let drag = null;
-        const boundaryAt = (clientX) => {
-          const cells = gifeTrimTrack.querySelectorAll(".gife-trim-frame");
-          if (!cells.length) return null;
-          const x = clientX - gifeTrimTrack.getBoundingClientRect().left;
-          let idx = 0;
-          for (let i = 0; i < cells.length; i++) {
-            const mid = cells[i].offsetLeft + cells[i].offsetWidth / 2;
-            if (x >= mid) idx = i + 1;
-            else break;
-          }
-          return idx; // 0..n（边界序号）
+      function markGifeStart() {
+        const { n, end } = gifeTrimValues();
+        const start = Math.max(0, Math.min(end, gifeCursor));
+        writeGifeTrim(start, n - end - 1);
+      }
+
+      function markGifeEnd() {
+        const { n, start } = gifeTrimValues();
+        const end = Math.max(start, Math.min(n - 1, gifeCursor));
+        writeGifeTrim(start, n - end - 1);
+      }
+
+      function timeFromClientX(clientX) {
+        if (!gifeTimeline || gifeTotalMs <= 0) return 0;
+        const rect = gifeTimeline.getBoundingClientRect();
+        const p = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
+        return p * gifeTotalMs;
+      }
+
+      function bindGifeTimeline() {
+        if (!gifeTimeline || gifeTimeline.dataset.trimBound) return;
+        gifeTimeline.dataset.trimBound = "1";
+        const endDrag = (e) => {
+          if (!gifeTrimDrag) return;
+          gifeTimeline.classList.remove("is-dragging-window");
+          try { gifeTimeline.releasePointerCapture(e.pointerId); } catch (_) {}
+          gifeTrimDrag = null;
         };
-        const apply = (edge, idx) => {
-          const { n } = gifeTrimValues();
-          const cur = gifeTrimValues();
-          let head = cur.head;
-          let tail = cur.tail;
-          if (edge === "head") head = Math.max(0, Math.min(n - tail - 1, idx));
-          else tail = Math.max(0, Math.min(n - head - 1, n - idx));
-          if (gifeTrimHead) gifeTrimHead.value = String(head);
-          if (gifeTrimTail) gifeTrimTail.value = String(tail);
-          syncGifeMeta();
-          renderGifeTrimStrip();
-        };
-        gifeTrimTrack.addEventListener("pointerdown", (e) => {
-          const idx = boundaryAt(e.clientX);
-          if (idx == null) return;
-          const handle = e.target.closest?.(".gife-trim-handle");
-          if (handle) drag = handle.dataset.edge;
-          else {
-            const { head, tail, n } = gifeTrimValues();
-            drag = Math.abs(idx - head) <= Math.abs(idx - (n - tail)) ? "head" : "tail";
+        gifeTimeline.addEventListener("pointerdown", (e) => {
+          if (!gifeFrames.length) return;
+          stopGifePlay();
+          const t = timeFromClientX(e.clientX);
+          const handle = e.target.closest?.(".gife-handle");
+          const windowEl = e.target.closest?.(".gife-window");
+          const { start, end } = gifeTrimValues();
+          if (handle === gifeHandleStart) {
+            gifeTrimDrag = { kind: "start" };
+          } else if (handle === gifeHandleEnd) {
+            gifeTrimDrag = { kind: "end" };
+          } else if (windowEl) {
+            gifeTrimDrag = {
+              kind: "window",
+              grab: t - gifeCumMs[start],
+              span: gifeCumMs[end + 1] - gifeCumMs[start],
+            };
+            gifeTimeline.classList.add("is-dragging-window");
+          } else {
+            gifeTrimDrag = { kind: "scrub" };
+            setGifeCursor(gifeFrameAtTime(t));
           }
           e.preventDefault();
-          apply(drag, idx);
-          try { gifeTrimTrack.setPointerCapture(e.pointerId); } catch (_) {}
+          try { gifeTimeline.setPointerCapture(e.pointerId); } catch (_) {}
         });
-        gifeTrimTrack.addEventListener("pointermove", (e) => {
-          if (!drag) return;
-          const idx = boundaryAt(e.clientX);
-          if (idx != null) apply(drag, idx);
+        gifeTimeline.addEventListener("pointermove", (e) => {
+          if (!gifeTrimDrag || !gifeFrames.length) return;
+          const t = timeFromClientX(e.clientX);
+          const n = gifeFrames.length;
+          const cur = gifeTrimValues();
+          if (gifeTrimDrag.kind === "scrub") {
+            setGifeCursor(gifeFrameAtTime(t));
+            return;
+          }
+          if (gifeTrimDrag.kind === "start") {
+            const start = Math.max(0, Math.min(cur.end, gifeFrameAtTime(t)));
+            writeGifeTrim(start, n - cur.end - 1);
+            setGifeCursor(start);
+            return;
+          }
+          if (gifeTrimDrag.kind === "end") {
+            const end = Math.max(cur.start, Math.min(n - 1, gifeFrameAtTime(Math.max(0, t - 0.001))));
+            writeGifeTrim(cur.start, n - end - 1);
+            setGifeCursor(end);
+            return;
+          }
+          if (gifeTrimDrag.kind === "window") {
+            const span = gifeTrimDrag.span;
+            let startT = t - gifeTrimDrag.grab;
+            startT = Math.max(0, Math.min(gifeTotalMs - span, startT));
+            const start = gifeFrameAtTime(startT);
+            const endT = startT + span;
+            const end = Math.max(start, gifeFrameAtTime(Math.max(0, endT - 0.001)));
+            writeGifeTrim(start, n - end - 1);
+            setGifeCursor(Math.max(start, Math.min(end, gifeCursor)));
+          }
         });
-        const end = (e) => {
-          drag = null;
-          try { gifeTrimTrack.releasePointerCapture(e.pointerId); } catch (_) {}
-        };
-        gifeTrimTrack.addEventListener("pointerup", end);
-        gifeTrimTrack.addEventListener("pointercancel", end);
+        gifeTimeline.addEventListener("pointerup", endDrag);
+        gifeTimeline.addEventListener("pointercancel", endDrag);
+        gifeHandleStart?.addEventListener("keydown", (e) => {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          const { start, end, n } = gifeTrimValues();
+          writeGifeTrim(start + (e.key === "ArrowLeft" ? -1 : 1), n - end - 1);
+        });
+        gifeHandleEnd?.addEventListener("keydown", (e) => {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          const { start, end, n } = gifeTrimValues();
+          writeGifeTrim(start, n - (end + (e.key === "ArrowLeft" ? -1 : 1)) - 1);
+        });
       }
   
       async function loadGifeFile(file) {
@@ -416,10 +591,12 @@
           gifeSrcW = frames[0].canvas.width;
           gifeSrcH = frames[0].canvas.height;
           gifeSourceName = `${(name.replace(/\.gif$/i, "") || "edited")}-edited.gif`;
+          gifeCursor = 0;
+          rebuildGifeTiming();
           setGifeCropPct(0, 0, 100, 100);
           paintGifeCropEditor();
           syncGifeMeta();
-          renderGifeTrimStrip();
+          showGifeTrimUi();
           setGifeButtons();
           setGifeProgress(true, 1, `已加载 ${frames.length} 帧`);
           toast(`GIF 已加载 · ${frames.length} 帧`);
@@ -439,9 +616,8 @@
       }
   
       function getGifeProcessedFrames() {
-        const head = Math.max(0, Math.min(gifeFrames.length, Number(gifeTrimHead?.value) || 0));
-        const tail = Math.max(0, Math.min(gifeFrames.length - head, Number(gifeTrimTail?.value) || 0));
-        const sliced = gifeFrames.slice(head, gifeFrames.length - tail);
+        const { start, end } = gifeTrimValues();
+        const sliced = gifeFrames.slice(start, end + 1);
         if (sliced.length < 1) throw new Error("删帧后至少需要保留 1 帧");
         const rect = gifeCropRectPx();
         if (rect.w < 2 || rect.h < 2) throw new Error("裁剪区域过小");
@@ -550,9 +726,20 @@
             gifeError = $("#gife-error");
             gifeTrimHead = $("#gife-trim-head");
             gifeTrimTail = $("#gife-trim-tail");
-            gifeTrimStrip = $("#gife-trim-strip");
-            gifeTrimTrack = $("#gife-trim-track");
+            gifeTrim = $("#gife-trim");
             gifeTrimHint = $("#gife-trim-hint");
+            gifePlay = $("#gife-play");
+            gifePrev = $("#gife-prev");
+            gifeNext = $("#gife-next");
+            gifeMarkStart = $("#gife-mark-start");
+            gifeMarkEnd = $("#gife-mark-end");
+            gifeClock = $("#gife-clock");
+            gifeTimeline = $("#gife-timeline");
+            gifeFilmstrip = $("#gife-filmstrip");
+            gifeWindow = $("#gife-window");
+            gifeHandleStart = $("#gife-handle-start");
+            gifeHandleEnd = $("#gife-handle-end");
+            gifePlayheadEl = $("#gife-playhead");
             gifeCropX = $("#gife-crop-x");
             gifeCropY = $("#gife-crop-y");
             gifeCropW = $("#gife-crop-w");
@@ -583,14 +770,31 @@
         setGifeCropPct(0, 0, 100, 100);
         syncGifeMeta();
       });
-      [gifeTrimHead, gifeTrimTail, gifeCropX, gifeCropY, gifeCropW, gifeCropH].forEach((el) => {
+      [gifeTrimHead, gifeTrimTail].forEach((el) => {
+        el?.addEventListener("input", () => {
+          stopGifePlay();
+          syncGifeMeta();
+          layoutGifeTimeline();
+        });
+      });
+      [gifeCropX, gifeCropY, gifeCropW, gifeCropH].forEach((el) => {
         el?.addEventListener("input", () => {
           syncGifeMeta();
-          renderGifeTrimStrip();
           paintGifeCropEditor();
         });
       });
-      bindGifeTrimStrip();
+      gifePlay?.addEventListener("click", playGifeKeepRange);
+      gifePrev?.addEventListener("click", () => {
+        stopGifePlay();
+        setGifeCursor(gifeCursor - 1);
+      });
+      gifeNext?.addEventListener("click", () => {
+        stopGifePlay();
+        setGifeCursor(gifeCursor + 1);
+      });
+      gifeMarkStart?.addEventListener("click", markGifeStart);
+      gifeMarkEnd?.addEventListener("click", markGifeEnd);
+      bindGifeTimeline();
       gifeCropStage?.addEventListener("pointerdown", (e) => {
         const box = e.target.closest("#gife-crop-box");
         if (!box || box.hidden || !gifeFrames.length) return;
@@ -660,7 +864,10 @@
       gifeCropStage?.addEventListener("pointerup", endGifeCropDrag);
       gifeCropStage?.addEventListener("pointercancel", endGifeCropDrag);
       window.addEventListener("resize", () => {
-        if (gifeFrames.length) paintGifeCropEditor();
+        if (!gifeFrames.length) return;
+        paintGifeCropEditor();
+        paintGifeFilmstrip();
+        layoutGifeTimeline();
       });
       });
     } catch (err) {
