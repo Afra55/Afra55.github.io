@@ -8,7 +8,7 @@ const HIGH_PRIMARY_SPAN_SEC = 16;
 const MID_SPAN_SEC = 24;
 const DEFAULT_FPS_LIST = [20, 15, 12];
 const RETRY_MIN_FPS = 12;
-/** ≤此时长才「守画质80再掉帧」；更长片优先保帧+420，允许 q<80 */
+/** 默认：≤此时长才「守画质80再掉帧」；更长片优先保帧+420，允许 q<80。画质优先开关会忽略此时长。 */
 const KEEP_Q_MAX_SPAN_SEC = 10;
 /** q4/q6 仅在体积贴预算时试（上次超限比） */
 const FINE_NEAR_BUDGET_RATIO = 1.18;
@@ -92,7 +92,8 @@ function isFluentTierFps(span, srcFps, fps) {
   return Number(fps) >= mid - 0.01;
 }
 
-function blackboxKeepQualityUntilFloor(span) {
+function blackboxKeepQualityUntilFloor(span, qualityFirst) {
+  if (qualityFirst) return true;
   return (Number(span) || 0) <= KEEP_Q_MAX_SPAN_SEC + 0.01;
 }
 

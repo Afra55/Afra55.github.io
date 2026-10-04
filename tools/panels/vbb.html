@@ -155,7 +155,11 @@
                 <option value="eco">省电</option>
               </select>
             </span>
+            <label class="flag" for="vbb-quality-first" title="默认关：≤10s 守画质≥80 再掉帧；更长片保帧+420，允许低于80。打开后任意时长都按≥80 再降宽/降帧，最低帧+380 才允许低于80。">
+              <input type="checkbox" id="vbb-quality-first" /> 画质优先
+            </label>
           </div>
+          <p class="hint tight" id="vbb-quality-first-hint">画质优先：全程守 gifski ≥80 再让渡宽/帧；默认关闭，长片仍优先保流畅。</p>
         </details>
 
         <details class="vbb-more" id="vbb-more-process">

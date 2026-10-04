@@ -68,6 +68,16 @@
       /** Soft keep≈0.72 对应约 1–2 轮 --lossy 轻压 */
       const VBB_SOFT_COMPRESS_KEEP = 0.72;
       const VBB_DEFAULT_META = "";
+      const VBB_QUALITY_FIRST_KEY = "devtools-vbb-quality-first";
+      function vbbQualityFirstOn() {
+        try {
+          const el = document.getElementById("vbb-quality-first");
+          if (el) return !!el.checked;
+          return localStorage.getItem(VBB_QUALITY_FIRST_KEY) === "1";
+        } catch (_) {
+          return false;
+        }
+      }
       const VBB_WORKFLOW_HINTS = {
         single:
           "选视频 → 可选编辑 → 一键黑盒。",
@@ -2989,6 +2999,7 @@
               span: r.span,
               srcW,
               srcH,
+              qualityFirst: vbbQualityFirstOn(),
               isAborted: () => abortVbb,
               seed: reuse.seed || undefined,
               speedLimitSec: vbbSpeedLimitSec(),
@@ -3610,6 +3621,7 @@
                   span: prepared.span,
                   srcW: prepared.srcW,
                   srcH: prepared.srcH,
+                  qualityFirst: vbbQualityFirstOn(),
                   seed: seedForItem,
                   speedLimitSec: vbbSpeedLimitSec(),
                   crop: vbbCrop,
@@ -3833,6 +3845,7 @@
             span: prepared.span,
             srcW: prepared.srcW,
             srcH: prepared.srcH,
+            qualityFirst: vbbQualityFirstOn(),
             speedLimitSec: vbbSpeedLimitSec(),
             crop: vbbCrop,
             isAborted: () => abortVbb,
@@ -4162,6 +4175,7 @@
                     span: r.span,
                     srcW,
                     srcH,
+                    qualityFirst: vbbQualityFirstOn(),
                     isAborted,
                     seed: reuseSeed || null,
                     speedLimitSec: vbbSpeedLimitSec(),
@@ -4182,6 +4196,7 @@
                   span: r.span,
                   srcW,
                   srcH,
+                  qualityFirst: vbbQualityFirstOn(),
                   isAborted,
                   seed: reuseSeed || null,
                   speedLimitSec: vbbSpeedLimitSec(),
@@ -4389,6 +4404,22 @@
             const v = setBlackboxMaxMb(snapMb(vbbMaxMb.value));
             vbbMaxMb.value = String(v);
             toast(`黑盒上限已设为 ${v} MB`);
+          });
+        }
+        const vbbQFirst = $("#vbb-quality-first", root);
+        if (vbbQFirst) {
+          try {
+            vbbQFirst.checked = localStorage.getItem(VBB_QUALITY_FIRST_KEY) === "1";
+          } catch (_) {}
+          vbbQFirst.addEventListener("change", () => {
+            try {
+              localStorage.setItem(VBB_QUALITY_FIRST_KEY, vbbQFirst.checked ? "1" : "0");
+            } catch (_) {}
+            toast(
+              vbbQFirst.checked
+                ? "画质优先：全程守 ≥80 再降宽/降帧"
+                : "已关画质优先：长片仍保流畅（可低于80）"
+            );
           });
         }
         // ---- 性能档 + 分块编码（仅手机显示分块）：建议值预填 + 记住用户改过的值 ----

@@ -2319,7 +2319,8 @@
         return cands[0] || V2G_BLACKBOX_RETRY_MIN_FPS;
       }
 
-      function blackboxKeepQualityUntilFloor(span) {
+      function blackboxKeepQualityUntilFloor(span, qualityFirst) {
+        if (qualityFirst) return true;
         return (Number(span) || 0) <= V2G_BLACKBOX_KEEP_Q_MAX_SPAN_SEC + 0.01;
       }
       function blackboxShouldSkipFineQi(qi, lastOverRatio) {
@@ -3030,6 +3031,7 @@
           speedLimitSec > 0 && span > speedLimitSec
             ? Math.max(1, Math.min(16, span / speedLimitSec))
             : 1;
+        const qualityFirst = !!(clipOpts && clipOpts.qualityFirst);
         const isAborted = clipOpts.isAborted || (() => abortV2g);
         const onProgress = clipOpts.onProgress || (() => {});
         // 并行探测源帧率（不挡引擎加载；最多等 1.5s，超时就用默认档位）
@@ -3775,7 +3777,7 @@
             }
             return null;
           };
-          const shortKeepQ = blackboxKeepQualityUntilFloor(effSpanForPick);
+          const shortKeepQ = blackboxKeepQualityUntilFloor(effSpanForPick, qualityFirst);
           const w0 = widthSteps[0];
           const qKeep = V2G_BLACKBOX_QUALITY_LADDER[keepMaxQi];
           const conc = blackboxSingleTaskEncodeConcurrency();
@@ -3850,11 +3852,13 @@
         };
         let chosen = null;
         await probeNativeGifski();
-        const shortKeepQPick = blackboxKeepQualityUntilFloor(effSpanForPick);
+        const shortKeepQPick = blackboxKeepQualityUntilFloor(effSpanForPick, qualityFirst);
         vbbLog(
           `[vbb-phase] 决策 fpsList=${JSON.stringify(fpsList)} srcFps=${srcFps} srcW=${srcW} floorW=${floorW} span=${effSpanForPick.toFixed(1)}s · ${
             blackboxIsMovieLike(srcFps) ? "电影向" : "屏录向"
-          } · ${currentMediaPerf().label} · ${shortKeepQPick ? "短片守80掉帧" : "长片保帧可<80"}`
+          } · ${currentMediaPerf().label} · ${
+            qualityFirst ? "画质优先守80" : shortKeepQPick ? "短片守80掉帧" : "长片保帧可<80"
+          }`
         );
         // 整除档从高到低：短片每档 420→外推跳宽 @≥80；长片 420 可降质
         for (const fps of fpsList) {
