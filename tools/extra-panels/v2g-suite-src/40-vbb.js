@@ -1865,14 +1865,24 @@
           vbbClips.forEach((c, i) => {
             if (c.jobStatus !== "pending" && c.jobStatus !== "running") return;
             live = true;
-            const label = formatPendingWaitText(c);
-            if (!label) return;
+            const progressText =
+              typeof formatClipProgressText === "function"
+                ? formatClipProgressText(c)
+                : formatPendingWaitText(c);
+            if (!progressText) return;
             const row = vbbList?.querySelector(`[data-vbb-clip="${i}"]`);
             if (!row) return;
             const textEl = row.querySelector(".vsplit-clip-progress-text");
-            if (textEl) textEl.textContent = label;
+            if (textEl) textEl.textContent = progressText;
             const meta = row.querySelector(".vbb-clip-meta");
-            if (meta && !c.gifBlob) meta.textContent = label;
+            if (meta && !c.gifBlob) {
+              if (c.jobStatus === "pending") {
+                meta.textContent = formatPendingWaitText(c) || progressText;
+              } else {
+                const stage = String(c.jobText || "").trim();
+                meta.textContent = stage && stage !== "等待中…" ? stage : progressText;
+              }
+            }
           });
           if (!live) stopVbbWaitClock();
         }, 250);
@@ -1984,9 +1994,15 @@
       function formatVbbClipMeta(c, { mobile = false } = {}) {
         if (c.error && !c.gifBlob) return c.error;
         if (!c.gifBlob) {
-          if (c.jobStatus === "running" || c.jobStatus === "pending") {
-            const waitLabel = formatPendingWaitText(c);
-            return waitLabel || c.jobText || "";
+          if (c.jobStatus === "pending") {
+            return formatPendingWaitText(c) || c.jobText || "";
+          }
+          if (c.jobStatus === "running") {
+            const stage = String(c.jobText || "").trim();
+            if (stage && stage !== "等待中…") return stage;
+            return typeof formatClipProgressText === "function"
+              ? formatClipProgressText(c)
+              : stage || "";
           }
           return c.error || "";
         }

@@ -4604,6 +4604,24 @@
         return `排队 ${formatWaitClockSec(Date.now() - origin)}`;
       }
 
+      /** 进度条上方主文案：排队用秒数；运行中阶段优先，时长只作后缀。 */
+      function formatClipProgressText(job) {
+        const status = job?.jobStatus || "";
+        const stage = String(job?.jobText || "").trim();
+        const waitLabel =
+          typeof formatPendingWaitText === "function" ? formatPendingWaitText(job) : "";
+        if (status === "pending") return waitLabel || stage || "等待中…";
+        if (status === "running") {
+          const main = stage && stage !== "等待中…" ? stage : "处理中…";
+          if (waitLabel && !main.includes(waitLabel)) return `${main} · ${waitLabel}`;
+          return main;
+        }
+        if (stage) return stage;
+        if (status === "done") return "完成";
+        if (status === "error") return "失败";
+        return "";
+      }
+
       function syncClipProgressDom(box, job) {
         if (!box) return;
         const status = job?.jobStatus || "";
@@ -4631,20 +4649,19 @@
           fill.classList.toggle("is-busy", running);
         }
         if (textEl) {
-          const waitLabel =
-            typeof formatPendingWaitText === "function" ? formatPendingWaitText(job) : "";
           textEl.textContent =
-            waitLabel ||
-            job.jobText ||
-            (status === "pending"
-              ? "等待中…"
-              : status === "running"
-                ? "处理中…"
-                : status === "done"
-                  ? "完成"
-                  : status === "error"
-                    ? "失败"
-                    : "");
+            typeof formatClipProgressText === "function"
+              ? formatClipProgressText(job)
+              : job.jobText ||
+                (status === "pending"
+                  ? "等待中…"
+                  : status === "running"
+                    ? "处理中…"
+                    : status === "done"
+                      ? "完成"
+                      : status === "error"
+                        ? "失败"
+                        : "");
         }
         if (pctEl) pctEl.textContent = status === "pending" ? "—" : `${pct}%`;
       }
@@ -8867,14 +8884,24 @@
           vbbClips.forEach((c, i) => {
             if (c.jobStatus !== "pending" && c.jobStatus !== "running") return;
             live = true;
-            const label = formatPendingWaitText(c);
-            if (!label) return;
+            const progressText =
+              typeof formatClipProgressText === "function"
+                ? formatClipProgressText(c)
+                : formatPendingWaitText(c);
+            if (!progressText) return;
             const row = vbbList?.querySelector(`[data-vbb-clip="${i}"]`);
             if (!row) return;
             const textEl = row.querySelector(".vsplit-clip-progress-text");
-            if (textEl) textEl.textContent = label;
+            if (textEl) textEl.textContent = progressText;
             const meta = row.querySelector(".vbb-clip-meta");
-            if (meta && !c.gifBlob) meta.textContent = label;
+            if (meta && !c.gifBlob) {
+              if (c.jobStatus === "pending") {
+                meta.textContent = formatPendingWaitText(c) || progressText;
+              } else {
+                const stage = String(c.jobText || "").trim();
+                meta.textContent = stage && stage !== "等待中…" ? stage : progressText;
+              }
+            }
           });
           if (!live) stopVbbWaitClock();
         }, 250);
@@ -8986,9 +9013,15 @@
       function formatVbbClipMeta(c, { mobile = false } = {}) {
         if (c.error && !c.gifBlob) return c.error;
         if (!c.gifBlob) {
-          if (c.jobStatus === "running" || c.jobStatus === "pending") {
-            const waitLabel = formatPendingWaitText(c);
-            return waitLabel || c.jobText || "";
+          if (c.jobStatus === "pending") {
+            return formatPendingWaitText(c) || c.jobText || "";
+          }
+          if (c.jobStatus === "running") {
+            const stage = String(c.jobText || "").trim();
+            if (stage && stage !== "等待中…") return stage;
+            return typeof formatClipProgressText === "function"
+              ? formatClipProgressText(c)
+              : stage || "";
           }
           return c.error || "";
         }

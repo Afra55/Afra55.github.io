@@ -189,6 +189,24 @@
         return `排队 ${formatWaitClockSec(Date.now() - origin)}`;
       }
 
+      /** 进度条上方主文案：排队用秒数；运行中阶段优先，时长只作后缀。 */
+      function formatClipProgressText(job) {
+        const status = job?.jobStatus || "";
+        const stage = String(job?.jobText || "").trim();
+        const waitLabel =
+          typeof formatPendingWaitText === "function" ? formatPendingWaitText(job) : "";
+        if (status === "pending") return waitLabel || stage || "等待中…";
+        if (status === "running") {
+          const main = stage && stage !== "等待中…" ? stage : "处理中…";
+          if (waitLabel && !main.includes(waitLabel)) return `${main} · ${waitLabel}`;
+          return main;
+        }
+        if (stage) return stage;
+        if (status === "done") return "完成";
+        if (status === "error") return "失败";
+        return "";
+      }
+
       function syncClipProgressDom(box, job) {
         if (!box) return;
         const status = job?.jobStatus || "";
@@ -216,20 +234,19 @@
           fill.classList.toggle("is-busy", running);
         }
         if (textEl) {
-          const waitLabel =
-            typeof formatPendingWaitText === "function" ? formatPendingWaitText(job) : "";
           textEl.textContent =
-            waitLabel ||
-            job.jobText ||
-            (status === "pending"
-              ? "等待中…"
-              : status === "running"
-                ? "处理中…"
-                : status === "done"
-                  ? "完成"
-                  : status === "error"
-                    ? "失败"
-                    : "");
+            typeof formatClipProgressText === "function"
+              ? formatClipProgressText(job)
+              : job.jobText ||
+                (status === "pending"
+                  ? "等待中…"
+                  : status === "running"
+                    ? "处理中…"
+                    : status === "done"
+                      ? "完成"
+                      : status === "error"
+                        ? "失败"
+                        : "");
         }
         if (pctEl) pctEl.textContent = status === "pending" ? "—" : `${pct}%`;
       }
