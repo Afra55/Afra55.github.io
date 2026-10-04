@@ -4258,6 +4258,36 @@
     setDesktopChromeHidden: (on) => applyDesktopChromeHidden(Boolean(on)),
     toggleDesktopChrome,
   };
+  function bindEarlyToolFileCapture() {
+    if (window.DevToolsPendingFiles) return;
+    const store = Object.create(null);
+    const idToTool = {
+      "vbb-file": "vbb",
+      "v2g-file": "v2g",
+      "vsplit-file": "vsplit",
+    };
+    window.DevToolsPendingFiles = {
+      take(tool) {
+        const key = String(tool || "");
+        const files = store[key];
+        delete store[key];
+        return files && files.length ? files : null;
+      },
+    };
+    document.addEventListener(
+      "change",
+      (e) => {
+        const el = e.target;
+        if (!el || el.type !== "file") return;
+        const tool = idToTool[el.id];
+        if (!tool || !el.files?.length) return;
+        store[tool] = Array.from(el.files);
+      },
+      true
+    );
+  }
+
+  bindEarlyToolFileCapture();
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
   window.DevToolsTemp?.refresh?.();
 })();

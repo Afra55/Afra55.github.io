@@ -1819,6 +1819,7 @@
         if (row && !(vbbBusy && isVbbUserScrolling() && patch.status !== "done" && patch.status !== "error")) {
           syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
         }
+        if (c.jobStatus === "pending" || c.jobStatus === "running") startVbbWaitClock();
       }
 
       function clearVbbClipJobs() {
@@ -1844,10 +1845,10 @@
         if (vbbWaitClockTimer) return;
         vbbWaitClockTimer = setInterval(() => {
           if (typeof isVbbUserScrolling === "function" && isVbbUserScrolling()) return;
-          let pending = false;
+          let live = false;
           vbbClips.forEach((c, i) => {
-            if (c.jobStatus !== "pending") return;
-            pending = true;
+            if (c.jobStatus !== "pending" && c.jobStatus !== "running") return;
+            live = true;
             const label = formatPendingWaitText(c);
             if (!label) return;
             const row = vbbList?.querySelector(`[data-vbb-clip="${i}"]`);
@@ -1857,7 +1858,7 @@
             const meta = row.querySelector(".vbb-clip-meta");
             if (meta && !c.gifBlob) meta.textContent = label;
           });
-          if (!pending) stopVbbWaitClock();
+          if (!live) stopVbbWaitClock();
         }, 250);
       }
       function vbbPendingJobFields() {
@@ -2823,7 +2824,7 @@
             vbbList.appendChild(buildVbbClipRow(c, idx));
           });
           setVbbButtons();
-          if (vbbClips.some((c) => c.jobStatus === "pending")) startVbbWaitClock();
+          if (vbbClips.some((c) => c.jobStatus === "pending" || c.jobStatus === "running")) startVbbWaitClock();
         }, { pin });
       }
   
@@ -5280,6 +5281,13 @@
               setError(vbbError, err.message || String(err));
             });
           });
+          const pending = window.DevToolsPendingFiles?.take?.("vbb");
+          if (pending?.length) {
+            loadVbbFiles(pending).catch((err) => {
+              clearVbb();
+              setError(vbbError, err.message || String(err));
+            });
+          }
         }
         $("#vbb-clear", root)?.addEventListener("click", clearVbb);
         vbbTargetSpan?.addEventListener("change", () => syncCustomTarget(vbbTargetSpan.value));

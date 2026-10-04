@@ -4581,16 +4581,23 @@
         return box;
       }
   
+      function formatWaitClockSec(ms) {
+        const n = Math.max(0, Number(ms) || 0);
+        const sec = n >= 10000 ? Math.round(n / 1000) : Math.max(0.1, Math.round(n / 100) / 10);
+        return `${sec}s`;
+      }
+
       function formatPendingWaitText(job) {
         const status = job?.jobStatus || "";
-        const t = String(job?.jobText || "").trim();
-        const isWait = !t || t === "等待中…" || t === "等待中";
-        if (status !== "pending" || !isWait) return "";
+        if (status === "running") {
+          const origin = Number(job.jobStartedAt) || 0;
+          if (!(origin > 0)) return "";
+          return formatWaitClockSec(Date.now() - origin);
+        }
+        if (status !== "pending") return "";
         const origin = Number(job.jobQueuedAt) || 0;
-        if (!(origin > 0)) return "";
-        const ms = Math.max(0, Date.now() - origin);
-        const sec = ms >= 10000 ? Math.round(ms / 1000) : Math.max(0.1, Math.round(ms / 100) / 10);
-        return `${sec}s`;
+        if (!(origin > 0)) return "排队中";
+        return `排队 ${formatWaitClockSec(Date.now() - origin)}`;
       }
 
       function syncClipProgressDom(box, job) {
@@ -8810,6 +8817,7 @@
         if (row && !(vbbBusy && isVbbUserScrolling() && patch.status !== "done" && patch.status !== "error")) {
           syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
         }
+        if (c.jobStatus === "pending" || c.jobStatus === "running") startVbbWaitClock();
       }
 
       function clearVbbClipJobs() {
@@ -8835,10 +8843,10 @@
         if (vbbWaitClockTimer) return;
         vbbWaitClockTimer = setInterval(() => {
           if (typeof isVbbUserScrolling === "function" && isVbbUserScrolling()) return;
-          let pending = false;
+          let live = false;
           vbbClips.forEach((c, i) => {
-            if (c.jobStatus !== "pending") return;
-            pending = true;
+            if (c.jobStatus !== "pending" && c.jobStatus !== "running") return;
+            live = true;
             const label = formatPendingWaitText(c);
             if (!label) return;
             const row = vbbList?.querySelector(`[data-vbb-clip="${i}"]`);
@@ -8848,7 +8856,7 @@
             const meta = row.querySelector(".vbb-clip-meta");
             if (meta && !c.gifBlob) meta.textContent = label;
           });
-          if (!pending) stopVbbWaitClock();
+          if (!live) stopVbbWaitClock();
         }, 250);
       }
       function vbbPendingJobFields() {
@@ -9814,7 +9822,7 @@
             vbbList.appendChild(buildVbbClipRow(c, idx));
           });
           setVbbButtons();
-          if (vbbClips.some((c) => c.jobStatus === "pending")) startVbbWaitClock();
+          if (vbbClips.some((c) => c.jobStatus === "pending" || c.jobStatus === "running")) startVbbWaitClock();
         }, { pin });
       }
   
@@ -12271,6 +12279,13 @@
               setError(vbbError, err.message || String(err));
             });
           });
+          const pending = window.DevToolsPendingFiles?.take?.("vbb");
+          if (pending?.length) {
+            loadVbbFiles(pending).catch((err) => {
+              clearVbb();
+              setError(vbbError, err.message || String(err));
+            });
+          }
         }
         $("#vbb-clear", root)?.addEventListener("click", clearVbb);
         vbbTargetSpan?.addEventListener("change", () => syncCustomTarget(vbbTargetSpan.value));
