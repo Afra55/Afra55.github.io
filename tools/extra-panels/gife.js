@@ -58,12 +58,17 @@
       let gifeProgressFill;
       let gifeProgressText;
       const GIFE_DEFAULT_META =
-        "拖进度看当前帧，拖黄柄或点「设为起点 / 设为终点」去掉片头片尾；也可裁画面、去黑边后导出。";
+        "拖进度看当前帧，拖黄柄去片头片尾；删中间：进度到该帧 →「添加删除段」（红段），或「删除起点 / 删除终点」。只改时长走原文件删帧，不糊画面。";
       /** @type {{ canvas: HTMLCanvasElement, delay: number }[]} */
       let gifeFrames = [];
       let gifeSrcW = 0;
       let gifeSrcH = 0;
       let gifeSourceName = "edited.gif";
+      /** @type {Blob | null} */
+      let gifeSourceBlob = null;
+      let gifeSourceBytes = 0;
+      /** @type {Uint8Array | null} */
+      let gifeSourceU8 = null;
       let gifeOutUrl = "";
       let gifeBusy = false;
       let gifeCropDrag = null;
@@ -73,6 +78,16 @@
       let gifePlaying = false;
       let gifePlayTimer = 0;
       let gifeTrimDrag = null;
+      /** @type {{ start: number, end: number }[]} */
+      let gifeCuts = [];
+      let gifeSelectedCut = -1;
+      let gifeCutPendingStart = -1;
+      let gifeCutoutsEl;
+      let gifeCutAdd;
+      let gifeCutMarkStart;
+      let gifeCutMarkEnd;
+      let gifeCutDel;
+      let gifeCutClear;
   
       function setGifeProgress(visible, ratio, text) {
         if (!gifeProgress) return;
@@ -270,6 +285,11 @@
         if (gifeNext) gifeNext.disabled = !ready;
         if (gifeMarkStart) gifeMarkStart.disabled = !ready;
         if (gifeMarkEnd) gifeMarkEnd.disabled = !ready;
+        if (gifeCutAdd) gifeCutAdd.disabled = !ready;
+        if (gifeCutMarkStart) gifeCutMarkStart.disabled = !ready;
+        if (gifeCutMarkEnd) gifeCutMarkEnd.disabled = !ready;
+        if (gifeCutClear) gifeCutClear.disabled = !ready || !gifeCuts.length;
+        if (gifeCutDel) gifeCutDel.disabled = !ready || gifeSelectedCut < 0;
         if (gifePlay) gifePlay.textContent = gifePlaying ? "暂停" : "预览保留段";
       }
   
@@ -316,6 +336,12 @@
         gifeCumMs = [0];
         gifeTotalMs = 0;
         gifeTrimDrag = null;
+        gifeCuts = [];
+        gifeSelectedCut = -1;
+        gifeCutPendingStart = -1;
+        gifeSourceBlob = null;
+        gifeSourceBytes = 0;
+        gifeSourceU8 = null;
         revokeGifeOut();
         if (gifeFile) gifeFile.value = "";
         if (gifeTrimHead) gifeTrimHead.value = "0";
@@ -333,12 +359,185 @@
         setGifeButtons();
       }
 
+      function gifeNormalizeCuts() {
+        const { start, end } = gifeTrimValues();
+        const raw = (gifeCuts || [])
+          .map((c) => {
+            const a = Math.max(start, Math.min(end, Number(c.start)));
+            const b = Math.max(start, Math.min(end, Number(c.end)));
+            return { start: Math.min(a, b), end: Math.max(a, b) };
+          })
+          .filter((c) => c.end >= c.start)
+          .sort((x, y) => x.start - y.start);
+        const merged = [];
+        for (const c of raw) {
+          const last = merged[merged.length - 1];
+          if (last && c.start <= last.end + 1) last.end = Math.max(last.end, c.end);
+          else merged.push({ start: c.start, end: c.end });
+        }
+        return merged;
+      }
+
+      function gifeKeepIndices() {
+        const { start, end } = gifeTrimValues();
+        const cuts = gifeNormalizeCuts();
+        const keep = [];
+        for (let i = start; i <= end; i++) {
+          if (cuts.some((c) => i >= c.start && i <= c.end)) continue;
+          keep.push(i);
+        }
+        return keep;
+      }
+
+      function gifeIsKeptIndex(i) {
+        const keep = gifeKeepIndices();
+        return keep.includes(i);
+      }
+
+      function gifeNextKept(from, dir) {
+        const keep = gifeKeepIndices();
+        if (!keep.length) return from;
+        if (dir > 0) {
+          const hit = keep.find((i) => i > from);
+          return hit == null ? keep[0] : hit;
+        }
+        for (let k = keep.length - 1; k >= 0; k--) {
+          if (keep[k] < from) return keep[k];
+        }
+        return keep[keep.length - 1];
+      }
+
+      function paintGifeCutouts() {
+        if (!gifeCutoutsEl) return;
+        gifeCutoutsEl.replaceChildren();
+        if (!gifeFrames.length || gifeTotalMs <= 0) return;
+        const cuts = gifeNormalizeCuts();
+        gifeCuts = cuts;
+        if (gifeSelectedCut >= cuts.length) gifeSelectedCut = cuts.length ? cuts.length - 1 : -1;
+        cuts.forEach((c, i) => {
+          const el = document.createElement("span");
+          el.className = "gife-cutout" + (i === gifeSelectedCut ? " is-selected" : "");
+          el.dataset.cutIndex = String(i);
+          const startPct = (gifeCumMs[c.start] / gifeTotalMs) * 100;
+          const endPct = (gifeCumMs[c.end + 1] / gifeTotalMs) * 100;
+          el.style.setProperty("--cut-start", `${startPct}%`);
+          el.style.setProperty("--cut-end", `${endPct}%`);
+          const hs = document.createElement("span");
+          hs.className = "gife-cutout-handle gife-cutout-handle-start";
+          hs.dataset.cutIndex = String(i);
+          hs.dataset.cutEdge = "start";
+          const he = document.createElement("span");
+          he.className = "gife-cutout-handle gife-cutout-handle-end";
+          he.dataset.cutIndex = String(i);
+          he.dataset.cutEdge = "end";
+          el.append(hs, he);
+          gifeCutoutsEl.appendChild(el);
+        });
+        setGifeButtons();
+      }
+
+      function setGifeCutEdge(index, edge, frame) {
+        const { start, end } = gifeTrimValues();
+        if (index < 0 || index >= gifeCuts.length) return;
+        const next = gifeCuts.map((c) => ({ ...c }));
+        const c = next[index];
+        if (edge === "start") c.start = Math.max(start, Math.min(c.end, frame));
+        else c.end = Math.min(end, Math.max(c.start, frame));
+        gifeCuts = next;
+        gifeSelectedCut = index;
+        const el = gifeCutoutsEl?.children?.[index];
+        if (el && gifeTotalMs > 0) {
+          el.style.setProperty("--cut-start", `${(gifeCumMs[c.start] / gifeTotalMs) * 100}%`);
+          el.style.setProperty("--cut-end", `${(gifeCumMs[c.end + 1] / gifeTotalMs) * 100}%`);
+          el.classList.add("is-selected");
+        } else {
+          paintGifeCutouts();
+        }
+        syncGifeMeta();
+        layoutGifeTimeline();
+      }
+
+      function addGifeCutAtCursor() {
+        const keep = gifeKeepIndices();
+        if (keep.length <= 1) {
+          toast("至少留 1 帧，没法再删");
+          return;
+        }
+        const { start, end } = gifeTrimValues();
+        let a = Math.max(start, Math.min(end, gifeCursor));
+        if (!gifeIsKeptIndex(a)) {
+          toast("当前帧已在删除段里，请先拖到要删的起点");
+          return;
+        }
+        const after = keep.filter((i) => i > a);
+        const remainAfterCut = keep.length - 1;
+        if (remainAfterCut < 1) {
+          toast("删完会没有帧");
+          return;
+        }
+        const b = a;
+        gifeCuts = gifeNormalizeCuts().concat([{ start: a, end: b }]);
+        gifeCuts = gifeNormalizeCuts();
+        gifeSelectedCut = gifeCuts.findIndex((c) => a >= c.start && a <= c.end);
+        if (gifeSelectedCut < 0) gifeSelectedCut = gifeCuts.length - 1;
+        paintGifeCutouts();
+        syncGifeMeta();
+        toast("已添加删除段 · 拖红柄调长短");
+        void after;
+      }
+
+      function markGifeCutStart() {
+        const { start, end } = gifeTrimValues();
+        gifeCutPendingStart = Math.max(start, Math.min(end, gifeCursor));
+        toast(`删除起点：第 ${gifeCutPendingStart + 1} 帧，再点「删除终点」`);
+      }
+
+      function markGifeCutEnd() {
+        const { start, end } = gifeTrimValues();
+        const b = Math.max(start, Math.min(end, gifeCursor));
+        const a = gifeCutPendingStart >= 0 ? gifeCutPendingStart : b;
+        const lo = Math.min(a, b);
+        const hi = Math.max(a, b);
+        const keep = gifeKeepIndices().filter((i) => i < lo || i > hi);
+        if (!keep.length) {
+          toast("不能把全部帧都删掉");
+          return;
+        }
+        gifeCuts = gifeNormalizeCuts().concat([{ start: lo, end: hi }]);
+        gifeCuts = gifeNormalizeCuts();
+        gifeSelectedCut = gifeCuts.findIndex((c) => lo >= c.start && hi <= c.end);
+        gifeCutPendingStart = -1;
+        paintGifeCutouts();
+        syncGifeMeta();
+        toast(`已删除第 ${lo + 1}–${hi + 1} 帧`);
+      }
+
+      function deleteSelectedGifeCut() {
+        if (gifeSelectedCut < 0 || gifeSelectedCut >= gifeCuts.length) return;
+        gifeCuts = gifeCuts.filter((_, i) => i !== gifeSelectedCut);
+        gifeSelectedCut = -1;
+        gifeCuts = gifeNormalizeCuts();
+        paintGifeCutouts();
+        syncGifeMeta();
+      }
+
+      function clearGifeCuts() {
+        gifeCuts = [];
+        gifeSelectedCut = -1;
+        gifeCutPendingStart = -1;
+        paintGifeCutouts();
+        syncGifeMeta();
+      }
+
       function syncGifeMeta() {
         if (!gifeMeta || !gifeFrames.length) return;
-        const { head, tail, n, start, end } = gifeTrimValues();
-        const remain = Math.max(0, n - head - tail);
-        const keepMs = gifeCumMs[end + 1] - gifeCumMs[start];
-        gifeMeta.textContent = `${gifeSourceName.replace(/\.gif$/i, "")} · ${gifeSrcW}×${gifeSrcH} · ${n} 帧 · 约 ${(gifeTotalMs / 1000).toFixed(2)}s · 保留 ${remain} 帧（约 ${(keepMs / 1000).toFixed(2)}s）`;
+        const { n } = gifeTrimValues();
+        const keep = gifeKeepIndices();
+        const remain = keep.length;
+        const keepMs = keep.reduce((s, i) => s + Math.max(20, Number(gifeFrames[i]?.delay) || 100), 0);
+        const cutN = gifeNormalizeCuts().length;
+        const cutNote = cutN ? ` · 中间删 ${cutN} 段` : "";
+        gifeMeta.textContent = `${gifeSourceName.replace(/\.gif$/i, "")} · ${gifeSrcW}×${gifeSrcH} · ${n} 帧 · 约 ${(gifeTotalMs / 1000).toFixed(2)}s · 保留 ${remain} 帧（约 ${(keepMs / 1000).toFixed(2)}s）${cutNote}`;
       }
 
       function gifeTrimValues() {
@@ -358,6 +557,9 @@
         const t = Math.max(0, Math.min(n - h - 1, tail));
         if (gifeTrimHead) gifeTrimHead.value = String(h);
         if (gifeTrimTail) gifeTrimTail.value = String(t);
+        gifeCuts = gifeNormalizeCuts();
+        if (gifeSelectedCut >= gifeCuts.length) gifeSelectedCut = gifeCuts.length ? gifeCuts.length - 1 : -1;
+        paintGifeCutouts();
         syncGifeMeta();
         layoutGifeTimeline();
       }
@@ -391,8 +593,9 @@
         gifeTimeline.style.setProperty("--gife-play", `${playPct}%`);
         if (gifeClock) {
           const t = gifeCumMs[cur] / 1000;
-          const kept = cur >= start && cur <= end;
-          gifeClock.textContent = `第 ${cur + 1}/${n} 帧 · ${t.toFixed(2)}s${kept ? "" : " · 将去掉"}`;
+          const kept = cur >= start && cur <= end && gifeIsKeptIndex(cur);
+          const why = cur < start || cur > end ? " · 将去掉" : kept ? "" : " · 中间删除";
+          gifeClock.textContent = `第 ${cur + 1}/${n} 帧 · ${t.toFixed(2)}s${why}`;
         }
       }
 
@@ -401,7 +604,13 @@
         if (n < 1) return;
         const { start, end } = gifeTrimValues();
         let next = Math.max(0, Math.min(n - 1, i));
-        if (clampToKeep) next = Math.max(start, Math.min(end, next));
+        if (clampToKeep) {
+          next = Math.max(start, Math.min(end, next));
+          if (!gifeIsKeptIndex(next)) {
+            const keep = gifeKeepIndices();
+            next = keep.includes(next) ? next : (keep[0] ?? start);
+          }
+        }
         gifeCursor = next;
         layoutGifeTimeline();
         if (paint) paintGifeCropEditor();
@@ -446,23 +655,22 @@
       }
 
       function playGifeKeepRange() {
-        if (!gifeFrames.length) return;
+        const keep = gifeKeepIndices();
+        if (!keep.length) return;
         if (gifePlaying) {
           stopGifePlay();
           return;
         }
-        const { start, end } = gifeTrimValues();
         gifePlaying = true;
         setGifeButtons();
-        if (gifeCursor < start || gifeCursor > end) setGifeCursor(start);
+        if (!gifeIsKeptIndex(gifeCursor)) setGifeCursor(keep[0]);
         else paintGifeCropEditor();
         const tick = () => {
           if (!gifePlaying) return;
-          const range = gifeTrimValues();
           const delay = Math.max(40, gifeFrames[gifeCursor]?.delay || 100);
           gifePlayTimer = window.setTimeout(() => {
             if (!gifePlaying) return;
-            const next = gifeCursor >= range.end ? range.start : gifeCursor + 1;
+            const next = gifeNextKept(gifeCursor, 1);
             setGifeCursor(next, { clampToKeep: true });
             tick();
           }, delay);
@@ -496,16 +704,34 @@
           if (!gifeTrimDrag) return;
           gifeTimeline.classList.remove("is-dragging-window");
           try { gifeTimeline.releasePointerCapture(e.pointerId); } catch (_) {}
+          const wasCut = gifeTrimDrag.kind === "cut";
           gifeTrimDrag = null;
+          if (wasCut) {
+            gifeCuts = gifeNormalizeCuts();
+            paintGifeCutouts();
+            syncGifeMeta();
+          }
         };
         gifeTimeline.addEventListener("pointerdown", (e) => {
           if (!gifeFrames.length) return;
           stopGifePlay();
           const t = timeFromClientX(e.clientX);
           const handle = e.target.closest?.(".gife-handle");
+          const cutHandle = e.target.closest?.(".gife-cutout-handle");
+          const cutEl = e.target.closest?.(".gife-cutout");
           const windowEl = e.target.closest?.(".gife-window");
           const { start, end } = gifeTrimValues();
-          if (handle === gifeHandleStart) {
+          if (cutHandle) {
+            const idx = Number(cutHandle.dataset.cutIndex);
+            gifeSelectedCut = idx;
+            gifeTrimDrag = { kind: "cut", index: idx, edge: cutHandle.dataset.cutEdge || "end" };
+            paintGifeCutouts();
+          } else if (cutEl) {
+            gifeSelectedCut = Number(cutEl.dataset.cutIndex);
+            gifeTrimDrag = { kind: "scrub" };
+            setGifeCursor(gifeFrameAtTime(t));
+            paintGifeCutouts();
+          } else if (handle === gifeHandleStart) {
             gifeTrimDrag = { kind: "start" };
           } else if (handle === gifeHandleEnd) {
             gifeTrimDrag = { kind: "end" };
@@ -529,6 +755,11 @@
           const n = gifeFrames.length;
           const cur = gifeTrimValues();
           if (gifeTrimDrag.kind === "scrub") {
+            setGifeCursor(gifeFrameAtTime(t));
+            return;
+          }
+          if (gifeTrimDrag.kind === "cut") {
+            setGifeCutEdge(gifeTrimDrag.index, gifeTrimDrag.edge, gifeFrameAtTime(t));
             setGifeCursor(gifeFrameAtTime(t));
             return;
           }
@@ -588,6 +819,12 @@
           if (!frames?.length) frames = decodeGifeGifWithOmggif(buffer);
           if (!frames.length) throw new Error("未解析到帧");
           gifeFrames = frames;
+          gifeSourceBlob = file instanceof Blob ? file : new Blob([buffer], { type: "image/gif" });
+          gifeSourceBytes = gifeSourceBlob.size || buffer.byteLength || 0;
+          gifeSourceU8 = new Uint8Array(buffer);
+          gifeCuts = [];
+          gifeSelectedCut = -1;
+          gifeCutPendingStart = -1;
           gifeSrcW = frames[0].canvas.width;
           gifeSrcH = frames[0].canvas.height;
           gifeSourceName = `${(name.replace(/\.gif$/i, "") || "edited")}-edited.gif`;
@@ -616,15 +853,153 @@
       }
   
       function getGifeProcessedFrames() {
-        const { start, end } = gifeTrimValues();
-        const sliced = gifeFrames.slice(start, end + 1);
-        if (sliced.length < 1) throw new Error("删帧后至少需要保留 1 帧");
+        const keep = gifeKeepIndices();
+        if (keep.length < 1) throw new Error("删帧后至少需要保留 1 帧");
+        const sliced = keep.map((i) => gifeFrames[i]);
         const rect = gifeCropRectPx();
         if (rect.w < 2 || rect.h < 2) throw new Error("裁剪区域过小");
         return sliced.map((f) => ({
           canvas: applyGifeCropToCanvas(f.canvas, rect),
           delay: f.delay,
         }));
+      }
+
+      function gifeIsIdentityCrop(rect) {
+        return rect.x === 0 && rect.y === 0 && rect.w === gifeSrcW && rect.h === gifeSrcH;
+      }
+
+      function gifeSkipGifSubBlocks(u8, p) {
+        while (p < u8.length) {
+          const sz = u8[p++];
+          if (!sz) break;
+          p += sz;
+        }
+        return p;
+      }
+
+      function gifeSplitGifFrames(u8) {
+        if (!u8 || u8.length < 14 || u8[0] !== 0x47 || u8[1] !== 0x49 || u8[2] !== 0x46) {
+          throw new Error("不是 GIF");
+        }
+        let p = 6;
+        p += 4;
+        const packed = u8[p++];
+        p += 2;
+        if (packed & 0x80) p += 3 * (1 << ((packed & 7) + 1));
+        let headerEnd = p;
+        const frames = [];
+        while (p < u8.length) {
+          const b = u8[p];
+          if (b === 0x3b) break;
+          if (b === 0x21) {
+            const label = u8[p + 1];
+            if (frames.length === 0 && label !== 0xf9) {
+              p += 2;
+              p = gifeSkipGifSubBlocks(u8, p);
+              headerEnd = p;
+              continue;
+            }
+          }
+          const start = p;
+          while (p < u8.length && u8[p] === 0x21) {
+            p += 2;
+            p = gifeSkipGifSubBlocks(u8, p);
+          }
+          if (u8[p] !== 0x2c) throw new Error("GIF 帧结构异常");
+          p += 9;
+          const ip = u8[p++];
+          if (ip & 0x80) p += 3 * (1 << ((ip & 7) + 1));
+          p += 1;
+          p = gifeSkipGifSubBlocks(u8, p);
+          frames.push(u8.subarray(start, p));
+        }
+        return { header: u8.subarray(0, headerEnd), frames };
+      }
+
+      function gifeKeepIsContiguous(keepIndices) {
+        return keepIndices.every((v, k) => k === 0 || v === keepIndices[k - 1] + 1);
+      }
+
+      function gifeAssembleKeptGif(keepIndices) {
+        if (!gifeSourceU8) throw new Error("没有原始 GIF 字节");
+        const { header, frames } = gifeSplitGifFrames(gifeSourceU8);
+        if (frames.length !== gifeFrames.length) {
+          throw new Error(`帧数不一致 ${frames.length}≠${gifeFrames.length}`);
+        }
+        let size = header.length + 1;
+        for (const i of keepIndices) size += frames[i].length;
+        const out = new Uint8Array(size);
+        let p = 0;
+        out.set(header, p);
+        p += header.length;
+        for (const i of keepIndices) {
+          out.set(frames[i], p);
+          p += frames[i].length;
+        }
+        out[p] = 0x3b;
+        return new Blob([out], { type: "image/gif" });
+      }
+
+      function gifeDropRanges(keepIndices) {
+        const keep = new Set(keepIndices);
+        const n = gifeFrames.length;
+        const drops = [];
+        for (let i = 0; i < n; i++) if (!keep.has(i)) drops.push(i);
+        const ranges = [];
+        for (const i of drops) {
+          const last = ranges[ranges.length - 1];
+          if (last && last.b === i - 1) last.b = i;
+          else ranges.push({ a: i, b: i });
+        }
+        return ranges;
+      }
+
+      async function encodeGifeWithGifsicle(keepIndices, cropRect, onProgress) {
+        if (!gifeSourceBlob) throw new Error("没有原始 GIF");
+        const gifsicle = await loadGifsicle();
+        if (!gifsicle || typeof gifsicle.run !== "function") throw new Error("gifsicle 未加载");
+        const keepRanges = [];
+        for (const i of keepIndices) {
+          const last = keepRanges[keepRanges.length - 1];
+          if (last && last.b === i - 1) last.b = i;
+          else keepRanges.push({ a: i, b: i });
+        }
+        const keepSels = keepRanges.map((r) => (r.a === r.b ? String(r.a) : `${r.a}-${r.b}`));
+        const drop = gifeDropRanges(keepIndices);
+        const dropSels = drop.map((r) => (r.a === r.b ? String(r.a) : `${r.a}-${r.b}`));
+        const crop =
+          cropRect && !gifeIsIdentityCrop(cropRect)
+            ? `--crop ${cropRect.x},${cropRect.y}+${cropRect.w}x${cropRect.h}`
+            : "";
+        const commands = [
+          [crop, "--unoptimize", "in.gif", ...keepSels, "-O3", "-o", "/out/out.gif"].filter(Boolean).join(" "),
+          [crop, "in.gif", ...keepSels, "-O3", "-o", "/out/out.gif"].filter(Boolean).join(" "),
+          [crop, "--unoptimize", "--delete", ...dropSels, "-O3", "in.gif", "-o", "/out/out.gif"].filter(Boolean).join(" "),
+        ];
+        onProgress?.(0.25, "原文件删帧并优化…");
+        let lastErr = "gifsicle 无输出";
+        for (const cmd of commands) {
+          try {
+            const out = await gifsicle.run({
+              input: [{ file: gifeSourceBlob, name: "in.gif" }],
+              command: [cmd],
+            });
+            const file = Array.isArray(out) ? out[0] : null;
+            if (!file) {
+              lastErr = `无输出: ${cmd}`;
+              continue;
+            }
+            const blob = file instanceof Blob ? file : new Blob([file], { type: "image/gif" });
+            if (!blob.size) {
+              lastErr = `空文件: ${cmd}`;
+              continue;
+            }
+            return blob;
+          } catch (err) {
+            lastErr = `${err?.message || err} · ${cmd}`;
+          }
+        }
+        throw new Error(lastErr);
       }
   
       async function encodeGifeGif(frames, onProgress) {
@@ -639,7 +1014,7 @@
         try {
           const gif = new GIF({
             workers: 2,
-            quality: 10,
+            quality: 1,
             width: outW,
             height: outH,
             workerScript,
@@ -674,9 +1049,63 @@
         setError(gifeError, "");
         revokeGifeOut();
         try {
-          const processed = getGifeProcessedFrames();
-          setGifeProgress(true, 0.05, `处理 ${processed.length} 帧…`);
-          const blob = await encodeGifeGif(processed, (ratio, text) => setGifeProgress(true, ratio, text));
+          const keep = gifeKeepIndices();
+          if (keep.length < 1) throw new Error("删帧后至少需要保留 1 帧");
+          const rect = gifeCropRectPx();
+          if (rect.w < 2 || rect.h < 2) throw new Error("裁剪区域过小");
+          const identity = gifeIsIdentityCrop(rect);
+          const noFrameEdit = keep.length === gifeFrames.length && keep.every((i, k) => i === k);
+          setGifeProgress(true, 0.05, `处理 ${keep.length} 帧…`);
+          let blob = null;
+          let how = "";
+          let gifsicleNote = "";
+          if (identity && noFrameEdit && gifeSourceBlob) {
+            blob = gifeSourceBlob;
+            how = "未改时长/画面，原文件";
+          }
+          if (!blob && identity && gifeSourceU8) {
+            try {
+              const contiguous = gifeKeepIsContiguous(keep);
+              if (!contiguous && typeof GifReader === "function") {
+                const reader = new GifReader(gifeSourceU8);
+                const depends = keep.some((i) => {
+                  if (keep.includes(i - 1) || i === keep[0]) return false;
+                  const info = reader.frameInfo(i);
+                  return !(info.x === 0 && info.y === 0 && info.width === reader.width && info.height === reader.height);
+                });
+                if (depends) throw new Error("中间删帧碰到差分帧，改走重编码");
+              }
+              blob = gifeAssembleKeptGif(keep);
+              how = contiguous ? "原文件剪帧" : "原文件剪中间帧";
+            } catch (err) {
+              gifsicleNote = err?.message || String(err);
+              blob = null;
+            }
+          }
+          if (!blob && gifeSourceBlob) {
+            try {
+              blob = await encodeGifeWithGifsicle(keep, rect, (ratio, text) => setGifeProgress(true, ratio, text));
+              if (!blob || !blob.size) throw new Error("gifsicle 无输出");
+              how = "原文件删帧 -O3";
+            } catch (err) {
+              gifsicleNote = [gifsicleNote, err?.message || String(err)].filter(Boolean).join("；");
+              console.warn("gife gifsicle trim failed", err);
+              blob = null;
+            }
+          }
+          if (!blob || !blob.size) {
+            const processed = getGifeProcessedFrames();
+            const raw = await encodeGifeGif(processed, (ratio, text) => setGifeProgress(true, ratio, text));
+            try {
+              const o3 = await compressGifBlob(raw, "standard", (ratio, text) => setGifeProgress(true, 0.85 + ratio * 0.14, text || "O3 优化…"), {
+                plan: { label: "O3", args: "-O3", round: 1, lossy: 0 },
+              });
+              blob = o3 && o3.size && o3.size <= raw.size ? o3 : raw;
+            } catch (_) {
+              blob = raw;
+            }
+            how = gifsicleNote ? `逐帧重编码 + O3（gifsicle: ${gifsicleNote}）` : "逐帧重编码 + O3";
+          }
           gifeOutUrl = URL.createObjectURL(blob);
           if (gifePreview) {
             gifePreview.src = gifeOutUrl;
@@ -687,7 +1116,10 @@
             gifeDownload.download = gifeSourceName;
             gifeDownload.hidden = false;
           }
-          setGifeProgress(true, 1, `完成 · ${processed[0].canvas.width}×${processed[0].canvas.height} · ${formatKb(blob.size)}`);
+          const sizeNote = gifeSourceBytes
+            ? ` · 原 ${formatKb(gifeSourceBytes)} → ${formatKb(blob.size)}`
+            : ` · ${formatKb(blob.size)}`;
+          setGifeProgress(true, 1, `完成 · ${rect.w}×${rect.h} · ${keep.length} 帧${sizeNote} · ${how}`);
           toast(`已导出 · ${formatKb(blob.size)}`);
         } catch (err) {
           setError(gifeError, err.message || String(err));
@@ -740,6 +1172,12 @@
             gifeHandleStart = $("#gife-handle-start");
             gifeHandleEnd = $("#gife-handle-end");
             gifePlayheadEl = $("#gife-playhead");
+            gifeCutoutsEl = $("#gife-cutouts");
+            gifeCutAdd = $("#gife-cut-add");
+            gifeCutMarkStart = $("#gife-cut-mark-start");
+            gifeCutMarkEnd = $("#gife-cut-mark-end");
+            gifeCutDel = $("#gife-cut-del");
+            gifeCutClear = $("#gife-cut-clear");
             gifeCropX = $("#gife-crop-x");
             gifeCropY = $("#gife-crop-y");
             gifeCropW = $("#gife-crop-w");
@@ -794,6 +1232,11 @@
       });
       gifeMarkStart?.addEventListener("click", markGifeStart);
       gifeMarkEnd?.addEventListener("click", markGifeEnd);
+      gifeCutAdd?.addEventListener("click", addGifeCutAtCursor);
+      gifeCutMarkStart?.addEventListener("click", markGifeCutStart);
+      gifeCutMarkEnd?.addEventListener("click", markGifeCutEnd);
+      gifeCutDel?.addEventListener("click", deleteSelectedGifeCut);
+      gifeCutClear?.addEventListener("click", clearGifeCuts);
       bindGifeTimeline();
       gifeCropStage?.addEventListener("pointerdown", (e) => {
         const box = e.target.closest("#gife-crop-box");

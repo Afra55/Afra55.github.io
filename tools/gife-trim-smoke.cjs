@@ -32,7 +32,10 @@ function makeGif() {
   assert(html.includes("预览保留段"), "play keep");
   assert(html.includes("用帧号微调"), "frame inputs secondary");
   assert(!html.includes("去掉前") || html.includes("gife-trim-advanced"), "numbers not primary-only");
+  assert(html.includes("添加删除段") && html.includes("gife-cutouts"), "cut middle ui");
+  assert(html.includes("删除起点") && html.includes("删除终点"), "cut mark buttons");
   assert(js.includes("playGifeKeepRange") && js.includes("markGifeStart"), "trim js");
+  assert(js.includes("encodeGifeWithGifsicle") && js.includes("addGifeCutAtCursor"), "lossless trim + cuts");
   assert(!js.includes("blackboxUseMaxBytes") && !js.includes("10MB"), "no 10MB on gife");
   assert(css.includes(".gife-handle") && css.includes("#f5c542"), "yellow handles");
 
@@ -111,11 +114,39 @@ function makeGif() {
   assert(/第 \d+\/12 帧/.test(playingClock), "clock while playing: " + playingClock);
   await page.click("#gife-play");
 
+  await page.click("#gife-cut-add");
+  const afterCut = await page.evaluate(() => ({
+    meta: document.getElementById("gife-meta").textContent,
+    clock: document.getElementById("gife-clock").textContent,
+    cuts: document.querySelectorAll(".gife-cutout").length,
+  }));
+  assert(afterCut.cuts === 1, "one cutout: " + JSON.stringify(afterCut));
+  assert(/中间删 1 段/.test(afterCut.meta), "cut in meta: " + afterCut.meta);
+  assert(afterCut.meta.includes("保留 5 帧"), "keep 5 after 1-frame cut: " + afterCut.meta);
+
   await page.click("#gife-apply");
   await page.waitForFunction(() => {
     const a = document.getElementById("gife-download");
     return a && !a.hidden && a.getAttribute("href");
-  }, { timeout: 25000 });
+  }, { timeout: 40000 });
+
+  const exportInfo = await page.evaluate(async (origLen) => {
+    const a = document.getElementById("gife-download");
+    const href = a.getAttribute("href");
+    const blob = await fetch(href).then((r) => r.blob());
+    return {
+      outSize: blob.size,
+      origLen,
+      progress: document.getElementById("gife-progress-text")?.textContent || "",
+      how: /原文件/.test(document.getElementById("gife-progress-text")?.textContent || ""),
+    };
+  }, gif.length);
+  assert(exportInfo.outSize > 20, "exported gif");
+  assert(exportInfo.how, "original-bytes trim path: " + exportInfo.progress);
+  assert(
+    exportInfo.outSize <= Math.max(exportInfo.origLen * 1.5, exportInfo.origLen + 512),
+    "trim should not inflate: " + JSON.stringify(exportInfo)
+  );
 
   const mobile = await page.evaluate(() => {
     const btn = document.getElementById("gife-mark-start");
@@ -136,7 +167,7 @@ function makeGif() {
     console.error(errors.join("\n"));
     throw new Error("page errors");
   }
-  console.log(JSON.stringify({ ok: true, afterMark, playingClock, mobile }, null, 2));
+  console.log(JSON.stringify({ ok: true, afterMark, afterCut, playingClock, mobile, exportInfo }, null, 2));
 })().catch((err) => {
   console.error(err);
   process.exit(1);

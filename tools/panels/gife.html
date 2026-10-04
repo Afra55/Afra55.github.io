@@ -2,7 +2,7 @@
   <div class="panel-head gif-tool-head">
     <p class="gif-tool-kicker">GIF</p>
     <h1>GIF 编辑</h1>
-    <p class="gif-tool-lead">拖进度看当前帧，用黄柄选要保留的段（去片头/片尾），也可裁画面、去黑边，再导出新 GIF。</p>
+    <p class="gif-tool-lead">拖进度看当前帧，用黄柄去片头/片尾；要删中间就拖到那一帧点「添加删除段」（红段），也可标记删除起止。只裁时长尽量不重编码，体积不涨。</p>
   </div>
   <div class="panel-body gif-tool-body">
     <div class="gif-tool-card">
@@ -37,18 +37,24 @@
             <button type="button" class="ghost-btn" id="gife-next" title="下一帧">下一帧</button>
             <button type="button" class="ghost-btn" id="gife-mark-start" title="把当前帧设为保留起点">设为起点</button>
             <button type="button" class="ghost-btn" id="gife-mark-end" title="把当前帧设为保留终点">设为终点</button>
+            <button type="button" class="secondary-btn" id="gife-cut-add" title="从当前帧起添加一段要删的中间帧">添加删除段</button>
+            <button type="button" class="ghost-btn" id="gife-cut-mark-start" title="把当前帧标成删除起点">删除起点</button>
+            <button type="button" class="ghost-btn" id="gife-cut-mark-end" title="把当前帧标成删除终点并生成红段">删除终点</button>
+            <button type="button" class="ghost-btn" id="gife-cut-del" title="去掉当前选中的红段" disabled>删选中段</button>
+            <button type="button" class="ghost-btn" id="gife-cut-clear" title="清空全部中间删除段">清空删除段</button>
             <span class="mono gife-clock" id="gife-clock">—</span>
           </div>
-          <div class="gife-timeline" id="gife-timeline" aria-label="拖黄柄选择保留段，拖中间进度看当前帧">
+          <div class="gife-timeline" id="gife-timeline" aria-label="拖黄柄选择保留段，红段为删中间，拖胶片看当前帧">
             <canvas id="gife-filmstrip" class="gife-filmstrip" width="640" height="56" aria-hidden="true"></canvas>
             <div class="gife-sel" id="gife-sel">
               <span class="gife-window" id="gife-window" aria-hidden="true"></span>
+              <span class="gife-cutouts" id="gife-cutouts" aria-hidden="true"></span>
               <span class="gife-handle gife-handle-start" id="gife-handle-start" role="slider" aria-label="保留起点" tabindex="0"></span>
               <span class="gife-handle gife-handle-end" id="gife-handle-end" role="slider" aria-label="保留终点" tabindex="0"></span>
               <span class="gife-playhead" id="gife-playhead" aria-hidden="true"></span>
             </div>
           </div>
-          <p class="hint tight" id="gife-trim-hint">黄框是要留下的段；两边暗的是片头/片尾。拖黄柄或先拖进度再点「设为起点 / 设为终点」。预览只播保留段。</p>
+          <p class="hint tight" id="gife-trim-hint">黄框是留下的段；红段是删中间。拖进度到要删的那一帧 →「添加删除段」，再拖红柄；或点「删除起点 / 删除终点」。预览会跳过红段和片头片尾。</p>
         </div>
 
         <details class="gife-trim-advanced">
