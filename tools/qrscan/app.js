@@ -10,6 +10,8 @@
   const supportEl = $("#qs-support");
   const resultPanel = $("#qs-result");
   const resultText = $("#qs-text");
+  const resultLabel = $("#qs-text-label");
+  const hitListEl = $("#qs-hit-list");
   const installCard = $("#qs-install");
   const installBtn = $("#qs-install-btn");
   const installHint = $("#qs-install-hint");
@@ -28,6 +30,9 @@
   let deferredPrompt = null;
   let libsReady = null;
   let userStopped = false;
+  let lastFrame = null;
+  let hits = [];
+  let activeHit = 0;
 
   const Scan = () => window.DevToolsCodeScan;
 
@@ -107,22 +112,104 @@
     return t;
   }
 
-  function showResult(text, meta) {
+  function paintHitBoxes(list, activeIndex) {
+    if (!canvas || !lastFrame) return;
+    const ctx = canvas.getContext("2d");
+    ctx.putImageData(lastFrame, 0, 0);
+    list.forEach((hit, i) => {
+      const b = hit.bbox;
+      if (!b) return;
+      const on = i === activeIndex;
+      ctx.strokeStyle = on ? "#2ec4b6" : "rgba(46,196,182,0.75)";
+      ctx.lineWidth = on ? 4 : 2;
+      ctx.strokeRect(b.x, b.y, b.w, b.h);
+      const label = String(i + 1);
+      ctx.font = "bold 14px system-ui,sans-serif";
+      const padX = 6;
+      const th = 18;
+      const tw = ctx.measureText(label).width + padX * 2;
+      const lx = Math.max(0, Math.min(b.x, canvas.width - tw));
+      const ly = Math.max(th, b.y);
+      ctx.fillStyle = "#2ec4b6";
+      ctx.fillRect(lx, ly - th, tw, th);
+      ctx.fillStyle = "#06241f";
+      ctx.fillText(label, lx + padX, ly - 4);
+    });
+  }
+
+  function selectHit(index) {
+    if (!hits.length) return;
+    activeHit = Math.max(0, Math.min(index, hits.length - 1));
+    const hit = hits[activeHit];
+    resultText.value = hit.text;
+    if (resultLabel) {
+      resultLabel.textContent =
+        hits.length > 1 ? `扫描结果（${hits.length} 个，当前第 ${activeHit + 1}）` : "扫描结果";
+    }
+    hitListEl?.querySelectorAll(".hit-item").forEach((el, i) => {
+      el.classList.toggle("is-active", i === activeHit);
+    });
+    paintHitBoxes(hits, activeHit);
+    if (openBtn) {
+      const ok = looksLikeUrl(hit.text);
+      openBtn.hidden = !ok;
+      openBtn.disabled = !ok;
+    }
+  }
+
+  function renderHitList(list) {
+    if (!hitListEl) return;
+    hitListEl.innerHTML = "";
+    if (list.length < 2) {
+      hitListEl.hidden = true;
+      return;
+    }
+    hitListEl.hidden = false;
+    list.forEach((hit, i) => {
+      const li = document.createElement("li");
+      li.className = "hit-item" + (i === activeHit ? " is-active" : "");
+      li.innerHTML =
+        `<span class="hit-num">${i + 1}</span>` +
+        `<div><p class="hit-fmt">${hit.format || "码"}</p><p class="hit-text"></p></div>` +
+        `<button type="button" class="ghost">复制</button>`;
+      li.querySelector(".hit-text").textContent = hit.text;
+      li.addEventListener("click", () => selectHit(i));
+      li.querySelector("button")?.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        selectHit(i);
+        try {
+          await navigator.clipboard.writeText(hit.text);
+          toast("已复制");
+        } catch (_) {
+          toast("请长按结果手动复制");
+        }
+      });
+      hitListEl.appendChild(li);
+    });
+  }
+
+  function showHits(list, meta) {
+    const found = (list || []).filter((h) => h?.text);
+    if (!found.length) return;
+    hits = found;
+    activeHit = 0;
     resultPanel.hidden = false;
     document.body.classList.add("has-result");
-    resultText.value = text;
-    setStatus("");
+    if (canvas) {
+      canvas.hidden = false;
+      canvas.classList.add("hit-preview");
+    }
+    if (preview) preview.hidden = true;
+    if (video) video.hidden = true;
+    setStatus(found.length > 1 ? `已识别 ${found.length} 个码` : "已识别", "ok");
     setError("");
     if (startBtn) {
       startBtn.hidden = false;
       startBtn.textContent = "继续扫";
     }
     if (stopBtn) stopBtn.hidden = true;
-    if (openBtn) {
-      const ok = looksLikeUrl(text);
-      openBtn.hidden = !ok;
-      openBtn.disabled = !ok;
-    }
+    renderHitList(found);
+    selectHit(0);
     try {
       if (navigator.vibrate) navigator.vibrate(40);
     } catch (_) {}
@@ -181,16 +268,16 @@
         decodeBusy = true;
         Promise.resolve()
           .then(() =>
-            Scan().decodeImageData(drawn.imageData, {
+            Scan().decodeAllImageData(drawn.imageData, {
               bitmapSource: canvas,
               preferNative: true,
             })
           )
-          .then((hit) => {
+          .then((found) => {
             if (!scanning) return;
-            if (hit?.text) {
-              const eng = hit.engine ? ` · ${hit.engine}` : "";
-              showResult(hit.text, `摄像头 · ${hit.format || "码"}${eng} · ${drawn.w}×${drawn.h}`);
+            if (found?.length) {
+              lastFrame = drawn.imageData;
+              showHits(found, `摄像头 · ${found.length} 个`);
               stopCamera();
             }
           })
@@ -210,6 +297,16 @@
     if (resultPanel) resultPanel.hidden = true;
     document.body.classList.remove("has-result");
     if (resultText) resultText.value = "";
+    hits = [];
+    lastFrame = null;
+    if (hitListEl) {
+      hitListEl.innerHTML = "";
+      hitListEl.hidden = true;
+    }
+    if (canvas) {
+      canvas.hidden = true;
+      canvas.classList.remove("hit-preview");
+    }
     await ensureLibs();
     stopCamera();
     userStopped = false;
@@ -261,19 +358,18 @@
           canvas.width = w;
           canvas.height = h;
           ctx.drawImage(img, 0, 0, w, h);
-          const hit = await Scan().decodeImageData(ctx.getImageData(0, 0, w, h), {
+          const found = await Scan().decodeAllImageData(ctx.getImageData(0, 0, w, h), {
             bitmapSource: canvas,
             preferNative: true,
           });
-          if (!hit?.text) throw new Error("未识别到条码/二维码，请换更清晰的图片");
+          if (!found.length) throw new Error("未识别到条码/二维码，请换更清晰的图片");
+          lastFrame = ctx.getImageData(0, 0, w, h);
           if (preview) {
-            preview.hidden = false;
-            preview.src = url;
-          } else {
-            URL.revokeObjectURL(url);
+            preview.hidden = true;
+            preview.removeAttribute("src");
           }
-          const eng = hit.engine ? ` · ${hit.engine}` : "";
-          resolve({ text: hit.text, meta: `图片 · ${hit.format || "码"}${eng} · ${file.name}` });
+          URL.revokeObjectURL(url);
+          resolve({ hits: found, meta: `图片 · ${found.length} 个 · ${file.name}` });
         } catch (err) {
           URL.revokeObjectURL(url);
           reject(err);
@@ -367,8 +463,8 @@
     stopCamera({ fromUser: true });
     try {
       await ensureLibs();
-      const { text, meta } = await decodeFromFile(file);
-      showResult(text, meta);
+      const { hits: found, meta } = await decodeFromFile(file);
+      showHits(found, meta);
     } catch (err) {
       setError(err.message || String(err));
     }

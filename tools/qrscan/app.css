@@ -104,7 +104,8 @@ button:disabled {
   border: 1px solid #1d2a40;
 }
 
-body.has-result .stage {
+body.has-result .reticle,
+body.has-result .stage video {
   display: none;
 }
 
@@ -117,8 +118,17 @@ body.has-result .stage {
   background: #000;
 }
 
+.stage canvas.hit-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+
 .stage video[hidden],
-.stage img[hidden] {
+.stage img[hidden],
+.stage canvas[hidden] {
   display: none;
 }
 
@@ -187,6 +197,59 @@ body.has-result .stage {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+}
+
+.hit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.hit-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.45rem;
+  align-items: start;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #243049;
+  border-radius: 10px;
+  background: #0a1220;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.hit-item.is-active {
+  border-color: var(--accent);
+}
+
+.hit-num {
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #06241f;
+  font-weight: 700;
+  font-size: 0.75rem;
+  display: grid;
+  place-items: center;
+}
+
+.hit-fmt {
+  margin: 0 0 0.12rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.hit-text {
+  margin: 0;
+  font: 0.85rem/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .install-card {

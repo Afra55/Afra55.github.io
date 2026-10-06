@@ -31,10 +31,12 @@
               <canvas id="qr-scan-canvas" hidden></canvas>
               <img id="qr-scan-preview" class="img-preview" alt="" hidden />
             </div>
+            <p class="hint tight" id="qr-multi-hint">同框有多个码时会全部列出，预览上编号框出；点列表可选中并复制。</p>
             <div class="label-row" style="margin-top:0.8rem" id="qr-result-head" hidden>
-              <label for="qr-decoded">扫描结果</label>
-              <button type="button" class="copy-btn" data-copy-value="qr-decoded">复制</button>
+              <label for="qr-decoded" id="qr-decoded-label">扫描结果</label>
+              <button type="button" class="copy-btn" data-copy-value="qr-decoded">复制当前</button>
             </div>
+            <ul id="qr-decode-list" class="qr-hit-list" hidden></ul>
             <textarea id="qr-decoded" class="mono area" rows="4" readonly placeholder="" spellcheck="false" hidden></textarea>
             <p class="hint" id="qr-decode-meta" hidden></p>
             <p class="hint tight" id="qr-support-hint" hidden></p>

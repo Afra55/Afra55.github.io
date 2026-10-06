@@ -37,10 +37,11 @@
   <p class="hint support" id="qs-support" hidden></p>
 
   <section class="panel result" id="qs-result" hidden>
-    <label for="qs-text">扫描结果</label>
+    <label for="qs-text" id="qs-text-label">扫描结果</label>
+    <ul id="qs-hit-list" class="hit-list" hidden></ul>
     <textarea id="qs-text" readonly spellcheck="false"></textarea>
     <div class="row">
-      <button type="button" class="primary" id="qs-copy">复制</button>
+      <button type="button" class="primary" id="qs-copy">复制当前</button>
       <button type="button" id="qs-open" hidden>打开链接</button>
       <button type="button" class="primary" id="qs-again">继续扫</button>
     </div>

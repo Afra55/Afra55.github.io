@@ -65,6 +65,78 @@
     return FORMAT_LABEL[key] || FORMAT_LABEL[key.toUpperCase?.()] || key;
   }
 
+  function cloneImageData(imageData) {
+    return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
+  }
+
+  function pointsToBbox(points) {
+    if (!points?.length) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let n = 0;
+    for (const p of points) {
+      if (!p) continue;
+      const x = Number(typeof p.getX === "function" ? p.getX() : p.x);
+      const y = Number(typeof p.getY === "function" ? p.getY() : p.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      n += 1;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+    if (!n) return null;
+    return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+  }
+
+  function bboxIou(a, b) {
+    if (!a || !b) return 0;
+    const x0 = Math.max(a.x, b.x);
+    const y0 = Math.max(a.y, b.y);
+    const x1 = Math.min(a.x + a.w, b.x + b.w);
+    const y1 = Math.min(a.y + a.h, b.y + b.h);
+    const inter = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+    const union = a.w * a.h + b.w * b.h - inter;
+    return union > 0 ? inter / union : 0;
+  }
+
+  function addHit(hits, hit) {
+    if (!hit?.text) return false;
+    for (const prev of hits) {
+      if (prev.text !== hit.text) continue;
+      if (!prev.bbox || !hit.bbox) return false;
+      if (bboxIou(prev.bbox, hit.bbox) > 0.35) return false;
+    }
+    hits.push(hit);
+    return true;
+  }
+
+  function maskRect(imageData, bbox) {
+    if (!imageData?.data || !bbox) return false;
+    const pad = Math.max(6, Math.round(Math.min(bbox.w, bbox.h) * 0.1));
+    const x0 = Math.min(imageData.width, Math.max(0, Math.floor(bbox.x - pad)));
+    const y0 = Math.min(imageData.height, Math.max(0, Math.floor(bbox.y - pad)));
+    const x1 = Math.min(imageData.width, Math.max(0, Math.ceil(bbox.x + bbox.w + pad)));
+    const y1 = Math.min(imageData.height, Math.max(0, Math.ceil(bbox.y + bbox.h + pad)));
+    if (x1 - x0 < 2 || y1 - y0 < 2) return false;
+    if ((x1 - x0) * (y1 - y0) > imageData.width * imageData.height * 0.92) return false;
+    const data = imageData.data;
+    const w = imageData.width;
+    for (let y = y0; y < y1; y += 1) {
+      let i = (y * w + x0) * 4;
+      for (let x = x0; x < x1; x += 1) {
+        data[i] = 255;
+        data[i + 1] = 255;
+        data[i + 2] = 255;
+        data[i + 3] = 255;
+        i += 4;
+      }
+    }
+    return true;
+  }
+
   function cameraErrorMessage(err) {
     const name = err?.name || "";
     const msg = String(err?.message || err || "").trim();
@@ -180,7 +252,12 @@
       if (!text) return null;
       const fmt = result.getBarcodeFormat?.() ?? result.format;
       const fmtName = typeof fmt === "number" ? ZXing.BarcodeFormat[fmt] : fmt;
-      return { text, format: formatLabel(fmtName) || "码", engine: "ZXing" };
+      const pts = result.getResultPoints?.() || result.resultPoints || [];
+      const bbox = pointsToBbox(pts);
+      try {
+        reader.reset?.();
+      } catch (_) {}
+      return { text, format: formatLabel(fmtName) || "码", engine: "ZXing", bbox };
     } catch (_) {
       try {
         reader.reset?.();
@@ -196,7 +273,11 @@
         inversionAttempts: "attemptBoth",
       });
       if (!code?.data) return null;
-      return { text: String(code.data), format: "QR", engine: "jsQR" };
+      const loc = code.location;
+      const pts = loc
+        ? [loc.topLeftCorner, loc.topRightCorner, loc.bottomRightCorner, loc.bottomLeftCorner]
+        : [];
+      return { text: String(code.data), format: "QR", engine: "jsQR", bbox: pointsToBbox(pts) };
     } catch (_) {
       return null;
     }
@@ -210,7 +291,6 @@
       const supported = await globalThis.BarcodeDetector.getSupportedFormats();
       const list = Array.isArray(supported) ? supported.map((x) => String(x).toLowerCase()) : [];
       const formats = BD_FORMATS.filter((f) => list.includes(f));
-      // 仅有 QR、或无实用一维码时仍可用，但优先当引擎之一
       if (!formats.length) return null;
       barcodeDetectorFormats = formats;
       barcodeDetector = new globalThis.BarcodeDetector({ formats });
@@ -221,21 +301,67 @@
     }
   }
 
-  async function decodeWithBarcodeDetector(source) {
+  function hitFromBarcodeDetector(code) {
+    const text = String(code?.rawValue || "").trim();
+    if (!text) return null;
+    const bb = code.boundingBox;
+    let bbox = null;
+    if (bb && Number(bb.width) > 0 && Number(bb.height) > 0) {
+      bbox = {
+        x: Number(bb.x) || 0,
+        y: Number(bb.y) || 0,
+        w: Number(bb.width),
+        h: Number(bb.height),
+      };
+    } else if (code.cornerPoints?.length) {
+      bbox = pointsToBbox(code.cornerPoints);
+    }
+    return { text, format: formatLabel(code.format) || "码", engine: "系统", bbox };
+  }
+
+  async function decodeAllWithBarcodeDetector(source) {
     const detector = await ensureBarcodeDetector();
-    if (!detector || !source) return null;
+    if (!detector || !source) return [];
     try {
       const codes = await detector.detect(source);
-      const hit = codes && codes[0];
-      if (!hit?.rawValue) return null;
-      return {
-        text: String(hit.rawValue),
-        format: formatLabel(hit.format) || "码",
-        engine: "系统",
-      };
+      if (!codes?.length) return [];
+      const hits = [];
+      for (const code of codes) addHit(hits, hitFromBarcodeDetector(code));
+      return hits;
     } catch (_) {
-      return null;
+      return [];
     }
+  }
+
+  function decodeRemaining(work, hits) {
+    let stalled = 0;
+    for (let i = 0; i < 12; i += 1) {
+      const hit = decodeWithZxing(work) || decodeWithJsQr(work);
+      if (!hit) break;
+      const added = addHit(hits, hit);
+      stalled = added ? 0 : stalled + 1;
+      if (!hit.bbox || !maskRect(work, hit.bbox) || stalled >= 2) break;
+    }
+  }
+
+  /**
+   * 识别画面中全部条码/二维码（含位置）。旧接口 decodeImageData 仍返回第一个。
+   * @param {ImageData} imageData
+   * @param {{ bitmapSource?: CanvasImageSource, preferNative?: boolean }} [opts]
+   */
+  async function decodeAllImageData(imageData, opts = {}) {
+    if (!imageData?.width || !imageData?.height) return [];
+    const hits = [];
+    const work = cloneImageData(imageData);
+    if (opts.preferNative !== false && opts.bitmapSource) {
+      const nativeHits = await decodeAllWithBarcodeDetector(opts.bitmapSource);
+      for (const hit of nativeHits) {
+        addHit(hits, hit);
+        if (hit.bbox) maskRect(work, hit.bbox);
+      }
+    }
+    decodeRemaining(work, hits);
+    return hits;
   }
 
   /**
@@ -243,14 +369,8 @@
    * @param {{ bitmapSource?: CanvasImageSource, preferNative?: boolean }} [opts]
    */
   async function decodeImageData(imageData, opts = {}) {
-    if (!imageData?.width || !imageData?.height) return null;
-    if (opts.preferNative !== false && opts.bitmapSource) {
-      const nativeHit = await decodeWithBarcodeDetector(opts.bitmapSource);
-      if (nativeHit) return nativeHit;
-    }
-    const zx = decodeWithZxing(imageData);
-    if (zx) return zx;
-    return decodeWithJsQr(imageData);
+    const hits = await decodeAllImageData(imageData, opts);
+    return hits[0] || null;
   }
 
   function engineStatusText() {
@@ -274,6 +394,7 @@
     ensureBarcodeDetector,
     ensureZxingReader,
     decodeImageData,
+    decodeAllImageData,
     decodeWithZxing,
     decodeWithJsQr,
     engineStatusText,

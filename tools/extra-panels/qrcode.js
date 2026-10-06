@@ -17,6 +17,11 @@
     let qrDecodeError;
     let qrCamStart;
     let qrCamStop;
+    let qrDecodeList;
+    let qrDecodedLabel;
+    let qrLastFrame = null;
+    let qrHits = [];
+    let qrActiveHit = 0;
     const QR_CAP_L40 = 2953;
   
     function qrPayloadBytes(text) {
@@ -234,6 +239,8 @@
         qrDecodeError = $("#qr-decode-error");
         qrCamStart = $("#qr-cam-start");
         qrCamStop = $("#qr-cam-stop");
+        qrDecodeList = $("#qr-decode-list");
+        qrDecodedLabel = $("#qr-decoded-label");
         const qrSupportHint = $("#qr-support-hint");
   
         $("#qr-gen")?.addEventListener("click", generateQr);
@@ -276,9 +283,12 @@
     function showResultUi(on) {
       const stage = $("#qr-scan-stage");
       const head = $("#qr-result-head");
+      const reticle = stage?.querySelector(".qr-scan-reticle");
       stage?.classList.toggle("is-result-only", !!on);
+      if (reticle) reticle.hidden = !!on;
       if (head) head.hidden = !on;
       if (qrDecoded) qrDecoded.hidden = !on;
+      if (qrDecodeList) qrDecodeList.hidden = !on || qrHits.length < 2;
       if (qrDecodeMeta) qrDecodeMeta.hidden = true;
       if (qrCamStart) {
         qrCamStart.hidden = !on;
@@ -287,15 +297,110 @@
       if (qrCamStop) qrCamStop.hidden = true;
     }
 
-    function showDecoded(text, metaText) {
-      if (qrDecoded) qrDecoded.value = text;
-      if (qrDecodeMeta) qrDecodeMeta.textContent = "";
+    function copyHitText(text) {
+      const t = String(text || "");
+      if (!t) return;
+      const done = () => toast("已复制");
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(t).then(done).catch(() => {
+          if (qrDecoded) {
+            qrDecoded.focus();
+            qrDecoded.select();
+          }
+          toast("请手动复制");
+        });
+      } else {
+        toast("请手动复制");
+      }
+    }
+
+    function paintHitBoxes(hits, activeIndex) {
+      if (!qrCanvas || !qrLastFrame) return;
+      const ctx = qrCanvas.getContext("2d");
+      ctx.putImageData(qrLastFrame, 0, 0);
+      hits.forEach((hit, i) => {
+        const b = hit.bbox;
+        if (!b) return;
+        const active = i === activeIndex;
+        const x = b.x;
+        const y = b.y;
+        ctx.strokeStyle = active ? "#2ec4b6" : "rgba(46,196,182,0.75)";
+        ctx.lineWidth = active ? 4 : 2;
+        ctx.strokeRect(x, y, b.w, b.h);
+        const label = String(i + 1);
+        ctx.font = "bold 14px system-ui,sans-serif";
+        const padX = 6;
+        const th = 18;
+        const tw = ctx.measureText(label).width + padX * 2;
+        const lx = Math.max(0, Math.min(x, qrCanvas.width - tw));
+        const ly = Math.max(th, y);
+        ctx.fillStyle = "#2ec4b6";
+        ctx.fillRect(lx, ly - th, tw, th);
+        ctx.fillStyle = "#06241f";
+        ctx.fillText(label, lx + padX, ly - 4);
+      });
+    }
+
+    function selectHit(index) {
+      if (!qrHits.length) return;
+      qrActiveHit = Math.max(0, Math.min(index, qrHits.length - 1));
+      const hit = qrHits[qrActiveHit];
+      if (qrDecoded) qrDecoded.value = hit.text;
+      if (qrDecodedLabel) {
+        qrDecodedLabel.textContent =
+          qrHits.length > 1 ? `扫描结果（${qrHits.length} 个，当前第 ${qrActiveHit + 1}）` : "扫描结果";
+      }
+      qrDecodeList?.querySelectorAll(".qr-hit-item").forEach((el, i) => {
+        el.classList.toggle("is-active", i === qrActiveHit);
+      });
+      paintHitBoxes(qrHits, qrActiveHit);
+    }
+
+    function renderHitList(hits) {
+      if (!qrDecodeList) return;
+      qrDecodeList.innerHTML = "";
+      if (hits.length < 2) {
+        qrDecodeList.hidden = true;
+        return;
+      }
+      qrDecodeList.hidden = false;
+      hits.forEach((hit, i) => {
+        const li = document.createElement("li");
+        li.className = "qr-hit-item" + (i === qrActiveHit ? " is-active" : "");
+        li.innerHTML =
+          `<span class="qr-hit-num">${i + 1}</span>` +
+          `<div class="qr-hit-body"><p class="qr-hit-fmt">${escapeHtml(hit.format || "码")}</p>` +
+          `<p class="qr-hit-text">${escapeHtml(hit.text)}</p></div>` +
+          `<button type="button" class="copy-btn qr-hit-copy">复制</button>`;
+        li.addEventListener("click", () => selectHit(i));
+        li.querySelector("button")?.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          selectHit(i);
+          copyHitText(hit.text);
+        });
+        qrDecodeList.appendChild(li);
+      });
+    }
+
+    function showHits(hits, metaText) {
+      const list = (hits || []).filter((h) => h?.text);
+      if (!list.length) return;
+      qrHits = list;
+      qrActiveHit = 0;
+      if (qrCanvas) {
+        qrCanvas.hidden = false;
+        qrCanvas.classList.add("qr-hit-preview");
+      }
+      if (qrPreview) qrPreview.hidden = true;
+      if (qrVideo) qrVideo.hidden = true;
       setError(qrDecodeError, "");
       showResultUi(true);
-      toast("已识别");
+      renderHitList(list);
+      selectHit(0);
+      toast(list.length > 1 ? `已识别 ${list.length} 个码` : "已识别");
       void metaText;
     }
-  
+
     async function decodeFromImageElement(img, metaText) {
       const canvas = qrCanvas;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -309,14 +414,15 @@
       canvas.width = w;
       canvas.height = h;
       ctx.drawImage(img, 0, 0, w, h);
-      const hit = await Scan().decodeImageData(ctx.getImageData(0, 0, w, h), {
+      qrLastFrame = ctx.getImageData(0, 0, w, h);
+      const hits = await Scan().decodeAllImageData(qrLastFrame, {
         bitmapSource: canvas,
         preferNative: true,
       });
-      if (!hit?.text) throw new Error("未识别到条码/二维码，请换更清晰的图片试试");
-      const eng = hit.engine ? ` · ${hit.engine}` : "";
-      showDecoded(hit.text, metaText || `已识别 · ${hit.format || "码"}${eng} · ${w}×${h}`);
-      return hit.text;
+      if (!hits.length) throw new Error("未识别到条码/二维码，请换更清晰的图片试试");
+      const eng = hits[0].engine ? ` · ${hits[0].engine}` : "";
+      showHits(hits, metaText || `已识别 ${hits.length} 个 · ${w}×${h}${eng}`);
+      return hits;
     }
   
     function stopCamera({ fromUser } = {}) {
@@ -369,15 +475,15 @@
           qrDecodeBusy = true;
           Promise.resolve()
             .then(() =>
-              Scan().decodeImageData(drawn.imageData, {
+              Scan().decodeAllImageData(drawn.imageData, {
                 bitmapSource: qrCanvas,
                 preferNative: true,
               })
             )
-            .then((hit) => {
-              if (!qrScanning || !hit?.text) return;
-              const eng = hit.engine ? ` · ${hit.engine}` : "";
-              showDecoded(hit.text, `摄像头 · ${hit.format || "码"}${eng} · ${drawn.w}×${drawn.h}`);
+            .then((hits) => {
+              if (!qrScanning || !hits?.length) return;
+              qrLastFrame = drawn.imageData;
+              showHits(hits, `摄像头 · ${hits.length} 个 · ${drawn.w}×${drawn.h}`);
               stopCamera();
             })
             .catch(() => {})
@@ -393,6 +499,16 @@
       qrUserStopped = false;
       setError(qrDecodeError, "");
       if (qrDecoded) qrDecoded.value = "";
+      qrHits = [];
+      qrLastFrame = null;
+      if (qrDecodeList) {
+        qrDecodeList.innerHTML = "";
+        qrDecodeList.hidden = true;
+      }
+      if (qrCanvas) {
+        qrCanvas.hidden = true;
+        qrCanvas.classList.remove("qr-hit-preview");
+      }
       showResultUi(false);
       await ensureScanLibs();
       try {
@@ -429,7 +545,7 @@
       img.onload = async () => {
         try {
           await ensureScanLibs();
-          qrPreview.hidden = false;
+          qrPreview.hidden = true;
           qrPreview.src = url;
           await decodeFromImageElement(img, `图片识别 · ${file.name}`);
         } catch (err) {
