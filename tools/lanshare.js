@@ -19,6 +19,9 @@
   const CHUNK_SIZE = 32 * 1024;
   const DC_BUFFER_LIMIT = 512 * 1024;
   const NAME_KEY = "devtools-lanshare-name";
+  const SAVE_DIR_IDB = "devtools-lanshare-save";
+  const SAVE_DIR_STORE = "kv";
+  const SAVE_DIR_KEY = "dirHandle";
   const PENDING_JOIN_KEY = "devtools-lanshare-pending-j";
   const PENDING_PWD_KEY = "devtools-lanshare-pending-p";
   const ANSWER_RELAY_PREFIX = "devtools-lanshare-answer";
@@ -62,6 +65,7 @@
     scanBtn: $("#ls-scan"),
     scanFileBtn: $("#ls-scan-file"),
     scanFileInput: $("#ls-scan-file-input"),
+    scanFeedback: $("#ls-scan-feedback"),
     pasteJoinBtn: $("#ls-paste-join"),
     joinPaste: $("#ls-join-paste"),
     joinConfirmBtn: $("#ls-join-confirm"),
@@ -86,6 +90,12 @@
     camVideo: $("#ls-cam-video"),
     camStop: $("#ls-cam-stop"),
     scanHint: $("#ls-scan-hint"),
+    saveDirRow: $("#ls-save-dir-row"),
+    saveDirName: $("#ls-save-dir-name"),
+    saveDirHint: $("#ls-save-dir-hint"),
+    saveDirPick: $("#ls-save-dir-pick"),
+    saveDirGrant: $("#ls-save-dir-grant"),
+    saveDirClear: $("#ls-save-dir-clear"),
   };
 
   /** @type {MediaStream|null} */
@@ -102,6 +112,16 @@
   let pendingJoinGen = 0;
   /** @type {number|null} */
   let downloadConnectTimer = null;
+  /** @type {FileSystemDirectoryHandle|null} */
+  let saveDirHandle = null;
+  let saveDirPending = false;
+  let saveDirName = "";
+  let saveDirRestoreTried = false;
+  /** @type {BarcodeDetector|null} */
+  let scanBarcodeDetector = null;
+  let scanBarcodeTried = false;
+  let scanStartedAt = 0;
+  let scanMissHintAt = 0;
 
   const state = {
     peerId: "",
@@ -187,12 +207,22 @@
     const a = readAnswerTokenFromHash();
     if (!a) return false;
     const ok = await applyHostAnswer(joinAnswerQrText(a));
-    if (ok) history.replaceState(null, "", "#lanshare");
+    if (ok) clearLanshareJoinLocation();
     return ok;
   }
 
-  function readJoinTokenFromHash() {
+  function readJoinFragFromLocation() {
     const full = String(location.hash || "").replace(/^#/, "");
+    if (full.startsWith("lanshare?")) return full;
+    try {
+      return lanshareFragFromSearchParams(new URLSearchParams(location.search));
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function readJoinTokenFromHash() {
+    const full = readJoinFragFromLocation();
     if (!full.startsWith("lanshare?")) return "";
     const params = new URLSearchParams(full.slice(full.indexOf("?") + 1));
     const j = params.get("j");
@@ -275,6 +305,51 @@
       return `${u.origin}${p}`;
     } catch {
       return "https://afra55.github.io/tools/";
+    }
+  }
+
+  function lanshareFragFromSearchParams(sp) {
+    if (!sp) return "";
+    const marker = sp.get("ls");
+    const j = sp.get("lsj");
+    if (j) return `lanshare?j=${encodeURIComponent(j)}`;
+    const r = sp.get("lsr") || (marker === "1" ? sp.get("r") : "");
+    const h = sp.get("lsh") || (marker === "1" ? sp.get("h") : "");
+    if (r && h) {
+      const p = new URLSearchParams();
+      p.set("r", r);
+      p.set("h", h);
+      const n = sp.get("lsn") || (marker === "1" ? sp.get("n") : "");
+      if (n) p.set("n", n);
+      return `lanshare?${p.toString()}`;
+    }
+    const o = sp.get("lso");
+    if (o) return `lanshare?o=${encodeURIComponent(o)}`;
+    const a = sp.get("lsa");
+    if (a) return `lanshare?a=${encodeURIComponent(a)}`;
+    const pwd = sp.get("lsp");
+    if (pwd) return `lanshare?p=${encodeURIComponent(pwd)}`;
+    return "";
+  }
+
+  function inviteCameraUrl(shortText) {
+    const short = shortText || inviteQrTextShort();
+    const params = new URLSearchParams(short.includes("?") ? short.slice(short.indexOf("?") + 1) : "");
+    const q = new URLSearchParams();
+    q.set("ls", "1");
+    if (params.get("r")) q.set("lsr", params.get("r"));
+    if (params.get("h")) q.set("lsh", params.get("h"));
+    if (params.get("j")) q.set("lsj", params.get("j"));
+    if (params.get("n")) q.set("lsn", params.get("n"));
+    return `${inviteLinkBase()}?${q.toString()}#${short}`;
+  }
+
+  function clearLanshareJoinLocation() {
+    try {
+      const path = location.pathname || "/tools/";
+      history.replaceState(null, "", `${path}#lanshare`);
+    } catch (_) {
+      history.replaceState(null, "", "#lanshare");
     }
   }
 
@@ -449,8 +524,11 @@
         throw new Error("无效的邀请链接");
       }
       const frag = u.hash.replace(/^#/, "");
+      if (frag.includes("lanshare?")) return parseInviteAsync(frag);
+      const fromQuery = lanshareFragFromSearchParams(u.searchParams);
+      if (fromQuery) return parseInviteAsync(fromQuery);
       if (frag.includes("lanshare")) return parseInviteAsync(frag);
-      throw new Error("链接不是互传邀请");
+      throw new Error("链接不是互传邀请（微信若只打开了工具首页，请改扫「完整链接」码或粘贴邀请）");
     }
     if (raw.startsWith("lanshare")) {
       const q = raw.indexOf("?");
@@ -603,10 +681,33 @@
     return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   }
 
+  function notifyToast(msg) {
+    const el = document.querySelector("#toast");
+    if (!el || !msg) return;
+    el.textContent = msg;
+    el.hidden = false;
+    el.classList.add("is-show");
+    clearTimeout(notifyToast._t);
+    notifyToast._t = setTimeout(() => {
+      el.classList.remove("is-show");
+      setTimeout(() => {
+        el.hidden = true;
+      }, 200);
+    }, 2200);
+  }
+
+  function setScanFeedback(msg, kind) {
+    if (!els.scanFeedback) return;
+    els.scanFeedback.textContent = msg || "";
+    els.scanFeedback.classList.toggle("is-ok", kind === "ok");
+    els.scanFeedback.classList.toggle("is-err", kind === "err");
+  }
+
   function setError(msg) {
     if (!els.errorEl) return;
     els.errorEl.hidden = !msg;
     els.errorEl.textContent = msg || "";
+    if (msg) notifyToast(msg);
   }
 
   function setInfo(msg) {
@@ -808,17 +909,15 @@
         "当前页面不是 HTTPS/localhost，部分浏览器会禁用 WebRTC。请打开 https://afra55.github.io/tools/#lanshare 或本机 localhost。"
       );
     }
-    parts.push("推荐：房主创建时设置房间密码，成员输入密码即可自动加入（密码通道需能访问公网信令）。");
+    parts.push("推荐：房主设房间密码，成员输入即可加入。");
     if (isIOS()) {
-      parts.push(
-        "iOS：请用 Safari（勿用微信内置浏览器）；可用相机扫电脑邀请码，或粘贴链接；保存文件时若弹出分享面板可点「存储到文件」。"
-      );
+      parts.push("iOS 请用 Safari（不要用微信内置浏览器）。系统相机扫「完整链接」码；本页摄像头扫短码。");
     } else if (isAndroid()) {
-      parts.push("Android：推荐 Chrome；可用微信/相机扫邀请码，或粘贴链接加入。");
+      parts.push("Android 推荐 Chrome。微信/相机扫「完整链接」码；本页摄像头扫短码。");
     } else {
-      parts.push("电脑作房主：手机扫邀请码或打开链接加入，再把手机上的连接码链接发回电脑粘贴即可（不必对着扫）。");
+      parts.push("电脑创建房间后，让手机扫左侧完整链接码。接收文件可先选保存目录。");
     }
-    parts.push("所有设备需同一 WiFi；互传无断点续传，失败请重试。切到后台可能断连。");
+    parts.push("同一 WiFi；无断点续传。切后台可能断连。");
     els.platformHint.hidden = false;
     els.platformHint.textContent = parts.join(" ");
   }
@@ -835,10 +934,10 @@
           '<p class="hint tight" style="margin:0.35rem 0 0">告诉成员此密码，对方输入即可自动连接，无需扫码或粘贴连接码。</p>';
       } else {
         els.pairingGuide.innerHTML =
-          "<strong>电脑 + 手机配对</strong><ol class=\"hint tight\" style=\"margin:0.35rem 0 0 1.1rem;padding:0\">" +
-          "<li>手机扫下方二维码，或用微信打开「邀请链接」</li>" +
-          "<li>手机出现「连接码」后，复制链接发到电脑（微信/QQ 均可）</li>" +
-          "<li>电脑粘贴到「粘贴成员连接码」并确认 — 也可摄像头扫手机连接码</li>" +
+          "<strong>电脑 + 手机</strong><ol class=\"ls-steps hint tight\">" +
+          "<li>手机用系统相机 / 微信扫左侧「完整链接」码（不要扫右侧短码）</li>" +
+          "<li>手机出现连接码后，复制链接发到电脑</li>" +
+          "<li>电脑粘贴到「粘贴成员连接码」并确认</li>" +
           "</ol>";
       }
     } else if (state.viaMqtt) {
@@ -884,7 +983,7 @@
     let statusExtra = "";
     if (state.pageHiddenWarn) statusExtra = " · 页面在后台，连接可能中断";
     else if (inRoom && !state.controlLinked) {
-      statusExtra = state.viaMqtt ? " · 密码配对中…" : " · 正在连接…";
+      statusExtra = state.viaMqtt ? " · 密码配对中，请保持页面在前台…" : " · 等待对方连接…";
     }
     else if (inRoom && !state.isHost && state.controlDc?.readyState !== "open") statusExtra = " · 信令连接中…";
     if (els.statusText) {
@@ -935,7 +1034,7 @@
             return `<div class="ls-member-row"><span>${escapeHtml(m.name)}</span>${tag}<span class="hint mono">${fmtTime(m.joinedAt)}</span></div>`;
           })
           .join("")
-      : '<p class="hint tight">暂无成员</p>';
+      : '<p class="hint tight">还没有其他设备。<br />1. 把邀请发给手机<br />2. 等对方出现在这里<br />3. 再传文件</p>';
   }
 
   function openJoinFallback(hint) {
@@ -1051,7 +1150,7 @@
   function bindFileRowActions(root = els.filesEl) {
     if (!root) return;
     $$(".ls-del", root).forEach((btn) => btn.addEventListener("click", () => removeFile(btn.dataset.id)));
-    $$(".ls-dl", root).forEach((btn) => btn.addEventListener("click", () => requestDownload(btn.dataset.id)));
+    $$(".ls-dl", root).forEach((btn) => btn.addEventListener("click", () => requestDownload(btn.dataset.id).catch((e) => setError(e.message))));
   }
 
   function setDownloadProgress(fileId, pct, label, phase = "downloading") {
@@ -1137,7 +1236,7 @@
             return `<div class="ls-file-row" data-id="${escapeHtml(f.id)}">${previewHtml}<div class="ls-file-main"><strong>${escapeHtml(f.name)}</strong><span class="hint mono"><span class="ls-file-kind-tag">${escapeHtml(kind)}</span>${fmtSize(f.size)} · ${escapeHtml(memberLabel(f.ownerId))}</span></div><div class="ls-file-actions btn-row tight">${fileActionsInnerHtml(f)}</div></div>`;
           })
           .join("")
-      : '<p class="hint tight">暂无文件，点「选择文件」上传</p>';
+        : '<p class="hint tight">还没有文件。<br />1. 等对方上线<br />2. 点左上「选择文件」发送<br />3. 对方点「下载」接收</p>';
     bindFileRowActions();
   }
 
@@ -1188,7 +1287,7 @@
     }
     const qrText = kind === "offer" ? joinOfferQrText(token) : joinAnswerQrText(token);
     const tries = [QRCode.CorrectLevel.L, QRCode.CorrectLevel.M];
-    for (const text of [`${inviteLinkBase()}#${qrText}`, qrText]) {
+    for (const text of [inviteCameraUrl(qrText), `${inviteLinkBase()}#${qrText}`, qrText]) {
       for (const level of tries) {
         try {
           renderQrBox(el, text, level);
@@ -1203,7 +1302,7 @@
 
   async function updateInviteDisplay() {
     const shortText = inviteQrTextShort();
-    const url = `${inviteLinkBase()}#${shortText}`;
+    const url = inviteCameraUrl(shortText);
     if (els.inviteText) els.inviteText.value = url;
     await renderInviteQr();
   }
@@ -1566,7 +1665,7 @@
       return;
     }
     const shortText = inviteQrTextShort();
-    const fullUrl = `${inviteLinkBase()}#${shortText}`;
+    const fullUrl = inviteCameraUrl(shortText);
     const tries = [QRCode.CorrectLevel.L, QRCode.CorrectLevel.M];
     if (els.inviteQrApp) {
       for (const level of tries) {
@@ -1900,13 +1999,13 @@
   }
 
   function readOfferTokenFromHash() {
-    const full = String(location.hash || "").replace(/^#/, "");
+    const full = readJoinFragFromLocation();
     if (!full.startsWith("lanshare?")) return "";
     return new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("o") || "";
   }
 
   function readAnswerTokenFromHash() {
-    const full = String(location.hash || "").replace(/^#/, "");
+    const full = readJoinFragFromLocation();
     if (!full.startsWith("lanshare?")) return "";
     return new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("a") || "";
   }
@@ -1916,7 +2015,7 @@
     const o = readOfferTokenFromHash();
     if (!o) return false;
     const ok = await applyJoinOffer(joinOfferQrText(o));
-    if (ok) history.replaceState(null, "", "#lanshare");
+    if (ok) clearLanshareJoinLocation();
     return ok;
   }
 
@@ -1925,7 +2024,7 @@
     const a = readAnswerTokenFromHash();
     if (!a) return false;
     const ok = await applyJoinAnswer(joinAnswerQrText(a));
-    if (ok) history.replaceState(null, "", "#lanshare");
+    if (ok) clearLanshareJoinLocation();
     return ok;
   }
 
@@ -2354,7 +2453,7 @@
   }
 
   function readPasswordFromHash() {
-    const full = String(location.hash || "").replace(/^#/, "");
+    const full = readJoinFragFromLocation();
     if (!full.startsWith("lanshare?")) return "";
     return new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("p") || "";
   }
@@ -2398,7 +2497,7 @@
       setError("");
       await joinByPassword(pending);
       clearPendingPassword();
-      history.replaceState(null, "", "#lanshare");
+      clearLanshareJoinLocation();
     } catch (e) {
       openJoinFallback((e?.message || "密码加入失败") + "；请改用下方扫码/粘贴邀请");
     } finally {
@@ -2754,7 +2853,7 @@
     }
   }
 
-  function requestDownload(fileId) {
+  async function requestDownload(fileId) {
     const f = state.files.get(fileId);
     if (!f || f.ownerId === state.peerId) return;
     if (state.activeDownload?.fileId === fileId) {
@@ -2762,11 +2861,19 @@
       if (p === "connecting" || p === "downloading") return;
     }
     if (state.downloadQueue.includes(fileId)) return;
+    if (saveDirHandle && saveDirPending) {
+      const ok = await ensureSaveDirPermission(saveDirHandle, { interactive: true });
+      saveDirPending = !ok;
+      paintSaveDirUi();
+      if (!ok) setInfo("目录未授权，将保存到浏览器默认下载位置");
+    }
     if (isDownloadBusy()) {
       enqueueDownload(fileId);
+      setInfo("已加入下载队列，当前文件传完后开始");
       return;
     }
     startDownloadRequest(fileId);
+    setInfo("正在连接上传者…");
   }
 
   function waitDcDrain(dc) {
@@ -2859,8 +2966,233 @@
     });
   }
 
+  function canSaveDirPicker() {
+    return typeof window.showDirectoryPicker === "function" && !isMobileClient();
+  }
+
+  function openSaveDirIdb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(SAVE_DIR_IDB, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(SAVE_DIR_STORE)) db.createObjectStore(SAVE_DIR_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function saveDirIdbGet() {
+    const db = await openSaveDirIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SAVE_DIR_STORE, "readonly");
+      const req = tx.objectStore(SAVE_DIR_STORE).get(SAVE_DIR_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function saveDirIdbPut(handle) {
+    const db = await openSaveDirIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SAVE_DIR_STORE, "readwrite");
+      tx.objectStore(SAVE_DIR_STORE).put(handle, SAVE_DIR_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function saveDirIdbDel() {
+    const db = await openSaveDirIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SAVE_DIR_STORE, "readwrite");
+      tx.objectStore(SAVE_DIR_STORE).delete(SAVE_DIR_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function ensureSaveDirPermission(handle, { interactive = false } = {}) {
+    if (!handle) return false;
+    const opts = { mode: "readwrite" };
+    try {
+      if (handle.queryPermission) {
+        const q = await handle.queryPermission(opts);
+        if (q === "granted") return true;
+        if (!interactive) return false;
+      }
+      if (interactive && handle.requestPermission) {
+        const r = await handle.requestPermission(opts);
+        return r === "granted";
+      }
+      return !handle.queryPermission;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function paintSaveDirUi() {
+    if (!els.saveDirRow) return;
+    if (isMobileClient()) {
+      els.saveDirRow.hidden = true;
+      return;
+    }
+    els.saveDirRow.hidden = false;
+    if (!canSaveDirPicker()) {
+      if (els.saveDirName) els.saveDirName.textContent = "浏览器默认下载文件夹";
+      if (els.saveDirHint) {
+        els.saveDirHint.textContent = "当前浏览器不支持选文件夹（可用 Chrome / Edge）。点「下载」会保存到浏览器默认下载位置。";
+      }
+      if (els.saveDirPick) els.saveDirPick.hidden = true;
+      if (els.saveDirGrant) els.saveDirGrant.hidden = true;
+      if (els.saveDirClear) els.saveDirClear.hidden = true;
+      return;
+    }
+    if (els.saveDirPick) els.saveDirPick.hidden = false;
+    if (saveDirHandle && !saveDirPending) {
+      if (els.saveDirName) els.saveDirName.textContent = saveDirName || saveDirHandle.name || "已选文件夹";
+      if (els.saveDirHint) els.saveDirHint.textContent = "收到的文件会直接写入该文件夹（重名会自动加序号）。";
+      if (els.saveDirGrant) els.saveDirGrant.hidden = true;
+      if (els.saveDirClear) els.saveDirClear.hidden = false;
+    } else if (saveDirHandle && saveDirPending) {
+      if (els.saveDirName) els.saveDirName.textContent = saveDirName || saveDirHandle.name || "已记住的文件夹";
+      if (els.saveDirHint) els.saveDirHint.textContent = "目录已记住，但还没写入权限。点「允许写入该目录」，或下次点「下载」时授权。未授权则改用浏览器默认下载。";
+      if (els.saveDirGrant) els.saveDirGrant.hidden = false;
+      if (els.saveDirClear) els.saveDirClear.hidden = false;
+    } else {
+      if (els.saveDirName) els.saveDirName.textContent = "浏览器默认下载文件夹";
+      if (els.saveDirHint) els.saveDirHint.textContent = "未选目录：点「下载」会走浏览器默认保存，不会再问路径。想固定到某个文件夹，点「选择保存目录」。";
+      if (els.saveDirGrant) els.saveDirGrant.hidden = true;
+      if (els.saveDirClear) els.saveDirClear.hidden = true;
+    }
+  }
+
+  async function restoreSaveDirHandle() {
+    if (saveDirRestoreTried) return;
+    saveDirRestoreTried = true;
+    if (!canSaveDirPicker()) {
+      paintSaveDirUi();
+      return;
+    }
+    try {
+      const handle = await saveDirIdbGet();
+      if (!handle) {
+        paintSaveDirUi();
+        return;
+      }
+      saveDirHandle = handle;
+      saveDirName = handle.name || "";
+      const ok = await ensureSaveDirPermission(handle, { interactive: false });
+      saveDirPending = !ok;
+    } catch (_) {
+      saveDirHandle = null;
+      saveDirPending = false;
+    }
+    paintSaveDirUi();
+  }
+
+  async function pickSaveDirectory() {
+    if (!canSaveDirPicker()) {
+      setError("当前浏览器不支持选择文件夹，文件将保存到浏览器默认下载位置");
+      return;
+    }
+    try {
+      const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+      const ok = await ensureSaveDirPermission(handle, { interactive: true });
+      saveDirHandle = handle;
+      saveDirName = handle.name || "";
+      saveDirPending = !ok;
+      await saveDirIdbPut(handle);
+      paintSaveDirUi();
+      setError("");
+      notifyToast(ok ? `已记住文件夹：${saveDirName}` : "已记住文件夹，还需允许写入");
+      setInfo(ok ? `接收将保存到「${saveDirName}」` : "目录已选，请再点「允许写入该目录」");
+    } catch (e) {
+      if (e?.name === "AbortError") {
+        setInfo("已取消选择目录，仍使用浏览器默认下载");
+        return;
+      }
+      setError(e?.message || "选择目录失败");
+    }
+  }
+
+  async function grantSaveDirectory() {
+    if (!saveDirHandle) {
+      await pickSaveDirectory();
+      return;
+    }
+    const ok = await ensureSaveDirPermission(saveDirHandle, { interactive: true });
+    saveDirPending = !ok;
+    paintSaveDirUi();
+    if (ok) {
+      setError("");
+      notifyToast(`已允许写入「${saveDirName || saveDirHandle.name}」`);
+    } else {
+      setError("未获得文件夹写入权限。点「下载」将改用浏览器默认保存。");
+    }
+  }
+
+  async function clearSaveDirectory() {
+    saveDirHandle = null;
+    saveDirPending = false;
+    saveDirName = "";
+    try {
+      await saveDirIdbDel();
+    } catch (_) {
+      /* ignore */
+    }
+    paintSaveDirUi();
+    setInfo("已改回浏览器默认下载");
+  }
+
+  async function uniqueFileHandle(dir, name) {
+    const safe = String(name || "download").replace(/[\\/:*?"<>|]/g, "_") || "download";
+    const dot = safe.lastIndexOf(".");
+    const base = dot > 0 ? safe.slice(0, dot) : safe;
+    const ext = dot > 0 ? safe.slice(dot) : "";
+    for (let i = 0; i < 200; i += 1) {
+      const candidate = i === 0 ? safe : `${base} (${i})${ext}`;
+      try {
+        await dir.getFileHandle(candidate);
+      } catch (_) {
+        return dir.getFileHandle(candidate, { create: true });
+      }
+    }
+    return dir.getFileHandle(`${base}-${Date.now()}${ext}`, { create: true });
+  }
+
+  async function writeBlobToSaveDir(blob, filename) {
+    if (!saveDirHandle || saveDirPending) return false;
+    const ok = await ensureSaveDirPermission(saveDirHandle, { interactive: false });
+    if (!ok) {
+      saveDirPending = true;
+      paintSaveDirUi();
+      return false;
+    }
+    const fileHandle = await uniqueFileHandle(saveDirHandle, filename);
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return fileHandle.name || filename;
+  }
+
   async function saveReceivedBlob(blob, filename) {
     const name = filename || "download";
+    if (!isMobileClient() && saveDirHandle && !saveDirPending) {
+      try {
+        const savedAs = await writeBlobToSaveDir(blob, name);
+        if (savedAs) {
+          setInfo(`已保存到「${saveDirName || saveDirHandle.name}」：${savedAs}`);
+          notifyToast("已写入所选文件夹");
+          return;
+        }
+      } catch (e) {
+        setInfo(`写入所选文件夹失败，改用浏览器下载：${e?.message || "未知错误"}`);
+      }
+    }
+    if (!isMobileClient() && !saveDirHandle) {
+      setInfo("未选保存目录，已按浏览器默认下载保存。");
+    }
     if (isMobileClient() && typeof navigator.share === "function" && typeof File !== "undefined") {
       try {
         const file = new File([blob], name, { type: blob.type || "application/octet-stream" });
@@ -3286,9 +3618,12 @@
       try {
         const u = new URL(s);
         const frag = u.hash.replace(/^#/, "").trim();
+        if (frag.includes("lanshare?")) return frag;
+        const fromQuery = lanshareFragFromSearchParams(u.searchParams);
+        if (fromQuery) return fromQuery;
         if (frag.includes("lanshare")) return frag;
         const q = u.search.replace(/^\?/, "");
-        if (q && (/(^|&)(r|j|o|a)=/.test(q) || q.includes("lanshare"))) return `lanshare?${q}`;
+        if (q && (/(^|&)(r|j|o|a|lsr|lsh|lsj)=/.test(q) || q.includes("lanshare"))) return `lanshare?${q}`;
       } catch (_) {
         /* ignore */
       }
@@ -3312,33 +3647,91 @@
   function handleDecodedScan(raw) {
     const data = normalizeScanPayload(raw);
     if (!data || !looksLikeLansharePayload(data)) {
-      setError("识别到二维码，但不是互传邀请/连接码");
+      setScanFeedback("扫到了码，但不是互传邀请。请扫电脑上「完整链接」码。", "err");
+      setError("识别到二维码，但不是互传邀请/连接码。系统相机请扫左侧完整链接，不要扫右侧短码。");
       return;
     }
     stopScan();
     setScanHint("");
+    setScanFeedback("已识别，正在加入…", "ok");
+    notifyToast("已识别邀请码");
+    setInfo("已识别邀请码，正在连接…");
+    const fail = (err) => {
+      setScanFeedback(err?.message || "加入失败", "err");
+      setError(err?.message || "加入失败");
+    };
     if (state.isHost && isOfferScanData(data)) {
-      applyOfferFromScanData(data).catch((err) => setError(err.message));
+      applyOfferFromScanData(data).then(() => setScanFeedback("已连接成员", "ok")).catch(fail);
       return;
     }
     if (state.isHost && isAnswerScanData(data)) {
-      applyAnswerFromScanData(data).catch((err) => setError(err.message));
+      applyAnswerFromScanData(data).then(() => setScanFeedback("已确认应答", "ok")).catch(fail);
       return;
     }
     if (!state.isHost && isAnswerScanData(data)) {
-      applyHostAnswer(data).catch((err) => setError(err.message));
+      applyHostAnswer(data).then(() => setScanFeedback("已完成配对", "ok")).catch(fail);
       return;
     }
-    joinFromScanData(data).catch((err) => setError(err.message));
+    joinFromScanData(data).then(() => setScanFeedback("已加入房间", "ok")).catch(fail);
+  }
+
+  async function decodeQrFromVideo(video) {
+    if (!scanBarcodeTried) {
+      scanBarcodeTried = true;
+      try {
+        if (typeof globalThis.BarcodeDetector === "function") {
+          const formats = await globalThis.BarcodeDetector.getSupportedFormats();
+          if (formats.includes("qr_code")) {
+            scanBarcodeDetector = new globalThis.BarcodeDetector({ formats: ["qr_code"] });
+          }
+        }
+      } catch (_) {
+        scanBarcodeDetector = null;
+      }
+    }
+    if (scanBarcodeDetector) {
+      try {
+        const codes = await scanBarcodeDetector.detect(video);
+        const text = codes?.[0]?.rawValue;
+        if (text) return String(text);
+      } catch (_) {
+        /* fall through to jsQR */
+      }
+    }
+    return decodeQrFromSource(video, video.videoWidth, video.videoHeight);
+  }
+
+  function cameraErrorMessage(err) {
+    const name = err?.name || "";
+    if (typeof window.isSecureContext !== "undefined" && !window.isSecureContext) {
+      return "当前不是 HTTPS/localhost，浏览器禁止打开摄像头。请用系统相机扫「完整链接」码，或打开 https://afra55.github.io/tools/#lanshare";
+    }
+    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+      return isIOS()
+        ? "未允许相机。请到 Safari 设置允许相机，或改用「相册识码」。"
+        : "未允许相机。请在浏览器权限里允许摄像头，或改用「相册识码」。";
+    }
+    if (name === "NotFoundError" || name === "OverconstrainedError") {
+      return "没有可用摄像头。请用「相册识码」或粘贴邀请链接。";
+    }
+    if (name === "NotReadableError" || name === "TrackStartError") {
+      return "摄像头被其它应用占用。关掉占用后重试，或用「相册识码」。";
+    }
+    if (name === "SecurityError") {
+      return "当前页面不允许摄像头。请用 HTTPS 打开本站后再扫。";
+    }
+    return isIOS()
+      ? "无法打开摄像头：请在 Safari 允许相机，或改用「相册识码」。"
+      : "无法打开摄像头，请用相册识码或粘贴邀请链接。";
   }
 
   function decodeQrFromImage(img) {
-    if (!getJsQR()) throw new Error("扫码库未加载");
+    if (!getJsQR() && !scanBarcodeDetector) throw new Error("扫码库未加载");
     const w = img.naturalWidth || img.videoWidth || img.width;
     const h = img.naturalHeight || img.videoHeight || img.height;
     if (!w || !h) throw new Error("无法读取图片尺寸");
     const data = decodeQrFromSource(img, w, h);
-    if (!data) throw new Error("未识别到二维码，请换更清晰的图片或对准一些");
+    if (!data) throw new Error("未识别到二维码。请换更清晰的图，或对准电脑上的「完整链接」码。");
     return data;
   }
 
@@ -3366,11 +3759,15 @@
     state.autoJoinBusy = true;
     try {
       setError("");
+      setScanFeedback("正在根据扫码链接加入…", "ok");
+      setInfo("正在根据扫码链接加入房间…");
       const joinText = pending.startsWith("lanshare?") ? pending : `lanshare?j=${pending}`;
       await joinRoom(joinText);
       clearPendingJoinToken();
-      history.replaceState(null, "", "#lanshare");
+      clearLanshareJoinLocation();
+      setScanFeedback("已加入房间", "ok");
     } catch (e) {
+      setScanFeedback(e.message || "自动加入失败", "err");
       setError(e.message || "自动加入失败，请粘贴链接后点「确认加入」");
     } finally {
       state.autoJoinBusy = false;
@@ -3378,20 +3775,31 @@
   }
 
   async function startScan() {
+    setScanFeedback("正在打开摄像头…", "");
     try {
       await ensureQrLibs();
     } catch (e) {
+      setScanFeedback(e.message || "扫码库未加载", "err");
       setError(e.message || "扫码库未加载");
       return;
     }
-    if (!getJsQR()) {
-      setError("扫码库未加载");
+    if (!getJsQR() && typeof globalThis.BarcodeDetector !== "function") {
+      setScanFeedback("扫码库未加载", "err");
+      setError("扫码库未加载，请刷新页面后重试");
       return;
     }
     stopScan();
     setError("");
+    if (typeof window.isSecureContext !== "undefined" && !window.isSecureContext) {
+      const msg = cameraErrorMessage({ name: "SecurityError" });
+      setScanFeedback(msg, "err");
+      setError(msg);
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError("当前环境无法打开摄像头，请用「图片识别邀请码」或手动粘贴");
+      const msg = "当前环境无法打开摄像头。请用系统相机扫「完整链接」码，或点「相册识码」。";
+      setScanFeedback(msg, "err");
+      setError(msg);
       return;
     }
     try {
@@ -3410,13 +3818,16 @@
       }
       if (els.camWrap) els.camWrap.hidden = false;
       if (els.camStop) els.camStop.hidden = false;
-      setScanHint("对准二维码，保持稳定…");
-      const tick = () => {
+      scanStartedAt = Date.now();
+      scanMissHintAt = 0;
+      setScanHint("对准电脑上的二维码，保持稳定…");
+      setScanFeedback("摄像头已打开，对准二维码…", "ok");
+      const tick = async () => {
         if (!camStream || !els.camVideo) return;
         const v = els.camVideo;
         if (v.readyState >= v.HAVE_CURRENT_DATA && v.videoWidth > 0 && v.videoHeight > 0) {
           try {
-            const data = decodeQrFromSource(v, v.videoWidth, v.videoHeight);
+            const data = await decodeQrFromVideo(v);
             if (data) {
               handleDecodedScan(data);
               return;
@@ -3425,12 +3836,28 @@
             /* ignore frame errors */
           }
         }
-        scanTimer = window.setTimeout(tick, 140);
+        const elapsed = Date.now() - scanStartedAt;
+        if (elapsed > 8000 && scanMissHintAt < 1) {
+          scanMissHintAt = 1;
+          setScanHint("还没扫到。靠近一些，或改扫左侧「完整链接」码。");
+          setScanFeedback("还没扫到码：靠近、对焦，或改用相册识码。", "err");
+        } else if (elapsed > 16000 && scanMissHintAt < 2) {
+          scanMissHintAt = 2;
+          setScanHint("仍未识别。请用相册拍下二维码再点「相册识码」，或复制邀请链接。");
+          setError("扫码超时：请用「相册识码」或粘贴邀请链接。");
+        }
+        scanTimer = window.setTimeout(() => {
+          tick().catch(() => {});
+        }, 140);
       };
-      scanTimer = window.setTimeout(tick, 140);
+      scanTimer = window.setTimeout(() => {
+        tick().catch(() => {});
+      }, 140);
     } catch (e) {
       setScanHint("");
-      setError(isIOS() ? "无法打开摄像头：请在 Safari 设置中允许相机，或改用「图片识别邀请码」" : "无法打开摄像头，请用图片识别或粘贴邀请文本");
+      const msg = cameraErrorMessage(e);
+      setScanFeedback(msg, "err");
+      setError(msg);
     }
   }
 
@@ -3498,14 +3925,22 @@
   els.copyGuestAnswerBtn?.addEventListener("click", () => copyText(els.guestAnswerText?.value || "").catch((e) => setError(e.message)));
   els.scanBtn?.addEventListener("click", () => {
     state.answerScanMode = false;
-    startScan();
+    startScan().catch((e) => setError(e.message || "无法开始扫码"));
   });
-  els.scanFileBtn?.addEventListener("click", () => els.scanFileInput?.click());
   els.scanFileInput?.addEventListener("change", () => {
     const f = els.scanFileInput?.files?.[0];
-    if (f) scanFromFile(f).catch((e) => setError(e.message));
+    if (f) {
+      setScanFeedback("正在识别图片…", "");
+      scanFromFile(f).catch((e) => {
+        setScanFeedback(e.message || "识别失败", "err");
+        setError(e.message);
+      });
+    }
     if (els.scanFileInput) els.scanFileInput.value = "";
   });
+  els.saveDirPick?.addEventListener("click", () => pickSaveDirectory().catch((e) => setError(e.message)));
+  els.saveDirGrant?.addEventListener("click", () => grantSaveDirectory().catch((e) => setError(e.message)));
+  els.saveDirClear?.addEventListener("click", () => clearSaveDirectory().catch((e) => setError(e.message)));
   els.camStop?.addEventListener("click", () => stopScan());
   els.leaveBtn?.addEventListener("click", () => leaveRoom());
   els.pickBtn?.addEventListener("click", () => els.fileInput?.click());
@@ -3537,6 +3972,8 @@
   paintPlatformHint();
   disableIfUnsupported();
   paintStatus();
+  paintSaveDirUi();
+  restoreSaveDirHandle().catch(() => paintSaveDirUi());
   tryApplyJoinOfferFromHash().catch(() => {});
   tryApplyJoinAnswerFromHash().catch(() => {});
   tryApplyHostAnswerFromHash().catch(() => {});
@@ -3571,6 +4008,10 @@
     normalizeRoomPassword,
     hashRoomPassword,
     validateRoomPassword,
+    inviteCameraUrl,
+    lanshareFragFromSearchParams,
+    canSaveDirPicker,
+    getSaveDirName: () => saveDirName,
     getRoomId: () => state.roomId,
   };
 
@@ -3585,6 +4026,7 @@
         tryAutoJoinFromHash().catch(() => {});
         tryAutoJoinFromPassword().catch(() => {});
         tryFlushSiteShareQueue();
+        restoreSaveDirHandle().catch(() => {});
         try {
           const hint = sessionStorage.getItem(SITE_SHARE_KEY);
           if (hint && !canUploadFiles()) {

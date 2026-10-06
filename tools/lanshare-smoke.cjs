@@ -12,6 +12,7 @@ const { URL } = require("url");
 const { execSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 
 const baseUrl = process.argv[2] || "http://127.0.0.1:4173/tools/";
 const root = path.join(__dirname);
@@ -104,7 +105,7 @@ async function main() {
   assert(/lanshare:\s*"\.\/lanshare\.js"/.test(lazyJs), "lazy-scripts 未注册 lanshare.js");
   const build = toolsBuildFromHtml(htmlLocal);
   assert(build, "index.html 缺少 TOOLS_BUILD");
-  assert(/2026\.(08|09)\.\d{2}-\d{6}|20260817theme1/.test(htmlLocal), `index.html 版本/cache-bust 异常 (${build})`);
+  assert(/2026\.\d{2}\.\d{2}-\d{6}|20260817theme1/.test(htmlLocal), `index.html 版本/cache-bust 异常 (${build})`);
 
   const js = fs.readFileSync(path.join(root, "lanshare.js"), "utf8");
   assert(/encodeURIComponent\(token\)/.test(js), "邀请 token 应 URL 编码");
@@ -140,6 +141,14 @@ async function main() {
   assert(/sessionStorage/.test(js) && /PENDING_JOIN_KEY/.test(js), "缺少 join token 缓存");
   assert(/ls-known-limits/.test(lansharePanel), "缺少已知限制说明");
   assert(/使用注意/.test(lansharePanel), "缺少使用注意文案");
+  assert(/ls-scan-feedback/.test(lansharePanel), "缺少扫码反馈");
+  assert(/ls-save-dir-pick/.test(lansharePanel), "缺少保存目录按钮");
+  assert(/ls-join-steps/.test(lansharePanel), "缺少加入步骤");
+  assert(/完整链接/.test(lansharePanel), "缺少完整链接码说明");
+  assert(/inviteCameraUrl/.test(js), "邀请链接应带查询参数防微信丢 hash");
+  assert(/showDirectoryPicker/.test(js), "桌面应支持选择保存目录");
+  assert(/cameraErrorMessage/.test(js), "应提示摄像头权限/HTTPS");
+  assert(/promoteLanshareQueryToHash/.test(fs.readFileSync(path.join(root, "app.js"), "utf8")), "app.js 应将 ls 查询参数提升为 hash");
   assert(/AbortError/.test(js), "取消分享应回落下载");
   assert(/connectionState === "failed"/.test(js), "下载端应处理 WebRTC failed");
   assert(/isSecureContext/.test(js), "应提示非安全上下文");
@@ -239,6 +248,76 @@ async function main() {
     assert(joined.joinHidden, "加入区未隐藏");
     assert(joined.hash === "#lanshare", `加入后 hash 未清理: ${joined.hash}`);
     console.log("OK deep link auto-join", JSON.stringify(joined));
+
+    const camUrl = await page.evaluate(() => window.LanShareSelfTest.inviteCameraUrl("lanshare?r=JOINQ1&h=hostq"));
+    assert(/[?&]ls=1/.test(camUrl) && /lsr=JOINQ1/.test(camUrl) && /#lanshare\?/.test(camUrl), `完整链接码格式异常: ${camUrl}`);
+    const parsedCam = await page.evaluate(async (url) => window.LanShareSelfTest.parseInviteAsync(url), camUrl);
+    assert(parsedCam.roomId === "JOINQ1", `完整链接解析失败: ${JSON.stringify(parsedCam)}`);
+
+    const queryOnly = new URL(await page.evaluate(() => window.LanShareSelfTest.inviteLinkBase()));
+    queryOnly.search = "ls=1&lsr=JOINQ1&lsh=hostq";
+    queryOnly.hash = "";
+    const queryPage = await browser.newPage();
+    await queryPage.goto(queryOnly.href, { waitUntil: "networkidle2", timeout: 60000 });
+    await queryPage.waitForFunction(
+      () => window.LanShareSelfTest?.getRoomId?.() === "JOINQ1",
+      { timeout: 20000 }
+    );
+    const queryJoined = await queryPage.evaluate(() => ({
+      roomId: window.LanShareSelfTest?.getRoomId?.() || "",
+      hash: location.hash,
+    }));
+    assert(queryJoined.roomId === "JOINQ1", `无 hash 查询参数未自动加入: ${JSON.stringify(queryJoined)}`);
+    await queryPage.close();
+    console.log("OK query-only auto-join", JSON.stringify(queryJoined));
+
+    const shotDir = fs.mkdtempSync(path.join(os.tmpdir(), "lanshare-ux-"));
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(new URL("#lanshare", baseUrl).href, { waitUntil: "networkidle2", timeout: 60000 });
+    await page.waitForSelector("#lanshare.is-workspace-active, #lanshare:not([hidden])", { timeout: 15000 }).catch(() => {});
+    const ux = await page.evaluate(async () => {
+      const scan = document.getElementById("ls-scan");
+      scan?.click();
+      await new Promise((r) => setTimeout(r, 400));
+      return {
+        steps: (document.getElementById("ls-join-steps")?.textContent || "").includes("创建房间"),
+        saveDir: !document.getElementById("ls-save-dir-row")?.hidden,
+        saveHint: document.getElementById("ls-save-dir-hint")?.textContent || "",
+        scanFb: document.getElementById("ls-scan-feedback")?.textContent || "",
+        scanBtn: !!document.getElementById("ls-scan"),
+        error: document.getElementById("ls-error")?.textContent || "",
+      };
+    });
+    assert(ux.steps && ux.scanBtn, `空态步骤/扫码按钮缺失: ${JSON.stringify(ux)}`);
+    assert(ux.saveDir, "桌面视口应显示保存目录");
+    assert(/默认/.test(ux.saveHint), `未选目录提示不清: ${ux.saveHint}`);
+    await page.screenshot({ path: path.join(shotDir, "desktop-empty.png"), fullPage: true });
+    await page.click("#ls-create");
+    await page.waitForFunction(
+      () => !document.getElementById("ls-invite-area")?.hidden && document.querySelector("#ls-invite-qr canvas, #ls-invite-qr img, #ls-invite-qr table"),
+      { timeout: 15000 }
+    );
+    const hostUx = await page.evaluate(() => ({
+      guide: (document.getElementById("ls-pairing-guide")?.textContent || "").includes("完整链接"),
+      saveDir: !document.getElementById("ls-save-dir-row")?.hidden,
+    }));
+    assert(hostUx.guide, "房主引导应写明扫完整链接码");
+    await page.screenshot({ path: path.join(shotDir, "desktop-host-qr.png"), fullPage: true });
+
+    await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    await page.reload({ waitUntil: "networkidle2", timeout: 60000 });
+    await page.evaluate(() => {
+      location.hash = "lanshare";
+    });
+    await page.waitForFunction(() => document.getElementById("ls-scan"), { timeout: 15000 });
+    const mobileUx = await page.evaluate(() => ({
+      saveHidden: document.getElementById("ls-save-dir-row")?.hidden !== false,
+      scan: !!document.getElementById("ls-scan"),
+      steps: (document.getElementById("ls-join-steps")?.textContent || "").includes("完整链接"),
+    }));
+    assert(mobileUx.scan && mobileUx.steps, `窄屏扫码入口缺失: ${JSON.stringify(mobileUx)}`);
+    await page.screenshot({ path: path.join(shotDir, "mobile-empty.png"), fullPage: true });
+    console.log("OK ux walk", JSON.stringify({ ux, mobileUx, shotDir }));
 
     const platforms = ["iOS Safari", "Android Chrome", "Desktop Chrome"];
     const uas = [

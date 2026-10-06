@@ -1,3 +1,41 @@
-#ls-scan-hint {
+#ls-scan-hint,
+#ls-scan-feedback {
   margin: 0.35rem 0 0;
+}
+
+#ls-scan-feedback:empty {
+  display: none;
+}
+
+#ls-scan-feedback.is-ok {
+  color: var(--ok, #3dd68c);
+}
+
+#ls-scan-feedback.is-err {
+  color: var(--danger, #ff6b6b);
+}
+
+#ls-error {
+  margin-top: 0.5rem;
+}
+
+.ls-steps {
+  margin: 0 0 0.75rem;
+  padding-left: 1.2rem;
+}
+
+.ls-steps li + li {
+  margin-top: 0.2rem;
+}
+
+.ls-save-dir-main strong {
+  display: block;
+}
+
+.ls-save-dir-main #ls-save-dir-name {
+  margin: 0.2rem 0 0;
+}
+
+#lanshare .primary-btn:disabled {
+  opacity: 0.55;
 }

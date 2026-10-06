@@ -2059,7 +2059,40 @@
   }
 
   /** iOS PWA / Safari 冷启动常带 #timestamp、空 hash 或裸 #media，在此类占位路由上恢复上次工具 */
+  function lanshareJoinFragFromSearch() {
+    try {
+      const sp = new URLSearchParams(location.search);
+      if (sp.get("ls") !== "1" && !sp.get("lsr") && !sp.get("lsj") && !sp.get("lso") && !sp.get("lsa")) return "";
+      const j = sp.get("lsj");
+      if (j) return `lanshare?j=${encodeURIComponent(j)}`;
+      const r = sp.get("lsr") || (sp.get("ls") === "1" ? sp.get("r") : "");
+      const h = sp.get("lsh") || (sp.get("ls") === "1" ? sp.get("h") : "");
+      if (r && h) return `lanshare?r=${encodeURIComponent(r)}&h=${encodeURIComponent(h)}`;
+      const o = sp.get("lso");
+      if (o) return `lanshare?o=${encodeURIComponent(o)}`;
+      const a = sp.get("lsa");
+      if (a) return `lanshare?a=${encodeURIComponent(a)}`;
+    } catch (_) {
+      /* ignore */
+    }
+    return "";
+  }
+
+  function promoteLanshareQueryToHash() {
+    const frag = lanshareJoinFragFromSearch();
+    if (!frag) return false;
+    const raw = String(location.hash || "").replace(/^#/, "").trim();
+    if (raw.startsWith("lanshare?")) return false;
+    try {
+      history.replaceState(null, "", `${location.pathname}${location.search}#${frag}`);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function shouldRestoreLastTool() {
+    if (lanshareJoinFragFromSearch()) return false;
     const raw0 = String(location.hash || "").replace(/^#/, "").trim();
     if (!raw0 || raw0 === "/") return true;
     const q = raw0.indexOf("?");
@@ -2087,6 +2120,7 @@
   }
 
   function bootRoute() {
+    promoteLanshareQueryToHash();
     restoreLastToolOnStartup();
     applyRoute({ skipRecent: bootPasses > 0, deferAssets: true });
     forceDrawerClosed();
