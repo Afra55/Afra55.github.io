@@ -289,6 +289,7 @@ async function main() {
       const cutAdd = $("cut-add");
       const cutTools = $("cut-tools");
       const cutToolsShown = cutTools && !cutTools.hidden && Boolean(cutAdd);
+      const downloadBtn = Boolean($("download")) && /下载编辑后的视频/.test($("download")?.textContent || "");
 
       const video = document.querySelector(".vtrim-editor-overlay video");
       const timeline = document.querySelector(".vtrim-editor-overlay .vtrim-timeline");
@@ -431,6 +432,25 @@ async function main() {
         closed,
         badge: badge.slice(0, 80),
         savedHint,
+        downloadBtn,
+        cutClosedKeep:
+          typeof window.DevToolsVtrimEditor?.keepRangesFromEdit === "function"
+            ? (() => {
+                const ks = window.DevToolsVtrimEditor.keepRangesFromEdit(
+                  { trimStart: 0, trimEnd: 10, cutouts: [{ start: 2, end: 4 }] },
+                  10
+                );
+                return {
+                  n: ks.length,
+                  k0end: ks[0]?.end,
+                  k1start: ks[1]?.start,
+                  ok:
+                    ks.length === 2 &&
+                    Math.abs((ks[0]?.end || 0) - 2) < 0.02 &&
+                    (ks[1]?.start || 0) >= 4 + 1 / 25 - 0.01,
+                };
+              })()
+            : { ok: false, reason: "no-keepRanges" },
       };
     });
     check(
@@ -489,6 +509,18 @@ async function main() {
       "edit.trim-end-half-open",
       editSuite.trimTailKeep?.ok === true,
       JSON.stringify(editSuite.trimTailKeep || {})
+    );
+    check(
+      rows,
+      "edit.cut-closed-keep",
+      editSuite.cutClosedKeep?.ok === true,
+      JSON.stringify(editSuite.cutClosedKeep || {})
+    );
+    check(
+      rows,
+      "edit.download-edited-mp4",
+      editSuite.downloadBtn === true,
+      JSON.stringify({ downloadBtn: editSuite.downloadBtn })
     );
     check(
       rows,

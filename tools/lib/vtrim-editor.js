@@ -154,7 +154,7 @@
             <button type="button" class="ghost-btn" id="${p("nudge-end-p")}" title="片尾 +0.1s，可长按">片尾+</button>
           </div>
           <div class="btn-row tool-actions vtrim-cut-tools" id="${p("cut-tools")}" hidden aria-label="删中间">
-            <button type="button" class="secondary-btn" id="${p("cut-add")}" title="从进度条当前位置起添加删除区（当前帧=删除起点）">添加删除段</button>
+            <button type="button" class="secondary-btn" id="${p("cut-add")}" title="从进度条当前位置起添加删除区（当前帧=删除起点；红柄两端所见帧都会删）">添加删除段</button>
             <button type="button" class="ghost-btn" id="${p("cut-del")}" title="删除当前选中的删除段" disabled>删选中段</button>
             <button type="button" class="ghost-btn" id="${p("cut-clear")}" title="清空全部删除段">清空</button>
           </div>
@@ -178,6 +178,7 @@
     </div>
     <footer class="vtrim-editor-foot">
       <button type="button" class="ghost-btn" id="${p("close")}">关闭</button>
+      <button type="button" class="secondary-btn" id="${p("download")}" title="导出修剪+删中间后的 MP4（不是 GIF）">下载编辑后的视频</button>
       <button type="button" class="primary-btn" id="${p("done")}">完成</button>
     </footer>
   </div>
@@ -283,6 +284,7 @@
     const cutAddBtn = $("cut-add");
     const cutDelBtn = $("cut-del");
     const cutClearBtn = $("cut-clear");
+    const downloadBtn = $("download");
 
     const filmVideo = document.createElement("video");
     filmVideo.muted = true;
@@ -346,7 +348,7 @@
           editMode === "crop"
             ? "拖绿框 · 双击重置"
             : editMode === "cut"
-              ? "拖进度到要删的起点 · 点「添加删除段」· 再拖红柄调终点"
+              ? "拖进度到要删的起点 · 点「添加删除段」· 红柄两端所见帧及其之间都会删"
               : "拖黄柄裁片头片尾";
       }
       syncCropBoxVisibility();
@@ -387,16 +389,15 @@
     }
 
     function keepRangesLocal() {
-      const cuts = normalizeCutoutsList(cutouts, startSec, endSec);
-      const keeps = [];
-      let cursor = startSec;
-      for (const c of cuts) {
-        if (c.start > cursor + 0.04) keeps.push({ start: cursor, end: c.start });
-        cursor = Math.max(cursor, c.end);
-      }
-      if (endSec > cursor + 0.04) keeps.push({ start: cursor, end: endSec });
-      if (!keeps.length) keeps.push({ start: startSec, end: endSec });
-      return keeps;
+      return keepRangesFromEdit(
+        { trimStart: startSec, trimEnd: endSec, cutouts },
+        duration || endSec
+      );
+    }
+
+    /** 删除段在成片侧的半开终点：含预览终点帧，再多收约 1 帧 */
+    function cutResumeSec(c) {
+      return Math.min(endKeepSec(), (Number(c?.end) || 0) + END_KEEP_SEC);
     }
 
     function clipCutoutsToWindow() {
@@ -456,7 +457,7 @@
       syncCutoutUi();
       updateLabels();
       previewSeek(a, { throttle: false });
-      toast("已从当前进度添加删除段 · 拖红柄调终点");
+      toast("已从当前进度添加删除段 · 拖红柄；两端所见帧都会删");
     }
 
     function deleteSelectedCutout() {
@@ -895,6 +896,7 @@
     async function finishTrimDrag() {
       if (!drag) return;
       const kind = drag.kind;
+      const cutIndex = drag.cutIndex;
       // 抬手只用已提交的 start/end，再对齐到浏览器实际显示帧（防预览/成片偏差）
       if (kind === "start") {
         const want = quantizeTrimSec(snapEdgeOnly(startSec, "start"));
@@ -934,9 +936,26 @@
         paintTimeline();
         updateLabels();
       } else if (kind === "cut-start" || kind === "cut-end") {
-        clipCutoutsToWindow();
-        paintCutouts();
-        updateLabels();
+        const idx = Number(cutIndex);
+        if (idx >= 0 && idx < cutouts.length) {
+          try {
+            video.pause();
+          } catch (_) {}
+          await waitSeek(video);
+          const shown = Number(video.currentTime);
+          const c = cutouts[idx];
+          const want = kind === "cut-end" ? c.end : c.start;
+          const snapped = Number.isFinite(shown)
+            ? kind === "cut-end"
+              ? Math.max(want, shown)
+              : Math.min(want, shown)
+            : want;
+          setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", snapped);
+        } else {
+          clipCutoutsToWindow();
+          paintCutouts();
+          updateLabels();
+        }
       }
     }
 
@@ -977,8 +996,8 @@
       let target = clamp(t, startSec, endKeepSec());
       // 若落在删除段内，跳到下一段保留起点
       for (const c of normalizeCutoutsList(cutouts, startSec, endSec)) {
-        if (target >= c.start - 0.001 && target < c.end) {
-          target = clamp(c.end, startSec, endKeepSec());
+        if (target >= c.start - 0.001 && target < cutResumeSec(c)) {
+          target = clamp(cutResumeSec(c), startSec, endKeepSec());
           break;
         }
       }
@@ -1031,10 +1050,10 @@
       }
       // 跳过删除段
       for (const c of normalizeCutoutsList(cutouts, startSec, endSec)) {
-        if (cur >= c.start - 0.01 && cur < c.end - 0.001) {
+        if (cur >= c.start - 0.01 && cur < cutResumeSec(c) - 0.001) {
           playWindowLooping = true;
           const gen = ++playWindowGen;
-          seekPlayheadExact(c.end)
+          seekPlayheadExact(cutResumeSec(c))
             .then(() => {
               if (closed || gen !== playWindowGen) return;
               playWindowLooping = false;
@@ -1110,6 +1129,53 @@
           h: Math.round(clamp(crop.h, 2, srcH)),
         },
       };
+    }
+
+    let exporting = false;
+    async function downloadEditedVideo() {
+      if (closed || exporting) return;
+      const edit = getEditState();
+      exporting = true;
+      const prev = downloadBtn?.textContent;
+      if (downloadBtn) {
+        downloadBtn.disabled = true;
+        downloadBtn.textContent = "导出中…";
+      }
+      toast("正在导出编辑后的视频…");
+      try {
+        const out = await exportKeepVideo(file, edit, duration, {
+          srcW: video.videoWidth || 0,
+          srcH: video.videoHeight || 0,
+          applyCrop: Boolean(edit.cropOn),
+          onProgress: (_r, text) => {
+            if (downloadBtn && text) downloadBtn.textContent = String(text).slice(0, 12);
+          },
+        });
+        const blob = out?.blob || (out?.file ? new Blob([out.file], { type: "video/mp4" }) : null);
+        if (!blob || !blob.size) throw new Error("未产出视频");
+        const name =
+          out?.filename ||
+          String(file.name || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
+        const dl = window.DevToolsExtraMedia?.triggerBlobDownload;
+        if (typeof dl === "function") dl(blob, name);
+        else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        }
+        toast("已开始下载编辑后的视频");
+      } finally {
+        exporting = false;
+        if (downloadBtn) {
+          downloadBtn.disabled = false;
+          downloadBtn.textContent = prev || "下载编辑后的视频";
+        }
+      }
     }
 
     function cleanup() {
@@ -1262,6 +1328,9 @@
     });
     $("close")?.addEventListener("click", () => finish(false));
     $("done")?.addEventListener("click", () => finish(true));
+    downloadBtn?.addEventListener("click", () => {
+      downloadEditedVideo().catch((err) => toast(err?.message || String(err) || "导出失败"));
+    });
 
     function onTimelinePointerDown(e) {
       if (!duration) return;
@@ -1590,15 +1659,160 @@
     const keeps = [];
     let cursor = trimStart;
     for (const c of cuts) {
-      if (c.start > cursor + 0.04) keeps.push({ start: cursor, end: c.start });
-      cursor = Math.max(cursor, c.end);
+      // 闭区间：预览 cut.start / cut.end 两帧都要删。keep 在 start 处断开（半开），
+      // 下一 keep 从 end+END_KEEP_SEC 再接，避免成片再放出终点所见帧；宁可多删 1 帧。
+      const delFrom = Math.max(trimStart, Number(c.start) || 0);
+      const delTo = Math.min(trimEnd, (Number(c.end) || 0) + END_KEEP_SEC);
+      if (delFrom > cursor + 0.02) keeps.push({ start: cursor, end: delFrom });
+      cursor = Math.max(cursor, delTo);
     }
-    if (trimEnd > cursor + 0.04) keeps.push({ start: cursor, end: trimEnd });
+    if (trimEnd > cursor + 0.02) keeps.push({ start: cursor, end: trimEnd });
     if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
-    // 半开片尾：预览停在 endKeep=trimEnd-1/25，成片必须同样收掉，否则 GIF 会多出黄柄后几帧
     const last = keeps[keeps.length - 1];
-    if (last) last.end = Math.max(last.start + 0.05, last.end - END_KEEP_SEC);
+    if (last && last.end >= trimEnd - 0.001) {
+      last.end = Math.max(last.start + 0.05, last.end - END_KEEP_SEC);
+    }
     return keeps;
+  }
+
+  function evenDim(n) {
+    return Math.max(2, Math.round((Number(n) || 2) / 2) * 2);
+  }
+
+  function cropVfFromEdit(edit) {
+    if (!edit?.cropOn || !edit.crop) return "";
+    const x = Math.max(0, Math.round(Number(edit.crop.x) || 0));
+    const y = Math.max(0, Math.round(Number(edit.crop.y) || 0));
+    const w = evenDim(Math.max(2, Number(edit.crop.w) || 2));
+    const h = evenDim(Math.max(2, Number(edit.crop.h) || 2));
+    return `crop=${w}:${h}:${x}:${y}`;
+  }
+
+  /**
+   * 按 keepRangesFromEdit 切出 trim+cutouts 后的 mp4（wasm ffmpeg）。
+   * @returns {Promise<{ file: File, blob: Blob, duration: number, srcW: number, srcH: number, filename: string }>}
+   */
+  async function exportKeepVideo(file, edit, duration, opts = {}) {
+    const onProgress = typeof opts.onProgress === "function" ? opts.onProgress : () => {};
+    const getFf =
+      window.DevToolsFfmpeg?.getInstance || window.DevToolsExtraMedia?.getFfmpegInstance;
+    const writeIn =
+      window.DevToolsFfmpeg?.ensureInputWritten || window.DevToolsExtraMedia?.ensureFfmpegInputWritten;
+    if (typeof getFf !== "function" || typeof writeIn !== "function") {
+      throw new Error("编码器未就绪，请稍等本机 FFmpeg 加载后再试");
+    }
+    const ffmpeg = await getFf((r, t) => onProgress(r, t || "准备编码器…"));
+    if (!ffmpeg) throw new Error("无法加载编码器");
+    const keeps = keepRangesFromEdit(edit, duration);
+    if (!keeps.length) throw new Error("没有可保留的片段");
+    const inName = await writeIn(ffmpeg, file, () => onProgress(0.05, "载入视频…"));
+    const srcW = Math.max(2, Number(opts.srcW) || 720);
+    const srcH = Math.max(2, Number(opts.srcH) || 404);
+    const W = evenDim(srcW);
+    const H = evenDim(srcH);
+    const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
+    const parts = [];
+    const trySlice = async (k, i, useTrim) => {
+      const start = Math.max(0, Number(k.start) || 0);
+      const end = Math.max(start + 0.05, Number(k.end) || 0);
+      const dur = Math.max(0.05, end - start);
+      const out = `keep${i}.mp4`;
+      const vfCore = [
+        cropVf,
+        useTrim ? `trim=start=${start}:end=${end}` : "",
+        useTrim ? "setpts=PTS-STARTPTS" : "",
+        `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
+        `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2`,
+        "setsar=1",
+        "format=yuv420p",
+      ]
+        .filter(Boolean)
+        .join(",");
+      const args = useTrim
+        ? ["-i", inName, "-an", "-vf", vfCore]
+        : ["-i", inName, "-ss", String(start), "-t", String(dur), "-an", "-vf", vfCore];
+      args.push(
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-y",
+        out
+      );
+      const code = await ffmpeg.exec(args).catch(() => 1);
+      return { code, out };
+    };
+    for (let i = 0; i < keeps.length; i++) {
+      onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
+      let { code, out } = await trySlice(keeps[i], i, true);
+      if (code !== 0) ({ code, out } = await trySlice(keeps[i], i, false));
+      if (code !== 0) throw new Error(`切片失败（段 ${i + 1}）`);
+      parts.push(out);
+    }
+    onProgress(0.7, "拼接…");
+    const filename = String(file?.name || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
+    let merged = parts[0];
+    if (parts.length > 1) {
+      merged = "keep-merged.mp4";
+      const listName = "keep-concat.txt";
+      const listBody = parts.map((p) => `file '${p}'`).join("\n");
+      await ffmpeg.writeFile(listName, new TextEncoder().encode(listBody));
+      let code = await ffmpeg
+        .exec(["-f", "concat", "-safe", "0", "-i", listName, "-c", "copy", "-y", merged])
+        .catch(() => 1);
+      if (code !== 0) {
+        const filter = parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
+        const args = [];
+        parts.forEach((p) => args.push("-i", p));
+        args.push(
+          "-filter_complex",
+          filter,
+          "-map",
+          "[v]",
+          "-an",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-crf",
+          "18",
+          "-pix_fmt",
+          "yuv420p",
+          "-y",
+          merged
+        );
+        code = await ffmpeg.exec(args).catch(() => 1);
+      }
+      try {
+        await ffmpeg.deleteFile(listName);
+      } catch (_) {}
+      if (code !== 0) throw new Error("拼接失败");
+    }
+    const data = await ffmpeg.readFile(merged);
+    const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const bytes = new Uint8Array(raw.byteLength);
+    bytes.set(raw);
+    const blob = new Blob([bytes], { type: "video/mp4" });
+    const outFile = new File([blob], filename, { type: "video/mp4" });
+    for (const p of parts) {
+      try {
+        await ffmpeg.deleteFile(p);
+      } catch (_) {}
+    }
+    if (merged !== parts[0]) {
+      try {
+        await ffmpeg.deleteFile(merged);
+      } catch (_) {}
+    }
+    const totalSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
+    onProgress(1, "完成");
+    return { file: outFile, blob, duration: totalSpan, srcW: W, srcH: H, filename };
   }
 
   window.DevToolsVtrimEditor = {
@@ -1606,6 +1820,7 @@
     ensureCss: ensureVtrimCss,
     normalizeCutouts,
     keepRangesFromEdit,
+    exportKeepVideo,
     END_KEEP_SEC,
     START_KEEP_SEC,
   };

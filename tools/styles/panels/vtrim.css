@@ -637,16 +637,21 @@ body.vtrim-editor-open {
     min-width: 0;
     text-align: center;
   }
-  /* 底栏固定完成/关闭；模式分段减少与预览打架 */
+  /* 底栏固定完成/关闭；下载按钮单独一行 */
   .vtrim-editor-foot {
     position: sticky;
     bottom: 0;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: stretch;
   }
   .vtrim-editor-foot .ghost-btn,
   .vtrim-editor-foot .primary-btn {
     flex: 1 1 0;
     min-height: 2.75rem;
+  }
+  .vtrim-editor-foot .secondary-btn {
+    flex: 1 1 100%;
+    min-height: 2.75rem;
+    order: -1;
   }
 }

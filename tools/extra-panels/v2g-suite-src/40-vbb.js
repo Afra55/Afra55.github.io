@@ -588,18 +588,22 @@
         const cuts = vbbNormalizeCutouts(edit?.cutouts, trimStart, trimEnd);
         const keeps = [];
         let cursor = trimStart;
-        for (const c of cuts) {
-          if (c.start > cursor + 0.04) keeps.push({ start: cursor, end: c.start });
-          cursor = Math.max(cursor, c.end);
-        }
-        if (trimEnd > cursor + 0.04) keeps.push({ start: cursor, end: trimEnd });
-        if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
         const endKeep =
           Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
             ? window.DevToolsVtrimEditor.END_KEEP_SEC
             : 1 / 25;
+        for (const c of cuts) {
+          const delFrom = Math.max(trimStart, Number(c.start) || 0);
+          const delTo = Math.min(trimEnd, (Number(c.end) || 0) + endKeep);
+          if (delFrom > cursor + 0.02) keeps.push({ start: cursor, end: delFrom });
+          cursor = Math.max(cursor, delTo);
+        }
+        if (trimEnd > cursor + 0.02) keeps.push({ start: cursor, end: trimEnd });
+        if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
         const lastKeep = keeps[keeps.length - 1];
-        if (lastKeep) lastKeep.end = Math.max(lastKeep.start + 0.05, lastKeep.end - endKeep);
+        if (lastKeep && lastKeep.end >= trimEnd - 0.001) {
+          lastKeep.end = Math.max(lastKeep.start + 0.05, lastKeep.end - endKeep);
+        }
         return keeps;
       }
 
@@ -736,6 +740,22 @@
         if (keeps.length <= 1) {
           return { file, duration, srcW, srcH, materialized: false };
         }
+        const exp = window.DevToolsVtrimEditor?.exportKeepVideo;
+        if (typeof exp === "function") {
+          const out = await exp(file, edit, duration, {
+            srcW,
+            srcH,
+            applyCrop: false,
+            onProgress,
+          });
+          return {
+            file: out.file,
+            duration: Number(out.duration) || duration,
+            srcW: out.srcW || srcW,
+            srcH: out.srcH || srcH,
+            materialized: true,
+          };
+        }
         const ffmpeg =
           typeof getFfmpegInstance === "function"
             ? await getFfmpegInstance((r, t) => onProgress?.(r, t || "准备拼接编辑…"))
@@ -753,10 +773,10 @@
           const dur = Math.max(0.05, k.end - k.start);
           const out = `keep${i}.mp4`;
           const args = [
-            "-ss",
-            String(k.start),
             "-i",
             inName,
+            "-ss",
+            String(k.start),
             "-t",
             String(dur),
             "-an",
