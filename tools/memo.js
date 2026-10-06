@@ -3934,6 +3934,7 @@
 
   function showClipOffer() {
     if (state.clipOfferEl) return;
+    if (!isMemoActive()) return;
     const stack = $("#memo-temp-prompt-stack");
     if (!stack) return;
     const offMemo = !isMemoActive();

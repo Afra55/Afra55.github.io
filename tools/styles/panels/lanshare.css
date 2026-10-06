@@ -1,3 +1,7 @@
+#lanshare [hidden] {
+  display: none !important;
+}
+
 #ls-scan-hint,
 #ls-scan-feedback {
   margin: 0.35rem 0 0;
@@ -38,4 +42,12 @@
 
 #lanshare .primary-btn:disabled {
   opacity: 0.55;
+}
+
+.ls-qr-app-details {
+  margin: 0;
+}
+
+.ls-qr-app-details > summary {
+  cursor: pointer;
 }

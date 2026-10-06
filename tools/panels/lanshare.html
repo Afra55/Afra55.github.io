@@ -21,19 +21,6 @@
           <input id="ls-name" type="text" maxlength="24" placeholder="例如：小明的手机" autocomplete="off" spellcheck="false" style="min-width:10rem" />
         </div>
 
-        <div id="ls-save-dir-row" class="panel-card ls-save-dir" hidden style="margin-top:0.75rem">
-          <div class="ls-save-dir-main">
-            <strong>接收保存到</strong>
-            <p class="hint tight mono" id="ls-save-dir-name">浏览器默认下载文件夹</p>
-            <p class="hint tight" id="ls-save-dir-hint">未选目录时，点「下载」会走浏览器默认保存，不会弹窗问路径。</p>
-          </div>
-          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.4rem">
-            <button type="button" class="secondary-btn" id="ls-save-dir-pick">选择保存目录</button>
-            <button type="button" class="ghost-btn" id="ls-save-dir-grant" hidden>允许写入该目录</button>
-            <button type="button" class="ghost-btn" id="ls-save-dir-clear" hidden>改用浏览器下载</button>
-          </div>
-        </div>
-
         <div id="ls-join-area" style="margin-top:0.85rem">
           <ol class="ls-steps hint tight" id="ls-join-steps">
             <li>电脑点「创建房间」（可设密码）</li>
@@ -54,7 +41,7 @@
           <label for="ls-room-pwd-join" style="margin-top:0.85rem">输入房间密码加入</label>
           <input id="ls-room-pwd-join" type="text" maxlength="16" placeholder="向房主索取密码" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" style="min-width:10rem" />
           <div class="btn-row tool-actions ls-action-row" style="margin-top:0.35rem">
-            <button type="button" class="primary-btn" id="ls-join-pwd">密码加入</button>
+            <button type="button" class="secondary-btn" id="ls-join-pwd">密码加入</button>
           </div>
 
           <div class="ls-scan-block" style="margin-top:0.85rem">
@@ -89,16 +76,16 @@
           <h2 class="subhead">邀请加入</h2>
           <p class="mono panel-card tight" id="ls-room-pwd-display" hidden style="margin:0.5rem 0;font-size:1.15rem;letter-spacing:0.06em"></p>
           <div id="ls-pairing-guide" class="panel-card hint tight" hidden style="margin-bottom:0.65rem"></div>
-          <p class="hint tight">手机<strong>系统相机 / 微信</strong>请扫左侧「完整链接」。本页「摄像头扫码」才扫右侧短码。</p>
+          <p class="hint tight">手机用系统相机 / 微信扫下面这个码。</p>
           <div class="ls-qr-duo">
             <div class="ls-qr-piece">
               <p class="hint tight"><strong>完整链接</strong>（系统相机 / 微信）</p>
               <div id="ls-invite-qr" class="qr-box-wrap"></div>
             </div>
-            <div class="ls-qr-piece">
-              <p class="hint tight">应用内短码（仅本页摄像头）</p>
+            <details class="ls-qr-piece ls-qr-app-details">
+              <summary class="hint tight">本页摄像头才用短码</summary>
               <div id="ls-invite-qr-app" class="qr-box-wrap"></div>
-            </div>
+            </details>
           </div>
           <label for="ls-invite-text">邀请链接（可复制到微信发给手机）</label>
           <textarea id="ls-invite-text" class="mono area" rows="2" readonly spellcheck="false"></textarea>
@@ -135,6 +122,19 @@
           <button type="button" class="primary-btn" id="ls-pick" disabled>选择文件</button>
           <input id="ls-file-input" type="file" multiple accept="*/*" hidden />
           <button type="button" class="ghost-btn" id="ls-leave" hidden>退出房间</button>
+        </div>
+
+        <div id="ls-save-dir-row" class="panel-card ls-save-dir" hidden style="margin-top:0.75rem">
+          <div class="ls-save-dir-main">
+            <strong>接收保存到</strong>
+            <p class="hint tight mono" id="ls-save-dir-name">浏览器默认下载文件夹</p>
+            <p class="hint tight" id="ls-save-dir-hint">未选目录时，点「下载」会走浏览器默认保存，不会弹窗问路径。</p>
+          </div>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.4rem">
+            <button type="button" class="secondary-btn" id="ls-save-dir-pick">选择保存目录</button>
+            <button type="button" class="ghost-btn" id="ls-save-dir-grant" hidden>允许写入该目录</button>
+            <button type="button" class="ghost-btn" id="ls-save-dir-clear" hidden>改用浏览器下载</button>
+          </div>
         </div>
 
         <details class="hint tight" id="ls-known-limits" style="margin-top:0.75rem">

@@ -681,6 +681,16 @@
     return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   }
 
+  function userFacingError(msg) {
+    const s = String(msg || "").trim();
+    if (!s) return "";
+    if (/setRemoteDescription|RTCPeerConnection|Called in wrong state|SDP/i.test(s)) {
+      return "连接没握上手。请退出房间后重新加入，或改用房间密码。";
+    }
+    if (/Failed to execute/i.test(s)) return "浏览器连接失败，请重试或改用房间密码。";
+    return s;
+  }
+
   function notifyToast(msg) {
     const el = document.querySelector("#toast");
     if (!el || !msg) return;
@@ -705,9 +715,10 @@
 
   function setError(msg) {
     if (!els.errorEl) return;
-    els.errorEl.hidden = !msg;
-    els.errorEl.textContent = msg || "";
-    if (msg) notifyToast(msg);
+    const text = msg ? userFacingError(msg) : "";
+    els.errorEl.hidden = !text;
+    els.errorEl.textContent = text;
+    if (text) notifyToast(text);
   }
 
   function setInfo(msg) {
@@ -909,17 +920,10 @@
         "当前页面不是 HTTPS/localhost，部分浏览器会禁用 WebRTC。请打开 https://afra55.github.io/tools/#lanshare 或本机 localhost。"
       );
     }
-    parts.push("推荐：房主设房间密码，成员输入即可加入。");
-    if (isIOS()) {
-      parts.push("iOS 请用 Safari（不要用微信内置浏览器）。系统相机扫「完整链接」码；本页摄像头扫短码。");
-    } else if (isAndroid()) {
-      parts.push("Android 推荐 Chrome。微信/相机扫「完整链接」码；本页摄像头扫短码。");
-    } else {
-      parts.push("电脑创建房间后，让手机扫左侧完整链接码。接收文件可先选保存目录。");
-    }
-    parts.push("同一 WiFi；无断点续传。切后台可能断连。");
+    parts.push("同一 WiFi。推荐设房间密码，手机扫完整链接码加入。");
     els.platformHint.hidden = false;
     els.platformHint.textContent = parts.join(" ");
+    paintJoinCtas();
   }
 
   function paintPairingGuide() {
@@ -973,8 +977,9 @@
 
   function paintStatus() {
     const inRoom = !!state.roomId;
-    els.statusDot?.classList.toggle("is-ok", inRoom);
-    els.statusDot?.classList.toggle("is-err", !inRoom);
+    els.statusDot?.classList.toggle("is-ok", inRoom && !!state.controlLinked);
+    els.statusDot?.classList.toggle("is-warn", inRoom && !state.controlLinked);
+    els.statusDot?.classList.toggle("is-err", false);
     if (els.statusTitle) {
       if (!inRoom) els.statusTitle.textContent = "未加入房间";
       else if (state.isHost) els.statusTitle.textContent = `房主 · 房间 ${state.roomId}`;
@@ -989,7 +994,7 @@
     if (els.statusText) {
       els.statusText.textContent = inRoom
         ? `${state.members.size} 人在线 · 文件从上传者直传${statusExtra}`
-        : "创建或加入房间；文件不经房主中转。";
+        : "创建房间或输入密码加入。";
     }
     if (els.inviteArea) els.inviteArea.hidden = !inRoom || !state.isHost;
     if (els.joinArea) els.joinArea.hidden = inRoom;
@@ -1008,6 +1013,7 @@
     paintMembers();
     paintFiles();
     paintPairingGuide();
+    paintJoinCtas();
     if (canUploadFiles()) tryFlushSiteShareQueue();
     if (els.roomCodeEl) {
       els.roomCodeEl.hidden = !inRoom || !state.isHost;
@@ -1035,6 +1041,15 @@
           })
           .join("")
       : '<p class="hint tight">还没有其他设备。<br />1. 把邀请发给手机<br />2. 等对方出现在这里<br />3. 再传文件</p>';
+  }
+
+  function paintJoinCtas() {
+    if (!els.createBtn || !els.joinPwdBtn) return;
+    const mobile = isMobileClient();
+    els.createBtn.classList.toggle("primary-btn", !mobile);
+    els.createBtn.classList.toggle("secondary-btn", mobile);
+    els.joinPwdBtn.classList.toggle("primary-btn", mobile);
+    els.joinPwdBtn.classList.toggle("secondary-btn", !mobile);
   }
 
   function openJoinFallback(hint) {
@@ -2288,6 +2303,7 @@
       setError("当前浏览器不支持 WebRTC");
       return;
     }
+    stopScan();
     setJoinUiBusy(true);
     startBusyProgress("正在创建房间…", "create");
     try {
