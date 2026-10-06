@@ -545,6 +545,55 @@ body.vtrim-editor-open {
   background: color-mix(in srgb, var(--panel, #121826) 88%, #1e2a3d);
   z-index: 2;
 }
+.vtrim-export-progress {
+  flex: 1 1 100%;
+  margin: 0 0 0.35rem;
+}
+.vtrim-export-progress[hidden] {
+  display: none !important;
+}
+.vtrim-export-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.vtrim-export-progress-text {
+  margin: 0;
+}
+.vtrim-export-progress-pct {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+.vtrim-export-progress-track {
+  height: 6px;
+  margin-top: 0.25rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line, #334) 70%, transparent);
+  overflow: hidden;
+}
+.vtrim-export-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--accent, #6ea8ff);
+  transition: width 0.2s ease;
+}
+.vtrim-export-progress-fill.is-active {
+  animation: vtrim-export-pulse 1.2s ease-in-out infinite;
+}
+@keyframes vtrim-export-pulse {
+  50% { opacity: 0.65; }
+}
+.vtrim-export-status {
+  flex: 1 1 100%;
+  margin: 0 0 0.35rem;
+}
+.vtrim-export-status.is-error {
+  color: #f2a0a0;
+}
 @media (max-width: 640px) {
   .vtrim-editor-overlay {
     padding: 0;

@@ -285,10 +285,11 @@ async function encodeOne(page, videoPath) {
         if (c.error) continue;
         const qm = /画质\s*(\d+)/.exec(c.note || "");
         const gq = qm ? Number(qm[1]) : 0;
-        const atFloorW = (Number(c.outW) || Number(c.maxW) || 999) <= 381;
-        const atFloorFps = Number(c.fps) > 0 && Number(c.fps) <= 12.6;
-        if (gq > 0 && gq < 80 && !(atFloorW && atFloorFps)) {
-          throw new Error(`${name}: 画质优先成片 gq=${gq} 且未到底档`);
+        if (gq > 0 && gq < 80) {
+          const joined = logs.join("\n");
+          if (!/底档≥80仍超/.test(joined)) {
+            throw new Error(`${name}: 画质优先 gq=${gq} 但未先试完底档≥80`);
+          }
         }
       }
     } else {

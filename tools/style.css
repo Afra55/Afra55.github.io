@@ -1592,7 +1592,7 @@ a.secondary-btn {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s, transform 0.2s;
-  z-index: 40;
+  z-index: 13000;
 }
 
 .toast.is-show {

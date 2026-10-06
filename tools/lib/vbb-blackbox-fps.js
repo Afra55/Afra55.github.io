@@ -122,10 +122,11 @@ function blackboxShouldSkipNarrowerWidth(lastSize, lastW, nextW, budget) {
   return est > (Number(budget) || 0) * AREA_SKIP_SLACK;
 }
 
-function blackboxShouldSkipHighFpsByDuration(fps, span) {
+function blackboxShouldSkipHighFpsByDuration(fps, span, srcFps) {
   const f = Number(fps) || 0;
   const s = Number(span) || 0;
   if (Math.abs(f - 15) < 0.2) return false;
+  if (blackboxIsFloorFps(f, srcFps, 0)) return false;
   if (!(s > 0) || !(f > 0)) return false;
   return s * f > HIGH_FPS_FRAME_SKIP + 0.01;
 }

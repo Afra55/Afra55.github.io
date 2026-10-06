@@ -177,6 +177,14 @@
       </div>
     </div>
     <footer class="vtrim-editor-foot">
+      <div class="vtrim-export-progress" id="${p("export-progress")}" hidden>
+        <div class="vtrim-export-progress-head">
+          <p class="hint vtrim-export-progress-text" id="${p("export-text")}">正在导出…</p>
+          <span class="mono vtrim-export-progress-pct" id="${p("export-pct")}">0%</span>
+        </div>
+        <div class="vtrim-export-progress-track" aria-hidden="true"><span class="vtrim-export-progress-fill" id="${p("export-fill")}"></span></div>
+      </div>
+      <p class="hint tight vtrim-export-status" id="${p("export-status")}" hidden></p>
       <button type="button" class="ghost-btn" id="${p("close")}">关闭</button>
       <button type="button" class="secondary-btn" id="${p("download")}" title="导出修剪+删中间后的 MP4（不是 GIF）">下载编辑后的视频</button>
       <button type="button" class="primary-btn" id="${p("done")}">完成</button>
@@ -285,6 +293,11 @@
     const cutDelBtn = $("cut-del");
     const cutClearBtn = $("cut-clear");
     const downloadBtn = $("download");
+    const exportProgress = $("export-progress");
+    const exportFill = $("export-fill");
+    const exportText = $("export-text");
+    const exportPct = $("export-pct");
+    const exportStatus = $("export-status");
 
     const filmVideo = document.createElement("video");
     filmVideo.muted = true;
@@ -1132,6 +1145,33 @@
     }
 
     let exporting = false;
+    function setExportProgress(visible, ratio, text, opts = {}) {
+      const r = Math.max(0, Math.min(1, Number(ratio) || 0));
+      const pct = Math.round(r * 100);
+      const busy = Boolean(opts.busy) || (visible && r < 0.99);
+      if (exportProgress) exportProgress.hidden = !visible;
+      if (exportFill) {
+        exportFill.style.width = `${Math.max(pct, busy && pct < 8 ? 8 : pct)}%`;
+        exportFill.classList.toggle("is-active", busy);
+      }
+      if (exportPct) exportPct.textContent = `${pct}%`;
+      if (exportText && text) exportText.textContent = String(text);
+      if (exportStatus) {
+        if (opts.error) {
+          exportStatus.hidden = false;
+          exportStatus.textContent = String(opts.error);
+          exportStatus.classList.add("is-error");
+        } else if (opts.ok) {
+          exportStatus.hidden = false;
+          exportStatus.textContent = String(opts.ok);
+          exportStatus.classList.remove("is-error");
+        } else if (!visible) {
+          exportStatus.hidden = true;
+          exportStatus.textContent = "";
+          exportStatus.classList.remove("is-error");
+        }
+      }
+    }
     async function downloadEditedVideo() {
       if (closed || exporting) return;
       const edit = getEditState();
@@ -1139,16 +1179,20 @@
       const prev = downloadBtn?.textContent;
       if (downloadBtn) {
         downloadBtn.disabled = true;
-        downloadBtn.textContent = "导出中…";
+        downloadBtn.textContent = "正在导出…";
       }
+      setExportProgress(true, 0.04, "正在导出编辑后的视频…", { busy: true });
       toast("正在导出编辑后的视频…");
       try {
         const out = await exportKeepVideo(file, edit, duration, {
           srcW: video.videoWidth || 0,
           srcH: video.videoHeight || 0,
           applyCrop: Boolean(edit.cropOn),
-          onProgress: (_r, text) => {
-            if (downloadBtn && text) downloadBtn.textContent = String(text).slice(0, 12);
+          onProgress: (r, text) => {
+            const ratio = Number(r);
+            const label = String(text || "正在导出…");
+            setExportProgress(true, Number.isFinite(ratio) ? ratio : 0.12, label, { busy: true });
+            if (downloadBtn) downloadBtn.textContent = "正在导出…";
           },
         });
         const blob = out?.blob || (out?.file ? new Blob([out.file], { type: "video/mp4" }) : null);
@@ -1156,6 +1200,7 @@
         const name =
           out?.filename ||
           String(file.name || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
+        setExportProgress(true, 1, "开始下载…");
         const dl = window.DevToolsExtraMedia?.triggerBlobDownload;
         if (typeof dl === "function") dl(blob, name);
         else {
@@ -1168,7 +1213,13 @@
           a.remove();
           setTimeout(() => URL.revokeObjectURL(url), 2000);
         }
+        setExportProgress(true, 1, "已开始下载", { ok: `已下载 ${name}` });
         toast("已开始下载编辑后的视频");
+      } catch (err) {
+        const msg = err?.message || String(err) || "导出失败";
+        setExportProgress(true, 0, "导出失败", { error: msg });
+        toast(msg);
+        throw err;
       } finally {
         exporting = false;
         if (downloadBtn) {

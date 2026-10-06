@@ -208,6 +208,15 @@
         }
         return maxQi;
       }
+      function blackboxEncMeetsKeepQ(c) {
+        const gq = Number(c?.gifskiQuality);
+        if (Number.isFinite(gq) && gq > 0) {
+          return gq >= V2G_BLACKBOX_QUALITY_KEEP_MIN_GQ - 0.5;
+        }
+        return (
+          blackboxLadderGifskiQ(blackboxLadderQuality(c)) >= V2G_BLACKBOX_QUALITY_KEEP_MIN_GQ - 0.5
+        );
+      }
       function manualGifskiQuality(quality) {
         const q = Math.min(30, Math.max(1, Number(quality) || 1));
         if (q <= 1) return V2G_MANUAL_GIFSKI_BEST;
@@ -2418,10 +2427,11 @@
         const est = blackboxEstSizeAtWidth(lastSize, lastW, nextW);
         return est > (Number(budget) || 0) * V2G_BLACKBOX_AREA_SKIP_SLACK;
       }
-      function blackboxShouldSkipHighFpsByDuration(fps, span) {
+      function blackboxShouldSkipHighFpsByDuration(fps, span, srcFps) {
         const f = Number(fps) || 0;
         const s = Number(span) || 0;
         if (Math.abs(f - 15) < 0.2) return false;
+        if (blackboxIsFloorFps(f, srcFps, 0)) return false;
         if (!(s > 0) || !(f > 0)) return false;
         return s * f > V2G_BLACKBOX_HIGH_FPS_FRAME_SKIP + 0.01;
       }
@@ -3532,8 +3542,13 @@
           return { ...encoded, compressRounds: 0, maxW };
         };
   
-        const compressAt = async (candidate, fps, isLastFps, progressBase) => {
+        const compressAt = async (candidate, fps, isLastFps, progressBase, compressOpts = {}) => {
           if (!(candidate?.blob?.size > V2G_BLACKBOX_MAX_BYTES)) return candidate;
+          const lockKeepQ =
+            Boolean(compressOpts.keepQuality) ||
+            (qualityFirst &&
+              blackboxEncMeetsKeepQ(candidate) &&
+              compressOpts.allowBelowKeepQ !== true);
           // 先做一次「无损重编」：按实测体积把宽度/帧率一起缩（体积 ∝ 宽度²×帧数），
           // 尽量不走到 gifsicle --lossy —— 它是「有损优化」，会改动像素，画面会出颗粒。
           {
@@ -3550,14 +3565,16 @@
               let retryQuality;
               if (shortFluent || midFluent) {
                 rf = fps;
-                retryQuality =
-                  keepQ < V2G_BLACKBOX_RETRY_QUALITY
+                retryQuality = lockKeepQ
+                  ? keepQ
+                  : keepQ < V2G_BLACKBOX_RETRY_QUALITY
                     ? V2G_BLACKBOX_RETRY_QUALITY
                     : Math.min(30, Math.max(keepQ, V2G_BLACKBOX_RETRY_QUALITY) + 7);
               } else {
                 rf = Math.max(blackboxFpsFloor(span / speed, srcFps), Math.round(fps * k * 2) / 2);
-                retryQuality =
-                  rf <= V2G_BLACKBOX_RETRY_MIN_FPS + 0.01 && k < 0.92
+                retryQuality = lockKeepQ
+                  ? keepQ
+                  : rf <= V2G_BLACKBOX_RETRY_MIN_FPS + 0.01 && k < 0.92
                     ? V2G_BLACKBOX_RETRY_QUALITY
                     : keepQ;
               }
@@ -3569,7 +3586,7 @@
                     (shortFluent || midFluent) && Math.abs(rf - fps) < 0.01
                       ? " · 保帧率"
                       : "（避免 --lossy）"
-                  }`
+                  }${lockKeepQ ? " · 守≥80" : ""}`
                 );
                 const retry = await encodeAt(rf, rw, progressBase, 0.18, `${rf}FPS·宽${rw}·无损重编`, retryQuality);
                 if (!(retry.blob.size > V2G_BLACKBOX_MAX_BYTES)) return retry;
@@ -3582,16 +3599,17 @@
           let cur = candidate;
           const movie = blackboxIsMovieLike(srcFps);
           const isBest = blackboxQualityIsBest(candidate);
+          const softOnly = isBest || lockKeepQ;
           for (let round = 1; round <= maxRounds; round++) {
             if (isAborted()) throw new Error("已取消");
             const before = cur.blob.size;
-            // 满画质禁止 lossy/减色硬塞；只 -O3，进不去就留给降质阶梯。
-            const plan = isBest
+            // 满画质 / 画质优先守80：禁止 lossy 减色硬塞；只 -O3。
+            const plan = softOnly
               ? buildBlackboxSoftCompressArgs(1, { movie })
               : isLastFps
                 ? buildBlackboxHardCompressArgs(round, { movie })
                 : buildBlackboxSoftCompressArgs(round, { movie });
-            if (isBest && round > 1) break;
+            if (softOnly && round > 1) break;
           const tComp = performance.now();
           const out = await compressGifBlob(
             cur.blob,
@@ -3816,7 +3834,42 @@
           return { best, closestOver };
         };
         const keepMaxQi = blackboxKeepQualityMaxQi();
-        const fitFps = async (fps) => {
+        const squeezeKeepQ = async (fps, w) => {
+          const qKeep = V2G_BLACKBOX_QUALITY_LADDER[keepMaxQi];
+          const last =
+            trialCache.get(`${Number(fps)}|${Number(w)}|${qKeep}`) ||
+            tried
+              .filter(
+                (t) =>
+                  Math.abs((Number(t.fps) || 0) - fps) < 0.01 &&
+                  Math.abs((Number(t.maxW) || 0) - w) < 1 &&
+                  blackboxEncMeetsKeepQ(t)
+              )
+              .sort((a, b) => (Number(a.blob?.size) || 0) - (Number(b.blob?.size) || 0))[0];
+          if (!(last?.blob?.size > V2G_BLACKBOX_MAX_BYTES)) return null;
+          vbbLog(
+            `[vbb-phase] ${fps}fps ${w}px q${qKeep} 超限 ${formatKb(last.blob.size)} → O3 守≥80`
+          );
+          const fitted = await blackboxAcceptBoostIfFits(last, {
+            onProgress,
+            isAborted,
+            softGate: 2,
+            curSize: 0,
+          });
+          if (fitted) {
+            tried.push(fitted);
+            return fitted;
+          }
+          const pressed = await compressAt(last, fps, true, 0.55, { keepQuality: true });
+          tried.push(pressed);
+          if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES && blackboxEncMeetsKeepQ(pressed)) {
+            return pressed;
+          }
+          return null;
+        };
+        const fitFps = async (fps, fitOpts = {}) => {
+          const allowBelowKeepQ = fitOpts.allowBelowKeepQ === true;
+          const belowKeepOnly = fitOpts.belowKeepOnly === true;
           const hardW = Math.max(64, Math.min(srcCap, floorW));
           const isFloorFps = blackboxIsFloorFps(fps, srcFps, effSpanForPick);
           const widthSteps = [];
@@ -3878,7 +3931,7 @@
           const w0 = widthSteps[0];
           const qKeep = V2G_BLACKBOX_QUALITY_LADDER[keepMaxQi];
           const conc = blackboxSingleTaskEncodeConcurrency();
-          if (conc >= 2 && keepMaxQi >= 1) {
+          if (!belowKeepOnly && conc >= 2 && keepMaxQi >= 1) {
             vbbLog(
               `[vbb-phase] 单任务并行试档 conc=2 · ${fps}fps ${w0}px q${V2G_BLACKBOX_QUALITY}+q${qKeep}`
             );
@@ -3906,7 +3959,7 @@
               const lastStep = wi === widthSteps.length - 1;
               // 底档必须实打实试 380@≥80，不能面积外推直接降到 q<80
               if (
-                !(isFloorFps && lastStep) &&
+                !(isFloorFps && lastStep && !belowKeepOnly) &&
                 blackboxShouldSkipNarrowerWidth(lastSize, lastWTried, w, V2G_BLACKBOX_MAX_BYTES)
               ) {
                 const est = blackboxEstSizeAtWidth(lastSize, lastWTried, w);
@@ -3916,24 +3969,34 @@
                 continue;
               }
             }
-            if (!shortKeepQ && !isFloorFps && wi > 0) {
+            if (!shortKeepQ && !isFloorFps && wi > 0 && !belowKeepOnly) {
               vbbLog(`[vbb-phase] 长片 ${fps}fps 保 420 不缩宽 → 降帧`);
               break;
             }
             vbbLog(
               `[vbb-phase] ${fps}fps 让渡宽 ${w}px · 画质 ${
-                shortKeepQ || isFloorFps ? "92→≥80" : "92→可<80（保帧）"
+                belowKeepOnly
+                  ? "<80（底档≥80已试完）"
+                  : shortKeepQ || isFloorFps
+                    ? "92→≥80"
+                    : "92→可<80（保帧）"
               }`
             );
-            let hit = await tryQualities(w, 0, keepMaxQi);
-            // 默认长片保帧：仅 420 允许 q<80。底档（12/12.5）不得在 420 先降质，须先缩到 380。
-            if (!hit && !shortKeepQ && !isFloorFps && wi === 0) {
+            let hit = null;
+            if (belowKeepOnly) {
               hit = await tryQualities(w, keepMaxQi + 1, V2G_BLACKBOX_QUALITY_LADDER.length - 1);
+            } else {
+              hit = await tryQualities(w, 0, keepMaxQi);
+              if (!hit && shortKeepQ) hit = await squeezeKeepQ(fps, w);
+              // 默认长片保帧：仅 420 允许 q<80。底档（12/12.5）不得在 420 先降质，须先缩到 380。
+              if (!hit && allowBelowKeepQ && !shortKeepQ && !isFloorFps && wi === 0) {
+                hit = await tryQualities(w, keepMaxQi + 1, V2G_BLACKBOX_QUALITY_LADDER.length - 1);
+              }
             }
             lastWTried = w;
             if (hit) return hit;
           }
-          if (isFloorFps) {
+          if (isFloorFps && allowBelowKeepQ) {
             const wLast = widthSteps[widthSteps.length - 1];
             vbbLog(`[vbb-phase] ${fps}fps 帧率底线 · ${wLast}px 允许画质<80`);
             const deep = await tryQualities(wLast, keepMaxQi + 1, V2G_BLACKBOX_QUALITY_LADDER.length - 1);
@@ -3942,11 +4005,13 @@
               .filter((t) => Math.abs((Number(t.fps) || 0) - fps) < 0.01)
               .sort((a, b) => (Number(a.blob?.size) || 0) - (Number(b.blob?.size) || 0))[0];
             if (deepLast?.blob?.size > V2G_BLACKBOX_MAX_BYTES) {
-              const pressed = await compressAt(deepLast, fps, true, 0.55);
+              const pressed = await compressAt(deepLast, fps, true, 0.55, {
+                allowBelowKeepQ: true,
+              });
               tried.push(pressed);
               if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
             }
-          } else {
+          } else if (!belowKeepOnly) {
             vbbLog(
               `[vbb-phase] ${fps}fps ${shortKeepQ ? "420/400/380 @≥80 仍超" : "420 含<80 仍超"} → 降整除帧`
             );
@@ -3963,13 +4028,12 @@
             qualityFirst ? "画质优先守80" : shortKeepQPick ? "短片守80掉帧" : "长片保帧可<80"
           }`
         );
-        // 整除档从高到低：短片每档 420→外推跳宽 @≥80；长片 420 可降质
-        for (const fps of fpsList) {
-          if (blackboxShouldSkipHighFpsByDuration(fps, effSpanForPick)) {
+        const skipFps = (fps) => {
+          if (blackboxShouldSkipHighFpsByDuration(fps, effSpanForPick, srcFps)) {
             vbbLog(
               `[vbb-phase] 跳过 ${fps}fps：时长×帧≈${Math.round(effSpanForPick * fps)} 超长片穷举门槛（15 仍试）`
             );
-            continue;
+            return true;
           }
           const cal = tried[tried.length - 1];
           if (
@@ -3980,21 +4044,61 @@
             vbbLog(
               `[vbb-phase] 外推跳过 ${fps}fps：${cal.fps}fps ${formatKb(cal.blob.size)} 估仍超`
             );
-            continue;
+            return true;
           }
-          const c = await fitFps(fps);
+          return false;
+        };
+        // 整除档从高到低：守80时每档 420→380 @≥80；默认长片 420 可降质。未试完底档≥80 不得选 q<80。
+        for (const fps of fpsList) {
+          if (skipFps(fps)) continue;
+          const c = await fitFps(fps, { allowBelowKeepQ: !shortKeepQPick });
           if (c) {
             chosen = { enc: c, fps };
             break;
           }
         }
+        if (!chosen && shortKeepQPick) {
+          vbbLog(
+            `[vbb-phase] 底档≥80仍超 10MB → 允许<80，优先更高帧（勿无意义降到12.5仍70）`
+          );
+          for (const fps of fpsList) {
+            if (blackboxShouldSkipHighFpsByDuration(fps, effSpanForPick, srcFps)) continue;
+            const c = await fitFps(fps, { allowBelowKeepQ: true, belowKeepOnly: true });
+            if (c) {
+              chosen = {
+                enc: {
+                  ...c,
+                  vbbPickNote: "超限：底档≥80塞不进10MB，已保更高帧",
+                },
+                fps,
+              };
+              break;
+            }
+          }
+        }
         if (!chosen) {
-          // 全都不行 → 取最小的一档走 gifsicle 硬压兜底
-          const smallest = tried.slice().sort((a, b) => a.blob.size - b.blob.size)[0];
+          // 全都不行 → 取最小的一档走 gifsicle 硬压兜底；画质优先优先更高帧
+          const pool = tried.slice().sort((a, b) => {
+            if (qualityFirst) {
+              const fd = (Number(b.fps) || 0) - (Number(a.fps) || 0);
+              if (Math.abs(fd) > 0.2) return fd;
+            }
+            return (Number(a.blob?.size) || 0) - (Number(b.blob?.size) || 0);
+          });
+          const smallest = pool[0];
           if (!smallest) return null;
-          const c = await compressAt(smallest, Number(smallest.fps) || fpsFloor, true, 0.9);
+          const c = await compressAt(smallest, Number(smallest.fps) || fpsFloor, true, 0.9, {
+            allowBelowKeepQ: true,
+          });
           tried.push(c);
-          if (c.blob.size <= V2G_BLACKBOX_MAX_BYTES) chosen = { enc: c, fps: Number(smallest.fps) || fpsFloor };
+          if (c.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+            chosen = {
+              enc: qualityFirst
+                ? { ...c, vbbPickNote: "超限：底档≥80塞不进10MB，已保更高帧" }
+                : c,
+              fps: Number(smallest.fps) || fpsFloor,
+            };
+          }
         }
         if (!chosen) return tried.slice().sort((a, b) => a.blob.size - b.blob.size)[0] || null;
         // 实验/排查用（仅 ?debug）：localStorage devtools-vbb-force="fps:宽" 强制指定档位
@@ -4033,7 +4137,11 @@
           const atFloor = blackboxIsFloorFps(fpsNow, srcFps, effSpanForPick) && wNow <= floorW + 2;
           const baseQ = blackboxLadderQuality(candidate);
           const at = V2G_BLACKBOX_QUALITY_LADDER.indexOf(baseQ);
-          const qiEnd = atFloor ? V2G_BLACKBOX_QUALITY_LADDER.length : keepMaxQi + 1;
+          const alreadyBelowKeep = !blackboxEncMeetsKeepQ(candidate);
+          const qiEnd =
+            (atFloor && (!qualityFirst || alreadyBelowKeep)) || alreadyBelowKeep
+              ? V2G_BLACKBOX_QUALITY_LADDER.length
+              : keepMaxQi + 1;
           for (let qi = (at >= 0 ? at : 0) + 1; qi < qiEnd; qi++) {
             if (abortV2g) throw new Error("已取消");
             const q = V2G_BLACKBOX_QUALITY_LADDER[qi];
@@ -4060,7 +4168,11 @@
         }
         // 仍超 → 压缩兜底
         if (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES) {
-          candidate = await compressAt(candidate, chosen.fps, true, 0.9);
+          const keepLock = qualityFirst && blackboxEncMeetsKeepQ(candidate);
+          candidate = await compressAt(candidate, chosen.fps, true, 0.9, {
+            keepQuality: keepLock,
+            allowBelowKeepQ: !keepLock,
+          });
           tried.push(candidate);
         }
         if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
@@ -4083,7 +4195,14 @@
             },
             srcCap
           );
-          return finished ? { ...finished, srcFps, quality: blackboxLadderQuality(finished) } : finished;
+          return finished
+            ? {
+                ...finished,
+                srcFps,
+                quality: blackboxLadderQuality(finished),
+                vbbPickNote: candidate.vbbPickNote || finished.vbbPickNote,
+              }
+            : finished;
         }
         const fallback = tried.slice().sort((a, b) => a.blob.size - b.blob.size)[0] || null;
         return fallback ? { ...fallback, srcFps } : null;
@@ -9215,6 +9334,7 @@
         } else if (encoded.maxColors) {
           bits.push(`${encoded.maxColors} 色`);
         }
+        if (encoded.vbbPickNote) bits.push(encoded.vbbPickNote);
         if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
         if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
         if (encoded.framesCapped && encoded.frameCount) bits.push(`已抽稀 ${encoded.frameCount} 帧`);

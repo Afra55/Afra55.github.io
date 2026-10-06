@@ -2140,6 +2140,7 @@
         } else if (encoded.maxColors) {
           bits.push(`${encoded.maxColors} 色`);
         }
+        if (encoded.vbbPickNote) bits.push(encoded.vbbPickNote);
         if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
         if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
         if (encoded.framesCapped && encoded.frameCount) bits.push(`已抽稀 ${encoded.frameCount} 帧`);

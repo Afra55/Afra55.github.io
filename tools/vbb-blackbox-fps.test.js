@@ -85,6 +85,7 @@ assert(blackboxShouldSkipNarrowerWidth(12.86e6, 420, 380, 10e6) === false, "贴�
 assert(blackboxShouldSkipHighFpsByDuration(25, 28.3) === true, "28s@25 跳过高档穷举");
 assert(blackboxShouldSkipHighFpsByDuration(15, 28.3) === false, "15 必试");
 assert(blackboxShouldSkipHighFpsByDuration(20, 15.8) === false, "16s@20 仍试");
+assert(blackboxShouldSkipHighFpsByDuration(12.5, 38.1, 25) === false, "底档 12.5 不得因时长跳过");
 assert(blackboxShouldSkipFpsByCal(20, 25, 27e6, 10e6) === true, "25@27MB 外推 20 仍超");
 assert(blackboxShouldSkipFpsByCal(15, 25, 27e6, 10e6) === false, "标定后 15 仍试");
 assert(blackboxFpsFloor(16, 30) === 12, "30 源底档 12");
@@ -131,6 +132,7 @@ assert(
   assert(/from currentTime|a = t|当前进度/.test(vtrimEd) && /addCutoutAtPlayhead/.test(vtrimEd), "删中间从播放头起");
   assert(/c\.end\s*[^\n]*\+\s*END_KEEP_SEC/.test(vtrimEd), "删中间闭区间：成片须越过预览终点帧");
   assert(/下载编辑后的视频/.test(vtrimEd) && /function exportKeepVideo/.test(vtrimEd), "编辑层须能下载编辑后 mp4");
+  assert(/正在导出/.test(vtrimEd) && /export-progress/.test(vtrimEd), "下载编辑后视频须有进度反馈");
   {
     const n = vtrimEd.match(/function normalizeCutouts\([\s\S]*?return merged;\s*\}/);
     const k = vtrimEd.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?return keeps;\s*\}/);
@@ -183,13 +185,17 @@ assert(
   assert(/function blackboxIsFloorFps/.test(src), "须有 15 非底档判定");
   assert(/Math\.abs\(\s*f\s*-\s*15\s*\)\s*<\s*0\.2\)\s*return false/.test(src), "isFloorFps 须排除 15");
   assert(
-    /!hit && !shortKeepQ && !isFloorFps && wi === 0/.test(src),
+    /allowBelowKeepQ && !shortKeepQ && !isFloorFps && wi === 0/.test(src),
     "底档不得在 420 先降到 q<80"
   );
   assert(
-    /!\(isFloorFps && lastStep\)/.test(src),
+    /!\(isFloorFps && lastStep && !belowKeepOnly\)/.test(src),
     "底档须实试 380@≥80，不得面积外推跳过"
   );
+  assert(/底档≥80仍超/.test(src), "画质优先须先试完底档≥80 再允许<80");
+  assert(/allowBelowKeepQ:\s*!shortKeepQPick/.test(src), "守80阶段不得选 q<80");
+  assert(/keepQuality:\s*true/.test(src), "守80时 compressAt 不得锁 q70");
+  assert(/vbbPickNote/.test(src), "≥80 塞不进须在结果说明");
   assert(
     /blackboxShouldSkipFpsByCal\(fps, cal\.fps, cal\.blob\.size, V2G_BLACKBOX_MAX_BYTES,\s*srcFps\)/.test(
       src
