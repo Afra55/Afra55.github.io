@@ -47,6 +47,9 @@
     platformHint: $("#ls-platform-hint"),
     nameInput: $("#ls-name"),
     createBtn: $("#ls-create"),
+    createNoPwdBtn: $("#ls-create-nopwd"),
+    session: $("#ls-session"),
+    inviteQrBackup: $("#ls-invite-qr-backup"),
     joinArea: $("#ls-join-area"),
     inviteArea: $("#ls-invite-area"),
     inviteText: $("#ls-invite-text"),
@@ -78,6 +81,7 @@
     filesEl: $("#ls-files"),
     fileInput: $("#ls-file-input"),
     pickBtn: $("#ls-pick"),
+    retryBtn: $("#ls-retry"),
     leaveBtn: $("#ls-leave"),
     addPassvaultBtn: $("#ls-add-passvault"),
     addMemoBtn: $("#ls-add-memo"),
@@ -170,6 +174,7 @@
     mqttOfferRetryTimer: null,
     mqttJoinTimeoutTimer: null,
     mqttPendingOffer: null,
+    mqttSignalingFailed: false,
   };
 
   function stashPendingJoinToken(token) {
@@ -260,6 +265,13 @@
     const a = "abcdefghijklmnopqrstuvwxyz0123456789";
     let s = "";
     for (let i = 0; i < n; i++) s += a[(Math.random() * a.length) | 0];
+    return s;
+  }
+
+  function generateRoomPassword() {
+    const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let s = "";
+    for (let i = 0; i < ROOM_PWD_MIN; i++) s += a[(Math.random() * a.length) | 0];
     return s;
   }
 
@@ -684,10 +696,16 @@
   function userFacingError(msg) {
     const s = String(msg || "").trim();
     if (!s) return "";
-    if (/setRemoteDescription|RTCPeerConnection|Called in wrong state|SDP/i.test(s)) {
-      return "连接没握上手。请退出房间后重新加入，或改用房间密码。";
+    if (
+      /setRemoteDescription|setLocalDescription|RTCPeerConnection|Called in wrong state|SDP|signalingState|addIceCandidate/i.test(
+        s
+      )
+    ) {
+      return "加入失败，请让双方都点重试，或用房间密码再加一次。";
     }
-    if (/Failed to execute/i.test(s)) return "浏览器连接失败，请重试或改用房间密码。";
+    if (/Failed to execute/i.test(s)) {
+      return "加入失败，请让双方都点重试，或用房间密码再加一次。";
+    }
     return s;
   }
 
@@ -784,6 +802,7 @@
   function setJoinUiBusy(busy) {
     const disabled = !!busy;
     if (els.createBtn) els.createBtn.disabled = disabled || !webrtcSupported();
+    if (els.createNoPwdBtn) els.createNoPwdBtn.disabled = disabled || !webrtcSupported();
     if (els.joinPwdBtn) els.joinPwdBtn.disabled = disabled || !webrtcSupported();
     if (els.scanBtn) els.scanBtn.disabled = disabled || !webrtcSupported();
     if (els.pasteJoinBtn) els.pasteJoinBtn.disabled = disabled || !webrtcSupported();
@@ -920,7 +939,7 @@
         "当前页面不是 HTTPS/localhost，部分浏览器会禁用 WebRTC。请打开 https://afra55.github.io/tools/#lanshare 或本机 localhost。"
       );
     }
-    parts.push("同一 WiFi。推荐设房间密码，手机扫完整链接码加入。");
+    parts.push("同一 WiFi。电脑设密码创建，手机输入同一密码加入。");
     els.platformHint.hidden = false;
     els.platformHint.textContent = parts.join(" ");
     paintJoinCtas();
@@ -938,15 +957,16 @@
           '<p class="hint tight" style="margin:0.35rem 0 0">告诉成员此密码，对方输入即可自动连接，无需扫码或粘贴连接码。</p>';
       } else {
         els.pairingGuide.innerHTML =
-          "<strong>电脑 + 手机</strong><ol class=\"ls-steps hint tight\">" +
-          "<li>手机用系统相机 / 微信扫左侧「完整链接」码（不要扫右侧短码）</li>" +
-          "<li>手机出现连接码后，复制链接发到电脑</li>" +
-          "<li>电脑粘贴到「粘贴成员连接码」并确认</li>" +
+          "<strong>未设密码，扫码不能立刻传文件</strong><ol class=\"ls-steps hint tight\">" +
+          "<li>手机扫「完整链接」码或打开邀请链接</li>" +
+          "<li>手机把连接码发回电脑</li>" +
+          "<li>电脑粘贴并确认后才能传文件</li>" +
           "</ol>";
       }
     } else if (state.viaMqtt) {
-      els.pairingGuide.innerHTML =
-        '<strong>密码加入</strong><p class="hint tight" style="margin:0.35rem 0 0">正在通过房间密码自动配对，请稍候…</p>';
+      els.pairingGuide.innerHTML = state.controlLinked
+        ? '<strong>已用密码加入</strong><p class="hint tight" style="margin:0.35rem 0 0">可以选文件发给对方。</p>'
+        : '<strong>密码加入</strong><p class="hint tight" style="margin:0.35rem 0 0">正在通过房间密码自动配对，请保持页面在前台…</p>';
     } else {
       els.pairingGuide.innerHTML =
         "<strong>等待与房主配对</strong><p class=\"hint tight\" style=\"margin:0.35rem 0 0\">" +
@@ -961,6 +981,7 @@
     if (els.pasteJoinBtn) els.pasteJoinBtn.disabled = !ok;
     if (els.joinConfirmBtn) els.joinConfirmBtn.disabled = !ok;
     if (els.joinPwdBtn) els.joinPwdBtn.disabled = !ok;
+    if (els.createNoPwdBtn) els.createNoPwdBtn.disabled = !ok;
   }
 
   function memberLabel(id) {
@@ -994,11 +1015,18 @@
     if (els.statusText) {
       els.statusText.textContent = inRoom
         ? `${state.members.size} 人在线 · 文件从上传者直传${statusExtra}`
-        : "创建房间或输入密码加入。";
+        : "电脑设密码创建，手机输入同一密码加入。";
     }
     if (els.inviteArea) els.inviteArea.hidden = !inRoom || !state.isHost;
     if (els.joinArea) els.joinArea.hidden = inRoom;
-    if (els.guestAnswerArea) els.guestAnswerArea.hidden = !inRoom || state.isHost || state.controlLinked;
+    if (els.session) els.session.hidden = !inRoom;
+    if (els.guestAnswerArea) {
+      els.guestAnswerArea.hidden = !inRoom || state.isHost || state.controlLinked || !!state.viaMqtt;
+    }
+    if (els.inviteQrBackup && inRoom && state.isHost && (!state.roomPassword || state.mqttSignalingFailed)) {
+      els.inviteQrBackup.open = true;
+    }
+    if (els.retryBtn) els.retryBtn.hidden = !inRoom || canUploadFiles();
     if (els.leaveBtn) els.leaveBtn.hidden = !inRoom;
     if (els.pickBtn) {
       els.pickBtn.disabled = !canUploadFiles();
@@ -1040,7 +1068,7 @@
             return `<div class="ls-member-row"><span>${escapeHtml(m.name)}</span>${tag}<span class="hint mono">${fmtTime(m.joinedAt)}</span></div>`;
           })
           .join("")
-      : '<p class="hint tight">还没有其他设备。<br />1. 把邀请发给手机<br />2. 等对方出现在这里<br />3. 再传文件</p>';
+      : '<p class="hint tight">还没有其他设备。<br />1. 把房间密码告诉手机<br />2. 对方点「密码加入」<br />3. 双方都出现后再传文件</p>';
   }
 
   function paintJoinCtas() {
@@ -1050,6 +1078,10 @@
     els.createBtn.classList.toggle("secondary-btn", mobile);
     els.joinPwdBtn.classList.toggle("primary-btn", mobile);
     els.joinPwdBtn.classList.toggle("secondary-btn", !mobile);
+    if (els.scanBtn) {
+      els.scanBtn.classList.remove("primary-btn");
+      els.scanBtn.classList.add("secondary-btn");
+    }
   }
 
   function openJoinFallback(hint) {
@@ -1477,7 +1509,7 @@
     if (!state.viaMqtt || state.isHost) return;
     state.mqttJoinTimeoutTimer = setTimeout(() => {
       if (state.controlLinked || !state.roomId || state.isHost) return;
-      openJoinFallback("自动配对超时：请确认房主在线且密码正确，或改用下方扫码/粘贴邀请");
+      setError("加入失败，请让双方都点重试，或用房间密码再加一次。");
       paintStatus();
     }, MQTT_JOIN_TIMEOUT_MS);
   }
@@ -1730,6 +1762,7 @@
     state.controlLinked = true;
     clearMqttJoinTimers();
     flushPendingOutbound();
+    setError("");
     paintStatus();
   }
 
@@ -1770,7 +1803,50 @@
   function canUploadFiles() {
     if (!state.roomId) return false;
     if (state.isHost) return state.controlLinked;
+    if (state.viaMqtt) return state.controlLinked;
     return state.controlLinked && state.controlDc?.readyState === "open";
+  }
+
+  function waitControlLinked(ms = 25000) {
+    if (canUploadFiles()) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const t0 = Date.now();
+      const tick = () => {
+        if (canUploadFiles()) {
+          resolve();
+          return;
+        }
+        if (Date.now() - t0 > ms) {
+          reject(new Error("加入失败，请让双方都点重试，或用房间密码再加一次。"));
+          return;
+        }
+        setTimeout(tick, 200);
+      };
+      tick();
+    });
+  }
+
+  async function retryHandshake() {
+    if (!state.roomId) return;
+    setError("");
+    if (state.isHost) {
+      await refreshJoinSlot();
+      setInfo("已重新等待成员。请让手机再点一次「重试连接」或重新密码加入。");
+      return;
+    }
+    if (state.viaMqtt && state.mqttPendingOffer) {
+      publishMqttGuestOffer(state.mqttPendingOffer.offerSdp, state.mqttPendingOffer.inv);
+      startMqttGuestJoinWatch();
+      setInfo("已重新发送加入请求，请让电脑页面保持在前台。");
+      try {
+        await waitControlLinked(20000);
+        setInfo("已连上，可以选文件。");
+      } catch (e) {
+        setError(e?.message || "加入失败，请让双方都点重试，或用房间密码再加一次。");
+      }
+      return;
+    }
+    setError("加入失败，请退出后用房间密码再加一次。");
   }
 
   function relayMemberEvent(msg, remoteId, types) {
@@ -2298,7 +2374,7 @@
     tryApplyJoinAnswerFromHash().catch(() => {});
   }
 
-  async function createRoom() {
+  async function createRoom(opts = {}) {
     if (!webrtcSupported()) {
       setError("当前浏览器不支持 WebRTC");
       return;
@@ -2319,8 +2395,13 @@
       state.joinedAt = Date.now();
       state.members.set(state.peerId, { id: state.peerId, name: state.peerName, joinedAt: state.joinedAt });
       state.controlLinked = true;
+      state.mqttSignalingFailed = false;
 
-      const pwdRaw = els.roomPwdHost?.value || "";
+      let pwdRaw = String(els.roomPwdHost?.value || "").trim();
+      if (!normalizeRoomPassword(pwdRaw) && !opts.allowNoPassword) {
+        pwdRaw = generateRoomPassword();
+        if (els.roomPwdHost) els.roomPwdHost.value = pwdRaw;
+      }
       if (normalizeRoomPassword(pwdRaw)) {
         state.roomPassword = validateRoomPassword(pwdRaw);
         state.roomPasswordSlug = await hashRoomPassword(state.roomPassword);
@@ -2332,14 +2413,18 @@
         try {
           await startMqttHost();
         } catch (e) {
-          openJoinFallback((e?.message || "密码信令启动失败") + "；请改用下方扫码/粘贴邀请");
           state.viaMqtt = false;
+          state.mqttSignalingFailed = true;
+          setError("密码通道没连上，手机用密码加入会失败。请退出后重试创建，或展开扫码并把连接码发回电脑。");
         }
       }
       if (els.progressText) els.progressText.textContent = "正在准备邀请…";
       await refreshJoinSlot();
-      setProgress(100, "房间已创建");
+      setProgress(100, state.roomPassword ? `房间已创建，密码 ${state.roomPassword}` : "房间已创建（无密码，需回传连接码）");
       paintStatus();
+      if (state.roomPassword && !state.mqttSignalingFailed) {
+        setInfo(`把密码 ${state.roomPassword} 告诉手机即可加入`);
+      }
     } catch (e) {
       state.roomId = "";
       state.isHost = false;
@@ -2389,8 +2474,8 @@
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "connected") paintStatus();
-        if (pc.connectionState === "failed") setError("加入房间失败，请确认邀请码未过期并重试");
-        if (pc.connectionState === "disconnected") setError("与房主连接中断，请重新加入");
+        if (pc.connectionState === "failed") setError("加入失败，请让双方都点重试，或用房间密码再加一次。");
+        if (pc.connectionState === "disconnected") setError("连接中断，请让双方都点重试，或用房间密码再加一次。");
       };
 
       if (inv.sdp && inv.mode === "legacy-offer") {
@@ -2428,7 +2513,7 @@
       state.hostId = "";
       state.members.clear();
       paintStatus();
-      throw new Error(e?.message || "无法建立连接，请让房主刷新邀请二维码");
+      throw new Error(userFacingError(e?.message || "加入失败，请让双方都点重试，或用房间密码再加一次。"));
     } finally {
       if (!opts._skipBusy) {
         setJoinUiBusy(false);
@@ -2456,11 +2541,14 @@
       const { client, topic, hello } = await waitMqttHostHello(slug);
       const invText = `lanshare?r=${encodeURIComponent(hello.roomId)}&h=${encodeURIComponent(hello.hostId)}`;
       await joinRoom(invText, { keepMqtt: true, viaMqtt: true, mqttClient: client, mqttTopic: topic, _skipBusy: true });
+      if (els.progressText) els.progressText.textContent = "正在完成配对…";
+      await waitControlLinked(25000);
       if (els.roomPwdJoin) els.roomPwdJoin.value = "";
-      setProgress(100, "已加入房间");
+      setError("");
+      setProgress(100, "已加入，可以选文件");
       paintStatus();
     } catch (e) {
-      openJoinFallback((e?.message || "密码加入失败") + "；请改用下方扫码/粘贴邀请");
+      setError(e?.message || "加入失败，请让双方都点重试，或用房间密码再加一次。");
       throw e;
     } finally {
       setJoinUiBusy(false);
@@ -2515,7 +2603,7 @@
       clearPendingPassword();
       clearLanshareJoinLocation();
     } catch (e) {
-      openJoinFallback((e?.message || "密码加入失败") + "；请改用下方扫码/粘贴邀请");
+      openJoinFallback(e?.message || "加入失败，请让双方都点重试，或用房间密码再加一次。");
     } finally {
       state.autoJoinBusy = false;
     }
@@ -3485,6 +3573,7 @@
     state.roomPassword = "";
     state.roomPasswordSlug = "";
     state.viaMqtt = false;
+    state.mqttSignalingFailed = false;
     stopSignalRelayListen();
     if (els.inviteText) els.inviteText.value = "";
     if (els.inviteQr) els.inviteQr.innerHTML = "";
@@ -3923,6 +4012,8 @@
   }
 
   els.createBtn?.addEventListener("click", () => createRoom().catch((e) => setError(e.message)));
+  els.createNoPwdBtn?.addEventListener("click", () => createRoom({ allowNoPassword: true }).catch((e) => setError(e.message)));
+  els.retryBtn?.addEventListener("click", () => retryHandshake().catch((e) => setError(e.message)));
   els.joinPwdBtn?.addEventListener("click", () => {
     const pwd = els.roomPwdJoin?.value || "";
     joinByPassword(pwd).catch((e) => setError(e.message || "密码加入失败"));
@@ -4024,6 +4115,8 @@
     normalizeRoomPassword,
     hashRoomPassword,
     validateRoomPassword,
+    generateRoomPassword,
+    canUploadFiles,
     inviteCameraUrl,
     lanshareFragFromSearchParams,
     canSaveDirPicker,

@@ -153,6 +153,15 @@ async function main() {
   assert(/connectionState === "failed"/.test(js), "下载端应处理 WebRTC failed");
   assert(/isSecureContext/.test(js), "应提示非安全上下文");
 
+  assert(/ls-create-nopwd/.test(lansharePanel), "缺少不设密码入口");
+  assert(/ls-session/.test(lansharePanel), "会话区应独立隐藏");
+  assert(/仅本页摄像头扫/.test(lansharePanel), "短码应标明仅本页摄像头扫");
+  assert(/ls-retry/.test(lansharePanel), "缺少重试连接按钮");
+  assert(/generateRoomPassword/.test(js), "创建房间应能自动生成密码");
+  assert(/waitControlLinked/.test(js), "密码加入应等待配对完成");
+  assert(/加入失败，请让双方都点重试/.test(js), "握手失败应用人话");
+  assert(!/openJoinFallback\(\(e\?\.message \|\| "密码加入失败"\)/.test(js), "密码失败不应再引导扫码当主路径");
+
   let puppeteer;
   try {
     puppeteer = require("puppeteer");
@@ -274,50 +283,95 @@ async function main() {
     const shotDir = fs.mkdtempSync(path.join(os.tmpdir(), "lanshare-ux-"));
     await page.setViewport({ width: 1280, height: 900 });
     await page.goto(new URL("#lanshare", baseUrl).href, { waitUntil: "networkidle2", timeout: 60000 });
-    await page.waitForSelector("#lanshare.is-workspace-active, #lanshare:not([hidden])", { timeout: 15000 }).catch(() => {});
-    const ux = await page.evaluate(async () => {
-      const scan = document.getElementById("ls-scan");
-      scan?.click();
-      await new Promise((r) => setTimeout(r, 400));
+    await page.waitForSelector("#ls-create", { timeout: 15000 });
+    const ux = await page.evaluate(() => {
+      const primaries = [...document.querySelectorAll("#ls-join-area .primary-btn")].filter((b) => {
+        const st = getComputedStyle(b);
+        return st.display !== "none" && st.visibility !== "hidden";
+      });
+      const fallback = document.getElementById("ls-join-fallback");
       return {
-        steps: (document.getElementById("ls-join-steps")?.textContent || "").includes("创建房间"),
-        saveDir: !document.getElementById("ls-save-dir-row")?.hidden,
-        saveHint: document.getElementById("ls-save-dir-hint")?.textContent || "",
-        scanFb: document.getElementById("ls-scan-feedback")?.textContent || "",
-        scanBtn: !!document.getElementById("ls-scan"),
-        error: document.getElementById("ls-error")?.textContent || "",
+        steps: (document.getElementById("ls-join-steps")?.textContent || "").includes("密码加入"),
+        sessionHidden: !!document.getElementById("ls-session")?.hidden,
+        saveDirHidden: !!document.getElementById("ls-save-dir-row")?.hidden || !!document.getElementById("ls-session")?.hidden,
+        primaryCount: primaries.length,
+        primaryText: primaries.map((b) => b.id).join(","),
+        scanInFallback: !!fallback?.contains(document.getElementById("ls-scan")),
+        fallbackOpen: !!fallback?.open,
+        nopwd: !!document.getElementById("ls-create-nopwd"),
       };
     });
-    assert(ux.steps && ux.scanBtn, `空态步骤/扫码按钮缺失: ${JSON.stringify(ux)}`);
-    assert(ux.saveDir, "桌面视口应显示保存目录");
-    assert(/默认/.test(ux.saveHint), `未选目录提示不清: ${ux.saveHint}`);
+    assert(ux.steps && ux.sessionHidden, `空态步骤/会话隐藏异常: ${JSON.stringify(ux)}`);
+    assert(ux.primaryCount === 1 && ux.primaryText === "ls-create", `桌面空态应只有创建房间主按钮: ${JSON.stringify(ux)}`);
+    assert(ux.scanInFallback && !ux.fallbackOpen, "扫码应收进折叠备用且默认关闭");
     await page.screenshot({ path: path.join(shotDir, "desktop-empty.png"), fullPage: true });
     await page.click("#ls-create");
     await page.waitForFunction(
-      () => !document.getElementById("ls-invite-area")?.hidden && document.querySelector("#ls-invite-qr canvas, #ls-invite-qr img, #ls-invite-qr table"),
-      { timeout: 15000 }
+      () => !document.getElementById("ls-invite-area")?.hidden && (document.getElementById("ls-room-pwd-display")?.textContent || "").includes("房间密码"),
+      { timeout: 20000 }
     );
     const hostUx = await page.evaluate(() => ({
-      guide: (document.getElementById("ls-pairing-guide")?.textContent || "").includes("完整链接"),
+      pwd: (document.getElementById("ls-room-pwd-display")?.textContent || "").match(/房间密码\s+(\S+)/)?.[1] || "",
+      guide: document.getElementById("ls-pairing-guide")?.textContent || "",
+      qrOpen: !!document.getElementById("ls-invite-qr-backup")?.open,
+      pickDisabled: !!document.getElementById("ls-pick")?.disabled,
+      sessionHidden: !!document.getElementById("ls-session")?.hidden,
       saveDir: !document.getElementById("ls-save-dir-row")?.hidden,
     }));
-    assert(hostUx.guide, "房主引导应写明扫完整链接码");
-    await page.screenshot({ path: path.join(shotDir, "desktop-host-qr.png"), fullPage: true });
+    assert(hostUx.pwd && hostUx.pwd.length >= 4, `未自动生成密码: ${JSON.stringify(hostUx)}`);
+    assert(/告诉成员此密码|自动连接/.test(hostUx.guide), `房主应突出密码而非扫码: ${hostUx.guide}`);
+    assert(!hostUx.qrOpen, "有密码时扫码备用应默认折叠");
+    assert(!hostUx.sessionHidden && !hostUx.pickDisabled, `房主应能直接选文件: ${JSON.stringify(hostUx)}`);
+    await page.screenshot({ path: path.join(shotDir, "desktop-host-pwd.png"), fullPage: true });
+
+    const guestPage = await browser.newPage();
+    await guestPage.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    await guestPage.setUserAgent(
+      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+    );
+    await guestPage.goto(new URL("#lanshare", baseUrl).href, { waitUntil: "networkidle2", timeout: 60000 });
+    await guestPage.waitForSelector("#ls-join-pwd", { timeout: 15000 });
+    const mobileEmpty = await guestPage.evaluate(() => {
+      const primaries = [...document.querySelectorAll("#ls-join-area .primary-btn")].filter((b) => {
+        const st = getComputedStyle(b);
+        return st.display !== "none" && st.visibility !== "hidden";
+      });
+      return {
+        primaryText: primaries.map((b) => b.id).join(","),
+        steps: (document.getElementById("ls-join-steps")?.textContent || "").includes("密码加入"),
+        scanInFallback: !!document.getElementById("ls-join-fallback")?.contains(document.getElementById("ls-scan")),
+      };
+    });
+    assert(mobileEmpty.primaryText === "ls-join-pwd", `窄屏空态主按钮应为密码加入: ${JSON.stringify(mobileEmpty)}`);
+    await guestPage.type("#ls-room-pwd-join", hostUx.pwd);
+    await guestPage.click("#ls-join-pwd");
+    await guestPage.waitForFunction(
+      () => {
+        const pick = document.getElementById("ls-pick");
+        return pick && !pick.disabled && !document.getElementById("ls-session")?.hidden;
+      },
+      { timeout: 30000 }
+    );
+    const guestUx = await guestPage.evaluate(() => ({
+      pickDisabled: !!document.getElementById("ls-pick")?.disabled,
+      guestQr: !document.getElementById("ls-guest-answer-area")?.hidden,
+      err: document.getElementById("ls-error")?.textContent || "",
+      room: window.LanShareSelfTest?.getRoomId?.() || "",
+    }));
+    assert(!guestUx.pickDisabled, `密码加入后应能选文件: ${JSON.stringify(guestUx)}`);
+    assert(!guestUx.guestQr, "密码加入后不应再要求回传连接码");
+    assert(!/setRemoteDescription|SDP/i.test(guestUx.err), `状态卡出现协议错误: ${guestUx.err}`);
+    await guestPage.screenshot({ path: path.join(shotDir, "mobile-joined.png"), fullPage: true });
+    await guestPage.close();
 
     await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
     await page.reload({ waitUntil: "networkidle2", timeout: 60000 });
     await page.evaluate(() => {
       location.hash = "lanshare";
     });
-    await page.waitForFunction(() => document.getElementById("ls-scan"), { timeout: 15000 });
-    const mobileUx = await page.evaluate(() => ({
-      saveHidden: document.getElementById("ls-save-dir-row")?.hidden !== false,
-      scan: !!document.getElementById("ls-scan"),
-      steps: (document.getElementById("ls-join-steps")?.textContent || "").includes("完整链接"),
-    }));
-    assert(mobileUx.scan && mobileUx.steps, `窄屏扫码入口缺失: ${JSON.stringify(mobileUx)}`);
+    await page.waitForSelector("#ls-join-pwd", { timeout: 15000 });
     await page.screenshot({ path: path.join(shotDir, "mobile-empty.png"), fullPage: true });
-    console.log("OK ux walk", JSON.stringify({ ux, mobileUx, shotDir }));
+    console.log("OK ux walk", JSON.stringify({ ux, hostUx, mobileEmpty, guestUx, shotDir }));
 
     const platforms = ["iOS Safari", "Android Chrome", "Desktop Chrome"];
     const uas = [

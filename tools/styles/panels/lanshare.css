@@ -51,3 +51,19 @@
 .ls-qr-app-details > summary {
   cursor: pointer;
 }
+
+.ls-join-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.ls-role-block {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  #ls-join-block {
+    order: -1;
+  }
+}
