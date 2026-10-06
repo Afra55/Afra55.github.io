@@ -146,7 +146,21 @@ assert(
     assert(Math.abs(ks[0].end - 2) < 1e-6, "keep 须在预览起点处断开");
     assert(ks[1].start >= 4 + 1 / 25 - 1e-6, "下一段须越过预览终点帧（含该帧）");
     assert(ks[1].end <= 10 - 1 / 25 + 1e-6, "末段仍半开片尾");
+    const p = vtrimEd.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start;\s*\}/);
+    assert(p, "须能抽出 previewSeekForKeepRanges");
+    const seekFn = new Function(`
+      const END_KEEP_SEC = 1 / 25;
+      ${p[0]}
+      return previewSeekForKeepRanges;
+    `)();
+    assert(seekFn(ks, 1, { paused: false }) == null, "keep 内不应跳");
+    const skipTo = seekFn(ks, 3, { paused: false });
+    assert(Math.abs(skipTo - ks[1].start) < 1e-6, "cutout 内须跳到下一段 keep");
+    assert(Math.abs(seekFn(ks, ks[0].end, { paused: false }) - ks[1].start) < 1e-6, "keep 终点须跳下一段");
+    assert(Math.abs(seekFn(ks, ks[1].end, { paused: false }) - ks[0].start) < 1e-6, "末段后播放须循环到首段");
   }
+  assert(/previewSeekForKeepRanges/.test(vbbUi) && /is-edit-crop/.test(vbbUi), "外预览须跳 cutouts 并套 crop");
+  assert(/translate\(|clipPath/.test(vbbUi), "外预览裁切须 clip + 放大绿框");
   assert(/exportKeepVideo/.test(vbbUi), "黑盒删中间拼接须走同一套导出");
   const gifskiCore = fs.readFileSync(path.join(__dirname, "ffmpeg-bridge/gifski-core.js"), "utf8");
   assert(!/srcSpan\s*\+\s*0\.05/.test(gifskiCore), "原生 gifski 不得再给片尾 +50ms");

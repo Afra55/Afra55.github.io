@@ -327,6 +327,10 @@ select.meta-input.text-choice {
   pointer-events: none;
 }
 
+.vbb-preview-wrap.is-edit-crop #vbb-video {
+  transform-box: fill-box;
+}
+
 .vbb-file-edit {
   margin-top: 0.65rem;
   padding: 0.7rem 0.8rem;

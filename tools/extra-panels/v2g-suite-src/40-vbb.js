@@ -105,6 +105,7 @@
       let vbbScrubSeekWanted = null;
       let vbbScrubSeekInflight = false;
       let vbbScrubSeekToken = 0;
+      let vbbEditSkipBusy = false;
       let vbbScrubRaf = 0;
       let abortVbb = false;
       let vbbMode = "duration";
@@ -577,6 +578,33 @@
           }))
           .filter((c) => c.end - c.start >= 0.2)
           .sort((x, y) => x.start - y.start);
+      }
+
+      function vbbPreviewSeekForKeepRanges(keeps, t, opts) {
+        const fn = window.DevToolsVtrimEditor?.previewSeekForKeepRanges;
+        if (typeof fn === "function") return fn(keeps, t, opts);
+        if (!Array.isArray(keeps) || !keeps.length) return null;
+        const paused = Boolean(opts && opts.paused);
+        const time = Number(t);
+        if (!Number.isFinite(time)) return null;
+        const first = keeps[0];
+        const last = keeps[keeps.length - 1];
+        const endEps = 0.0005;
+        const endKeep =
+          Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
+            ? window.DevToolsVtrimEditor.END_KEEP_SEC
+            : 1 / 25;
+        for (let i = 0; i < keeps.length; i++) {
+          const k = keeps[i];
+          if (time >= k.start - 0.02 && time < k.end - endEps) return null;
+        }
+        if (time < first.start - 0.02) return first.start;
+        for (let i = 0; i < keeps.length; i++) {
+          const nxt = keeps[i + 1];
+          if (nxt && time < nxt.start) return nxt.start;
+        }
+        if (paused) return Math.max(last.start, last.end - endKeep);
+        return first.start;
       }
 
       function vbbKeepRangesFromEdit(edit, duration) {
@@ -1083,57 +1111,79 @@
         toast("已重置该视频的编辑");
       }
 
-      /** 主预览跟随当前编辑：裁时长循环 + 裁画面 clip-path */
+      function clearVbbEditPreviewStyles() {
+        const video = vbbVideo;
+        const wrap = vbbPreviewWrap;
+        if (video) {
+          video.style.clipPath = "";
+          video.style.webkitClipPath = "";
+          video.style.transform = "";
+          video.style.transformOrigin = "";
+        }
+        wrap?.classList.remove("is-edit-preview", "is-edit-crop");
+      }
+
+      /** 主预览跟随当前编辑：keep 跳过删中间 + 裁画面 clip/放大到绿框 */
       function syncVbbEditPreview() {
         const item = getActiveVbbEditItem();
         const video = vbbVideo;
         const wrap = vbbPreviewWrap;
         if (!video) return;
         if (!item?.edit || !vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) {
-          video.style.clipPath = "";
-          video.style.webkitClipPath = "";
-          wrap?.classList.remove("is-edit-preview");
+          clearVbbEditPreviewStyles();
           return;
         }
         wrap?.classList.add("is-edit-preview");
         const edit = item.edit;
         if (edit.cropOn && edit.crop && item.srcW > 0 && item.srcH > 0) {
+          wrap?.classList.add("is-edit-crop");
           const c = edit.crop;
-          const top = (Math.max(0, c.y) / item.srcH) * 100;
-          const left = (Math.max(0, c.x) / item.srcW) * 100;
-          const bottom = Math.max(0, 100 - ((c.y + c.h) / item.srcH) * 100);
-          const right = Math.max(0, 100 - ((c.x + c.w) / item.srcW) * 100);
-          const inset = `inset(${top}% ${right}% ${bottom}% ${left}%)`;
+          const srcW = item.srcW;
+          const srcH = item.srcH;
+          const left = Math.max(0, Number(c.x) || 0) / srcW;
+          const top = Math.max(0, Number(c.y) || 0) / srcH;
+          const rw = Math.max(0.02, (Number(c.w) || srcW) / srcW);
+          const rh = Math.max(0.02, (Number(c.h) || srcH) / srcH);
+          const right = Math.max(0, 1 - left - rw);
+          const bottom = Math.max(0, 1 - top - rh);
+          const scale = Math.min(1 / rw, 1 / rh);
+          const ox = (left + rw / 2) * 100;
+          const oy = (top + rh / 2) * 100;
+          video.style.transformOrigin = `${ox}% ${oy}%`;
+          video.style.transform = `translate(${50 - ox}%, ${50 - oy}%) scale(${scale})`;
+          const inset = `inset(${top * 100}% ${right * 100}% ${bottom * 100}% ${left * 100}%)`;
           video.style.clipPath = inset;
           video.style.webkitClipPath = inset;
         } else {
+          wrap?.classList.remove("is-edit-crop");
           video.style.clipPath = "";
           video.style.webkitClipPath = "";
+          video.style.transform = "";
+          video.style.transformOrigin = "";
         }
       }
 
       function enforceVbbEditPlaybackWindow(mediaTime) {
-        if (isVbbManualMode() || vbbBusy || !vbbVideo?.src) return;
+        if (isVbbManualMode() || vbbBusy || !vbbVideo?.src || vbbEditSkipBusy) return;
         const item = getActiveVbbEditItem();
         if (!item?.edit || !vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) return;
-        const start = Math.max(0, Number(item.edit.trimStart) || 0);
-        const end = Math.max(start + VBB_MIN_SPAN, Number(item.edit.trimEnd) || item.duration);
-        const keep = Math.max(start, end - 1 / 25);
+        const keeps = vbbKeepRangesFromEdit(item.edit, item.duration);
+        if (!keeps.length) return;
         const t = Number.isFinite(mediaTime) ? mediaTime : Number(vbbVideo.currentTime) || 0;
-        if (t < start - 0.08) {
-          applyVbbSeek(start, { keepPlaying: !vbbVideo.paused });
-          return;
-        }
-        if (t >= keep - 0.0005) {
-          if (!vbbVideo.paused) {
-            try {
-              vbbVideo.pause();
-            } catch (_) {}
-            applyVbbSeek(start, { keepPlaying: true });
-          } else {
-            applyVbbSeek(keep, { keepPlaying: false });
-          }
-        }
+        const next = vbbPreviewSeekForKeepRanges(keeps, t, { paused: vbbVideo.paused });
+        if (next == null || !Number.isFinite(next)) return;
+        if (Math.abs(t - next) < 0.04) return;
+        const keepPlaying = !vbbVideo.paused;
+        vbbEditSkipBusy = true;
+        applyVbbSeek(next, { keepPlaying: true });
+        const finish = () => {
+          vbbVideo.removeEventListener("seeked", finish);
+          window.clearTimeout(watch);
+          vbbEditSkipBusy = false;
+          if (keepPlaying && vbbVideo.paused) vbbVideo.play().catch(() => {});
+        };
+        const watch = window.setTimeout(finish, 360);
+        vbbVideo.addEventListener("seeked", finish);
       }
 
       function armVbbEditFrameWatch() {
@@ -2904,6 +2954,8 @@
           vbbVideo.load?.();
           vbbVideo.hidden = true;
         }
+        clearVbbEditPreviewStyles();
+        vbbEditSkipBusy = false;
         if (vbbFile) vbbFile.value = "";
         if (vbbAbort) vbbAbort.hidden = true;
         if (vbbPlan) vbbPlan.hidden = true;
@@ -2983,6 +3035,7 @@
         syncVbbScrubFromVideo();
         syncVbbWorkflowUi();
         syncVbbEditUi();
+        syncVbbEditPreview();
         setVbbButtons();
         prefetchVbbVtrimEditor();
         toast(vbbWorkflow === "single" ? "视频已就绪 · 可点「编辑」裁时长/画面，再「一键黑盒」" : "视频已就绪，点「一键黑盒」即可");
@@ -5440,6 +5493,33 @@
         getMarks: () => vbbMarks.map((m) => ({ ...m })),
         getDraftStart: () => vbbDraftStart,
         computeManualRanges: () => computeVbbManualRanges(),
+        previewSeekForTime: vbbPreviewSeekForKeepRanges,
+        syncEditPreview: syncVbbEditPreview,
+        applySavedEdit: (next) => {
+          const item = getActiveVbbEditItem();
+          if (!item) return false;
+          ensureVbbItemEdit(item);
+          item.edit = {
+            trimStart: Number(next?.trimStart) || 0,
+            trimEnd: Number(next?.trimEnd) || item.duration,
+            cutouts: Array.isArray(next?.cutouts)
+              ? next.cutouts.map((c) => ({
+                  start: Number(c.start) || 0,
+                  end: Number(c.end) || 0,
+                }))
+              : [],
+            cropOn: Boolean(next?.cropOn),
+            crop: next?.crop
+              ? { ...next.crop }
+              : { x: 0, y: 0, w: item.srcW, h: item.srcH },
+          };
+          clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
+          if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
+          applyVbbSeek(Number(item.edit.trimStart) || 0, { keepPlaying: false });
+          syncVbbEditPreview();
+          syncVbbEditUi();
+          return true;
+        },
       };
       vbbAnalyze?.addEventListener("click", (e) => {
         const btn = e.currentTarget;
@@ -5505,8 +5585,11 @@
         enforceVbbEditPlaybackWindow();
       });
       vbbVideo?.addEventListener("seeked", () => {
-        if (!isVbbManualMode()) return;
-        paintVbbNow();
+        if (isVbbManualMode()) {
+          paintVbbNow();
+          return;
+        }
+        enforceVbbEditPlaybackWindow();
       });
       vbbScrub?.addEventListener("input", () => {
         if (!vbbVideo?.src) return;

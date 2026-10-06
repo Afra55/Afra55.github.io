@@ -1675,6 +1675,35 @@
     return keeps;
   }
 
+  /**
+   * 外预览：源时间若落在 keep 外（删中间 / 片头片尾外），返回应 seek 到的时间；否则 null。
+   * 播放到末段 keep 尾则循环到第一段；暂停则停在末段尾。
+   * @param {{start:number,end:number}[]} keeps
+   * @param {number} t
+   * @param {{ paused?: boolean }} [opts]
+   * @returns {number|null}
+   */
+  function previewSeekForKeepRanges(keeps, t, opts) {
+    if (!Array.isArray(keeps) || !keeps.length) return null;
+    const paused = Boolean(opts && opts.paused);
+    const time = Number(t);
+    if (!Number.isFinite(time)) return null;
+    const first = keeps[0];
+    const last = keeps[keeps.length - 1];
+    const endEps = 0.0005;
+    for (let i = 0; i < keeps.length; i++) {
+      const k = keeps[i];
+      if (time >= k.start - 0.02 && time < k.end - endEps) return null;
+    }
+    if (time < first.start - 0.02) return first.start;
+    for (let i = 0; i < keeps.length; i++) {
+      const nxt = keeps[i + 1];
+      if (nxt && time < nxt.start) return nxt.start;
+    }
+    if (paused) return Math.max(last.start, last.end - END_KEEP_SEC);
+    return first.start;
+  }
+
   function evenDim(n) {
     return Math.max(2, Math.round((Number(n) || 2) / 2) * 2);
   }
@@ -1820,6 +1849,7 @@
     ensureCss: ensureVtrimCss,
     normalizeCutouts,
     keepRangesFromEdit,
+    previewSeekForKeepRanges,
     exportKeepVideo,
     END_KEEP_SEC,
     START_KEEP_SEC,
