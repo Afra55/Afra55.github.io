@@ -158,9 +158,10 @@ async function encodeOne(page, videoPath) {
   const input = await page.$("#vbb-file");
   await input.uploadFile(videoPath);
   await page.waitForFunction(() => {
+    const v = document.getElementById("vbb-video");
     const b = document.getElementById("vbb-oneclick");
-    return b && !b.disabled;
-  }, { timeout: 60000 });
+    return v && Number(v.duration) > 0 && Number.isFinite(v.duration) && b && !b.disabled;
+  }, { timeout: 120000 });
 
   const meta = await page.evaluate(() => document.getElementById("vbb-meta")?.textContent || "");
   const perfInfo = await page.evaluate(() => {

@@ -2425,9 +2425,10 @@
         if (!(s > 0) || !(f > 0)) return false;
         return s * f > V2G_BLACKBOX_HIGH_FPS_FRAME_SKIP + 0.01;
       }
-      function blackboxShouldSkipFpsByCal(fps, calFps, calSize, budget) {
+      function blackboxShouldSkipFpsByCal(fps, calFps, calSize, budget, srcFps) {
         const f = Number(fps) || 0;
         if (Math.abs(f - 15) < 0.2) return false;
+        if (blackboxIsFloorFps(f, srcFps, 0)) return false;
         const cf = Math.max(0.01, Number(calFps) || 0);
         const estQ8 = (((Number(calSize) || 0) * f) / cf) * 0.9;
         return estQ8 > (Number(budget) || 0) * 1.08;
@@ -2466,6 +2467,14 @@
         const cands = blackboxFpsCandidates(srcFps);
         const last = cands[cands.length - 1];
         return last > 0 ? last : V2G_BLACKBOX_RETRY_MIN_FPS;
+      }
+
+      /** 15 是中档必试，不是底档。底档只有候选末档 12 / 12.5。 */
+      function blackboxIsFloorFps(fps, srcFps, span) {
+        const f = Number(fps) || 0;
+        if (!(f > 0)) return false;
+        if (Math.abs(f - 15) < 0.2) return false;
+        return f <= blackboxFpsFloor(span, srcFps) + 0.01;
       }
 
       /** 主试列表：整除档从高到低（不再按时长砍掉高档） */
@@ -3134,6 +3143,13 @@
             }
           }
         } catch (_) {}
+        {
+          const floorFps = blackboxFpsFloor(span / speed, srcFps);
+          if (!fpsList.some((f) => Number(f) <= floorFps + 0.01)) {
+            fpsList = fpsList.concat(floorFps);
+            vbbLog(`[vbb-phase] 补回帧率底档 ${floorFps}（15 不是底档）`);
+          }
+        }
         if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
         const tried = [];
         const common = {
@@ -3802,7 +3818,7 @@
         const keepMaxQi = blackboxKeepQualityMaxQi();
         const fitFps = async (fps) => {
           const hardW = Math.max(64, Math.min(srcCap, floorW));
-          const isFloorFps = fps <= fpsFloor + 0.01;
+          const isFloorFps = blackboxIsFloorFps(fps, srcFps, effSpanForPick);
           const widthSteps = [];
           for (const raw of V2G_BLACKBOX_LETGO_WIDTHS) {
             const w = Math.round(Math.max(hardW, Math.min(srcCap, raw)) / 2) * 2;
@@ -3887,7 +3903,12 @@
             }
             if (wi > 0 && lastWTried > 0) {
               const lastSize = Number(tried[tried.length - 1]?.blob?.size) || 0;
-              if (blackboxShouldSkipNarrowerWidth(lastSize, lastWTried, w, V2G_BLACKBOX_MAX_BYTES)) {
+              const lastStep = wi === widthSteps.length - 1;
+              // 底档必须实打实试 380@≥80，不能面积外推直接降到 q<80
+              if (
+                !(isFloorFps && lastStep) &&
+                blackboxShouldSkipNarrowerWidth(lastSize, lastWTried, w, V2G_BLACKBOX_MAX_BYTES)
+              ) {
                 const est = blackboxEstSizeAtWidth(lastSize, lastWTried, w);
                 vbbLog(
                   `[vbb-phase] 面积外推跳过 ${w}px：${lastWTried}px ${formatKb(lastSize)} → 估 ${formatKb(est)}`
@@ -3905,7 +3926,8 @@
               }`
             );
             let hit = await tryQualities(w, 0, keepMaxQi);
-            if (!hit && (!shortKeepQ || isFloorFps) && wi === 0) {
+            // 默认长片保帧：仅 420 允许 q<80。底档（12/12.5）不得在 420 先降质，须先缩到 380。
+            if (!hit && !shortKeepQ && !isFloorFps && wi === 0) {
               hit = await tryQualities(w, keepMaxQi + 1, V2G_BLACKBOX_QUALITY_LADDER.length - 1);
             }
             lastWTried = w;
@@ -3953,7 +3975,7 @@
           if (
             cal?.blob?.size &&
             Number(cal.fps) > 0 &&
-            blackboxShouldSkipFpsByCal(fps, cal.fps, cal.blob.size, V2G_BLACKBOX_MAX_BYTES)
+            blackboxShouldSkipFpsByCal(fps, cal.fps, cal.blob.size, V2G_BLACKBOX_MAX_BYTES, srcFps)
           ) {
             vbbLog(
               `[vbb-phase] 外推跳过 ${fps}fps：${cal.fps}fps ${formatKb(cal.blob.size)} 估仍超`
@@ -4008,7 +4030,7 @@
         if (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES) {
           const wNow = Number(candidate.maxW) || chosen.width;
           const fpsNow = Number(chosen.fps) || fpsFloor;
-          const atFloor = fpsNow <= fpsFloor + 0.01 && wNow <= floorW + 2;
+          const atFloor = blackboxIsFloorFps(fpsNow, srcFps, effSpanForPick) && wNow <= floorW + 2;
           const baseQ = blackboxLadderQuality(candidate);
           const at = V2G_BLACKBOX_QUALITY_LADDER.indexOf(baseQ);
           const qiEnd = atFloor ? V2G_BLACKBOX_QUALITY_LADDER.length : keepMaxQi + 1;

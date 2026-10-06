@@ -50,6 +50,14 @@ function blackboxFpsFloor(span, srcFps) {
   return last > 0 ? last : RETRY_MIN_FPS;
 }
 
+/** 15 是中档必试，不是底档。底档只有候选末档 12 / 12.5。 */
+function blackboxIsFloorFps(fps, srcFps, span) {
+  const f = Number(fps) || 0;
+  if (!(f > 0)) return false;
+  if (Math.abs(f - 15) < 0.2) return false;
+  return f <= blackboxFpsFloor(span, srcFps) + 0.01;
+}
+
 function resolveBlackboxFpsList(span, srcFps) {
   const cands = blackboxFpsCandidates(srcFps);
   return cands.length ? cands.slice() : [blackboxFpsFloor(span, srcFps)];
@@ -122,9 +130,10 @@ function blackboxShouldSkipHighFpsByDuration(fps, span) {
   return s * f > HIGH_FPS_FRAME_SKIP + 0.01;
 }
 
-function blackboxShouldSkipFpsByCal(fps, calFps, calSize, budget) {
+function blackboxShouldSkipFpsByCal(fps, calFps, calSize, budget, srcFps) {
   const f = Number(fps) || 0;
   if (Math.abs(f - 15) < 0.2) return false;
+  if (blackboxIsFloorFps(f, srcFps, 0)) return false;
   const cf = Math.max(0.01, Number(calFps) || 0);
   const estQ8 = ((Number(calSize) || 0) * f) / cf * 0.9;
   return estQ8 > (Number(budget) || 0) * 1.08;
@@ -142,6 +151,7 @@ module.exports = {
   blackboxIsMovieLike,
   blackboxPrimaryFps,
   blackboxFpsFloor,
+  blackboxIsFloorFps,
   resolveBlackboxFpsList,
   gifEffectivePlaybackFps,
   allowedGifFpsSet,

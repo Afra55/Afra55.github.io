@@ -11,6 +11,8 @@ const {
   blackboxFpsCandidates,
   blackboxIsMovieLike,
   blackboxPrimaryFps,
+  blackboxFpsFloor,
+  blackboxIsFloorFps,
   resolveBlackboxFpsList,
   gifEffectivePlaybackFps,
   assertGifFpsAllowed,
@@ -85,6 +87,22 @@ assert(blackboxShouldSkipHighFpsByDuration(15, 28.3) === false, "15 必试");
 assert(blackboxShouldSkipHighFpsByDuration(20, 15.8) === false, "16s@20 仍试");
 assert(blackboxShouldSkipFpsByCal(20, 25, 27e6, 10e6) === true, "25@27MB 外推 20 仍超");
 assert(blackboxShouldSkipFpsByCal(15, 25, 27e6, 10e6) === false, "标定后 15 仍试");
+assert(blackboxFpsFloor(16, 30) === 12, "30 源底档 12");
+assert(blackboxFpsFloor(19, 25) === 12.5, "25 源底档 12.5");
+assert(blackboxIsFloorFps(15, 24, 16) === false, "画质优先/长片：15 不是 floor");
+assert(blackboxIsFloorFps(15, 25, 19) === false, "屏录长片：15 不是 floor");
+assert(blackboxIsFloorFps(15, 28.4, 16) === false, "910 类源：15 不是 floor");
+assert(blackboxIsFloorFps(12, 24, 16) === true, "24 源底档 12");
+assert(blackboxIsFloorFps(12.5, 25, 19) === true, "25 源底档 12.5");
+assert(blackboxIsFloorFps(12, 28.4, 16) === true, "默认档底档 12");
+assert(
+  blackboxShouldSkipFpsByCal(12, 15, 16e6, 10e6, 30) === false,
+  "15@380 仍超不得外推跳过 12"
+);
+assert(
+  blackboxShouldSkipFpsByCal(12.5, 15, 18e6, 10e6, 25) === false,
+  "15 超限不得外推跳过 12.5"
+);
 
 {
   const encPath = path.join(__dirname, "extra-panels/v2g-suite-src/10-shared-encode.js");
@@ -129,6 +147,22 @@ assert(blackboxShouldSkipFpsByCal(15, 25, 27e6, 10e6) === false, "标定后 15 �
   }
   assert(/blackboxShouldSkipNarrowerWidth/.test(src), "须有面积外推跳宽");
   assert(/blackboxShouldSkipHighFpsByDuration/.test(src), "须有长片跳过高档穷举");
+  assert(/function blackboxIsFloorFps/.test(src), "须有 15 非底档判定");
+  assert(/Math\.abs\(\s*f\s*-\s*15\s*\)\s*<\s*0\.2\)\s*return false/.test(src), "isFloorFps 须排除 15");
+  assert(
+    /!hit && !shortKeepQ && !isFloorFps && wi === 0/.test(src),
+    "底档不得在 420 先降到 q<80"
+  );
+  assert(
+    /!\(isFloorFps && lastStep\)/.test(src),
+    "底档须实试 380@≥80，不得面积外推跳过"
+  );
+  assert(
+    /blackboxShouldSkipFpsByCal\(fps, cal\.fps, cal\.blob\.size, V2G_BLACKBOX_MAX_BYTES,\s*srcFps\)/.test(
+      src
+    ),
+    "外推跳帧须传入 srcFps 以保住底档"
+  );
   assert(/V2G_GIFSKI_WASM_MAX_FRAMES/.test(src), "须有 wasm 分块安全帧上限");
   assert(/V2G_BLACKBOX_QUALITY_LADDER\s*=\s*\[\s*1\s*,\s*4\s*,\s*6\s*,\s*8\s*,/.test(src), "92–83 须有细档 q4/q6");
   const v2gUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/20-v2g-ui.js"), "utf8");
