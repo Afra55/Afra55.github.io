@@ -3188,7 +3188,7 @@
 
       /** 从一帧里估算纯色边框，返回保留区域（不含边框）；无边则 null
        *  四边各自独立：任意纯色边（黑/白/灰/绿…）都能裁。
-       *  防误裁：容差与离群从严、单边≤18%、回退 1px；雾气等「看起来像边」但不够纯的行会判失败。 */
+       *  防误裁：容差与离群从严、单边≤18%；1px 安全回退在 detectVideoCrop 映射到源分辨率后做。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -3274,11 +3274,8 @@
             right--;
           }
         }
-        // 回退 1px，避免贴齐内容抗锯齿被啃掉
-        if (top > 0) top -= 1;
-        if (bottom < h - 1) bottom += 1;
-        if (left > 0) left -= 1;
-        if (right < w - 1) right += 1;
+        // 不在缩略图像素上回退：细边（源 6～22px）在 360 宽里常只占 1～4px，
+        // 回退 1 缩略像素会把左边整段裁没。1px 安全回退改在映射到源分辨率后做。
         if (right <= left || bottom <= top) return null;
         if (top === 0 && left === 0 && right === w - 1 && bottom === h - 1) return null;
         return { left, top, right, bottom, w, h };
@@ -3287,8 +3284,8 @@
       /** 采样多帧取「内容并集」（各边取最浅裁），只裁所有帧都同意是边框的区域；无边框返回 null */
       async function detectVideoCrop(file) {
         if (!file) return null;
-        // v5：任意纯色边 + 严纯度；编辑只裁时长时不走自动裁（见 resolveVbbEncodeCrop）
-        const cacheKey = `v5|${file.name}|${file.size}|${file.lastModified || 0}`;
+        // v6：更高缩略图 + 源像素回退 + 细边也算有效；编辑只裁时长时不走自动裁（见 resolveVbbEncodeCrop）
+        const cacheKey = `v6|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         const url = URL.createObjectURL(file);
@@ -3306,14 +3303,17 @@
           const vw = v.videoWidth || 0;
           const vh = v.videoHeight || 0;
           if (vw < 16 || vh < 16) throw new Error("视频尺寸无效");
-          const cw = Math.min(360, vw);
+          // 960：细左右黑边（源约 6～22px）在 360 宽里常只剩 1px，再取整/回退就丢边
+          const cw = Math.min(960, vw);
           const ch = Math.max(1, Math.round(vh * (cw / vw)));
           const canvas = document.createElement("canvas");
           canvas.width = cw;
           canvas.height = ch;
           const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (ctx) ctx.imageSmoothingEnabled = false;
           const dur = Number.isFinite(v.duration) ? v.duration : 0;
-          const marks = dur > 0.6 ? [0.2, 0.5, 0.8].map((r) => Math.min(dur * r, Math.max(0, dur - 0.05))) : [0];
+          // 避开片尾淡出/全黑（易把「内容并集」的左边裁量抬高又被其它帧压回，无益；细边主要靠清晰帧）
+          const marks = dur > 0.6 ? [0.15, 0.4, 0.65].map((r) => Math.min(dur * r, Math.max(0, dur - 0.05))) : [0];
           let acc = null;
           let hits = 0;
           for (const t of marks) {
@@ -3343,14 +3343,22 @@
           if (acc && hits > 0 && acc.right > acc.left && acc.bottom > acc.top) {
             const sx = vw / acc.w;
             const sy = vh / acc.h;
-            const x = Math.max(0, Math.round(acc.left * sx));
-            const y = Math.max(0, Math.round(acc.top * sy));
-            let w = Math.round((acc.right - acc.left + 1) * sx);
-            let h = Math.round((acc.bottom - acc.top + 1) * sy);
+            // 向内取整偏「多裁一点」：ceil 左边/顶，floor 内容右/底，避免缩略图低估细边
+            let x = acc.left > 0 ? Math.max(0, Math.ceil(acc.left * sx)) : 0;
+            let y = acc.top > 0 ? Math.max(0, Math.ceil(acc.top * sy)) : 0;
+            let x2 = Math.min(vw, Math.floor((acc.right + 1) * sx));
+            let y2 = Math.min(vh, Math.floor((acc.bottom + 1) * sy));
+            // 源像素回退 1px，避免贴齐内容抗锯齿被啃掉
+            if (x > 0) x -= 1;
+            if (y > 0) y -= 1;
+            if (x2 < vw) x2 += 1;
+            if (y2 < vh) y2 += 1;
+            let w = x2 - x;
+            let h = y2 - y;
             if (x + w > vw) w = vw - x;
             if (y + h > vh) h = vh - y;
-            // 至少裁掉 6 源像素才算有效，避免缩略图取整抖一下
-            if (w >= 8 && h >= 8 && (w < vw - 6 || h < vh - 6)) result = { x, y, w, h };
+            // 至少裁掉 2 源像素才算有效（旧 6 会放过 1075 这类只剩约 6～8px 左边的 GIF）
+            if (w >= 8 && h >= 8 && (w < vw - 2 || h < vh - 2)) result = { x, y, w, h };
           }
         } catch (_) {
           result = null;
@@ -3474,12 +3482,22 @@
               } catch (_) {}
               names[i] = nmM;
             }
-            const crop =
+            let crop =
               win.edit?.cropOn && win.edit.crop
                 ? typeof normalizeV2gCrop === "function"
                   ? normalizeV2gCrop(win.edit.crop, item.srcW, item.srcH)
                   : win.edit.crop
                 : null;
+            // 拼接中间片也要套自动去色边；旧逻辑只认编辑裁画面，多段黑边宽不一会在 pad 后残留/补边
+            if (!crop) {
+              crop = await resolveVbbEncodeCrop(
+                item.file,
+                win.edit,
+                item.srcW,
+                item.srcH,
+                item.duration
+              );
+            }
             wins.push({ ...win, startSec, span, crop });
           }
           setVbbProgress(true, 0.48, "拼接 · 探测片源帧率…", { busy: true });
