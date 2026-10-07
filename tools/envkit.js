@@ -61,6 +61,15 @@
       link: "#mdm",
       kind: "pandoc",
     },
+    {
+      id: "lanboard-mount",
+      name: "⑦ 局域网看板 · /lanboard（可选）",
+      url: "http://127.0.0.1:17888/lanboard/health",
+      token: "devtools-bridge",
+      tokenHeader: "X-Adb-Token",
+      link: "#lanboard",
+      kind: "lanboard",
+    },
   ];
 
   function detectOs() {

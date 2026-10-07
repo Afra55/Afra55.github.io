@@ -100,6 +100,7 @@
         unlockOpsJs,
         pandocServerJs,
         pandocOpsJs,
+        lanboardServerJs,
         scriptRaw,
         resolvePortJs,
         serverJar,
@@ -120,6 +121,7 @@
         fetchTextAsset("./fileunlock-bridge/lock-ops.js").catch(() => ""),
         fetchTextAsset("./pandoc-bridge/server.js").catch(() => ""),
         fetchTextAsset("./pandoc-bridge/pandoc-ops.js").catch(() => ""),
+        fetchTextAsset("./lanboard-bridge/server.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
         fetchTextAsset("./adb-bridge/resolve-port.js").catch(() => ""),
         fetch("./adb-bridge/vendor/scrcpy-server-v3.1", { cache: "no-cache" })
@@ -151,6 +153,7 @@
         "  - git-bridge/server.js + git-ops.js + noop-editor.*",
         "  - fileunlock-bridge/server.js + lock-ops.js（Windows 文件占用解锁）",
         "  - pandoc-bridge/server.js + pandoc-ops.js（Markdown → 任意格式，需本机装 pandoc）",
+        "  - lanboard-bridge/server.js（局域网看板文字快照 / 媒体暂存）",
         "  - vendor/scrcpy-server-v3.1（可选）",
         "  - " + cfg.scriptName,
         "",
@@ -161,7 +164,7 @@
         "4. 网页各工具都连 http://127.0.0.1:17888 · Token: devtools-bridge",
         "",
         "只需启动这一座桥。不要再下「独立 Git / 独立 FFmpeg」包。",
-        "API：/ff · /ytdlp · /git",
+        "API：/ff · /ytdlp · /git · /lanboard",
         "",
       ].join("\n");
 
@@ -184,6 +187,7 @@
       if (unlockOpsJs) zip.file("fileunlock-bridge/lock-ops.js", unlockOpsJs);
       if (pandocServerJs) zip.file("pandoc-bridge/server.js", pandocServerJs);
       if (pandocOpsJs) zip.file("pandoc-bridge/pandoc-ops.js", pandocOpsJs);
+      if (lanboardServerJs) zip.file("lanboard-bridge/server.js", lanboardServerJs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {
         unixPermissions: platform === "win" ? undefined : 0o755,

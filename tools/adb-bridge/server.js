@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.46";
+const BRIDGE_VERSION = "0.9.47";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -115,6 +115,24 @@ function loadPandocBridge() {
 const pandocBridge = loadPandocBridge();
 if (!pandocBridge) {
   console.warn("未找到 Pandoc 模块（可选）：完整 ZIP 请包含 pandoc-bridge/server.js + pandoc-ops.js");
+}
+function loadLanboardBridge() {
+  const candidates = [
+    path.join(__dirname, "lanboard-bridge", "server.js"),
+    path.join(__dirname, "..", "lanboard-bridge", "server.js"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return require(candidate);
+    } catch (err) {
+      console.warn("加载局域网看板模块失败:", candidate, err.message || err);
+    }
+  }
+  return null;
+}
+const lanboardBridge = loadLanboardBridge();
+if (!lanboardBridge) {
+  console.warn("未找到局域网看板模块（可选）：完整 ZIP 请包含 lanboard-bridge/server.js");
 }
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
@@ -5040,6 +5058,25 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    // 统一桥：局域网看板 API 挂在 /lanboard/*
+    if (url.pathname === "/lanboard" || url.pathname.startsWith("/lanboard/")) {
+      if (!lanboardBridge?.handleRequest) {
+        sendJson(res, 503, { ok: false, error: "未找到局域网看板模块（请用完整 ZIP，含 lanboard-bridge）" }, origin);
+        return;
+      }
+      const stripped = url.pathname === "/lanboard" ? "/" : url.pathname.slice(9) || "/";
+      const isLanboardHealth =
+        (stripped === "/health" || stripped === "/") && req.method === "GET";
+      if (!isLanboardHealth && req.method !== "OPTIONS") requireToken(req);
+      wrapResWithCors(res, origin);
+      await lanboardBridge.handleRequest(req, res, {
+        pathname: stripped,
+        alreadyAuthed: !isLanboardHealth,
+        embedded: true,
+      });
+      return;
+    }
+
     if (url.pathname === "/health" && req.method === "GET") {
       const adbInfo = await checkAdb();
       const hostTools = await probeHostTools();
@@ -5158,6 +5195,7 @@ async function handleApi(req, res, url) {
             "git-mount",
             "unlock-mount",
             "pandoc-mount",
+            "lanboard-mount",
             "device-perf",
             "device-processes",
             "device-shell",
@@ -5186,8 +5224,10 @@ async function handleApi(req, res, url) {
           gitMount: "/git",
           unlockMount: "/unlock",
           pandocMount: "/pandoc",
+          lanboardMount: "/lanboard",
+          lanboard: !!lanboardBridge,
           note:
-            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock) + Pandoc(/pandoc)。Token 默认 devtools-bridge。只需启动一次。",
+            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock) + Pandoc(/pandoc) + 看板(/lanboard)。Token 默认 devtools-bridge。只需启动一次。",
         },
         origin
       );
@@ -5906,7 +5946,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
-  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / Pandoc(/pandoc) / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / Pandoc(/pandoc) / 看板(/lanboard) / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);

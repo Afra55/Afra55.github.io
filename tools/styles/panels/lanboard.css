@@ -1,0 +1,130 @@
+#lanboard [hidden] {
+  display: none !important;
+}
+
+#lb-error {
+  margin-top: 0.5rem;
+}
+
+.lb-steps {
+  margin: 0.65rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.lb-steps li + li {
+  margin-top: 0.2rem;
+}
+
+.lb-compose-actions .file-btn {
+  cursor: pointer;
+}
+
+#lb-file-hint:empty {
+  display: none;
+}
+
+.lb-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.lb-item {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: 8px;
+  background: var(--card, transparent);
+}
+
+.lb-item-preview {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lb-item-preview img,
+.lb-item-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lb-item-preview .lb-kind {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.lb-item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lb-item-main strong {
+  display: block;
+  word-break: break-word;
+}
+
+.lb-item-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+}
+
+.lb-item-meta {
+  margin: 0.2rem 0 0;
+}
+
+.lb-item-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: stretch;
+}
+
+.lb-item-actions .ghost-btn,
+.lb-item-actions .secondary-btn,
+.lb-item-actions .primary-btn {
+  white-space: nowrap;
+}
+
+.lb-dl-hint {
+  max-width: 7.5rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: var(--muted, #888);
+}
+
+.lb-dl-hint.is-warn {
+  color: var(--danger, #c45c26);
+}
+
+#lanboard .primary-btn:disabled,
+#lanboard .secondary-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.lb-members {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.lb-members li + li {
+  margin-top: 0.15rem;
+}
+
+.lb-empty {
+  margin: 0;
+}

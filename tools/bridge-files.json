@@ -31,6 +31,7 @@
     "fileunlock-bridge/server.js",
     "fileunlock-bridge/lock-ops.js",
     "pandoc-bridge/server.js",
-    "pandoc-bridge/pandoc-ops.js"
+    "pandoc-bridge/pandoc-ops.js",
+    "lanboard-bridge/server.js"
   ]
 }

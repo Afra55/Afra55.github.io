@@ -248,6 +248,11 @@
       "bytes": 7985
     },
     {
+      "id": "lanboard",
+      "file": "./panels/lanboard.html",
+      "bytes": 2800
+    },
+    {
       "id": "markdown",
       "file": "./panels/markdown.html",
       "bytes": 815

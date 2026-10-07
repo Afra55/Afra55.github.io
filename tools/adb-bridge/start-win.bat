@@ -244,6 +244,13 @@ if not exist "%SCRIPT_DIR%pandoc-bridge\server.js" (
   )
 )
 
+if not exist "%SCRIPT_DIR%lanboard-bridge\server.js" (
+  if not exist "%SCRIPT_DIR%..\lanboard-bridge\server.js" (
+    echo [WARN] lanboard-bridge/server.js not found - Lan board API disabled until full ZIP is used.
+    echo [WARN] missing lanboard-bridge>> "%LOG_FILE%"
+  )
+)
+
 if "%ADB_BRIDGE_TOKEN%"=="" set "ADB_BRIDGE_TOKEN=devtools-bridge"
 set "ADB_BRIDGE_DIR=%CD%"
 

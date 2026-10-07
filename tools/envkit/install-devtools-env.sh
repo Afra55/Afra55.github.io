@@ -355,7 +355,7 @@ install_gifski_vendor() {
 sync_bridges() {
   say ""
   say "== 同步本机桥文件 → ${BRIDGE_DIR} =="
-  mkdir -p "$BRIDGE_DIR/adb-bridge" "$BRIDGE_DIR/ffmpeg-bridge" "$BRIDGE_DIR/git-bridge" "$BRIDGE_DIR/fileunlock-bridge" "$BRIDGE_DIR/pandoc-bridge"
+  mkdir -p "$BRIDGE_DIR/adb-bridge" "$BRIDGE_DIR/ffmpeg-bridge" "$BRIDGE_DIR/git-bridge" "$BRIDGE_DIR/fileunlock-bridge" "$BRIDGE_DIR/pandoc-bridge" "$BRIDGE_DIR/lanboard-bridge"
 
   # ADB 统一桥核心文件
   local adb_files=(server.js resolve-port.js scrcpy-mirror.js scrcpy-ctrl.js device-inspect.js)
@@ -393,6 +393,12 @@ sync_bridges() {
     download_file "${BASE_URL}/pandoc-bridge/$f" "$BRIDGE_DIR/pandoc-bridge/$f" || warn "下载失败 $f"
   done
 
+  # 局域网看板（文字快照 / 媒体暂存）
+  for f in server.js; do
+    info "lanboard-bridge/$f"
+    download_file "${BASE_URL}/lanboard-bridge/$f" "$BRIDGE_DIR/lanboard-bridge/$f" || warn "下载失败 $f"
+  done
+
   # ADB / FFmpeg 补齐 Windows 启动脚本
   for f in start-win.bat start-win.cmd; do
     download_file "${BASE_URL}/adb-bridge/$f" "$BRIDGE_DIR/adb-bridge/$f" || true
@@ -410,7 +416,8 @@ sync_bridges() {
     "$BRIDGE_DIR/fileunlock-bridge/server.js" \
     "$BRIDGE_DIR/fileunlock-bridge/lock-ops.js" \
     "$BRIDGE_DIR/pandoc-bridge/server.js" \
-    "$BRIDGE_DIR/pandoc-bridge/pandoc-ops.js"
+    "$BRIDGE_DIR/pandoc-bridge/pandoc-ops.js" \
+    "$BRIDGE_DIR/lanboard-bridge/server.js"
   do
     if [[ ! -s "$f" ]]; then
       warn "缺失或空文件：$f"

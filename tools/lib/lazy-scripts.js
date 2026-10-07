@@ -86,6 +86,7 @@
     gitbridge: "./gitbridge.js",
     passvault: "./passvault.js",
     lanshare: "./lanshare.js",
+    lanboard: "./lanboard.js",
     setup: "./setup.js",
     envkit: "./envkit.js",
     feedbackhub: "./feedbackhub.js",
@@ -184,6 +185,7 @@
     hash: ["spark-md5"],
     qrcode: ["qrcodegen", "qrcode", "zxing", "jsQR"],
     lanshare: ["qrcode", "jsQR"],
+    lanboard: ["qrcode", "mqtt"],
     sharecard: ["html2canvas"],
     gifmaker: ["gif", "omggif"],
     v2g: ["gif", "omggif"],
@@ -238,6 +240,7 @@
     "ipgeo",
     "sandspiel",
     "lanshare",
+    "lanboard",
     "ffbridge",
     "ytdlp",
     "gitbridge",
@@ -247,7 +250,7 @@
   ]);
 
   const NO_PURE = new Set([
-    "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp",
+    "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "lanboard", "ffbridge", "ytdlp",
     "gitbridge", "passvault", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",

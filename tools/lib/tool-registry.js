@@ -171,6 +171,7 @@
       "label": "设备",
       "tools": [
         "lanshare",
+        "lanboard",
         "adb",
         "ffbridge",
         "ytdlp",
@@ -884,6 +885,16 @@
         "局域网"
       ]
     },
+    "lanboard": {
+      "name": "局域网看板",
+      "aliases": [
+        "看板",
+        "白板",
+        "lanboard",
+        "公共白板",
+        "大厅"
+      ]
+    },
     "ffbridge": {
       "name": "FFmpeg 本机桥",
       "aliases": [
@@ -1253,6 +1264,7 @@
     "healthread": "养生功法等文章离线阅读：列表搜索、按需加载动图，记住阅读进度。",
     "adb": "网页侧 ADB：设备、文件、应用、性能/进程/Shell/布局、Logcat、输入与任务等。",
     "lanshare": "局域网互传：多机同房间 WebRTC 直传；密码或扫码加入（微信请扫完整链接码）；电脑可选保存目录。需 HTTPS、同 WiFi；无断点续传。",
+    "lanboard": "局域网看板：打开即进固定大厅，发文字/图片/视频，在线设备立刻看到；文字一键复制。可选统一桥落文字快照；源设备离开后媒体仅可预览。",
     "ffbridge": "电脑批量用本机 FFmpeg 桥；手机请直接用视频/GIF 分类里的音频/修剪/动图（网页内处理）。",
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
     "gitbridge": "今日交码看板 + 说明模板 + Gerrit 视角 + 历史/工作线右键；统一桥 /git。",
