@@ -5,8 +5,17 @@
  * 文字快照 + 可选媒体暂存；电脑退出后手机仍可从桥拉文字/已暂存媒体。
  */
 
-const BRIDGE_VERSION = "0.1.0";
+const BRIDGE_VERSION = "0.1.1";
 const FEATURES = { lanboard: true, textSnapshot: true, mediaStash: true };
+
+function mediaKindFrom(mime, kindHint) {
+  const hint = String(kindHint || "").trim();
+  if (hint === "image" || hint === "video" || hint === "file") return hint;
+  const m = String(mime || "");
+  if (m.startsWith("video/")) return "video";
+  if (m.startsWith("image/")) return "image";
+  return "file";
+}
 
 const MAX_TEXT_ITEMS = 300;
 const MAX_TEXT_BYTES = 8 * 1024;
@@ -112,7 +121,7 @@ function exportMediaMetas() {
   return [...mediaItems.values()]
     .map((it) => ({
       id: it.id,
-      kind: it.mime?.startsWith("video/") ? "video" : "image",
+      kind: mediaKindFrom(it.mime, it.kind),
       name: it.name,
       mime: it.mime,
       size: it.size,
@@ -228,6 +237,7 @@ async function handleRequest(req, res, opts = {}) {
       }
       const mime = String(req.headers["x-lanboard-mime"] || "application/octet-stream").slice(0, 120);
       const ownerId = String(req.headers["x-lanboard-owner"] || "").slice(0, 64);
+      const kind = mediaKindFrom(mime, req.headers["x-lanboard-kind"]);
       if (!id) {
         sendJson(res, 400, { ok: false, error: "缺少 x-lanboard-id" });
         return;
@@ -242,6 +252,7 @@ async function handleRequest(req, res, opts = {}) {
       }
       mediaItems.set(id, {
         id,
+        kind,
         name,
         mime,
         size: buf.length,

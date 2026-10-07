@@ -43,6 +43,7 @@
     textInput: $("#lb-text"),
     sendBtn: $("#lb-send"),
     fileInput: $("#lb-file-input"),
+    anyFileInput: $("#lb-any-file-input"),
     fileHint: $("#lb-file-hint"),
     emptySteps: $("#lb-empty-steps"),
     feed: $("#lb-feed"),
@@ -98,6 +99,19 @@
     if (x < 1024) return `${x} B`;
     if (x < 1024 * 1024) return `${(x / 1024).toFixed(1)} KB`;
     return `${(x / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function fileKindOf(file) {
+    const mime = String(file?.type || "");
+    if (mime.startsWith("video/")) return "video";
+    if (mime.startsWith("image/")) return "image";
+    return "file";
+  }
+
+  function kindLabel(kind) {
+    if (kind === "video") return "视频";
+    if (kind === "image") return "图片";
+    return "文件";
   }
 
   function notifyToast(msg) {
@@ -298,7 +312,7 @@
     if (els.emptySteps) els.emptySteps.hidden = list.length > 0;
     if (!list.length) {
       els.feed.innerHTML =
-        '<p class="hint tight lb-empty">大厅还没有内容。发一条文字，或选张图点「发送」。</p>';
+        '<p class="hint tight lb-empty">大厅还没有内容。发一条文字，或选文件点「发送」。</p>';
       return;
     }
     els.feed.innerHTML = list
@@ -315,22 +329,16 @@
           </div>`;
         }
         const canDl = mediaDownloadable(it);
+        const label = kindLabel(it.kind);
         const preview = it.thumb
           ? `<img src="${escapeHtml(it.thumb)}" alt="" loading="lazy" />`
-          : `<span class="lb-kind">${it.kind === "video" ? "视频" : "图片"}</span>`;
+          : `<span class="lb-kind lb-kind-${escapeHtml(it.kind === "video" || it.kind === "image" ? it.kind : "file")}">${escapeHtml(label)}</span>`;
         const hint = canDl ? "" : `<span class="lb-dl-hint is-warn">${SOURCE_GONE}</span>`;
         return `<div class="lb-item" data-id="${escapeHtml(it.id)}">
           <div class="lb-item-preview">${preview}</div>
           <div class="lb-item-main">
-            <strong>${escapeHtml(it.name || "媒体")}</strong>
-            <p class="hint tight lb-item-meta mono">${escapeHtml(it.kind === "video" ? "视频" : "图片")} · ${fmtSize(it.size)} · ${escapeHtml(peerLabel(it.ownerId))}</p>
-            ${
-              it.thumb && it.kind === "image"
-                ? ""
-                : it.kind === "video" && it.thumb
-                  ? ""
-                  : ""
-            }
+            <strong>${escapeHtml(it.name || label)}</strong>
+            <p class="hint tight lb-item-meta mono">${escapeHtml(label)} · ${fmtSize(it.size)} · ${escapeHtml(peerLabel(it.ownerId))}</p>
           </div>
           <div class="lb-item-actions">
             <button type="button" class="secondary-btn lb-download" data-id="${escapeHtml(it.id)}" ${
@@ -1148,6 +1156,7 @@
           "X-Lanboard-Id": item.id,
           "X-Lanboard-Name": encodeURIComponent(item.name || "file"),
           "X-Lanboard-Mime": item.mime || "application/octet-stream",
+          "X-Lanboard-Kind": item.kind || "file",
           "X-Lanboard-Owner": item.ownerId || "",
           "X-Lanboard-Owner-Name": encodeURIComponent(item.ownerName || ""),
           "X-Lanboard-Thumb": encodeURIComponent(item.thumb || ""),
@@ -1173,10 +1182,29 @@
     return blob;
   }
 
+  function clearPendingFiles() {
+    pendingFiles = [];
+    if (els.fileHint) els.fileHint.textContent = "";
+    if (els.fileInput) els.fileInput.value = "";
+    if (els.anyFileInput) els.anyFileInput.value = "";
+  }
+
+  function setPendingFromInput(input) {
+    pendingFiles = [...(input?.files || [])];
+    if (els.fileHint) {
+      els.fileHint.textContent = pendingFiles.length
+        ? `已选 ${pendingFiles.length} 个，点发送`
+        : "";
+    }
+    // 两个 input 互斥：从一个选完后清空另一个，避免重复
+    if (input === els.fileInput && els.anyFileInput) els.anyFileInput.value = "";
+    if (input === els.anyFileInput && els.fileInput) els.fileInput.value = "";
+  }
+
   async function sendText() {
     const text = String(els.textInput?.value || "").trim();
     if (!text && !pendingFiles.length) {
-      setError("请输入文字或选择图片/视频");
+      setError("请输入文字或选择文件");
       return;
     }
     setError("");
@@ -1193,28 +1221,24 @@
       if (els.textInput) els.textInput.value = "";
     }
     const files = pendingFiles.slice();
-    pendingFiles = [];
-    if (els.fileHint) els.fileHint.textContent = "";
-    if (els.fileInput) els.fileInput.value = "";
+    clearPendingFiles();
     for (const file of files) {
-      await sendMedia(file);
+      await sendFile(file);
     }
     paintFeed();
   }
 
-  async function sendMedia(file) {
+  async function sendFile(file) {
+    if (!file) return;
     const id = uid(12);
-    const isVideo = file.type.startsWith("video/");
-    const isImage = file.type.startsWith("image/");
-    if (!isVideo && !isImage) {
-      setError("仅支持图片或视频");
-      return;
-    }
-    const thumb = isImage ? await makeImageThumb(file) : await makeVideoThumb(file);
+    const kind = fileKindOf(file);
+    let thumb = "";
+    if (kind === "image") thumb = await makeImageThumb(file);
+    else if (kind === "video") thumb = await makeVideoThumb(file);
     const item = {
       id,
-      kind: isVideo ? "video" : "image",
-      name: file.name || (isVideo ? "video" : "image"),
+      kind,
+      name: file.name || kindLabel(kind),
       mime: file.type || "application/octet-stream",
       size: file.size,
       ownerId: state.peerId,
@@ -1314,14 +1338,8 @@
       });
     }
     els.sendBtn?.addEventListener("click", () => sendText().catch((e) => setError(e.message || "发送失败")));
-    els.fileInput?.addEventListener("change", () => {
-      pendingFiles = [...(els.fileInput.files || [])];
-      if (els.fileHint) {
-        els.fileHint.textContent = pendingFiles.length
-          ? `已选 ${pendingFiles.length} 个，点发送`
-          : "";
-      }
-    });
+    els.fileInput?.addEventListener("change", () => setPendingFromInput(els.fileInput));
+    els.anyFileInput?.addEventListener("change", () => setPendingFromInput(els.anyFileInput));
     els.textInput?.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
         ev.preventDefault();

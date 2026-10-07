@@ -1,7 +1,7 @@
 <section id="lanboard" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>局域网看板</h1>
-        <p>打开即在场：同 WiFi 发文字 / 图片 / 视频，在线设备立刻看到。比「互传」更轻，无需建房间。</p>
+        <p>打开即在场：同 WiFi 发文字 / 图片 / 视频 / 任意文件，在线设备立刻看到。比「互传」更轻，无需建房间。</p>
       </div>
       <div class="panel-body">
         <div class="adb-status panel-card" id="lb-status">
@@ -22,16 +22,18 @@
             <input id="lb-name" type="text" maxlength="24" placeholder="例如：客厅电脑" autocomplete="off" spellcheck="false" style="min-width:10rem" />
           </div>
           <label for="lb-text">发送内容</label>
-          <textarea id="lb-text" class="area" rows="3" placeholder="输入文字，或选图片/视频后点发送" spellcheck="true"></textarea>
+          <textarea id="lb-text" class="area" rows="3" placeholder="输入文字，或选文件后点发送" spellcheck="true"></textarea>
           <div class="btn-row tool-actions lb-compose-actions" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center">
             <button type="button" class="primary-btn" id="lb-send">发送</button>
             <label class="secondary-btn file-btn" for="lb-file-input">选图片/视频</label>
             <input id="lb-file-input" type="file" accept="image/*,video/*" multiple hidden />
+            <label class="secondary-btn file-btn" for="lb-any-file-input">发送任意文件</label>
+            <input id="lb-any-file-input" type="file" accept="*/*" multiple hidden />
             <span class="hint tight" id="lb-file-hint"></span>
           </div>
           <ol class="lb-steps hint tight" id="lb-empty-steps">
             <li>双方打开本页（自动进大厅）</li>
-            <li>输入文字或选图/视频，点「发送」</li>
+            <li>输入文字，或选图/视频/任意文件，点「发送」</li>
             <li>对方列表立刻出现；文字可一键复制</li>
           </ol>
         </div>

@@ -47,6 +47,10 @@ function staticCheck() {
   const html = fs.readFileSync(path.join(toolsRoot, "panels/lanboard.html"), "utf8");
   assert(html.includes('id="lanboard"'), "面板 id 不对");
   assert(html.includes('id="lb-send"'), "缺少发送按钮");
+  assert(html.includes('id="lb-any-file-input"'), "缺少任意文件输入");
+  assert(/accept=["']\*\/\*["']/.test(html), "任意文件 accept 应为 */*");
+  assert(js.includes("sendFile") || js.includes("fileKindOf"), "缺少任意文件发送逻辑");
+  assert(!js.includes("仅支持图片或视频"), "仍限制仅图片/视频");
   const reg = JSON.parse(fs.readFileSync(path.join(toolsRoot, "registry/tools.json"), "utf8"));
   assert(reg.meta?.lanboard, "registry 缺 lanboard");
   assert((reg.groups.find((g) => g.id === "device")?.tools || []).includes("lanboard"), "device 组未挂 lanboard");
@@ -103,6 +107,7 @@ async function browserFlow() {
       "--disable-setuid-sandbox",
       "--use-fake-ui-for-media-stream",
       "--autoplay-policy=no-user-gesture-required",
+      "--disable-dev-shm-usage",
     ],
   });
 
@@ -111,14 +116,16 @@ async function browserFlow() {
     const pageB = await browser.newPage();
     const url = BASE.replace(/\/?$/, "/") + "#lanboard";
 
-    pageA.setDefaultTimeout(30000);
-    pageB.setDefaultTimeout(30000);
+    pageA.setDefaultTimeout(60000);
+    pageB.setDefaultTimeout(60000);
+    pageA.setDefaultNavigationTimeout(120000);
+    pageB.setDefaultNavigationTimeout(120000);
 
-    await pageA.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-    await pageB.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-
-    await pageA.waitForFunction(() => !!document.querySelector("#lanboard #lb-send"), { timeout: 45000 });
-    await pageB.waitForFunction(() => !!document.querySelector("#lanboard #lb-send"), { timeout: 45000 });
+    // 串行进页：避免单线程静态服被双标签并发打爆
+    await pageA.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
+    await pageA.waitForFunction(() => !!document.querySelector("#lanboard #lb-send"), { timeout: 60000 });
+    await pageB.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
+    await pageB.waitForFunction(() => !!document.querySelector("#lanboard #lb-send"), { timeout: 60000 });
 
     await pageA.evaluate(async () => {
       if (window.DevToolsLanBoard?.boot) await window.DevToolsLanBoard.boot();
@@ -202,6 +209,30 @@ async function browserFlow() {
     assert(mediaOnB, "B 未出现媒体预览/下载按钮");
     console.log("media preview OK");
 
+    const anyName = `smoke-any-${Date.now()}.bin`;
+    const anyPath = path.join(os.tmpdir(), anyName);
+    fs.writeFileSync(anyPath, Buffer.from("lanboard-any-file-smoke"));
+    const anyInput = await pageA.$("#lb-any-file-input");
+    assert(anyInput, "缺少任意文件输入");
+    await anyInput.uploadFile(anyPath);
+    await wait(200);
+    await pageA.evaluate(() => document.querySelector("#lb-send")?.click());
+
+    let anyOnB = false;
+    for (let i = 0; i < 30; i++) {
+      anyOnB = await pageB.evaluate((name) => {
+        const feed = document.querySelector("#lb-feed")?.innerText || "";
+        const hasName = feed.includes(name);
+        const hasFileKind = [...document.querySelectorAll("#lb-feed .lb-kind-file")].length > 0;
+        const dlCount = document.querySelectorAll("#lb-feed .lb-download").length;
+        return hasName && hasFileKind && dlCount >= 2;
+      }, anyName);
+      if (anyOnB) break;
+      await wait(400);
+    }
+    assert(anyOnB, `B 未看到任意文件「${anyName}」`);
+    console.log("any file sync OK");
+
     // 关掉源页；再等 bye / presence 过期；必要时强制刷新列表态
     const ownerId = await pageA.evaluate(() => {
       const row = [...document.querySelectorAll("#lb-feed .lb-item")].find((el) =>
@@ -234,6 +265,11 @@ async function browserFlow() {
 
     try {
       fs.unlinkSync(pngPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(anyPath);
     } catch {
       /* ignore */
     }
