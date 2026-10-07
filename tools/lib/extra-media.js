@@ -918,6 +918,9 @@
     if (!isGifmakerActive()) return;
     const run = () => {
       prewarmFfmpegEngine().catch(() => {});
+      // 黑盒收尾才用 gifsicle：提前拉模块，避免长时编码后网络抖动导致 import 失败
+      injectGifsiclePreloadLink();
+      loadGifsicle().catch(() => {});
     };
     if (typeof requestIdleCallback === "function") {
       requestIdleCallback(run, { timeout: 1500 });
@@ -1130,15 +1133,100 @@
     return run;
   }
 
+  /** 解析 tools/ 根，避免 location 落在 /tools（无尾斜杠）时 ./vendor 指到站根 404 */
+  function resolveToolsVendorFile(fileName, cacheBust) {
+    const ver = encodeURIComponent(String(TOOLS_VERSION || "").replace(/^v/, ""));
+    const q = [];
+    if (ver) q.push(`v=${ver}`);
+    if (cacheBust) q.push(`r=${encodeURIComponent(String(cacheBust))}`);
+    const qs = q.length ? `?${q.join("&")}` : "";
+    const rel = `vendor/${fileName}${qs}`;
+    const nodes = document.getElementsByTagName("script");
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const src = nodes[i].src || "";
+      // lib/*.js → ../vendor；tools 根脚本 → ./vendor
+      if (/\/lib\/[^/]+\.js(\?|#|$)/i.test(src)) {
+        return new URL(`../${rel}`, src).href;
+      }
+      if (/\/(?:app|extra|lazy-scripts)\.js(\?|#|$)/i.test(src)) {
+        return new URL(`./${rel}`, src).href;
+      }
+    }
+    let base = document.baseURI || window.location.href;
+    try {
+      const u = new URL(base);
+      if (/\/tools$/i.test(u.pathname)) {
+        u.pathname += "/";
+        base = u.href;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return new URL(`./${rel}`, base).href;
+  }
+
+  function injectGifsiclePreloadLink() {
+    const id = "gifsicle-modulepreload";
+    if (document.getElementById(id)) return;
+    try {
+      const href = resolveToolsVendorFile("gifsicle.min.js");
+      const link = document.createElement("link");
+      link.id = id;
+      link.rel = "modulepreload";
+      link.href = href;
+      link.crossOrigin = "anonymous";
+      document.head.appendChild(link);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  async function importGifsicleFromUrl(url, { reload = false } = {}) {
+    try {
+      const mod = await import(url);
+      return mod.default || mod;
+    } catch (importErr) {
+      // 直接 import 失败时：fetch + blob 再 import，可避开粘滞的模块失败缓存，并给出 HTTP 状态
+      const res = await fetch(url, { cache: reload ? "reload" : "default" });
+      if (!res.ok) {
+        throw new Error(`gifsicle HTTP ${res.status}（${url.split("?")[0]}）`);
+      }
+      const text = await res.text();
+      if (!/export\s+default/i.test(text) || text.length < 1000) {
+        throw new Error("gifsicle 响应无效（可能是错误页或缓存损坏），请强制刷新");
+      }
+      const blobUrl = URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
+      try {
+        const mod = await import(blobUrl);
+        return mod.default || mod;
+      } finally {
+        URL.revokeObjectURL(blobUrl);
+      }
+    }
+  }
+
   function loadGifsicle() {
     if (!gifsicleModulePromise) {
-      const url = new URL("./vendor/gifsicle.min.js", document.baseURI || window.location.href).href;
-      gifsicleModulePromise = import(url)
-        .then((mod) => mod.default || mod)
-        .catch((err) => {
-          gifsicleModulePromise = null;
-          throw err;
-        });
+      injectGifsiclePreloadLink();
+      gifsicleModulePromise = (async () => {
+        let lastErr;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const url = resolveToolsVendorFile("gifsicle.min.js", attempt > 0 ? String(attempt) : "");
+          try {
+            return await importGifsicleFromUrl(url, { reload: attempt > 0 });
+          } catch (err) {
+            lastErr = err;
+            await new Promise((r) => setTimeout(r, 280 * (attempt + 1)));
+          }
+        }
+        const detail = lastErr?.message || String(lastErr || "unknown");
+        throw new Error(
+          `GIF 压缩引擎（gifsicle）加载失败：${detail}。请点顶栏「强制刷新」后重试`
+        );
+      })().catch((err) => {
+        gifsicleModulePromise = null;
+        throw err;
+      });
     }
     return gifsicleModulePromise;
   }
