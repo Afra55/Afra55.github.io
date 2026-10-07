@@ -55,7 +55,7 @@ function main() {
 
   // 3) SW 旁路大资源（源码是正则字面量：\/health-articles\/ 等）
   const sw = read("sw.js");
-  for (const needle of ["health-articles", "assets\\/ambient", "lib\\/health-articles", "qrscan"]) {
+  for (const needle of ["health-articles", "assets\\/ambient", "lib\\/health-articles", "qrscan", "gifski", "gifsicle", "jsquash"]) {
     if (!sw.includes(needle)) fail(`sw.js missing bypass marker: ${needle}`);
   }
   if (!/function shouldBypass[\s\S]*health-articles[\s\S]*function shouldCacheResponse/.test(sw)) {
@@ -64,7 +64,7 @@ function main() {
   if (!/function shouldCacheResponse[\s\S]*health-articles/.test(sw)) {
     fail("sw shouldCacheResponse must refuse health-articles");
   }
-  if (!failed) ok("sw.js bypasses health-articles + ambient");
+  if (!failed) ok("sw.js bypasses health-articles + ambient + encoders");
 
   // 4) 媒体核导出并行 API
   const media = read("lib/extra-media.js");

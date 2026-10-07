@@ -84,8 +84,13 @@
   function loadJsquash() {
     if (window.DevToolsJsquash) return Promise.resolve(window.DevToolsJsquash);
     if (!jsquashPromise) {
+      const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
       const v = encodeURIComponent(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
-      jsquashPromise = import(`./vendor/jsquash/hub.js?v=${v}`).then((mod) => {
+      const entry =
+        typeof resolve === "function"
+          ? resolve("vendor/jsquash/hub.js")
+          : `./vendor/jsquash/hub.js?v=${v}`;
+      jsquashPromise = import(/* webpackIgnore: true */ entry).then((mod) => {
         window.DevToolsJsquash = mod;
         return mod;
       });

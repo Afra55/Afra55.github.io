@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>vendor-import-pending</title>
+  <script src="../lib/tools-build.js"></script>
+</head>
+<body>
+  <pre id="out">running…</pre>
+  <script type="module">
+    const out = document.getElementById("out");
+    const log = [];
+    const note = (s) => {
+      log.push(s);
+      out.textContent = log.join("\n");
+      try {
+        window.__harnessLog = log.join("\n");
+        document.title = "vendor-import:" + s.slice(0, 80);
+      } catch (_) {}
+    };
+    try {
+      const resolve = window.resolveToolsAssetUrl;
+      if (typeof resolve !== "function") throw new Error("resolveToolsAssetUrl missing");
+      note("BUILD=" + (window.TOOLS_BUILD || ""));
+
+      const pageNoSlash = location.origin + "/tools";
+      const naive = new URL("./vendor/gifsicle.min.js", pageNoSlash).href;
+      note("naive@/tools=" + naive);
+      if (/\/tools\/vendor\//.test(naive)) throw new Error("unexpected: naive path still under /tools");
+
+      const gUrl = resolve("vendor/gifsicle.min.js");
+      note("gifsicleUrl=" + gUrl);
+      if (!/\/tools\/vendor\/gifsicle\.min\.js\?v=/.test(gUrl)) {
+        throw new Error("gifsicle URL missing /tools + ?v=");
+      }
+
+      const res = await fetch(gUrl);
+      note("gifsicleHTTP=" + res.status + " CT=" + (res.headers.get("content-type") || ""));
+      if (!res.ok) throw new Error("gifsicle fetch HTTP " + res.status);
+      const text = await res.text();
+      if (!/export\s+default/i.test(text) || text.length < 1000) {
+        throw new Error("gifsicle body invalid len=" + text.length);
+      }
+      note("gifsicleBody=ok len=" + text.length);
+
+      try {
+        const mod = await import(gUrl);
+        const g = mod.default || mod;
+        note("gifsicleImport=" + (typeof g?.run === "function" ? "run-ok" : typeof g));
+      } catch (e) {
+        // blob 兜底（与生产 loadGifsicle 一致）
+        const blobUrl = URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
+        try {
+          const mod = await import(blobUrl);
+          const g = mod.default || mod;
+          note("gifsicleBlobImport=" + (typeof g?.run === "function" ? "run-ok" : typeof g));
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+      }
+
+      const skiUrl = resolve("vendor/gifski/gifski_wasm.js");
+      note("gifskiUrl=" + skiUrl);
+      const ski = await import(skiUrl);
+      await ski.default();
+      note("gifskiImport=ok");
+
+      const ffUrl = resolve("vendor/ffmpeg/ff/index.js");
+      const ffRes = await fetch(ffUrl);
+      note("ffmpegHTTP=" + ffRes.status);
+      if (!ffRes.ok) throw new Error("ffmpeg entry fetch failed");
+
+      note("RESULT=PASS");
+      document.title = "vendor-import-PASS";
+    } catch (err) {
+      const msg = err && err.message ? err.message : String(err);
+      note("RESULT=FAIL " + msg);
+      document.title = "vendor-import-FAIL:" + msg.slice(0, 100);
+    }
+  </script>
+</body>
+</html>

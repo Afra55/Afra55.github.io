@@ -325,7 +325,30 @@
   }
 
   function withVersion(src) {
-    const url = new URL(src, document.baseURI || window.location.href);
+    const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
+    if (typeof resolve === "function" && /^\.?\/?(?:vendor|lib|extra-panels|styles|panels)\//i.test(String(src || "").replace(/^\.\//, ""))) {
+      const rel = String(src || "").replace(/^\.\//, "");
+      try {
+        const abs = resolve(rel, {
+          version: isVendorSrc(src) ? VENDOR_V : BUILD,
+        });
+        const u = new URL(abs);
+        return u.pathname + u.search;
+      } catch (_) {
+        /* fall through */
+      }
+    }
+    let base = document.baseURI || window.location.href;
+    try {
+      const bu = new URL(base);
+      if (/\/tools$/i.test(bu.pathname)) {
+        bu.pathname += "/";
+        base = bu.href;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    const url = new URL(src, base);
     url.searchParams.set("v", isVendorSrc(src) ? VENDOR_V : BUILD);
     return url.pathname + url.search;
   }

@@ -347,14 +347,33 @@
 
   /** 视频转 GIF：ffmpeg.wasm（本地 vendor），进入 GIF 工具时预热并持久保存 */
   function resolveFfmpegVendorBase() {
+    const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
+    if (typeof resolve === "function") {
+      // 去掉 ?v=，给 new URL(子路径, base) 当目录基址
+      const href = resolve("vendor/ffmpeg/", { version: false });
+      return new URL(href.endsWith("/") ? href : `${href}/`);
+    }
     const nodes = document.getElementsByTagName("script");
     for (let i = nodes.length - 1; i >= 0; i--) {
       const src = nodes[i].src || "";
       if (/extra\.js(\?|#|$)/i.test(src)) {
         return new URL("./vendor/ffmpeg/", src);
       }
+      if (/\/lib\/[^/]+\.js(\?|#|$)/i.test(src)) {
+        return new URL("../vendor/ffmpeg/", src);
+      }
     }
-    return new URL("./vendor/ffmpeg/", document.baseURI || window.location.href);
+    let base = document.baseURI || window.location.href;
+    try {
+      const u = new URL(base);
+      if (/\/tools$/i.test(u.pathname)) {
+        u.pathname += "/";
+        base = u.href;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return new URL("./vendor/ffmpeg/", base);
   }
 
   const FFMPEG_VENDOR_BASE = resolveFfmpegVendorBase();
@@ -389,7 +408,11 @@
 
   function loadFfmpegMods() {
     if (!ffmpegModsPromise) {
-      const entry = new URL("ff/index.js", FFMPEG_VENDOR_BASE).href;
+      const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
+      const entry =
+        typeof resolve === "function"
+          ? resolve("vendor/ffmpeg/ff/index.js")
+          : new URL("ff/index.js", FFMPEG_VENDOR_BASE).href;
       ffmpegModsPromise = import(entry)
         .then((ff) => ({ FFmpeg: ff.FFmpeg }))
         .catch((err) => {
@@ -1133,25 +1156,20 @@
     return run;
   }
 
-  /** 解析 tools/ 根，避免 location 落在 /tools（无尾斜杠）时 ./vendor 指到站根 404 */
+  /** 解析 tools/vendor 文件（委托 tools-build 公共解析，带 ?v=） */
   function resolveToolsVendorFile(fileName, cacheBust) {
+    const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
+    if (typeof resolve === "function") {
+      return resolve(`vendor/${fileName}`, {
+        version: TOOLS_VERSION || true,
+        cacheBust: cacheBust || undefined,
+      });
+    }
     const ver = encodeURIComponent(String(TOOLS_VERSION || "").replace(/^v/, ""));
     const q = [];
     if (ver) q.push(`v=${ver}`);
     if (cacheBust) q.push(`r=${encodeURIComponent(String(cacheBust))}`);
     const qs = q.length ? `?${q.join("&")}` : "";
-    const rel = `vendor/${fileName}${qs}`;
-    const nodes = document.getElementsByTagName("script");
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      const src = nodes[i].src || "";
-      // lib/*.js → ../vendor；tools 根脚本 → ./vendor
-      if (/\/lib\/[^/]+\.js(\?|#|$)/i.test(src)) {
-        return new URL(`../${rel}`, src).href;
-      }
-      if (/\/(?:app|extra|lazy-scripts)\.js(\?|#|$)/i.test(src)) {
-        return new URL(`./${rel}`, src).href;
-      }
-    }
     let base = document.baseURI || window.location.href;
     try {
       const u = new URL(base);
@@ -1162,7 +1180,7 @@
     } catch (_) {
       /* ignore */
     }
-    return new URL(`./${rel}`, base).href;
+    return new URL(`./vendor/${fileName}${qs}`, base).href;
   }
 
   function injectGifsiclePreloadLink() {
@@ -1763,7 +1781,7 @@
     terminateFfmpegInstance, paintFfmpegWarmHint,
     setFfmpegWarmProgress, injectFfmpegPreloadLinks, isGifmakerActive, prewarmFfmpegEngine,
     scheduleFfmpegPrewarm, bindFfmpegPrewarmTriggers, encodeAnimatedWebpFromStillFrames,
-    paintToolsVersion, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,
+    paintToolsVersion, resolveToolsVendorFile, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions,
     drawGifTextWatermark, compressGifBlob, mergeGifBlobs, TOOLS_VERSION, GIF_TOOL_VERSION,
     AUTO_PACK_ZIP_KEY, FFMPEG_SEG_FILE_BYTES, blackboxUseMaxBytes, blackboxMaxRounds,

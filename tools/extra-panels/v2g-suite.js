@@ -968,7 +968,12 @@
           ownedWorkerScript = "";
         };
         if (!workerScript) {
-          const workerSource = await fetch(new URL("./vendor/gif.worker.js", document.baseURI || window.location.href)).then((r) => {
+          const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
+          const workerUrl =
+            typeof resolve === "function"
+              ? resolve("vendor/gif.worker.js")
+              : new URL("./vendor/gif.worker.js", document.baseURI || window.location.href).href;
+          const workerSource = await fetch(workerUrl).then((r) => {
             if (!r.ok) throw new Error("无法加载 gif.worker.js");
             return r.text();
           });
@@ -1481,10 +1486,27 @@
           requestAnimationFrame(() => setTimeout(go, 0));
         });
       }
-      /** 懒加载 gifski wasm（ES module）；失败不缓存，下次重试 */
+      /** 懒加载 gifski wasm（ES module）；带 ?v= + /tools 根解析；失败不缓存，下次重试 */
       function loadGifskiMods() {
         if (!gifskiModPromise) {
-          const entry = new URL("./vendor/gifski/gifski_wasm.js", document.baseURI || window.location.href).href;
+          const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
+          const entry =
+            typeof resolve === "function"
+              ? resolve("vendor/gifski/gifski_wasm.js")
+              : (() => {
+                  let base = document.baseURI || window.location.href;
+                  try {
+                    const u = new URL(base);
+                    if (/\/tools$/i.test(u.pathname)) {
+                      u.pathname += "/";
+                      base = u.href;
+                    }
+                  } catch (_) {
+                    /* ignore */
+                  }
+                  const ver = encodeURIComponent(String(TOOLS_VERSION || window.TOOLS_VERSION || "").replace(/^v/, ""));
+                  return new URL(`./vendor/gifski/gifski_wasm.js${ver ? `?v=${ver}` : ""}`, base).href;
+                })();
           gifskiModPromise = import(entry)
             .then(async (mod) => {
               await mod.default();

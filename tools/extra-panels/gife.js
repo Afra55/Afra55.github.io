@@ -1025,7 +1025,12 @@
         if (typeof GIF !== "function") throw new Error("gif.js 未加载");
         const outW = frames[0].canvas.width;
         const outH = frames[0].canvas.height;
-        const workerSource = await fetch(new URL("./vendor/gif.worker.js", document.baseURI || window.location.href)).then((r) => {
+        const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
+        const workerUrl =
+          typeof resolve === "function"
+            ? resolve("vendor/gif.worker.js")
+            : new URL("./vendor/gif.worker.js", document.baseURI || window.location.href).href;
+        const workerSource = await fetch(workerUrl).then((r) => {
           if (!r.ok) throw new Error("无法加载 gif.worker.js");
           return r.text();
         });

@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20261007-214359";
+const SHELL_CACHE = "devtools-shell-20261007-215842";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -17,7 +17,8 @@ function shouldBypass(url) {
   const path = url.pathname;
   if (!path.includes("/tools")) return true;
   if (/\.wasm$/i.test(path)) return true;
-  if (/\/vendor\/(ffmpeg|gifsicle|gif\.worker|omggif)/i.test(path)) return true;
+  // 大体积编码器 / wasm 壳：不进 SW（动态 import 自带 ?v=；避免坏缓存粘滞）
+  if (/\/vendor\/(ffmpeg|gifsicle|gifski|gif\.worker|omggif|jsquash)/i.test(path)) return true;
   if (/\/ffmpeg\//i.test(path)) return true;
   if (/\/excalidraw\//i.test(path)) return true;
   if (/\/sandspiel\//i.test(path)) return true;
@@ -34,7 +35,7 @@ function shouldBypass(url) {
 function shouldCacheResponse(url) {
   const path = url.pathname;
   if (/\.wasm$/i.test(path)) return false;
-  if (/\/vendor\/(ffmpeg|gifsicle|gif\.worker|omggif)/i.test(path)) return false;
+  if (/\/vendor\/(ffmpeg|gifsicle|gifski|gif\.worker|omggif|jsquash)/i.test(path)) return false;
   if (/\/ffmpeg\//i.test(path)) return false;
   if (/\/health-articles\//i.test(path)) return false;
   if (/\/assets\/ambient\//i.test(path)) return false;

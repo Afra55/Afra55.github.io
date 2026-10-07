@@ -306,7 +306,12 @@
           const ctx = canvas.getContext("2d", { willReadFrequently: true });
   
           setProgress(true, 0.02, "准备编码器…");
-          const workerSource = await fetch(new URL("./vendor/gif.worker.js", document.baseURI || window.location.href)).then((r) => {
+          const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
+          const workerUrl =
+            typeof resolve === "function"
+              ? resolve("vendor/gif.worker.js")
+              : new URL("./vendor/gif.worker.js", document.baseURI || window.location.href).href;
+          const workerSource = await fetch(workerUrl).then((r) => {
             if (!r.ok) throw new Error("无法加载 gif.worker.js");
             return r.text();
           });
