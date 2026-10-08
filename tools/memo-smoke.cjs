@@ -780,12 +780,26 @@ async function main() {
       const tempBtn = ctx?.querySelector('[data-memo-ctx-act="temp"]');
       out.ctxTemp.ctxShown = Boolean(ctx && !ctx.hidden);
       out.ctxTemp.hasTempAct = Boolean(tempBtn);
+      const countBefore = Number(document.getElementById("memo-temp-count")?.textContent || "0");
       tempBtn?.click();
       await sleep(220);
       const row = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === videoItem.id);
       out.ctxTemp.marked = window.DevToolsMemo.isTempItem(row);
+      const countAfter = Number(document.getElementById("memo-temp-count")?.textContent || "0");
+      out.ctxTemp.countBumped =
+        countAfter === countBefore + 1 ||
+        (typeof window.DevToolsMemo.getTempCount === "function" && window.DevToolsMemo.getTempCount() === countAfter && countAfter > countBefore);
+      // 到期自动清理：人为把 tempUntil 拨到过去，再 purge
+      if (row) {
+        row.tempUntil = Date.now() - 1000;
+        const purged = await window.DevToolsMemo.purgeExpiredTempItems?.({ quiet: true });
+        out.ctxTemp.purgedExpired = purged === 1;
+        out.ctxTemp.goneAfterPurge = !(window.DevToolsMemo.getIndex().items || []).some((x) => x.id === videoItem.id);
+      }
       if (ctx) ctx.hidden = true;
-      await window.DevToolsMemo.clearItemTemp(videoItem.id);
+      if ((window.DevToolsMemo.getIndex().items || []).some((x) => x.id === videoItem.id)) {
+        await window.DevToolsMemo.clearItemTemp(videoItem.id);
+      }
     }
 
     out.videoZoom = { hasApi: typeof window.DevToolsMemo.getPreviewZoom === "function" };
@@ -1833,7 +1847,15 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
+  if (
+    !result.ctxTemp?.hasVideo ||
+    !result.ctxTemp?.ctxShown ||
+    !result.ctxTemp?.hasTempAct ||
+    !result.ctxTemp?.marked ||
+    !result.ctxTemp?.countBumped ||
+    !result.ctxTemp?.purgedExpired ||
+    !result.ctxTemp?.goneAfterPurge
+  ) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
   const normVer = (v) => String(v || "").replace(/^v/i, "").trim();

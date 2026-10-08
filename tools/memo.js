@@ -1451,33 +1451,88 @@
     const d = Number(days) > 0 ? Number(days) : state.tempDays;
     item.tempUntil = Date.now() + d * 86400000;
     item.updatedAt = Date.now();
+    invalidateCountCache();
+    scheduleTempPurgeTimer();
   }
 
   function clearItemTemp(item) {
     if (!item) return;
     delete item.tempUntil;
     item.updatedAt = Date.now();
+    invalidateCountCache();
+    scheduleTempPurgeTimer();
   }
 
-  async function purgeExpiredTempItems() {
+  let tempPurgeTimer = 0;
+  let purgingTemp = false;
+
+  /** 按最近一条 tempUntil 预约清理；到期后立刻删索引+blob，并刷新「临时」计数 */
+  function scheduleTempPurgeTimer() {
+    if (tempPurgeTimer) {
+      clearTimeout(tempPurgeTimer);
+      tempPurgeTimer = 0;
+    }
+    const now = Date.now();
+    let next = Infinity;
+    const items = state.index.items || [];
+    for (let i = 0; i < items.length; i++) {
+      const tu = Number(items[i]?.tempUntil);
+      if (!Number.isFinite(tu) || tu <= 0) continue;
+      if (tu <= now) {
+        next = now;
+        break;
+      }
+      if (tu < next) next = tu;
+    }
+    if (!Number.isFinite(next) || next === Infinity) return;
+    const delay = Math.max(250, Math.min(next - now + 80, 600000));
+    tempPurgeTimer = setTimeout(() => {
+      tempPurgeTimer = 0;
+      purgeExpiredTempItems().catch(() => {}).finally(() => scheduleTempPurgeTimer());
+    }, delay);
+  }
+
+  async function purgeExpiredTempItems(opts = {}) {
+    if (purgingTemp) return 0;
     const now = Date.now();
     const removed = [];
     const keep = [];
     for (const it of state.index.items || []) {
-      if (it.tempUntil && it.tempUntil <= now) removed.push(it);
+      const tu = Number(it?.tempUntil);
+      if (Number.isFinite(tu) && tu > 0 && tu <= now) removed.push(it);
       else keep.push(it);
     }
-    if (!removed.length) return 0;
-    state.index.items = keep;
-    removed.forEach((it) => {
-      forgetHash(it);
-      if (it?.id) state.cardHeightCache.delete(it.id);
-      state.selected.delete(it.id);
-    });
-    reindexOrders();
-    await persistIndex({ immediate: true });
-    renderAll();
-    return removed.length;
+    if (!removed.length) {
+      scheduleTempPurgeTimer();
+      return 0;
+    }
+    purgingTemp = true;
+    try {
+      state.index.items = keep;
+      removed.forEach((it) => {
+        forgetHash(it);
+        if (it?.id) {
+          dropMediaCache(it.id);
+          state.cardHeightCache.delete(it.id);
+          state.selected.delete(it.id);
+        }
+      });
+      reindexOrders();
+      await persistIndex({ immediate: true });
+      for (const it of removed) {
+        try {
+          await removeBlob(it);
+        } catch (_) {}
+      }
+      renderAll();
+      if (!opts.quiet) {
+        toast(removed.length > 1 ? `已自动清理 ${removed.length} 条到期临时条目` : "已自动清理 1 条到期临时条目");
+      }
+      scheduleTempPurgeTimer();
+      return removed.length;
+    } finally {
+      purgingTemp = false;
+    }
   }
 
   function syncTempChrome() {
@@ -4415,7 +4470,9 @@
       }
     })();
 
-    void withTimeout(purgeExpiredTempItems(), 3000, 0).catch(() => {});
+    void withTimeout(purgeExpiredTempItems(), 3000, 0)
+      .catch(() => {})
+      .finally(() => scheduleTempPurgeTimer());
 
     // 剪贴板检测与列表加载解耦：停用只跳过这里
     maybeCaptureClipboard();
@@ -4426,9 +4483,10 @@
       document.addEventListener("pointerdown", retry, { once: true, capture: true });
       document.addEventListener("keydown", retry, { once: true, capture: true });
     }
+    // 兜底轮询（主路径靠 scheduleTempPurgeTimer 按到期点触发）
     setInterval(() => {
-      purgeExpiredTempItems().catch(() => {});
-    }, 3600000);
+      purgeExpiredTempItems({ quiet: true }).catch(() => {});
+    }, 60000);
   }
 
   function stopUndoCountdown(pending) {
@@ -7469,10 +7527,16 @@
     maybeCaptureClipboard();
   });
   window.addEventListener("focus", () => {
-    if (document.visibilityState === "visible") maybeCaptureClipboard();
+    if (document.visibilityState === "visible") {
+      maybeCaptureClipboard();
+      purgeExpiredTempItems({ quiet: true }).catch(() => {});
+    }
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") maybeCaptureClipboard();
+    if (document.visibilityState === "visible") {
+      maybeCaptureClipboard();
+      purgeExpiredTempItems({ quiet: true }).catch(() => {});
+    }
   });
   document.addEventListener(
     "click",
@@ -7481,6 +7545,7 @@
       queueMicrotask(() => {
         maybeCaptureClipboard();
         focusQuickCapture();
+        purgeExpiredTempItems().catch(() => {});
       });
     },
     true
@@ -7491,6 +7556,7 @@
       queueMicrotask(() => {
         maybeCaptureClipboard();
         focusQuickCapture();
+        purgeExpiredTempItems().catch(() => {});
       });
     }
   });
@@ -7587,6 +7653,8 @@
       renderAll();
       return item;
     },
+    purgeExpiredTempItems: (opts) => purgeExpiredTempItems(opts || {}),
+    getTempCount: () => ensureCountCache().temp || 0,
     getTempDays: () => state.tempDays,
     scheduleTempPrompt: (id) => scheduleTempPrompt(id),
     finishTempPrompt: (id, opts) => finishTempPrompt(id, opts),
