@@ -102,17 +102,22 @@ async function encodeOne(page, videoPath) {
     waitUntil: "domcontentloaded",
     timeout: 180000,
   });
-  await page.evaluate((mobile, fpsCap, qualityFirst) => {
+  const forceHtml5Fail = /^(1|true|yes)$/i.test(String(process.env.VBB_BENCH_FORCE_HTML5_FAIL || ""));
+  await page.evaluate((mobile, fpsCap, qualityFirst, forceHtml5Fail) => {
     try {
       localStorage.setItem("devtools-vbb-debug", "1");
+      localStorage.setItem("devtools-vbb-auto-crop", "1");
       if (fpsCap > 0) localStorage.setItem("devtools-vbb-fps-cap", String(fpsCap));
       else localStorage.removeItem("devtools-vbb-fps-cap");
       localStorage.setItem("devtools-vbb-quality-first", qualityFirst ? "1" : "0");
       if (mobile) {
         localStorage.setItem("devtools-media-perf-v1", "max");
       }
+      window.__VBB_FORCE_CROP_HTML5_FAIL = Boolean(forceHtml5Fail);
+      if (forceHtml5Fail) localStorage.setItem("devtools-vbb-force-crop-html5-fail", "1");
+      else localStorage.removeItem("devtools-vbb-force-crop-html5-fail");
     } catch (_) {}
-  }, MOBILE, FPS_CAP, QUALITY_FIRST);
+  }, MOBILE, FPS_CAP, QUALITY_FIRST, forceHtml5Fail);
   await page.waitForFunction(
     () => window.__devtoolsBootReady && Boolean(document.getElementById("vbb-file")),
     { timeout: 90000 }
@@ -123,6 +128,12 @@ async function encodeOne(page, videoPath) {
     el.checked = on;
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }, QUALITY_FIRST);
+  await page.evaluate(() => {
+    const el = document.getElementById("vbb-auto-crop");
+    if (!el) return;
+    el.checked = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 
   if (MOBILE) {
     // 模拟手机：触屏 + 小视口；强制 wasm，避免本机桥把「手机单路」测成桌面原生
@@ -192,16 +203,21 @@ async function encodeOne(page, videoPath) {
   const logs = [];
   const onConsole = (msg) => {
     const t = msg.text();
-    if (/\[vbb-phase\]|\[vbb\]/.test(t)) {
+    if (/\[vbb-phase\]|\[vbb\]|\[vbb-crop\]/.test(t)) {
       logs.push(t);
       console.log("  ", t.slice(0, 220));
     }
   };
   page.on("console", onConsole);
 
-  await page.evaluate(() => {
+  await page.evaluate((forceHtml5Fail) => {
+    try {
+      window.__VBB_FORCE_CROP_HTML5_FAIL = Boolean(forceHtml5Fail);
+      if (forceHtml5Fail) localStorage.setItem("devtools-vbb-force-crop-html5-fail", "1");
+      else localStorage.removeItem("devtools-vbb-force-crop-html5-fail");
+    } catch (_) {}
     document.getElementById("vbb-oneclick")?.click();
-  });
+  }, forceHtml5Fail);
 
   await page.waitForFunction(
     () => {
@@ -272,6 +288,32 @@ async function encodeOne(page, videoPath) {
     console.log(
       `→ GIF span=${Number(c.span).toFixed(1)}s fps=${c.fps} w=${c.outW || c.maxW} size=${fmtMb(c.size)} ≤10MB=${c.under10} note=${c.note || c.error}`
     );
+  }
+
+  // 自动去色边：开关强制开着时，成片须标注「去色边」且宽高比相对源有变化（裁掉左右黑边）
+  {
+    const c = result.clips[0] || {};
+    if (!c.error) {
+      const srcAspect = (Number(result.video.width) || 0) / Math.max(1, Number(result.video.height) || 1);
+      const outAspect = (Number(c.outW) || 0) / Math.max(1, Number(c.outH) || 1);
+      const note = String(c.note || "");
+      if (!/去色边/.test(note)) {
+        throw new Error(`${name}: 自动去色边开着但 note 无「去色边」：${note}`);
+      }
+      if (!(c.outW > 0 && c.outH > 0)) {
+        throw new Error(`${name}: 缺少 outW/outH，无法校验 crop`);
+      }
+      if (Math.abs(outAspect - srcAspect) < 0.004) {
+        throw new Error(
+          `${name}: 成片宽高比≈源（${outAspect.toFixed(4)} vs ${srcAspect.toFixed(4)}），疑似未裁黑边`
+        );
+      }
+      const cropLog = logs.find((l) => /\[vbb-crop\]/.test(l)) || "";
+      console.log(`✓ crop guard: aspect ${srcAspect.toFixed(4)}→${outAspect.toFixed(4)} · ${cropLog.slice(0, 120)}`);
+      if (forceHtml5Fail && !/ffmpeg-fallback|forcedHtml5Fail/.test(logs.join("\n"))) {
+        throw new Error(`${name}: 强制 HTML5 失败时须走 ffmpeg-fallback`);
+      }
+    }
   }
 
   // 硬约束：决策日志里的 srcFps 与成片 fps 必须同属整除档（防 25→20 回归）

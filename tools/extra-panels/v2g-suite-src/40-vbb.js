@@ -913,12 +913,19 @@
       }
 
       async function resolveVbbEncodeCrop(file, edit, srcW, srcH, duration) {
-        // 用户在编辑里手动裁了画面 → 用绿框，不再叠自动去色边
+        // 用户在编辑里手动裁了画面（绿框非整幅）→ 用绿框，不再叠自动去色边
         if (edit?.cropOn && edit.crop) {
-          return normalizeV2gCrop(edit.crop, srcW, srcH);
+          const manual = normalizeV2gCrop(edit.crop, srcW, srcH);
+          if (
+            manual &&
+            (manual.w < Math.max(1, Number(srcW) || 0) - 4 ||
+              manual.h < Math.max(1, Number(srcH) || 0) - 4)
+          ) {
+            return manual;
+          }
         }
-        // 只裁时长 / 删中间：仍走自动去色边（勾选开启时）；与 tools/lib/vbb-auto-crop.js 对齐
-        return vbbResolveCrop(file);
+        // 只裁时长 / 删中间 / 绿框仍是整幅：走自动去色边（开关开着时）
+        return vbbResolveCrop(file, srcW, srcH, duration);
       }
 
       function paintVbbEditStatusLabel(el, { badge, name, batch }) {
@@ -3076,7 +3083,12 @@
               await ensureFfmpegInputWritten(ff, vbbSourceFile, () => {});
             } catch (_) {}
           }
-          const vbbCrop = await vbbResolveCrop(vbbSourceFile);
+          const vbbCrop = await vbbResolveCrop(
+            vbbSourceFile,
+            srcW,
+            srcH,
+            Number(vbbVideo?.duration) || 0
+          );
           for (let i = 0; i < ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = ranges[i];
@@ -3182,9 +3194,18 @@
 
       // ---- 自动裁剪纯色边框（视频版「去色边」） ----
       const vbbCropCache = new Map();
+      /** 去色边失败原因（给用户可见提示）；成功则清空 */
+      let vbbCropFailReason = "";
 
       function vbbAutoCropEnabled() {
-        return Boolean($("#vbb-auto-crop")?.checked);
+        const el = $("#vbb-auto-crop");
+        if (el) return Boolean(el.checked);
+        // DOM 未挂上时仍认 localStorage（手机懒加载/面板重建时避免误关）
+        try {
+          return localStorage.getItem("devtools-vbb-auto-crop") !== "0";
+        } catch (_) {
+          return true;
+        }
       }
 
       function vbbColorsNear(a, b, tol) {
@@ -3330,121 +3351,367 @@
         };
       }
 
-      /** 采样多帧取「内容并集」（各边取最浅裁），只裁所有帧都同意是边框的区域；无边框返回 null */
-      async function detectVideoCrop(file) {
+      /** 缩略内容框 → 源分辨率 crop；与 tools/lib/vbb-auto-crop.js mapThumbCropToSource 对齐 */
+      function mapAccToSourceCrop(acc, vw, vh) {
+        if (!acc || !(vw > 0) || !(vh > 0)) return null;
+        const sx = vw / acc.w;
+        const sy = vh / acc.h;
+        let x = acc.left > 0 ? Math.max(0, Math.ceil(acc.left * sx)) : 0;
+        let y = acc.top > 0 ? Math.max(0, Math.ceil(acc.top * sy)) : 0;
+        let x2 = Math.min(vw, Math.floor((acc.right + 1) * sx));
+        let y2 = Math.min(vh, Math.floor((acc.bottom + 1) * sy));
+        const extraX = Math.max(1, Math.round(sx));
+        const extraY = Math.max(1, Math.round(sy));
+        if (acc.darkLeft && x > 0) x = Math.min(x + extraX, Math.floor(vw * 0.2));
+        if (acc.darkRight && x2 < vw) x2 = Math.max(x + 8, x2 - extraX);
+        if (acc.darkTop && y > 0) y = Math.min(y + extraY, Math.floor(vh * 0.2));
+        if (acc.darkBottom && y2 < vh) y2 = Math.max(y + 8, y2 - extraY);
+        if (!acc.darkLeft && x > 0) x -= 1;
+        if (!acc.darkTop && y > 0) y -= 1;
+        if (!acc.darkRight && x2 < vw) x2 += 1;
+        if (!acc.darkBottom && y2 < vh) y2 += 1;
+        let w = x2 - x;
+        let h = y2 - y;
+        if (x + w > vw) w = vw - x;
+        if (y + h > vh) h = vh - y;
+        if (w >= 8 && h >= 8 && (w < vw - 2 || h < vh - 2)) return { x, y, w, h };
+        return null;
+      }
+
+      function unionCropRects(a, b) {
+        if (!a) return b;
+        if (!b) return a;
+        return {
+          left: Math.min(a.left, b.left),
+          top: Math.min(a.top, b.top),
+          right: Math.max(a.right, b.right),
+          bottom: Math.max(a.bottom, b.bottom),
+          w: b.w,
+          h: b.h,
+          darkLeft: a.darkLeft || b.darkLeft,
+          darkRight: a.darkRight || b.darkRight,
+          darkTop: a.darkTop || b.darkTop,
+          darkBottom: a.darkBottom || b.darkBottom,
+        };
+      }
+
+      /** 抽帧失败时常整幅近黑；不当作有效边框样本 */
+      function frameLooksDecoded(imgData) {
+        const data = imgData?.data;
+        if (!data || data.length < 16) return false;
+        const nPix = data.length >> 2;
+        const step = Math.max(1, Math.floor(nPix / 2500));
+        let dark = 0;
+        let n = 0;
+        let maxCh = 0;
+        for (let p = 0; p < nPix; p += step) {
+          const i = p * 4;
+          const mx = Math.max(data[i], data[i + 1], data[i + 2]);
+          maxCh = Math.max(maxCh, mx);
+          if (mx <= 8) dark += 1;
+          n += 1;
+        }
+        if (!(n > 0)) return false;
+        // 几乎全黑且峰值也不亮 → 未解码/seek 失败
+        if (dark / n >= 0.97 && maxCh <= 16) return false;
+        return true;
+      }
+
+      function cropSampleMarks(dur) {
+        const d = Number(dur) || 0;
+        if (d > 0.6) return [0.15, 0.4, 0.65].map((r) => Math.min(d * r, Math.max(0, d - 0.05)));
+        return [0];
+      }
+
+      async function unlockVideoForSeek(v) {
+        try {
+          v.muted = true;
+          const p = v.play();
+          if (p && typeof p.then === "function") await p.catch(() => {});
+          try {
+            v.pause();
+          } catch (_) {}
+        } catch (_) {}
+      }
+
+      async function seekVideoEl(v, t) {
+        const target = Math.max(0, Number(t) || 0);
+        if (Math.abs((Number(v.currentTime) || 0) - target) < 0.02) return true;
+        let ok = false;
+        await new Promise((resolve) => {
+          const to = setTimeout(() => resolve(), 5000);
+          const onSeeked = () => {
+            ok = true;
+            clearTimeout(to);
+            v.removeEventListener("seeked", onSeeked);
+            resolve();
+          };
+          v.addEventListener("seeked", onSeeked);
+          try {
+            v.currentTime = target;
+          } catch (_) {
+            clearTimeout(to);
+            v.removeEventListener("seeked", onSeeked);
+            resolve();
+          }
+        });
+        return ok || Math.abs((Number(v.currentTime) || 0) - target) < 0.35;
+      }
+
+      /** 从已就绪的 video 元素采样并映射 crop */
+      async function sampleCropFromVideoEl(v, vw, vh) {
+        if (!v || !(vw >= 16) || !(vh >= 16)) return null;
+        await unlockVideoForSeek(v);
+        const cw = Math.min(960, vw);
+        const ch = Math.max(1, Math.round(vh * (cw / vw)));
+        const canvas = document.createElement("canvas");
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return null;
+        ctx.imageSmoothingEnabled = false;
+        const dur = Number.isFinite(v.duration) ? v.duration : 0;
+        let acc = null;
+        let hits = 0;
+        let decoded = 0;
+        for (const t of cropSampleMarks(dur)) {
+          await seekVideoEl(v, t);
+          try {
+            ctx.drawImage(v, 0, 0, cw, ch);
+          } catch (_) {
+            continue;
+          }
+          const img = ctx.getImageData(0, 0, cw, ch);
+          if (!frameLooksDecoded(img)) continue;
+          decoded += 1;
+          const rect = detectFrameContentRect(img, 14);
+          if (!rect) continue;
+          hits += 1;
+          acc = unionCropRects(acc, rect);
+        }
+        if (!(decoded > 0)) return { crop: null, reason: "html5-blank" };
+        if (!(acc && hits > 0)) return { crop: null, reason: "html5-no-border" };
+        const crop = mapAccToSourceCrop(acc, vw, vh);
+        return { crop, reason: crop ? "" : "html5-map-empty", acc };
+      }
+
+      /** 手机 HTML5 seek 常失败：用已加载的 ffmpeg.wasm 抽 RGBA 帧（与编码同引擎） */
+      async function detectVideoCropViaFfmpeg(file, vw, vh, dur) {
+        if (!file || typeof getFfmpegInstance !== "function") return null;
+        if (!(vw >= 16) || !(vh >= 16)) return null;
+        const ffmpeg = await getFfmpegInstance(() => {});
+        if (!ffmpeg) return null;
+        const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => {});
+        const cw = Math.min(960, vw);
+        const ch = Math.max(1, Math.round(vh * (cw / vw)));
+        // 偶数尺寸，避免部分 wasm scale 异常
+        const outW = Math.max(2, cw - (cw % 2));
+        const outH = Math.max(2, ch - (ch % 2));
+        let acc = null;
+        let hits = 0;
+        for (const t of cropSampleMarks(dur)) {
+          const rawName = `vbb-crop-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.rgba`;
+          const args = [
+            "-ss",
+            String(Math.max(0, t)),
+            "-i",
+            inName,
+            "-frames:v",
+            "1",
+            "-vf",
+            `scale=${outW}:${outH}:flags=neighbor`,
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgba",
+            "-y",
+            rawName,
+          ];
+          const code = await ffmpeg.exec(args).catch(() => 1);
+          if (code !== 0) {
+            try {
+              await ffmpeg.deleteFile(rawName);
+            } catch (_) {}
+            continue;
+          }
+          let data;
+          try {
+            data = await ffmpeg.readFile(rawName);
+          } catch (_) {
+            continue;
+          } finally {
+            try {
+              await ffmpeg.deleteFile(rawName);
+            } catch (_) {}
+          }
+          const u8 = data instanceof Uint8Array ? data : new Uint8Array(data);
+          const need = outW * outH * 4;
+          if (u8.byteLength < need) continue;
+          const img = {
+            width: outW,
+            height: outH,
+            data: new Uint8ClampedArray(u8.buffer, u8.byteOffset, need),
+          };
+          if (!frameLooksDecoded(img)) continue;
+          const rect = detectFrameContentRect(img, 14);
+          if (!rect) continue;
+          hits += 1;
+          acc = unionCropRects(acc, rect);
+        }
+        if (!(acc && hits > 0)) return null;
+        return mapAccToSourceCrop(acc, vw, vh);
+      }
+
+      /**
+       * 采样多帧取「内容并集」；手机优先预览 video + ffmpeg 回退。
+       * v9：HTML5 失败不再静默吞掉；开关开着时编码前必尽量出 crop。
+       */
+      async function detectVideoCrop(file, hintW, hintH, hintDur) {
         if (!file) return null;
-        // v8：暗边占比 + 映射多吃 1 缩略像素；四边对称；手动裁画面才跳过自动裁（见 resolveVbbEncodeCrop）
-        // 算法源：tools/lib/vbb-auto-crop.js（改这里必须同步）
-        const cacheKey = `v8|${file.name}|${file.size}|${file.lastModified || 0}`;
+        const cacheKey = `v9|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
-        const url = URL.createObjectURL(file);
-        const v = document.createElement("video");
-        v.muted = true;
-        v.playsInline = true;
-        v.preload = "auto";
-        v.src = url;
-        try {
-          await new Promise((resolve, reject) => {
-            const to = setTimeout(() => reject(new Error("读取视频超时")), 30000);
-            v.onloadeddata = () => { clearTimeout(to); resolve(); };
-            v.onerror = () => { clearTimeout(to); reject(new Error("无法读取视频")); };
-          });
-          const vw = v.videoWidth || 0;
-          const vh = v.videoHeight || 0;
-          if (vw < 16 || vh < 16) throw new Error("视频尺寸无效");
-          // 960：细左右黑边（源约 6～22px）在 360 宽里常只剩 1px，再取整/回退就丢边
-          const cw = Math.min(960, vw);
-          const ch = Math.max(1, Math.round(vh * (cw / vw)));
-          const canvas = document.createElement("canvas");
-          canvas.width = cw;
-          canvas.height = ch;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          if (ctx) ctx.imageSmoothingEnabled = false;
-          const dur = Number.isFinite(v.duration) ? v.duration : 0;
-          // 避开片尾淡出/全黑（易把「内容并集」的左边裁量抬高又被其它帧压回，无益；细边主要靠清晰帧）
-          const marks = dur > 0.6 ? [0.15, 0.4, 0.65].map((r) => Math.min(dur * r, Math.max(0, dur - 0.05))) : [0];
-          let acc = null;
-          let hits = 0;
-          for (const t of marks) {
-            await new Promise((resolve) => {
-              if (Math.abs(v.currentTime - t) < 0.02) { resolve(); return; }
-              const to = setTimeout(resolve, 8000);
-              v.onseeked = () => { clearTimeout(to); resolve(); };
-              try { v.currentTime = t; } catch (_) { clearTimeout(to); resolve(); }
+        let failReason = "";
+        const forceHtml5Fail = (() => {
+          try {
+            if (typeof window !== "undefined" && window.__VBB_FORCE_CROP_HTML5_FAIL) return true;
+            return localStorage.getItem("devtools-vbb-force-crop-html5-fail") === "1";
+          } catch (_) {
+            return false;
+          }
+        })();
+
+        const tryHtml5 = async () => {
+          if (forceHtml5Fail) return { crop: null, reason: "forced-html5-fail" };
+          // 1) 已挂载的预览（手机上通常已解码，比新建 video 可靠）
+          if (
+            vbbVideo &&
+            vbbSourceFile === file &&
+            (vbbVideo.videoWidth || 0) >= 16 &&
+            (vbbVideo.videoHeight || 0) >= 16
+          ) {
+            const fromPreview = await sampleCropFromVideoEl(
+              vbbVideo,
+              vbbVideo.videoWidth,
+              vbbVideo.videoHeight
+            );
+            if (fromPreview?.crop) return fromPreview;
+            if (fromPreview?.reason) failReason = fromPreview.reason;
+          }
+          // 2) 独立 video 元素（批量/无预览）
+          const url = URL.createObjectURL(file);
+          const v = document.createElement("video");
+          v.muted = true;
+          v.playsInline = true;
+          v.setAttribute("playsinline", "");
+          v.setAttribute("webkit-playsinline", "");
+          v.preload = "auto";
+          v.src = url;
+          try {
+            await new Promise((resolve, reject) => {
+              const to = setTimeout(() => reject(new Error("读取视频超时")), 20000);
+              const done = () => {
+                clearTimeout(to);
+                resolve();
+              };
+              v.onloadeddata = done;
+              v.onloadedmetadata = () => {
+                if ((v.videoWidth || 0) >= 16) done();
+              };
+              v.onerror = () => {
+                clearTimeout(to);
+                reject(new Error("无法读取视频"));
+              };
             });
-            ctx.drawImage(v, 0, 0, cw, ch);
-            // tol 14：旧 24 在深色录屏里容易把导航栏/底栏当边框
-            const rect = detectFrameContentRect(ctx.getImageData(0, 0, cw, ch), 14);
-            if (!rect) continue;
-            hits += 1;
-            // 内容并集 = 各边取最小裁切量（任一帧有内容就保留）；暗边标记取 OR
-            acc = acc
-              ? {
-                  left: Math.min(acc.left, rect.left),
-                  top: Math.min(acc.top, rect.top),
-                  right: Math.max(acc.right, rect.right),
-                  bottom: Math.max(acc.bottom, rect.bottom),
-                  w: rect.w,
-                  h: rect.h,
-                  darkLeft: acc.darkLeft || rect.darkLeft,
-                  darkRight: acc.darkRight || rect.darkRight,
-                  darkTop: acc.darkTop || rect.darkTop,
-                  darkBottom: acc.darkBottom || rect.darkBottom,
-                }
-              : rect;
-          }
-          if (acc && hits > 0 && acc.right > acc.left && acc.bottom > acc.top) {
-            const sx = vw / acc.w;
-            const sy = vh / acc.h;
-            // 向内取整偏「多裁一点」：ceil 左边/顶，floor 内容右/底，避免缩略图低估细边
-            let x = acc.left > 0 ? Math.max(0, Math.ceil(acc.left * sx)) : 0;
-            let y = acc.top > 0 ? Math.max(0, Math.ceil(acc.top * sy)) : 0;
-            let x2 = Math.min(vw, Math.floor((acc.right + 1) * sx));
-            let y2 = Math.min(vh, Math.floor((acc.bottom + 1) * sy));
-            // 暗边：NEAREST 缩略常吞掉过渡暗列，再多吃约 1 缩略像素；不要 1px 回退（回退会在 GIF 上留下黑条）
-            const extraX = Math.max(1, Math.round(sx));
-            const extraY = Math.max(1, Math.round(sy));
-            if (acc.darkLeft && x > 0) x = Math.min(x + extraX, Math.floor(vw * 0.2));
-            if (acc.darkRight && x2 < vw) x2 = Math.max(x + 8, x2 - extraX);
-            if (acc.darkTop && y > 0) y = Math.min(y + extraY, Math.floor(vh * 0.2));
-            if (acc.darkBottom && y2 < vh) y2 = Math.max(y + 8, y2 - extraY);
-            // 非暗纯色边：源像素回退 1px，避免贴齐内容抗锯齿被啃掉
-            if (!acc.darkLeft && x > 0) x -= 1;
-            if (!acc.darkTop && y > 0) y -= 1;
-            if (!acc.darkRight && x2 < vw) x2 += 1;
-            if (!acc.darkBottom && y2 < vh) y2 += 1;
-            let w = x2 - x;
-            let h = y2 - y;
-            if (x + w > vw) w = vw - x;
-            if (y + h > vh) h = vh - y;
-            // 至少裁掉 2 源像素才算有效（旧 6 会放过 1075 这类只剩约 6～8px 左边的 GIF）
-            if (w >= 8 && h >= 8 && (w < vw - 2 || h < vh - 2)) {
-              result = { x, y, w, h };
-              vbbLog(
-                `[vbb-crop] ${vw}x${vh} → crop=${w}x${h}+${x}+${y}（L${x}/R${vw - x - w}` +
-                  `${acc.darkLeft || acc.darkRight ? " ·暗边" : ""}）`
-              );
+            await unlockVideoForSeek(v);
+            let vw = v.videoWidth || 0;
+            let vh = v.videoHeight || 0;
+            if (vw < 16 || vh < 16) {
+              vw = Number(hintW) || 0;
+              vh = Number(hintH) || 0;
             }
+            if (vw < 16 || vh < 16) return { crop: null, reason: "html5-no-size" };
+            return await sampleCropFromVideoEl(v, vw, vh);
+          } finally {
+            try {
+              URL.revokeObjectURL(url);
+            } catch (_) {}
+            try {
+              v.removeAttribute("src");
+              v.load();
+            } catch (_) {}
           }
-        } catch (_) {
-          result = null;
-        } finally {
-          try { URL.revokeObjectURL(url); } catch (_) {}
-          try { v.removeAttribute("src"); v.load(); } catch (_) {}
+        };
+
+        try {
+          const html5 = await tryHtml5();
+          if (html5?.crop) {
+            result = html5.crop;
+            vbbLog(
+              `[vbb-crop] html5 ${hintW || "?"}x${hintH || "?"} → crop=${result.w}x${result.h}+${result.x}+${result.y}`
+            );
+          } else if (html5?.reason) {
+            failReason = html5.reason;
+          }
+        } catch (err) {
+          failReason = `html5:${err?.message || err || "error"}`;
+          vbbLog(`[vbb-crop] html5 fail: ${failReason}`);
         }
+
+        if (!result) {
+          const vw = Number(hintW) || (vbbVideo && vbbSourceFile === file ? vbbVideo.videoWidth : 0) || 0;
+          const vh = Number(hintH) || (vbbVideo && vbbSourceFile === file ? vbbVideo.videoHeight : 0) || 0;
+          const dur =
+            Number(hintDur) ||
+            (vbbVideo && vbbSourceFile === file && Number.isFinite(vbbVideo.duration) ? vbbVideo.duration : 0) ||
+            0;
+          try {
+            const ffCrop = await detectVideoCropViaFfmpeg(file, vw, vh, dur);
+            if (ffCrop) {
+              result = ffCrop;
+              failReason = "";
+              vbbLog(
+                `[vbb-crop] ffmpeg-fallback ${vw}x${vh} → crop=${result.w}x${result.h}+${result.x}+${result.y}` +
+                  (forceHtml5Fail ? " ·forcedHtml5Fail" : "")
+              );
+            } else if (!failReason) {
+              failReason = "ffmpeg-no-crop";
+            }
+          } catch (err) {
+            failReason = failReason || `ffmpeg:${err?.message || err || "error"}`;
+            vbbLog(`[vbb-crop] ffmpeg fail: ${failReason}`);
+          }
+        }
+
+        if (result) {
+          vbbLog(
+            `[vbb-crop] ${hintW || result.w} → final crop=${result.w}x${result.h}+${result.x}+${result.y}（L${result.x}/R${(Number(hintW) || 0) - result.x - result.w}）`
+          );
+        }
+        vbbCropFailReason = result ? "" : failReason || "unknown";
         vbbCropCache.set(cacheKey, result);
         return result;
       }
 
-      /** 按开关取裁剪矩形（关闭时 null） */
-      async function vbbResolveCrop(file) {
+      /** 按开关取裁剪矩形（关闭时 null）；失败时留下可见提示 */
+      async function vbbResolveCrop(file, hintW, hintH, hintDur) {
+        vbbCropFailReason = "";
         if (!vbbAutoCropEnabled()) return null;
+        let crop = null;
         try {
-          return await detectVideoCrop(file);
-        } catch (_) {
-          return null;
+          crop = await detectVideoCrop(file, hintW, hintH, hintDur);
+        } catch (err) {
+          vbbCropFailReason = `detect:${err?.message || err || "error"}`;
+          crop = null;
         }
+        if (!crop) {
+          const why = vbbCropFailReason || "未检出边框";
+          vbbLog(`[vbb-crop] 开关开着但未得到 crop：${why}`);
+          try {
+            toast(`去色边未生效：${why}（成片可能仍有黑边）`);
+          } catch (_) {}
+        }
+        return crop;
       }
 
       /**
@@ -4267,7 +4534,12 @@
             ...vbbPendingJobFields(),
           }));
           renderVbbResults();
-          const vbbCrop = await vbbResolveCrop(vbbSourceFile);
+          const vbbCrop = await vbbResolveCrop(
+            vbbSourceFile,
+            srcW,
+            srcH,
+            Number(vbbVideo?.duration) || Number(vbbAnalysis?.duration) || 0
+          );
           for (let i = 0; i < plan.ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = plan.ranges[i];

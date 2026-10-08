@@ -97,7 +97,11 @@ function nearestResize(img, cw, ch) {
   const panel = fs.readFileSync(path.join(__dirname, "panels/vbb.html"), "utf8");
   assert(/devtools-vbb-auto-crop[\s\S]{0,120}!==\s*"0"/.test(vbb), "默认开：localStorage !== \"0\"");
   assert(/stored\s*==\s*null[\s\S]{0,80}setItem\([\s\S]{0,40}"1"/.test(vbb), "首次写入默认 1");
-  assert(/cacheKey\s*=\s*`v8\|/.test(vbb), "crop 缓存键须为 v8");
+  assert(/cacheKey\s*=\s*`v9\|/.test(vbb), "crop 缓存键须为 v9");
+  assert(/detectVideoCropViaFfmpeg/.test(vbb), "须有 ffmpeg 抽帧回退（手机 HTML5 seek 失败）");
+  assert(/frameLooksDecoded/.test(vbb), "须过滤未解码近黑帧");
+  assert(/去色边未生效/.test(vbb), "开关开着但无 crop 须 toast 提示");
+  assert(/devtools-vbb-auto-crop"\)\s*!==\s*"0"/.test(vbb), "DOM 缺失时仍认 localStorage");
   assert(!/编辑只裁了时长[\s\S]{0,40}禁止再叠/.test(vbb), "不得再因只裁时长跳过自动去色边");
   assert(/edit\?\.cropOn\s*&&\s*edit\.crop/.test(vbb), "手动裁画面仍优先绿框");
   assert(/id="vbb-auto-crop"\s+checked/.test(panel), "面板 checkbox 默认 checked");
