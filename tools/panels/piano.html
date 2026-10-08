@@ -1,7 +1,7 @@
 <section id="piano" class="panel tool-panel" data-reveal>
   <div class="panel-head">
     <h1>在线钢琴</h1>
-    <p>88 键标准钢琴（A0–C8），鼠标、触摸或电脑键盘弹奏。电脑键盘映射约 2.5 个八度（Z 行 / Q 行 / I 行）。默认 Web Audio 合成，离线可用；可选加载 <a href="https://github.com/danigb/soundfont-player" target="_blank" rel="noopener noreferrer">soundfont-player</a> 三角钢琴采样。交互参考 <a href="https://github.com/kevinsqi/react-piano" target="_blank" rel="noopener noreferrer">kevinsqi/react-piano</a>（MIT）。</p>
+    <p>88 键标准钢琴（A0–C8）。鼠标/触摸点按（靠下更响）、或电脑键盘（Z/Q/I 三行约 2.5 八度）。默认 Web Audio 低延迟合成；可选 <a href="https://github.com/danigb/soundfont-player" target="_blank" rel="noopener noreferrer">soundfont-player</a> 三角钢琴采样。布局参考 <a href="https://github.com/kevinsqi/react-piano" target="_blank" rel="noopener noreferrer">kevinsqi/react-piano</a>（MIT）。</p>
   </div>
   <div class="panel-body piano-body">
     <div class="piano-toolbar">
@@ -12,8 +12,8 @@
           <option value="acoustic">三角钢琴采样</option>
         </select>
       </label>
-      <label class="piano-field" for="piano-vol">
-        <span>音量</span>
+      <label class="piano-field piano-field-vol" for="piano-vol">
+        <span>音量 <strong class="mono" id="piano-vol-num">72%</strong></span>
         <input id="piano-vol" type="range" min="0" max="100" value="72" />
       </label>
       <div class="piano-field">
@@ -32,7 +32,7 @@
       <button type="button" class="ghost-btn" id="piano-demo-ode">欢乐颂</button>
       <button type="button" class="ghost-btn" id="piano-demo-stop" hidden>停止试听</button>
     </div>
-    <p class="hint tight" id="piano-status">88 键 A0–C8，可左右滑动。电脑键盘：Z 行从 C3 起、Q 行从 C4 起、I 行从 C5 起；↑↓ 调八度，空格延音。</p>
+    <p class="hint tight" id="piano-status">88 键 A0–C8，可左右滑动。高亮键为电脑键盘区。Z 行 C3、Q 行 C4、I 行 C5；↑↓ 移八度，空格延音。</p>
     <p class="piano-now" id="piano-now" aria-live="polite">—</p>
     <div class="piano-bed" id="piano-bed">
       <div class="piano-kb" id="piano-kb" role="application" aria-label="钢琴键盘"></div>

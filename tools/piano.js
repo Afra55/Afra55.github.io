@@ -70,10 +70,12 @@
     { code: "Backslash", label: "\\", midi: 81 },
     { code: "Quote", label: "'", midi: 82 },
   ];
-  const HINT_KEYS = "电脑键盘：Z 行从 C3 起、Q 行从 C4 起、I 行从 C5 起（约 2.5 个八度）；↑↓ 调八度，空格延音。";
+  const HINT_KEYS =
+    "电脑键盘：Z 行 C3、Q 行 C4、I 行 C5（约 2.5 八度）；↑↓ 移八度，空格延音。按键越靠下力度越大。";
   const SF_SCRIPT = "https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js";
   const SF_FONT = (name, sf, format) =>
     `https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/${sf}/${name}-${format}.js`;
+  const DEFAULT_VEL = 0.82;
 
   const SONGS = {
     twinkle: {
@@ -110,11 +112,13 @@
   let acousticLoading = null;
   let demoTimer = 0;
   let demoPlaying = false;
+  let noiseBuf = null;
 
   const held = new Set();
   const pointerNotes = new Map();
   const keyNotes = new Map();
   const voices = new Map();
+  const keyVel = new Map();
 
   function isAccidental(midi) {
     return [1, 3, 6, 8, 10].includes(midi % 12);
@@ -191,35 +195,57 @@
     if (audioCtx) return audioCtx;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) throw new Error("当前浏览器不支持 Web Audio");
-    audioCtx = new AC();
+    try {
+      audioCtx = new AC({ latencyHint: "interactive" });
+    } catch (_) {
+      audioCtx = new AC();
+    }
     master = audioCtx.createGain();
     master.gain.value = volume;
     master.connect(audioCtx.destination);
     return audioCtx;
   }
 
-  async function unlockAudio() {
-    const ctx = getCtx();
-    if (ctx.state === "suspended") await ctx.resume();
-    if (master) master.gain.value = volume;
+  function ensureNoiseBuf(ctx) {
+    if (noiseBuf && noiseBuf.sampleRate === ctx.sampleRate) return noiseBuf;
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.028), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    noiseBuf = buf;
+    return noiseBuf;
   }
 
-  function stopVoice(midi) {
+  function unlockAudio() {
+    try {
+      const ctx = getCtx();
+      if (master) master.gain.value = volume;
+      if (ctx.state === "suspended") {
+        const p = ctx.resume();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      }
+      return ctx;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function stopVoice(midi, quick) {
     const voice = voices.get(midi);
     if (!voice) return;
     voices.delete(midi);
     const now = audioCtx ? audioCtx.currentTime : 0;
+    const rel = quick ? 0.04 : 0.14;
     try {
       if (voice.kind === "acoustic") {
-        voice.node?.stop?.(now + 0.03);
+        voice.node?.stop?.(now + (quick ? 0.01 : 0.03));
       } else {
         const g = voice.gain;
         g.gain.cancelScheduledValues(now);
         g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), now);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + rel);
         voice.oscs.forEach((o) => {
           try {
-            o.stop(now + 0.2);
+            o.stop(now + rel + 0.02);
           } catch (_) {}
         });
         window.setTimeout(() => {
@@ -231,34 +257,36 @@
           try {
             g.disconnect();
           } catch (_) {}
-        }, 260);
+        }, Math.ceil((rel + 0.05) * 1000));
       }
     } catch (_) {
       /* ignore */
     }
   }
 
-  function startSynth(midi) {
+  function startSynth(midi, velocity) {
     const ctx = getCtx();
     const now = ctx.currentTime;
     const freq = 440 * Math.pow(2, (midi - 69) / 12);
-    const vel = 0.22 + Math.min(1, (LAST - midi) / 36) * 0.08;
+    const v = Math.max(0.2, Math.min(1, velocity == null ? DEFAULT_VEL : velocity));
+    const rangeBoost = 0.2 + Math.min(1, (LAST - midi) / 40) * 0.1;
+    const peak = (0.16 + v * 0.22) * (0.85 + rangeBoost);
 
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.Q.value = 1.1;
-    filter.frequency.setValueAtTime(900 + vel * 3200, now);
-    filter.frequency.exponentialRampToValueAtTime(420, now + 1.4);
+    filter.Q.value = 0.95;
+    filter.frequency.setValueAtTime(700 + v * 3800, now);
+    filter.frequency.exponentialRampToValueAtTime(380 + v * 120, now + 1.2);
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(vel, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(vel * 0.42, now + 0.22);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.6);
+    gain.gain.linearRampToValueAtTime(peak, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * 0.4), now + 0.18);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.2);
 
     const specs = [
       ["triangle", freq, 0.72],
-      ["sine", freq * 2.003, 0.22],
+      ["sine", freq * 2.003, 0.2],
       ["sine", freq * 3.01, 0.08],
     ];
     const oscs = specs.map(([type, f, mix]) => {
@@ -270,20 +298,17 @@
       osc.connect(g);
       g.connect(filter);
       osc.start(now);
-      osc.stop(now + 4.2);
+      osc.stop(now + 3.8);
       return osc;
     });
 
     const noise = ctx.createBufferSource();
-    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.04), ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
-    noise.buffer = buf;
+    noise.buffer = ensureNoiseBuf(ctx);
     const ng = ctx.createGain();
-    ng.gain.value = 0.045;
+    ng.gain.value = 0.03 + v * 0.035;
     const nf = ctx.createBiquadFilter();
     nf.type = "highpass";
-    nf.frequency.value = 1200;
+    nf.frequency.value = 1400;
     noise.connect(nf);
     nf.connect(ng);
     ng.connect(filter);
@@ -294,44 +319,54 @@
     voices.set(midi, { kind: "synth", oscs, gain });
   }
 
-  function startAcoustic(midi) {
+  function startAcoustic(midi, velocity) {
     if (!acoustic) {
-      startSynth(midi);
+      startSynth(midi, velocity);
       return;
     }
-    const node = acoustic.play(midi, 0, { gain: 0.35 + volume * 0.9, attack: 0.008 });
+    const v = Math.max(0.2, Math.min(1, velocity == null ? DEFAULT_VEL : velocity));
+    const node = acoustic.play(midi, 0, {
+      gain: (0.28 + volume * 0.85) * (0.55 + v * 0.7),
+      attack: 0.004,
+    });
     voices.set(midi, { kind: "acoustic", node });
   }
 
-  function startVoice(midi) {
-    if (voices.has(midi)) stopVoice(midi);
-    if (engine === "acoustic" && acoustic) startAcoustic(midi);
-    else startSynth(midi);
+  function startVoice(midi, velocity) {
+    if (voices.has(midi)) stopVoice(midi, true);
+    if (engine === "acoustic" && acoustic) startAcoustic(midi, velocity);
+    else startSynth(midi, velocity);
   }
 
-  function noteOn(midi) {
+  function noteOn(midi, velocity) {
     const n = clampMidi(midi);
     held.add(n);
+    if (velocity != null) keyVel.set(n, velocity);
+    paintKey(n, true);
+    paintNow();
     try {
-      startVoice(n);
+      unlockAudio();
+      startVoice(n, velocity == null ? keyVel.get(n) : velocity);
     } catch (err) {
       setStatus(`无法发声：${err.message || err}`);
     }
-    paintKeys();
   }
 
   function noteOff(midi) {
     const n = clampMidi(midi);
     held.delete(n);
+    keyVel.delete(n);
     if (!sustainOn()) stopVoice(n);
-    paintKeys();
+    paintKey(n, false);
+    paintNow();
   }
 
   function panicStop() {
     held.clear();
     pointerNotes.clear();
     keyNotes.clear();
-    for (const midi of [...voices.keys()]) stopVoice(midi);
+    keyVel.clear();
+    for (const midi of [...voices.keys()]) stopVoice(midi, true);
     paintKeys();
   }
 
@@ -350,8 +385,18 @@
   function paintNow() {
     const el = $("#piano-now");
     if (!el) return;
-    const list = [...voices.keys()].sort((a, b) => a - b).map(midiName);
+    const list = [...new Set([...voices.keys(), ...held])]
+      .sort((a, b) => a - b)
+      .map(midiName);
     el.textContent = list.length ? list.join(" · ") : "—";
+  }
+
+  function paintKey(midi, forceOn) {
+    const kb = $("#piano-kb");
+    const btn = kb?.querySelector(`[data-midi="${midi}"]`);
+    if (!btn) return;
+    const on = forceOn || voices.has(midi) || held.has(midi);
+    btn.classList.toggle("is-active", on);
   }
 
   function paintKeys() {
@@ -360,8 +405,18 @@
     kb.querySelectorAll("[data-midi]").forEach((btn) => {
       const midi = Number(btn.dataset.midi);
       btn.classList.toggle("is-active", voices.has(midi) || held.has(midi));
+      const mapped = btn.dataset.mapped === "1";
+      btn.classList.toggle("is-mapped", mapped);
     });
     paintNow();
+  }
+
+  function velocityFromPoint(clientY, el) {
+    if (!el) return DEFAULT_VEL;
+    const r = el.getBoundingClientRect();
+    if (!r.height) return DEFAULT_VEL;
+    const y = (clientY - r.top) / r.height;
+    return 0.38 + Math.max(0, Math.min(1, y)) * 0.62;
   }
 
   function scrollKeyIntoView(midi) {
@@ -418,6 +473,7 @@
       }
       const hot = inv.get(midi);
       if (hot) {
+        btn.dataset.mapped = "1";
         const k = document.createElement("span");
         k.className = "piano-key-hot";
         k.textContent = hot;
@@ -431,37 +487,51 @@
     requestAnimationFrame(() => scrollKeyIntoView(focus));
   }
 
-  function midiFromPoint(x, y) {
+  function keyElFromPoint(x, y) {
     const stack = document.elementsFromPoint(x, y);
     for (const el of stack) {
       if (el.classList?.contains("piano-black") || el.classList?.contains("piano-white")) {
-        const n = Number(el.dataset.midi);
-        if (Number.isFinite(n)) return n;
+        return el;
       }
     }
     return null;
   }
 
+  function midiFromPoint(x, y) {
+    const el = keyElFromPoint(x, y);
+    if (!el) return null;
+    const n = Number(el.dataset.midi);
+    return Number.isFinite(n) ? n : null;
+  }
+
   function bindPointer(kb) {
-    kb.addEventListener("pointerdown", async (e) => {
-      const midi = midiFromPoint(e.clientX, e.clientY);
-      if (midi == null) return;
+    const bed = $("#piano-bed");
+    const warm = () => {
+      unlockAudio();
+    };
+    bed?.addEventListener("pointerenter", warm, { passive: true });
+    kb.addEventListener("pointerdown", (e) => {
+      const el = keyElFromPoint(e.clientX, e.clientY);
+      const midi = el ? Number(el.dataset.midi) : null;
+      if (midi == null || !Number.isFinite(midi)) return;
       e.preventDefault();
       try {
         kb.setPointerCapture(e.pointerId);
       } catch (_) {}
-      await unlockAudio().catch(() => {});
+      const vel = velocityFromPoint(e.clientY, el);
+      unlockAudio();
       pointerNotes.set(e.pointerId, midi);
-      noteOn(midi);
+      noteOn(midi, vel);
     });
     kb.addEventListener("pointermove", (e) => {
       if (!pointerNotes.has(e.pointerId)) return;
-      const midi = midiFromPoint(e.clientX, e.clientY);
+      const el = keyElFromPoint(e.clientX, e.clientY);
+      const midi = el ? Number(el.dataset.midi) : null;
       const prev = pointerNotes.get(e.pointerId);
-      if (midi == null || midi === prev) return;
+      if (midi == null || !Number.isFinite(midi) || midi === prev) return;
       pointerNotes.set(e.pointerId, midi);
       noteOff(prev);
-      noteOn(midi);
+      noteOn(midi, velocityFromPoint(e.clientY, el));
     });
     const end = (e) => {
       const prev = pointerNotes.get(e.pointerId);
@@ -471,6 +541,7 @@
     };
     kb.addEventListener("pointerup", end);
     kb.addEventListener("pointercancel", end);
+    kb.addEventListener("lostpointercapture", end);
   }
 
   function isTypingTarget(el) {
@@ -495,7 +566,7 @@
     if (e.code === "Space") {
       e.preventDefault();
       if (!e.repeat) {
-        unlockAudio().catch(() => {});
+        unlockAudio();
         applySustain({ held: true });
       }
       return;
@@ -515,9 +586,9 @@
     if (midi == null) return;
     e.preventDefault();
     if (e.repeat || keyNotes.has(e.code)) return;
-    unlockAudio().catch(() => {});
+    unlockAudio();
     keyNotes.set(e.code, midi);
-    noteOn(midi);
+    noteOn(midi, DEFAULT_VEL);
   }
 
   function onKeyUp(e) {
@@ -529,6 +600,12 @@
     if (midi == null) return;
     keyNotes.delete(e.code);
     noteOff(midi);
+  }
+
+  function releaseAllKeyboard() {
+    for (const midi of [...keyNotes.values()]) noteOff(midi);
+    keyNotes.clear();
+    if (sustainHeld) applySustain({ held: false });
   }
 
   function loadScriptOnce(src) {
@@ -554,7 +631,9 @@
     if (acousticLoading) return acousticLoading;
     setStatus("正在加载三角钢琴采样（约数 MB，需访问 jsDelivr）…");
     acousticLoading = (async () => {
-      await unlockAudio();
+      unlockAudio();
+      const ctx = getCtx();
+      if (ctx.state === "suspended") await ctx.resume();
       await loadScriptOnce(SF_SCRIPT);
       if (!window.Soundfont?.instrument) throw new Error("Soundfont 不可用");
       acoustic = await window.Soundfont.instrument(getCtx(), "acoustic_grand_piano", {
@@ -593,7 +672,9 @@
     const song = SONGS[id];
     if (!song) return;
     stopDemo();
-    await unlockAudio().catch(() => {});
+    unlockAudio();
+    const ctx = getCtx();
+    if (ctx.state === "suspended") await ctx.resume().catch(() => {});
     if (engine === "acoustic") {
       try {
         await ensureAcoustic();
@@ -624,10 +705,13 @@
   function syncControls() {
     const eng = $("#piano-engine");
     const vol = $("#piano-vol");
+    const volN = $("#piano-vol-num");
     const oct = $("#piano-oct-label");
     const sus = $("#piano-sustain");
     if (eng) eng.value = engine;
-    if (vol) vol.value = String(Math.round(volume * 100));
+    const pct = Math.round(volume * 100);
+    if (vol) vol.value = String(pct);
+    if (volN) volN.textContent = `${pct}%`;
     if (oct) oct.textContent = octave === 0 ? "0" : octave > 0 ? `+${octave}` : String(octave);
     if (sus) sus.checked = sustainStick;
   }
@@ -643,7 +727,7 @@
     loadPrefs();
     renderKeyboard();
     syncControls();
-    setStatus(`88 键 A0–C8，可左右滑动。${HINT_KEYS}`);
+    setStatus(`88 键 A0–C8，可左右滑动。高亮键为电脑键盘区。${HINT_KEYS}`);
     bindPointer($("#piano-kb"));
 
     $("#piano-engine")?.addEventListener("change", async (e) => {
@@ -660,11 +744,15 @@
     $("#piano-vol")?.addEventListener("input", (e) => {
       volume = Math.max(0, Math.min(1, Number(e.target.value) / 100));
       if (master) master.gain.value = volume;
+      syncControls();
       savePrefs();
     });
     $("#piano-oct-down")?.addEventListener("click", () => shiftOctave(-1));
     $("#piano-oct-up")?.addEventListener("click", () => shiftOctave(1));
-    $("#piano-goto-c4")?.addEventListener("click", () => scrollKeyIntoView(60));
+    $("#piano-goto-c4")?.addEventListener("click", () => {
+      scrollKeyIntoView(60);
+      unlockAudio();
+    });
     $("#piano-sustain")?.addEventListener("change", (e) => {
       applySustain({ stick: Boolean(e.target.checked) });
       savePrefs();
@@ -675,6 +763,10 @@
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", releaseAllKeyboard);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) releaseAllKeyboard();
+    });
 
     if (engine === "acoustic") {
       ensureAcoustic().catch(() => {});
