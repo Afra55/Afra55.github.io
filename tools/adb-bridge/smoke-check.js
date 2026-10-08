@@ -345,7 +345,16 @@ async function main() {
     }
     if (!features.includes("fs-preview")) throw new Error("health missing feature: fs-preview");
     if (!features.includes("host-tools-probe")) throw new Error("health missing feature: host-tools-probe");
-    if (!features.includes("app-labels-aapt")) throw new Error("health missing feature: app-labels-aapt");
+    if (!features.includes("app-labels-device")) throw new Error("health missing feature: app-labels-device");
+    if (!features.includes("app-labels-stream")) throw new Error("health missing feature: app-labels-stream");
+    if (features.includes("app-icons")) throw new Error("app-icons feature must stay removed (no APK pull for icons)");
+    const serverSrc = fs.readFileSync(path.join(__dirname, "server.js"), "utf8");
+    if (/enrichLabelsWithAapt/.test(serverSrc)) {
+      throw new Error("server.js must not pull APK via enrichLabelsWithAapt for app labels");
+    }
+    if (!/已禁用应用图标拉取/.test(serverSrc)) {
+      throw new Error("server.js should disable icon extraction that requires adb pull");
+    }
 
     // Label parser smoke (mirrors server parseLabelFromBadging / dumpsys rules)
     const badging = [

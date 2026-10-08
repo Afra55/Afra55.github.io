@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.50";
+const BRIDGE_VERSION = "0.9.51";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -1435,7 +1435,7 @@ function applyCachedLabels(apps) {
       app.label = sanitizeAppLabel(hit.label);
       if (app.label) used += 1;
     }
-    app.hasIcon = Boolean(readCachedIconMeta(app.packageName, app.apkPath));
+    app.hasIcon = false;
   }
   return { cache, used };
 }
@@ -1472,7 +1472,7 @@ async function listApps(serial, kind = "all", opts = {}) {
   const labelInfo = await loadAppLabels(serial, apps);
   for (const app of apps) {
     app.label = sanitizeAppLabel(labelInfo.map.get(app.packageName) || app.label || "");
-    app.hasIcon = Boolean(readCachedIconMeta(app.packageName, app.apkPath));
+    app.hasIcon = false;
   }
   sortAppsByLabel(apps);
   return {
@@ -1732,77 +1732,20 @@ async function queryLauncherLabels(serial) {
   return map;
 }
 
-async function enrichLabelsWithAapt(serial, apps, map, cache, opts = {}) {
-  const onLabel = typeof opts.onLabel === "function" ? opts.onLabel : null;
-  const shouldAbort = typeof opts.shouldAbort === "function" ? opts.shouldAbort : () => false;
-  const bin = resolveAaptBin();
-  if (!bin) {
-    return {
-      enriched: 0,
-      icons: 0,
-      note: "本机未找到 aapt/aapt2：应用名可能显示为包名。安装 Android SDK build-tools 并加入 PATH 后重启桥，即可解析中文应用名与图标。",
-    };
+/** 把设备侧解析到的应用名写入本机缓存（绝不为此 pull APK）。 */
+function persistDeviceLabels(apps, map) {
+  if (!map?.size) return;
+  const cache = readLabelCache();
+  let changed = 0;
+  for (const app of apps || []) {
+    const label = sanitizeAppLabel(map.get(app.packageName));
+    if (!label || !app.apkPath) continue;
+    const key = `${app.packageName}@@${app.apkPath}`;
+    if (cache[key]?.label === label) continue;
+    cache[key] = { label, at: Date.now(), source: "device" };
+    changed += 1;
   }
-  const missing = apps.filter((a) => a.apkPath && !map.get(a.packageName));
-  missing.sort((a, b) => Number(a.isSystem) - Number(b.isSystem));
-  const budgetCap = opts.budget != null ? opts.budget : missing.length <= 80 ? missing.length : 180;
-  const budget = missing.slice(0, budgetCap);
-  let enriched = 0;
-  let icons = 0;
-  let failed = 0;
-  const started = Date.now();
-  const deadlineMs = opts.deadlineMs != null ? opts.deadlineMs : 180000;
-  await mapPool(budget, opts.concurrency || 4, async (app) => {
-    if (shouldAbort() || Date.now() - started > deadlineMs) return;
-    const cacheKey = `${app.packageName}@@${app.apkPath}`;
-    const hit = cache[cacheKey];
-    if (hit?.label && !map.get(app.packageName)) {
-      const label = sanitizeAppLabel(hit.label);
-      map.set(app.packageName, label);
-      enriched += 1;
-      if (onLabel) onLabel({ packageName: app.packageName, label, icon: Boolean(readCachedIconMeta(app.packageName, app.apkPath)), source: "cache" });
-      return;
-    }
-    if (map.get(app.packageName)) return;
-    const local = tempName("label", `${app.packageName.replace(/[^\w.-]+/g, "_")}.apk`);
-    try {
-      await adbSerial(serial, ["pull", app.apkPath, local], { timeout: 90000 });
-      const badging = await dumpBadgingText(local);
-      const label = parseLabelFromBadging(badging);
-      let hasIcon = Boolean(readCachedIconMeta(app.packageName, app.apkPath));
-      if (!hasIcon) {
-        const icon = await extractIconFromLocalApk(local, badging);
-        if (icon && writeCachedIcon(app.packageName, app.apkPath, icon.buffer, icon.mime)) {
-          hasIcon = true;
-          icons += 1;
-        }
-      }
-      if (label) {
-        map.set(app.packageName, sanitizeAppLabel(label));
-        cache[cacheKey] = { label: sanitizeAppLabel(label), at: Date.now() };
-        enriched += 1;
-        if (onLabel) onLabel({ packageName: app.packageName, label: sanitizeAppLabel(label), icon: hasIcon, source: "aapt" });
-      } else {
-        failed += 1;
-        if (hasIcon && onLabel) onLabel({ packageName: app.packageName, label: "", icon: true, source: "aapt" });
-      }
-    } catch {
-      failed += 1;
-    } finally {
-      try {
-        fs.unlinkSync(local);
-      } catch {
-        /* ignore */
-      }
-    }
-  });
-  writeLabelCache(cache);
-  const stillMissing = apps.filter((a) => !map.get(a.packageName)).length;
-  let note = `应用名已用 aapt 解析 ${enriched} 个`;
-  if (icons) note += `，图标 ${icons} 个`;
-  if (stillMissing) note += `，仍有 ${stillMissing} 个显示包名`;
-  if (failed && !enriched) note += "（拉取/解析失败较多，请确认 build-tools 可用）";
-  return { enriched, icons, note };
+  if (changed) writeLabelCache(cache);
 }
 
 async function loadAppLabels(serial, apps = []) {
@@ -1832,7 +1775,7 @@ async function loadAppLabels(serial, apps = []) {
     }
     if (added) sources.push("dumpsys");
   } catch {
-    /* optional — 流式路径里也会再试 */
+    /* optional */
   }
 
   const cache = readLabelCache();
@@ -1847,23 +1790,20 @@ async function loadAppLabels(serial, apps = []) {
   }
   if (usedCache) sources.push("cache");
 
-  const before = map.size;
-  const aaptInfo = await enrichLabelsWithAapt(serial, apps, map, cache);
-  if (map.size > before) sources.push("aapt");
+  persistDeviceLabels(apps, map);
 
   const resolved = map.size;
-  let note = aaptInfo.note || "";
-  if (!resolved) {
-    note =
-      aaptInfo.note ||
-      "未能解析应用名。请安装 Android SDK build-tools（提供 aapt/aapt2），重启 ADB 桥后再刷新应用列表。";
-  }
+  const missing = (apps || []).filter((a) => !map.get(a.packageName)).length;
+  let note = resolved
+    ? `应用名来自设备侧（${sources.join("+") || "none"}），已解析 ${resolved} 个`
+    : "设备未返回应用名，列表仅显示包名（不会为解析名字而 pull APK）";
+  if (missing) note += `；${missing} 个保持包名`;
   return { map, note, source: sources.join("+") || "none" };
 }
 
 /**
- * 流式补全应用名：launcher → dumpsys → aapt(并行 pull)，每解析到一个就回调。
- * 页面可先渲染包名，不必等齐。
+ * 流式补全应用名：仅设备侧 launcher / dumpsys（禁止为应用名 adb pull APK）。
+ * 拿不到就保持包名。
  */
 async function streamAppLabels(serial, apps = [], opts = {}) {
   const onLabel = typeof opts.onLabel === "function" ? opts.onLabel : () => {};
@@ -1913,81 +1853,24 @@ async function streamAppLabels(serial, apps = [], opts = {}) {
     }
   }
 
-  const cache = readLabelCache();
-  const before = map.size;
-  const aaptInfo = await enrichLabelsWithAapt(serial, apps, map, cache, {
-    onLabel,
-    shouldAbort,
-    concurrency: 4,
-    deadlineMs: 180000,
-  });
-  if (map.size > before) sources.push("aapt");
+  if (!shouldAbort()) persistDeviceLabels(apps, map);
 
-  const resolved = [...map.keys()].length;
-  let note = aaptInfo.note || "";
-  if (!resolved && !apps.some((a) => a.label)) {
-    note =
-      aaptInfo.note ||
-      "未能解析应用名。请安装 Android SDK build-tools（提供 aapt/aapt2），重启 ADB 桥后再刷新应用列表。";
-  } else if (!note) {
-    note = `应用名已补全 ${resolved} 个（${sources.join("+") || "cache"}）`;
-  }
+  const resolved = map.size;
+  const missing = (apps || []).filter((a) => !map.get(a.packageName)).length;
+  let note = resolved
+    ? `应用名已补全 ${resolved} 个（${sources.join("+") || "cache"}，仅设备侧，未 pull APK）`
+    : "设备未返回应用名，仅显示包名（不会为名字 pull APK）";
+  if (missing) note += `；${missing} 个保持包名`;
   return { map, note, source: sources.join("+") || "none", resolved };
 }
 
-async function resolveAppApkPath(serial, packageName) {
-  const pkg = String(packageName || "").trim();
-  if (!pkg) throw new Error("包名无效");
-  const { stdout } = await adbSerial(serial, ["shell", "pm", "path", pkg], { timeout: 30000 });
-  const remotes = [...String(stdout || "").matchAll(/package:(.+)/g)].map((m) => m[1].trim()).filter(Boolean);
-  if (!remotes.length) throw new Error("找不到应用 APK 路径");
-  const score = (p) => (/\/base\.apk$/i.test(p) ? 0 : /base\.apk/i.test(p) ? 1 : 2);
-  remotes.sort((a, b) => score(a) - score(b));
-  return remotes[0];
-}
-
-async function ensureAppIcon(serial, packageName) {
-  const pkg = String(packageName || "").trim();
-  if (!pkg || !/^[A-Za-z0-9._]+$/.test(pkg)) throw new Error("包名无效");
-  const apkPath = await resolveAppApkPath(serial, pkg);
-  const cached = readCachedIconMeta(pkg, apkPath);
-  if (cached) {
-    return { buffer: fs.readFileSync(cached.file), mime: cached.mime, cached: true, apkPath };
-  }
-  if (!resolveAaptBin()) {
-    const err = new Error(
-      "无法提取图标：本机未找到 aapt/aapt2。安装 Android SDK build-tools 后重启桥。Adaptive Icon（XML）也无法直接显示。"
-    );
-    err.status = 501;
-    throw err;
-  }
-  const local = tempName("icon", `${pkg.replace(/[^\w.-]+/g, "_")}.apk`);
-  try {
-    await adbSerial(serial, ["pull", apkPath, local], { timeout: 120000 });
-    const badging = await dumpBadgingText(local);
-    const icon = await extractIconFromLocalApk(local, badging);
-    if (!icon) {
-      const err = new Error(
-        "该应用图标为 Adaptive Icon（XML）或资源无法从 APK 直接解出 PNG/WebP，暂不支持显示。"
-      );
-      err.status = 404;
-      throw err;
-    }
-    writeCachedIcon(pkg, apkPath, icon.buffer, icon.mime);
-    const label = parseLabelFromBadging(badging);
-    if (label) {
-      const cache = readLabelCache();
-      cache[`${pkg}@@${apkPath}`] = { label: sanitizeAppLabel(label), at: Date.now() };
-      writeLabelCache(cache);
-    }
-    return { buffer: icon.buffer, mime: icon.mime, cached: false, apkPath, label };
-  } finally {
-    try {
-      fs.unlinkSync(local);
-    } catch {
-      /* ignore */
-    }
-  }
+/** 图标需 pull APK 才能解出，按产品策略禁用自动拉取。 */
+async function ensureAppIcon(_serial, _packageName) {
+  const err = new Error(
+    "已禁用应用图标拉取：解图标需要 adb pull APK，仅用户主动「备份」才会 pull。列表只显示包名/设备侧应用名。"
+  );
+  err.status = 501;
+  throw err;
 }
 
 async function appAction(serial, packageName, action) {
@@ -5490,9 +5373,8 @@ async function handleApi(req, res, url) {
             "host-tools",
             "fs-preview",
             "host-tools-probe",
-            "app-labels-aapt",
+            "app-labels-device",
             "app-labels-stream",
-            "app-icons",
             "proxy",
             "forward",
             "developer",

@@ -299,7 +299,7 @@
               <p class="hint tight">行内可快速打开 / 详情 / 备份 APK / 卸载；其余操作请<strong>右键</strong>应用行。</p>
               <p class="hint tight" id="adb-apps-label-tip" hidden></p>
               <pre class="mono adb-pre" id="adb-app-detail" hidden></pre>
-              <p class="hint">进入后先列出全部包名，应用名后台流式补全（launcher → dumpsys → aapt，带缓存）。图标在可见行按需从 APK 提取（需本机 aapt；Adaptive Icon/XML 可能无图）。备份用 <code class="mono">pm path</code> + <code class="mono">adb pull</code>。系统应用操作可能失败。</p>
+              <p class="hint">进入后先列出全部包名；应用名仅从设备侧补全（launcher / dumpsys，带本机缓存），<strong>不会为解析名字而 pull APK</strong>——拿不到就一直显示包名。列表不拉图标。备份是你主动点的才会 <code class="mono">pm path</code> + <code class="mono">adb pull</code>。系统应用操作可能失败。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="network" hidden>
