@@ -296,10 +296,10 @@
                 <button type="button" class="ghost-btn" id="adb-perm-revoke">撤销权限</button>
               </div>
               <div class="adb-fs-list adb-apps-list" id="adb-apps-list" aria-live="polite"></div>
-              <p class="hint tight">行内可快速打开 / 详情 / 卸载；其余操作请<strong>右键</strong>应用行。</p>
+              <p class="hint tight">行内可快速打开 / 详情 / 备份 APK / 卸载；其余操作请<strong>右键</strong>应用行。</p>
               <p class="hint tight" id="adb-apps-label-tip" hidden></p>
               <pre class="mono adb-pre" id="adb-app-detail" hidden></pre>
-              <p class="hint">左侧勾选用于权限操作。应用名优先用 aapt 解析 APK 标签（需本机 build-tools）；首次刷新会拉取 APK 解析并缓存，之后会快很多。系统应用操作可能失败。</p>
+              <p class="hint">进入后先列出全部包名，应用名后台流式补全（launcher → dumpsys → aapt，带缓存）。图标在可见行按需从 APK 提取（需本机 aapt；Adaptive Icon/XML 可能无图）。备份用 <code class="mono">pm path</code> + <code class="mono">adb pull</code>。系统应用操作可能失败。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="network" hidden>

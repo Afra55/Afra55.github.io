@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.49";
+const BRIDGE_VERSION = "0.9.50";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -1388,7 +1388,7 @@ function parseSerials(input) {
     .filter(Boolean);
 }
 
-async function listApps(serial, kind = "all") {
+async function collectInstalledApps(serial, kind = "all") {
   const flag = kind === "system" ? "-s" : kind === "third" ? "-3" : "";
   const args = flag ? ["shell", "pm", "list", "packages", "-f", flag] : ["shell", "pm", "list", "packages", "-f"];
   const { stdout } = await adbSerial(serial, args, { timeout: 60000 });
@@ -1420,20 +1420,65 @@ async function listApps(serial, kind = "all") {
       apkPath,
       isSystem,
       kind: isSystem ? "system" : "third",
+      hasIcon: false,
     });
   }
-  const labelInfo = await loadAppLabels(serial, apps);
+  return apps;
+}
+
+function applyCachedLabels(apps) {
+  const cache = readLabelCache();
+  let used = 0;
   for (const app of apps) {
-    app.label = sanitizeAppLabel(labelInfo.map.get(app.packageName) || "");
+    const hit = cache[`${app.packageName}@@${app.apkPath}`];
+    if (hit?.label) {
+      app.label = sanitizeAppLabel(hit.label);
+      if (app.label) used += 1;
+    }
+    app.hasIcon = Boolean(readCachedIconMeta(app.packageName, app.apkPath));
   }
+  return { cache, used };
+}
+
+function sortAppsByLabel(apps) {
   apps.sort((a, b) => {
     const la = (a.label || a.packageName).toLowerCase();
     const lb = (b.label || b.packageName).toLowerCase();
     return la.localeCompare(lb, "zh");
   });
+}
+
+async function listApps(serial, kind = "all", opts = {}) {
+  const quick = opts.quick !== false;
+  const apps = await collectInstalledApps(serial, kind);
+  const cacheInfo = applyCachedLabels(apps);
+  if (quick) {
+    apps.sort((a, b) => a.packageName.localeCompare(b.packageName));
+    const resolved = apps.filter((a) => a.label).length;
+    const pending = apps.length - resolved;
+    return {
+      apps,
+      labelResolved: resolved,
+      labelsPending: pending > 0,
+      labelNote:
+        pending > 0
+          ? `已列出 ${apps.length} 个包名（缓存应用名 ${resolved}）；其余应用名将流式补全`
+          : cacheInfo.used
+            ? `已从缓存恢复全部 ${resolved} 个应用名`
+            : `已列出 ${apps.length} 个包名`,
+      labelSource: cacheInfo.used ? "cache" : "none",
+    };
+  }
+  const labelInfo = await loadAppLabels(serial, apps);
+  for (const app of apps) {
+    app.label = sanitizeAppLabel(labelInfo.map.get(app.packageName) || app.label || "");
+    app.hasIcon = Boolean(readCachedIconMeta(app.packageName, app.apkPath));
+  }
+  sortAppsByLabel(apps);
   return {
     apps,
     labelResolved: apps.filter((a) => a.label).length,
+    labelsPending: false,
     labelNote: labelInfo.note || "",
     labelSource: labelInfo.source || "",
   };
@@ -1487,10 +1532,13 @@ function parseDumpsysPackageLabels(stdout) {
   return map;
 }
 
-function labelCachePath() {
+function bridgeDataDir() {
   const raw = process.env.ADB_BRIDGE_DIR || process.env.DEVTOOLS_BRIDGE_DIR;
-  const base = raw && String(raw).trim() ? path.resolve(String(raw).trim()) : __dirname;
-  return path.join(base, "app-labels-cache.json");
+  return raw && String(raw).trim() ? path.resolve(String(raw).trim()) : __dirname;
+}
+
+function labelCachePath() {
+  return path.join(bridgeDataDir(), "app-labels-cache.json");
 }
 
 function readLabelCache() {
@@ -1512,6 +1560,51 @@ function writeLabelCache(cache) {
   }
 }
 
+function iconCacheDir() {
+  return path.join(bridgeDataDir(), "app-icons-cache");
+}
+
+function iconCacheKey(packageName, apkPath) {
+  return crypto.createHash("sha1").update(`${packageName}@@${apkPath || ""}`).digest("hex");
+}
+
+function iconCachePaths(packageName, apkPath) {
+  const key = iconCacheKey(packageName, apkPath);
+  const dir = iconCacheDir();
+  return {
+    key,
+    meta: path.join(dir, `${key}.json`),
+    file: path.join(dir, `${key}.bin`),
+  };
+}
+
+function readCachedIconMeta(packageName, apkPath) {
+  try {
+    const { meta, file } = iconCachePaths(packageName, apkPath);
+    if (!fs.existsSync(meta) || !fs.existsSync(file)) return null;
+    const raw = JSON.parse(fs.readFileSync(meta, "utf8"));
+    if (!raw || !raw.mime) return null;
+    return { ...raw, file };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedIcon(packageName, apkPath, buffer, mime) {
+  try {
+    const { meta, file } = iconCachePaths(packageName, apkPath);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, buffer);
+    fs.writeFileSync(
+      meta,
+      JSON.stringify({ mime: mime || "image/png", at: Date.now(), packageName, apkPath: apkPath || "" })
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resolveAaptBin() {
   const aapt2 = resolveTool("aapt2");
   if (whichSync("aapt2") || (aapt2 && aapt2 !== "aapt2" && fs.existsSync(aapt2))) return aapt2;
@@ -1520,7 +1613,7 @@ function resolveAaptBin() {
   return "";
 }
 
-async function dumpBadgingLabel(localApk) {
+async function dumpBadgingText(localApk) {
   const bin = resolveAaptBin();
   if (!bin) return "";
   try {
@@ -1528,10 +1621,75 @@ async function dumpBadgingLabel(localApk) {
       timeout: 45000,
       maxBuffer: 8 * 1024 * 1024,
     });
-    return parseLabelFromBadging(`${stdout || ""}\n${stderr || ""}`);
+    return `${stdout || ""}\n${stderr || ""}`;
   } catch (err) {
-    return parseLabelFromBadging(`${err?.stdout || ""}\n${err?.stderr || ""}`);
+    return `${err?.stdout || ""}\n${err?.stderr || ""}`;
   }
+}
+
+async function dumpBadgingLabel(localApk) {
+  return parseLabelFromBadging(await dumpBadgingText(localApk));
+}
+
+function parseIconPathFromBadging(text) {
+  const s = String(text || "");
+  const dens = [];
+  for (const m of s.matchAll(/application-icon-(\d+):'([^']+)'/g)) {
+    dens.push({ dpi: Number(m[1]) || 0, path: m[2] });
+  }
+  dens.sort((a, b) => b.dpi - a.dpi);
+  const fallback = (s.match(/application-icon:'([^']+)'/) || [])[1] || "";
+  const candidates = [...dens.map((d) => d.path), fallback].filter(Boolean);
+  for (const p of candidates) {
+    if (/\.(png|webp|jpg|jpeg)$/i.test(p)) return p.replace(/^\//, "");
+  }
+  // Adaptive icon 多为 XML，无法直接当位图显示
+  return "";
+}
+
+function sniffImageMime(buf) {
+  if (!buf || buf.length < 12) return "";
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image/png";
+  if (buf[0] === 0xff && buf[1] === 0xd8) return "image/jpeg";
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 && buf[8] === 0x57) {
+    return "image/webp";
+  }
+  return "";
+}
+
+async function extractZipEntryBuffer(zipPath, entryPath) {
+  const norm = String(entryPath || "")
+    .replace(/\\/g, "/")
+    .replace(/^\//, "");
+  if (!norm || !fs.existsSync(zipPath)) return null;
+  const tryCmds = [
+    ["tar", ["-xf", zipPath, "-O", norm]],
+    ["unzip", ["-p", zipPath, norm]],
+  ];
+  for (const [bin, args] of tryCmds) {
+    try {
+      const { stdout } = await execFileAsync(bin, args, {
+        encoding: "buffer",
+        timeout: 30000,
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      if (stdout && stdout.length > 32 && sniffImageMime(stdout)) return Buffer.from(stdout);
+    } catch {
+      /* next */
+    }
+  }
+  return null;
+}
+
+async function extractIconFromLocalApk(localApk, badgingText = "") {
+  const text = badgingText || (await dumpBadgingText(localApk));
+  const iconPath = parseIconPathFromBadging(text);
+  if (!iconPath) return null;
+  const buf = await extractZipEntryBuffer(localApk, iconPath);
+  if (!buf) return null;
+  const mime = sniffImageMime(buf);
+  if (!mime) return null;
+  return { buffer: buf, mime, iconPath };
 }
 
 async function mapPool(items, concurrency, worker) {
@@ -1546,41 +1704,87 @@ async function mapPool(items, concurrency, worker) {
   await Promise.all(runners);
 }
 
-async function enrichLabelsWithAapt(serial, apps, map, cache) {
+async function queryLauncherLabels(serial) {
+  const map = new Map();
+  const { stdout } = await adbSerial(
+    serial,
+    [
+      "shell",
+      "cmd",
+      "package",
+      "query-activities",
+      "-a",
+      "android.intent.action.MAIN",
+      "-c",
+      "android.intent.category.LAUNCHER",
+    ],
+    { timeout: 45000, maxBuffer: 20 * 1024 * 1024 }
+  );
+  let pkg = "";
+  for (const line of String(stdout || "").split(/\r?\n/)) {
+    const p = line.match(/packageName=(\S+)/);
+    if (p) pkg = p[1].trim();
+    const lab =
+      (line.match(/nonLocalizedLabel=([^\s]+)/) || line.match(/applicationLabel=([^\s]+)/) || [])[1];
+    const cleaned = sanitizeAppLabel(lab);
+    if (pkg && cleaned && !map.has(pkg)) map.set(pkg, cleaned);
+  }
+  return map;
+}
+
+async function enrichLabelsWithAapt(serial, apps, map, cache, opts = {}) {
+  const onLabel = typeof opts.onLabel === "function" ? opts.onLabel : null;
+  const shouldAbort = typeof opts.shouldAbort === "function" ? opts.shouldAbort : () => false;
   const bin = resolveAaptBin();
   if (!bin) {
     return {
       enriched: 0,
-      note: "本机未找到 aapt/aapt2：应用名可能显示为包名。安装 Android SDK build-tools 并加入 PATH 后重启桥，即可解析中文应用名。",
+      icons: 0,
+      note: "本机未找到 aapt/aapt2：应用名可能显示为包名。安装 Android SDK build-tools 并加入 PATH 后重启桥，即可解析中文应用名与图标。",
     };
   }
   const missing = apps.filter((a) => a.apkPath && !map.get(a.packageName));
-  // 三方优先（用户最关心），再补系统
   missing.sort((a, b) => Number(a.isSystem) - Number(b.isSystem));
-  const budget = missing.slice(0, 100);
+  const budgetCap = opts.budget != null ? opts.budget : missing.length <= 80 ? missing.length : 180;
+  const budget = missing.slice(0, budgetCap);
   let enriched = 0;
+  let icons = 0;
   let failed = 0;
   const started = Date.now();
-  const deadlineMs = 75000;
-  await mapPool(budget, 3, async (app) => {
-    if (Date.now() - started > deadlineMs) return;
+  const deadlineMs = opts.deadlineMs != null ? opts.deadlineMs : 180000;
+  await mapPool(budget, opts.concurrency || 4, async (app) => {
+    if (shouldAbort() || Date.now() - started > deadlineMs) return;
     const cacheKey = `${app.packageName}@@${app.apkPath}`;
     const hit = cache[cacheKey];
-    if (hit?.label) {
-      map.set(app.packageName, sanitizeAppLabel(hit.label));
+    if (hit?.label && !map.get(app.packageName)) {
+      const label = sanitizeAppLabel(hit.label);
+      map.set(app.packageName, label);
       enriched += 1;
+      if (onLabel) onLabel({ packageName: app.packageName, label, icon: Boolean(readCachedIconMeta(app.packageName, app.apkPath)), source: "cache" });
       return;
     }
+    if (map.get(app.packageName)) return;
     const local = tempName("label", `${app.packageName.replace(/[^\w.-]+/g, "_")}.apk`);
     try {
       await adbSerial(serial, ["pull", app.apkPath, local], { timeout: 90000 });
-      const label = await dumpBadgingLabel(local);
+      const badging = await dumpBadgingText(local);
+      const label = parseLabelFromBadging(badging);
+      let hasIcon = Boolean(readCachedIconMeta(app.packageName, app.apkPath));
+      if (!hasIcon) {
+        const icon = await extractIconFromLocalApk(local, badging);
+        if (icon && writeCachedIcon(app.packageName, app.apkPath, icon.buffer, icon.mime)) {
+          hasIcon = true;
+          icons += 1;
+        }
+      }
       if (label) {
         map.set(app.packageName, sanitizeAppLabel(label));
         cache[cacheKey] = { label: sanitizeAppLabel(label), at: Date.now() };
         enriched += 1;
+        if (onLabel) onLabel({ packageName: app.packageName, label: sanitizeAppLabel(label), icon: hasIcon, source: "aapt" });
       } else {
         failed += 1;
+        if (hasIcon && onLabel) onLabel({ packageName: app.packageName, label: "", icon: true, source: "aapt" });
       }
     } catch {
       failed += 1;
@@ -1595,59 +1799,40 @@ async function enrichLabelsWithAapt(serial, apps, map, cache) {
   writeLabelCache(cache);
   const stillMissing = apps.filter((a) => !map.get(a.packageName)).length;
   let note = `应用名已用 aapt 解析 ${enriched} 个`;
+  if (icons) note += `，图标 ${icons} 个`;
   if (stillMissing) note += `，仍有 ${stillMissing} 个显示包名`;
   if (failed && !enriched) note += "（拉取/解析失败较多，请确认 build-tools 可用）";
-  return { enriched, note };
+  return { enriched, icons, note };
 }
 
 async function loadAppLabels(serial, apps = []) {
   const map = new Map();
   const sources = [];
+
   try {
-    const { stdout } = await adbSerial(serial, ["shell", "dumpsys", "package"], {
-      timeout: 120000,
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    const fromDump = parseDumpsysPackageLabels(stdout);
-    for (const [k, v] of fromDump) map.set(k, v);
-    if (fromDump.size) sources.push("dumpsys");
+    const fromLauncher = await queryLauncherLabels(serial);
+    for (const [k, v] of fromLauncher) map.set(k, v);
+    if (fromLauncher.size) sources.push("launcher");
   } catch {
     /* optional */
   }
 
-  // 启动器 Activity 里偶尔有 nonLocalizedLabel（覆盖桌面可见应用）
   try {
-    const beforeLauncher = map.size;
-    const { stdout } = await adbSerial(
-      serial,
-      [
-        "shell",
-        "cmd",
-        "package",
-        "query-activities",
-        "-a",
-        "android.intent.action.MAIN",
-        "-c",
-        "android.intent.category.LAUNCHER",
-      ],
-      { timeout: 45000, maxBuffer: 20 * 1024 * 1024 }
-    );
-    let pkg = "";
-    for (const line of String(stdout || "").split(/\r?\n/)) {
-      const p = line.match(/packageName=(\S+)/);
-      if (p) pkg = p[1].trim();
-      const lab =
-        (line.match(/nonLocalizedLabel=([^\s]+)/) ||
-          line.match(/applicationLabel=([^\s]+)/) ||
-          [])[1];
-      const cleaned = sanitizeAppLabel(lab);
-      if (pkg && cleaned && !map.has(pkg)) {
-        map.set(pkg, cleaned);
+    const { stdout } = await adbSerial(serial, ["shell", "dumpsys", "package"], {
+      timeout: 25000,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const fromDump = parseDumpsysPackageLabels(stdout);
+    let added = 0;
+    for (const [k, v] of fromDump) {
+      if (!map.has(k)) {
+        map.set(k, v);
+        added += 1;
       }
     }
-    if (map.size > beforeLauncher) sources.push("launcher");
+    if (added) sources.push("dumpsys");
   } catch {
-    /* optional */
+    /* optional — 流式路径里也会再试 */
   }
 
   const cache = readLabelCache();
@@ -1674,6 +1859,135 @@ async function loadAppLabels(serial, apps = []) {
       "未能解析应用名。请安装 Android SDK build-tools（提供 aapt/aapt2），重启 ADB 桥后再刷新应用列表。";
   }
   return { map, note, source: sources.join("+") || "none" };
+}
+
+/**
+ * 流式补全应用名：launcher → dumpsys → aapt(并行 pull)，每解析到一个就回调。
+ * 页面可先渲染包名，不必等齐。
+ */
+async function streamAppLabels(serial, apps = [], opts = {}) {
+  const onLabel = typeof opts.onLabel === "function" ? opts.onLabel : () => {};
+  const shouldAbort = typeof opts.shouldAbort === "function" ? opts.shouldAbort : () => false;
+  const map = new Map();
+  const sources = [];
+  for (const app of apps) {
+    const label = sanitizeAppLabel(app.label);
+    if (label) map.set(app.packageName, label);
+  }
+
+  if (!shouldAbort()) {
+    try {
+      const fromLauncher = await queryLauncherLabels(serial);
+      let n = 0;
+      for (const [pkg, label] of fromLauncher) {
+        if (shouldAbort()) break;
+        if (map.has(pkg)) continue;
+        map.set(pkg, label);
+        n += 1;
+        onLabel({ packageName: pkg, label, icon: false, source: "launcher" });
+      }
+      if (n) sources.push("launcher");
+    } catch {
+      /* optional */
+    }
+  }
+
+  if (!shouldAbort()) {
+    try {
+      const { stdout } = await adbSerial(serial, ["shell", "dumpsys", "package"], {
+        timeout: 25000,
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      const fromDump = parseDumpsysPackageLabels(stdout);
+      let n = 0;
+      for (const [pkg, label] of fromDump) {
+        if (shouldAbort()) break;
+        if (map.has(pkg)) continue;
+        map.set(pkg, label);
+        n += 1;
+        onLabel({ packageName: pkg, label, icon: false, source: "dumpsys" });
+      }
+      if (n) sources.push("dumpsys");
+    } catch {
+      /* optional */
+    }
+  }
+
+  const cache = readLabelCache();
+  const before = map.size;
+  const aaptInfo = await enrichLabelsWithAapt(serial, apps, map, cache, {
+    onLabel,
+    shouldAbort,
+    concurrency: 4,
+    deadlineMs: 180000,
+  });
+  if (map.size > before) sources.push("aapt");
+
+  const resolved = [...map.keys()].length;
+  let note = aaptInfo.note || "";
+  if (!resolved && !apps.some((a) => a.label)) {
+    note =
+      aaptInfo.note ||
+      "未能解析应用名。请安装 Android SDK build-tools（提供 aapt/aapt2），重启 ADB 桥后再刷新应用列表。";
+  } else if (!note) {
+    note = `应用名已补全 ${resolved} 个（${sources.join("+") || "cache"}）`;
+  }
+  return { map, note, source: sources.join("+") || "none", resolved };
+}
+
+async function resolveAppApkPath(serial, packageName) {
+  const pkg = String(packageName || "").trim();
+  if (!pkg) throw new Error("包名无效");
+  const { stdout } = await adbSerial(serial, ["shell", "pm", "path", pkg], { timeout: 30000 });
+  const remotes = [...String(stdout || "").matchAll(/package:(.+)/g)].map((m) => m[1].trim()).filter(Boolean);
+  if (!remotes.length) throw new Error("找不到应用 APK 路径");
+  const score = (p) => (/\/base\.apk$/i.test(p) ? 0 : /base\.apk/i.test(p) ? 1 : 2);
+  remotes.sort((a, b) => score(a) - score(b));
+  return remotes[0];
+}
+
+async function ensureAppIcon(serial, packageName) {
+  const pkg = String(packageName || "").trim();
+  if (!pkg || !/^[A-Za-z0-9._]+$/.test(pkg)) throw new Error("包名无效");
+  const apkPath = await resolveAppApkPath(serial, pkg);
+  const cached = readCachedIconMeta(pkg, apkPath);
+  if (cached) {
+    return { buffer: fs.readFileSync(cached.file), mime: cached.mime, cached: true, apkPath };
+  }
+  if (!resolveAaptBin()) {
+    const err = new Error(
+      "无法提取图标：本机未找到 aapt/aapt2。安装 Android SDK build-tools 后重启桥。Adaptive Icon（XML）也无法直接显示。"
+    );
+    err.status = 501;
+    throw err;
+  }
+  const local = tempName("icon", `${pkg.replace(/[^\w.-]+/g, "_")}.apk`);
+  try {
+    await adbSerial(serial, ["pull", apkPath, local], { timeout: 120000 });
+    const badging = await dumpBadgingText(local);
+    const icon = await extractIconFromLocalApk(local, badging);
+    if (!icon) {
+      const err = new Error(
+        "该应用图标为 Adaptive Icon（XML）或资源无法从 APK 直接解出 PNG/WebP，暂不支持显示。"
+      );
+      err.status = 404;
+      throw err;
+    }
+    writeCachedIcon(pkg, apkPath, icon.buffer, icon.mime);
+    const label = parseLabelFromBadging(badging);
+    if (label) {
+      const cache = readLabelCache();
+      cache[`${pkg}@@${apkPath}`] = { label: sanitizeAppLabel(label), at: Date.now() };
+      writeLabelCache(cache);
+    }
+    return { buffer: icon.buffer, mime: icon.mime, cached: false, apkPath, label };
+  } finally {
+    try {
+      fs.unlinkSync(local);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 async function appAction(serial, packageName, action) {
@@ -5177,6 +5491,8 @@ async function handleApi(req, res, url) {
             "fs-preview",
             "host-tools-probe",
             "app-labels-aapt",
+            "app-labels-stream",
+            "app-icons",
             "proxy",
             "forward",
             "developer",
@@ -5524,7 +5840,9 @@ async function handleApi(req, res, url) {
     if (url.pathname === "/apps" && req.method === "GET") {
       const serial = url.searchParams.get("serial") || "";
       const kind = url.searchParams.get("kind") || "all";
-      const result = await listApps(serial, kind);
+      const quickParam = url.searchParams.get("quick");
+      const quick = quickParam == null ? true : !/^(0|false|no|full)$/i.test(String(quickParam));
+      const result = await listApps(serial, kind, { quick });
       sendJson(
         res,
         200,
@@ -5533,11 +5851,75 @@ async function handleApi(req, res, url) {
           apps: result.apps,
           count: result.apps.length,
           labelResolved: result.labelResolved,
+          labelsPending: Boolean(result.labelsPending),
           labelNote: result.labelNote,
           labelSource: result.labelSource,
+          quick,
         },
         origin
       );
+      return;
+    }
+
+    if (url.pathname === "/apps/labels" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      const kind = url.searchParams.get("kind") || "all";
+      const apps = await collectInstalledApps(serial, kind);
+      applyCachedLabels(apps);
+      const headers = {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      };
+      applyCors(headers, origin);
+      res.writeHead(200, headers);
+      let closed = false;
+      req.on("close", () => {
+        closed = true;
+      });
+      const writeLine = (obj) => {
+        if (closed || res.writableEnded) return;
+        res.write(`${JSON.stringify(obj)}\n`);
+      };
+      try {
+        const result = await streamAppLabels(serial, apps, {
+          shouldAbort: () => closed,
+          onLabel: (item) => {
+            if (!item?.packageName) return;
+            writeLine({
+              packageName: item.packageName,
+              label: item.label || "",
+              icon: Boolean(item.icon),
+              source: item.source || "",
+            });
+          },
+        });
+        writeLine({
+          done: true,
+          ok: true,
+          note: result.note || "",
+          source: result.source || "",
+          resolved: result.resolved || 0,
+        });
+      } catch (err) {
+        writeLine({ done: true, ok: false, error: err?.message || String(err) });
+      }
+      if (!res.writableEnded) res.end();
+      return;
+    }
+
+    if (url.pathname === "/apps/icon" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      const packageName = url.searchParams.get("package") || "";
+      const icon = await ensureAppIcon(serial, packageName);
+      const headers = {
+        "Content-Type": icon.mime || "image/png",
+        "Content-Length": icon.buffer.length,
+        "Cache-Control": "private, max-age=86400",
+      };
+      applyCors(headers, origin);
+      res.writeHead(200, headers);
+      res.end(icon.buffer);
       return;
     }
 

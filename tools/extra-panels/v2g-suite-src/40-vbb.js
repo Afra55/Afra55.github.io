@@ -3186,9 +3186,12 @@
         return Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
       }
 
-      /** 从一帧里估算纯色边框，返回保留区域（不含边框）；无边则 null
-       *  四边各自独立：任意纯色边（黑/白/灰/绿…）都能裁。
-       *  防误裁：容差与离群从严、单边≤18%；1px 安全回退在 detectVideoCrop 映射到源分辨率后做。 */
+      /** 从一帧里估算边框，返回保留区域（不含边框）；无边则 null。
+       *  两套策略：
+       *  1) 暗边（letterbox/pillarbox）：按「暗像素占比」吃边，能吞压缩噪点 + 渐变过渡列
+       *     （旧「纯度」在过渡暗列/最外列噪点上会提前停，缩成 GIF 后左右仍留黑条）
+       *  2) 非暗纯色边（白/灰/绿…）：仍用严纯度，防雾气误裁
+       *  单边 ≤18%；暗边在 detectVideoCrop 映射时多吃约 1 缩略像素，非暗边才做 1px 回退。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -3199,93 +3202,133 @@
         };
         const near = (a, b) =>
           Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
-        /** 该行/该列是否「纯色」，是则返回平均色，否则 null。
-         *  离群 ≤1.2%：只吞压缩噪点；真 letterbox 够平，雾气/渐变过不了。 */
         const OUTLIER_RATIO = 0.012;
-        const lineColor = (get, n) => {
+        /** 暗边：通道峰值 ≤32 算暗像素；行/列 ≥90% 暗且均值也够暗 → 边框 */
+        const DARK_CH = 32;
+        const DARK_RATIO = 0.9;
+        const DARK_EDGE_AVG = 36;
+        const SOFT_CH = 48;
+        const SOFT_RATIO = 0.82;
+        const lineStats = (get, n) => {
           let r = 0;
           let g = 0;
           let b = 0;
+          let dark = 0;
+          let soft = 0;
+          const cols = [];
           for (let i = 0; i < n; i++) {
             const p = get(i);
+            cols.push(p);
             r += p.r;
             g += p.g;
             b += p.b;
+            const mx = Math.max(p.r, p.g, p.b);
+            if (mx <= DARK_CH) dark += 1;
+            if (mx <= SOFT_CH) soft += 1;
           }
           const avg = { r: r / n, g: g / n, b: b / n };
           const limit = Math.max(1, Math.floor(n * OUTLIER_RATIO));
           let bad = 0;
           let maxDev = 0;
           for (let i = 0; i < n; i++) {
-            const p = get(i);
+            const p = cols[i];
             const dr = Math.abs(p.r - avg.r);
             const dg = Math.abs(p.g - avg.g);
             const db = Math.abs(p.b - avg.b);
             maxDev = Math.max(maxDev, dr, dg, db);
-            if (!near(p, avg)) {
-              bad += 1;
-              if (bad > limit) return null;
-            }
+            if (!near(p, avg)) bad += 1;
           }
-          // 峰值偏差过大也不是「纯色边」（雾气横纹常有局部起伏）
-          if (maxDev > tol + 6) return null;
-          return avg;
+          return {
+            avg,
+            pure: bad <= limit && maxDev <= tol + 6,
+            darkRatio: dark / n,
+            softRatio: soft / n,
+            avgMax: Math.max(avg.r, avg.g, avg.b),
+          };
         };
+        const isDarkBorder = (st) =>
+          st.avgMax <= DARK_EDGE_AVG && st.darkRatio >= DARK_RATIO;
+        const isSoftDark = (st) =>
+          st.avgMax <= SOFT_CH + 8 && st.softRatio >= SOFT_RATIO && st.darkRatio >= 0.55;
         const rowAt = (y) => (i) => px(i, y);
         const colAt = (x) => (i) => px(x, i);
-        let top = 0;
-        let bottom = h - 1;
-        let left = 0;
-        let right = w - 1;
-        const cTop = lineColor(rowAt(0), w);
-        const cBottom = lineColor(rowAt(h - 1), w);
-        const cLeft = lineColor(colAt(0), h);
-        const cRight = lineColor(colAt(w - 1), h);
-        // 单边最多吃 18%：再深多半是内容区「碰巧纯色」，不是 letterbox
+        /** 从一边往里扫，返回裁掉的像素数 + 是否走了暗边模式 */
+        const scanSide = (isCol, fromStart, maxN) => {
+          const length = isCol ? h : w;
+          const span = isCol ? w : h;
+          const lineAt = isCol ? colAt : rowAt;
+          const edgeIdx = fromStart ? 0 : span - 1;
+          const st0 = lineStats(lineAt(edgeIdx), length);
+          const darkish =
+            isDarkBorder(st0) || (st0.darkRatio >= 0.85 && st0.avgMax <= DARK_EDGE_AVG + 6);
+          if (darkish) {
+            let trim = 0;
+            let idx = edgeIdx;
+            while (trim < maxN) {
+              const st = lineStats(lineAt(idx), length);
+              const hard =
+                st.darkRatio >= DARK_RATIO && st.avgMax <= DARK_EDGE_AVG + 4;
+              if (hard || isSoftDark(st)) {
+                trim += 1;
+                idx = fromStart ? idx + 1 : idx - 1;
+                continue;
+              }
+              break;
+            }
+            // 再吃 1 列过渡（均值仍偏暗），避免缩 GIF 后剩一条发丝黑边
+            if (trim > 0 && trim < maxN) {
+              const st = lineStats(lineAt(idx), length);
+              if (st.avgMax <= 55 && st.darkRatio >= 0.35) trim += 1;
+            }
+            return { trim, dark: true };
+          }
+          if (st0.pure) {
+            const c0 = st0.avg;
+            let trim = 0;
+            let idx = edgeIdx;
+            while (trim < maxN) {
+              const st = lineStats(lineAt(idx), length);
+              if (!st.pure || !near(st.avg, c0)) break;
+              trim += 1;
+              idx = fromStart ? idx + 1 : idx - 1;
+            }
+            return { trim, dark: false };
+          }
+          return { trim: 0, dark: false };
+        };
         const maxTop = Math.floor(h * 0.18);
         const maxBottom = Math.floor(h * 0.18);
         const maxLeft = Math.floor(w * 0.18);
         const maxRight = Math.floor(w * 0.18);
-        if (cTop) {
-          while (top < bottom && top < maxTop) {
-            const c = lineColor(rowAt(top), w);
-            if (!c || !near(c, cTop)) break;
-            top++;
-          }
-        }
-        if (cBottom) {
-          while (bottom > top && h - 1 - bottom < maxBottom) {
-            const c = lineColor(rowAt(bottom), w);
-            if (!c || !near(c, cBottom)) break;
-            bottom--;
-          }
-        }
-        if (cLeft) {
-          while (left < right && left < maxLeft) {
-            const c = lineColor(colAt(left), h);
-            if (!c || !near(c, cLeft)) break;
-            left++;
-          }
-        }
-        if (cRight) {
-          while (right > left && w - 1 - right < maxRight) {
-            const c = lineColor(colAt(right), h);
-            if (!c || !near(c, cRight)) break;
-            right--;
-          }
-        }
-        // 不在缩略图像素上回退：细边（源 6～22px）在 360 宽里常只占 1～4px，
-        // 回退 1 缩略像素会把左边整段裁没。1px 安全回退改在映射到源分辨率后做。
+        const leftScan = scanSide(true, true, maxLeft);
+        const rightScan = scanSide(true, false, maxRight);
+        const topScan = scanSide(false, true, maxTop);
+        const bottomScan = scanSide(false, false, maxBottom);
+        const left = leftScan.trim;
+        const top = topScan.trim;
+        const right = w - 1 - rightScan.trim;
+        const bottom = h - 1 - bottomScan.trim;
         if (right <= left || bottom <= top) return null;
         if (top === 0 && left === 0 && right === w - 1 && bottom === h - 1) return null;
-        return { left, top, right, bottom, w, h };
+        return {
+          left,
+          top,
+          right,
+          bottom,
+          w,
+          h,
+          darkLeft: leftScan.dark && left > 0,
+          darkRight: rightScan.dark && rightScan.trim > 0,
+          darkTop: topScan.dark && top > 0,
+          darkBottom: bottomScan.dark && bottomScan.trim > 0,
+        };
       }
 
       /** 采样多帧取「内容并集」（各边取最浅裁），只裁所有帧都同意是边框的区域；无边框返回 null */
       async function detectVideoCrop(file) {
         if (!file) return null;
-        // v6：更高缩略图 + 源像素回退 + 细边也算有效；编辑只裁时长时不走自动裁（见 resolveVbbEncodeCrop）
-        const cacheKey = `v6|${file.name}|${file.size}|${file.lastModified || 0}`;
+        // v7：暗边按占比检测 + 映射多吃 1 缩略像素；编辑只裁时长时不走自动裁（见 resolveVbbEncodeCrop）
+        const cacheKey = `v7|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         const url = URL.createObjectURL(file);
@@ -3328,7 +3371,7 @@
             const rect = detectFrameContentRect(ctx.getImageData(0, 0, cw, ch), 14);
             if (!rect) continue;
             hits += 1;
-            // 内容并集 = 各边取最小裁切量（任一帧有内容就保留）
+            // 内容并集 = 各边取最小裁切量（任一帧有内容就保留）；暗边标记取 OR
             acc = acc
               ? {
                   left: Math.min(acc.left, rect.left),
@@ -3337,6 +3380,10 @@
                   bottom: Math.max(acc.bottom, rect.bottom),
                   w: rect.w,
                   h: rect.h,
+                  darkLeft: acc.darkLeft || rect.darkLeft,
+                  darkRight: acc.darkRight || rect.darkRight,
+                  darkTop: acc.darkTop || rect.darkTop,
+                  darkBottom: acc.darkBottom || rect.darkBottom,
                 }
               : rect;
           }
@@ -3348,17 +3395,30 @@
             let y = acc.top > 0 ? Math.max(0, Math.ceil(acc.top * sy)) : 0;
             let x2 = Math.min(vw, Math.floor((acc.right + 1) * sx));
             let y2 = Math.min(vh, Math.floor((acc.bottom + 1) * sy));
-            // 源像素回退 1px，避免贴齐内容抗锯齿被啃掉
-            if (x > 0) x -= 1;
-            if (y > 0) y -= 1;
-            if (x2 < vw) x2 += 1;
-            if (y2 < vh) y2 += 1;
+            // 暗边：NEAREST 缩略常吞掉过渡暗列，再多吃约 1 缩略像素；不要 1px 回退（回退会在 GIF 上留下黑条）
+            const extraX = Math.max(1, Math.round(sx));
+            const extraY = Math.max(1, Math.round(sy));
+            if (acc.darkLeft && x > 0) x = Math.min(x + extraX, Math.floor(vw * 0.2));
+            if (acc.darkRight && x2 < vw) x2 = Math.max(x + 8, x2 - extraX);
+            if (acc.darkTop && y > 0) y = Math.min(y + extraY, Math.floor(vh * 0.2));
+            if (acc.darkBottom && y2 < vh) y2 = Math.max(y + 8, y2 - extraY);
+            // 非暗纯色边：源像素回退 1px，避免贴齐内容抗锯齿被啃掉
+            if (!acc.darkLeft && x > 0) x -= 1;
+            if (!acc.darkTop && y > 0) y -= 1;
+            if (!acc.darkRight && x2 < vw) x2 += 1;
+            if (!acc.darkBottom && y2 < vh) y2 += 1;
             let w = x2 - x;
             let h = y2 - y;
             if (x + w > vw) w = vw - x;
             if (y + h > vh) h = vh - y;
             // 至少裁掉 2 源像素才算有效（旧 6 会放过 1075 这类只剩约 6～8px 左边的 GIF）
-            if (w >= 8 && h >= 8 && (w < vw - 2 || h < vh - 2)) result = { x, y, w, h };
+            if (w >= 8 && h >= 8 && (w < vw - 2 || h < vh - 2)) {
+              result = { x, y, w, h };
+              vbbLog(
+                `[vbb-crop] ${vw}x${vh} → crop=${w}x${h}+${x}+${y}（L${x}/R${vw - x - w}` +
+                  `${acc.darkLeft || acc.darkRight ? " ·暗边" : ""}）`
+              );
+            }
           }
         } catch (_) {
           result = null;

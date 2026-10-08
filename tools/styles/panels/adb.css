@@ -691,7 +691,7 @@
 
 .adb-app-select {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   gap: 0.55rem;
   align-items: start;
   cursor: pointer;
@@ -701,6 +701,28 @@
 .adb-app-select input {
   margin-top: 0.35rem;
   accent-color: var(--accent);
+}
+
+.adb-app-icon-wrap {
+  width: 36px;
+  height: 36px;
+  margin-top: 0.1rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--line) 65%, transparent);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.adb-app-icon {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  display: block;
+  border-radius: 8px;
+}
+
+.adb-app-icon:not(.is-loaded) {
+  opacity: 0;
 }
 
 .adb-apps-list .adb-fs-actions {

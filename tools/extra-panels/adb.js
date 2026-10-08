@@ -169,6 +169,11 @@
       let adbJobTimer = 0;
       let adbLogLiveTimer = 0;
       let adbApps = [];
+      let adbAppsLabelAbort = null;
+      let adbAppsLabelSeq = 0;
+      let adbAppsRenderTimer = 0;
+      let adbAppsIconBusy = new Set();
+      let adbAppsIconUrls = new Map();
       let adbJobs = [];
       let adbApkFile = null;
       let adbApkUploadId = "";
@@ -1750,6 +1755,248 @@
         }
       }
   
+      function revokeAppIconUrls() {
+        for (const url of adbAppsIconUrls.values()) {
+          try {
+            URL.revokeObjectURL(url);
+          } catch {
+            /* ignore */
+          }
+        }
+        adbAppsIconUrls.clear();
+        adbAppsIconBusy.clear();
+      }
+
+      function stopAppsLabelStream() {
+        if (adbAppsLabelAbort) {
+          try {
+            adbAppsLabelAbort.abort();
+          } catch {
+            /* ignore */
+          }
+          adbAppsLabelAbort = null;
+        }
+        adbAppsLabelSeq += 1;
+        if (adbAppsRenderTimer) {
+          clearTimeout(adbAppsRenderTimer);
+          adbAppsRenderTimer = 0;
+        }
+      }
+
+      function updateAppsMeta(extra = "") {
+        if (!adbAppsMeta) return;
+        const q = String($("#adb-apps-filter")?.value || "")
+          .trim()
+          .toLowerCase();
+        const list = adbApps.filter((app) => {
+          if (!q) return true;
+          return (
+            app.packageName.toLowerCase().includes(q) ||
+            appDisplayLabel(app).toLowerCase().includes(q)
+          );
+        });
+        const resolved = adbApps.filter(
+          (a) => sanitizeAppLabel(a.label) && sanitizeAppLabel(a.label) !== a.packageName
+        ).length;
+        const base = `${list.length}/${adbApps.length} · 应用名 ${resolved}/${adbApps.length} · ${
+          adbSelected || "未选择"
+        }`;
+        adbAppsMeta.textContent = extra ? `${base} · ${extra}` : base;
+      }
+
+      function scheduleRenderApps(delay = 120) {
+        if (adbAppsRenderTimer) return;
+        adbAppsRenderTimer = setTimeout(() => {
+          adbAppsRenderTimer = 0;
+          renderApps();
+        }, delay);
+      }
+
+      function patchAppRow(packageName) {
+        if (!adbAppsList) return false;
+        const app = adbApps.find((a) => a.packageName === packageName);
+        if (!app) return false;
+        const row = adbAppsList.querySelector(
+          `.adb-app-row[data-adb-app-pkg="${CSS.escape(packageName)}"]`
+        );
+        if (!row) return false;
+        const titleEl = row.querySelector("strong");
+        if (titleEl) titleEl.textContent = appDisplayLabel(app);
+        const metas = row.querySelectorAll(".adb-fs-meta");
+        if (metas[1]) {
+          const kind = app.isSystem ? "系统" : "三方";
+          const label = sanitizeAppLabel(app.label);
+          const hasLabel = Boolean(label && label !== app.packageName);
+          metas[1].textContent = `${kind}${hasLabel ? "" : " · 未解析应用名"}${
+            app.apkPath ? ` · ${app.apkPath}` : ""
+          }`;
+        }
+        const img = row.querySelector(".adb-app-icon");
+        if (img) {
+          if (adbAppsIconUrls.has(packageName)) {
+            img.src = adbAppsIconUrls.get(packageName);
+            img.hidden = false;
+            img.classList.add("is-loaded");
+          } else if (app.hasIcon) {
+            loadAppIcon(packageName).catch(() => {});
+          }
+        }
+        updateAppsMeta(adbAppsLabelAbort ? "补全中…" : "");
+        return true;
+      }
+
+      async function loadAppIcon(packageName) {
+        const pkg = String(packageName || "").trim();
+        if (!pkg || !adbSelected || adbAppsIconUrls.has(pkg) || adbAppsIconBusy.has(pkg)) return;
+        if (adbAppsIconBusy.size >= 3) return;
+        adbAppsIconBusy.add(pkg);
+        try {
+          const res = await adbFetch(
+            `/apps/icon?serial=${encodeURIComponent(adbSelected)}&package=${encodeURIComponent(pkg)}`
+          );
+          const blob = await res.blob();
+          if (!blob || !blob.size || !(blob.type || "").startsWith("image/")) return;
+          const url = URL.createObjectURL(blob);
+          const prev = adbAppsIconUrls.get(pkg);
+          if (prev) {
+            try {
+              URL.revokeObjectURL(prev);
+            } catch {
+              /* ignore */
+            }
+          }
+          adbAppsIconUrls.set(pkg, url);
+          const app = adbApps.find((a) => a.packageName === pkg);
+          if (app) app.hasIcon = true;
+          const img = adbAppsList?.querySelector(
+            `.adb-app-row[data-adb-app-pkg="${CSS.escape(pkg)}"] .adb-app-icon`
+          );
+          if (img) {
+            img.src = url;
+            img.hidden = false;
+            img.classList.add("is-loaded");
+          }
+        } catch {
+          /* Adaptive Icon / 无 aapt 时跳过 */
+        } finally {
+          adbAppsIconBusy.delete(pkg);
+        }
+      }
+
+      function observeVisibleAppIcons() {
+        if (!adbAppsList || typeof IntersectionObserver !== "function") {
+          adbApps.slice(0, 24).forEach((a) => {
+            if (a.hasIcon || sanitizeAppLabel(a.label)) loadAppIcon(a.packageName).catch(() => {});
+          });
+          return;
+        }
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const ent of entries) {
+              if (!ent.isIntersecting) continue;
+              const pkg = ent.target.getAttribute("data-adb-app-pkg");
+              if (pkg) loadAppIcon(pkg).catch(() => {});
+            }
+          },
+          { root: adbAppsList, rootMargin: "120px", threshold: 0.01 }
+        );
+        adbAppsList.querySelectorAll(".adb-app-row[data-adb-app-pkg]").forEach((row) => io.observe(row));
+        // 短暂观察后断开，避免泄漏；滚动时由下次 render 重建
+        setTimeout(() => io.disconnect(), 8000);
+      }
+
+      async function startAppsLabelStream(kind) {
+        if (!adbSelected) return;
+        if (adbBridgeVersion && !bridgeHas("app-labels-stream") && !bridgeAtLeast("0.9.50")) {
+          const tip = $("#adb-apps-label-tip");
+          if (tip) {
+            tip.hidden = false;
+            tip.textContent = "当前桥较旧，无法流式补全应用名。请更新统一桥 ZIP（≥0.9.50）并重启。";
+          }
+          return;
+        }
+        stopAppsLabelStream();
+        const seq = adbAppsLabelSeq;
+        const ac = new AbortController();
+        adbAppsLabelAbort = ac;
+        updateAppsMeta("补全中…");
+        try {
+          const res = await adbFetch(
+            `/apps/labels?serial=${encodeURIComponent(adbSelected)}&kind=${encodeURIComponent(kind || "third")}`,
+            { signal: ac.signal }
+          );
+          const reader = res.body?.getReader?.();
+          if (!reader) throw new Error("桥未返回流式响应");
+          const decoder = new TextDecoder();
+          let buf = "";
+          let note = "";
+          while (true) {
+            if (seq !== adbAppsLabelSeq) break;
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            let nl;
+            while ((nl = buf.indexOf("\n")) >= 0) {
+              const line = buf.slice(0, nl).trim();
+              buf = buf.slice(nl + 1);
+              if (!line) continue;
+              let item;
+              try {
+                item = JSON.parse(line);
+              } catch {
+                continue;
+              }
+              if (item.done) {
+                note = item.note || item.error || "";
+                continue;
+              }
+              const pkg = String(item.packageName || "").trim();
+              if (!pkg) continue;
+              const app = adbApps.find((a) => a.packageName === pkg);
+              if (!app) continue;
+              const label = sanitizeAppLabel(item.label);
+              if (label) app.label = label;
+              if (item.icon) app.hasIcon = true;
+              if (!patchAppRow(pkg)) scheduleRenderApps(80);
+              else updateAppsMeta("补全中…");
+              if (item.icon) loadAppIcon(pkg).catch(() => {});
+            }
+          }
+          if (seq !== adbAppsLabelSeq) return;
+          sortAppsByLabelLocal();
+          renderApps();
+          const tip = $("#adb-apps-label-tip");
+          if (tip) {
+            if (note) {
+              tip.hidden = false;
+              tip.textContent = note;
+            } else {
+              tip.hidden = true;
+            }
+          }
+          updateAppsMeta("完成");
+          setTimeout(() => updateAppsMeta(""), 2000);
+        } catch (err) {
+          if (ac.signal.aborted || seq !== adbAppsLabelSeq) return;
+          const tip = $("#adb-apps-label-tip");
+          if (tip) {
+            tip.hidden = false;
+            tip.textContent = err.message || String(err);
+          }
+          updateAppsMeta("");
+        } finally {
+          if (adbAppsLabelAbort === ac) adbAppsLabelAbort = null;
+        }
+      }
+
+      function sortAppsByLabelLocal() {
+        adbApps.sort((a, b) => {
+          const la = appDisplayLabel(a).toLowerCase();
+          const lb = appDisplayLabel(b).toLowerCase();
+          return la.localeCompare(lb, "zh");
+        });
+      }
+
       function renderApps() {
         if (!adbAppsList) return;
         const q = String($("#adb-apps-filter")?.value || "")
@@ -1762,13 +2009,7 @@
             appDisplayLabel(app).toLowerCase().includes(q)
           );
         });
-        if (adbAppsMeta) {
-          const resolved = adbApps.filter((a) => sanitizeAppLabel(a.label) && sanitizeAppLabel(a.label) !== a.packageName)
-            .length;
-          adbAppsMeta.textContent = `${list.length}/${adbApps.length} · 应用名 ${resolved}/${adbApps.length} · ${
-            adbSelected || "未选择"
-          }`;
-        }
+        updateAppsMeta(adbAppsLabelAbort ? "补全中…" : "");
         if (!list.length) {
           adbAppsList.innerHTML = `<div class="adb-fs-empty">无匹配应用</div>`;
           return;
@@ -1782,9 +2023,15 @@
             const hasLabel = Boolean(label && label !== app.packageName);
             const title = escapeHtml(appDisplayLabel(app));
             const checked = adbPermPackage === app.packageName ? "checked" : "";
+            const iconUrl = adbAppsIconUrls.get(app.packageName) || "";
             return `<div class="adb-fs-row adb-app-row" data-adb-app-pkg="${pkg}">
               <label class="adb-app-select">
                 <input type="checkbox" data-adb-app-check="${pkg}" ${checked} />
+                <span class="adb-app-icon-wrap" aria-hidden="true">
+                  <img class="adb-app-icon${iconUrl ? " is-loaded" : ""}" alt="" ${
+                    iconUrl ? `src="${escapeHtml(iconUrl)}"` : "hidden"
+                  } width="36" height="36" loading="lazy" />
+                </span>
                 <span>
                   <strong>${title}</strong>
                   <div class="adb-fs-meta mono">${pkg}</div>
@@ -1796,6 +2043,7 @@
               <div class="adb-app-actions">
                 <button type="button" class="primary-btn" data-adb-app-open="${pkg}">打开</button>
                 <button type="button" class="secondary-btn" data-adb-app-info="${pkg}">详情</button>
+                <button type="button" class="secondary-btn" data-adb-app-backup="${pkg}">备份</button>
                 <button type="button" class="ghost-btn" data-adb-app-uninstall="${pkg}">卸载</button>
               </div>
             </div>`;
@@ -1807,6 +2055,7 @@
             `<div class="adb-fs-empty">仅显示前 400 条，请用过滤缩小范围</div>`
           );
         }
+        observeVisibleAppIcons();
       }
   
       function hideAppCtxMenu() {
@@ -2311,33 +2560,38 @@
   
       async function loadApps() {
         if (!adbSelected) return;
-        if (adbAppsMeta) adbAppsMeta.textContent = "加载应用名中…（首次可能较慢）";
+        stopAppsLabelStream();
+        revokeAppIconUrls();
+        if (adbAppsMeta) adbAppsMeta.textContent = "正在拉取包名…";
         const kind = $("#adb-apps-kind")?.value || "third";
         const data = await adbFetch(
-          `/apps?serial=${encodeURIComponent(adbSelected)}&kind=${encodeURIComponent(kind)}`
+          `/apps?serial=${encodeURIComponent(adbSelected)}&kind=${encodeURIComponent(kind)}&quick=1`
         );
-        adbApps = data.apps || [];
-        const resolved =
-          data.labelResolved != null
-            ? Number(data.labelResolved)
-            : adbApps.filter((a) => sanitizeAppLabel(a.label) && sanitizeAppLabel(a.label) !== a.packageName).length;
-        if (adbAppsMeta) {
-          adbAppsMeta.textContent = `${adbApps.length} 个 · 应用名 ${resolved}/${adbApps.length} · ${
-            adbSelected || "未选择"
-          }`;
-        }
+        adbApps = (data.apps || []).map((a) => ({
+          ...a,
+          label: sanitizeAppLabel(a.label),
+          hasIcon: Boolean(a.hasIcon),
+        }));
         renderApps();
-        if (data.labelNote) {
-          const tip = $("#adb-apps-label-tip");
-          if (tip) {
-            tip.hidden = false;
-            tip.textContent = data.labelNote;
-          } else if (resolved < Math.min(3, adbApps.length)) {
-            toast(data.labelNote);
-          }
+        const tip = $("#adb-apps-label-tip");
+        if (data.labelNote && tip) {
+          tip.hidden = false;
+          tip.textContent = data.labelNote;
+        } else if (tip) {
+          tip.hidden = true;
+        }
+        const pending =
+          data.labelsPending != null
+            ? Boolean(data.labelsPending)
+            : adbApps.some((a) => !sanitizeAppLabel(a.label));
+        if (pending) {
+          startAppsLabelStream(kind).catch((err) => setError(adbError, err.message || String(err)));
         } else {
-          const tip = $("#adb-apps-label-tip");
-          if (tip) tip.hidden = true;
+          sortAppsByLabelLocal();
+          renderApps();
+          updateAppsMeta("");
+          // 缓存命中时仍按需补图标
+          observeVisibleAppIcons();
         }
       }
   
@@ -5812,6 +6066,7 @@
         }
         const openBtn = e.target.closest("[data-adb-app-open]");
         const infoBtn = e.target.closest("[data-adb-app-info]");
+        const backupBtn = e.target.closest("[data-adb-app-backup]");
         const uninstallBtn = e.target.closest("[data-adb-app-uninstall]");
         try {
         if (openBtn) {
@@ -5820,6 +6075,10 @@
         }
         if (infoBtn) {
         await runAppRowAction("info", infoBtn.dataset.adbAppInfo);
+        return;
+        }
+        if (backupBtn) {
+        await runAppRowAction("backup", backupBtn.dataset.adbAppBackup);
         return;
         }
         if (uninstallBtn) {
