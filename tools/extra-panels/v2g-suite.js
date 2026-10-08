@@ -10323,7 +10323,14 @@
               },
             });
             if (abortVbb) throw new Error("已取消");
-            applyVbbClipEncoded(vbbClips[i], encoded, reuse.fromCache ? ["沿用方案"] : []);
+            applyVbbClipEncoded(
+              vbbClips[i],
+              encoded,
+              [
+                ...(reuse.fromCache ? ["沿用方案"] : []),
+                ...(vbbCrop ? ["去色边"] : []),
+              ].filter(Boolean)
+            );
             if (vbbClips[i].error || !vbbClips[i].gifBlob) {
               setVbbClipJob(i, { status: "error", progress: 1, text: "失败" });
               refreshVbbClipRow(i);
@@ -11050,6 +11057,7 @@
                 }
                 if (prepared.cutNote) editBits.push(prepared.cutNote);
                 if (win.edit?.cropOn) editBits.push("裁画面");
+                else if (vbbCrop) editBits.push("去色边");
                 vbbClips[i].gifNote = [
                   vbbClips[i].gifNote,
                   ...editBits,
@@ -11257,6 +11265,7 @@
           }
           if (prepared.cutNote) editBits.push(prepared.cutNote);
           if (win.edit?.cropOn) editBits.push("裁画面");
+          else if (vbbCrop) editBits.push("去色边");
           vbbClips[0].gifNote = [
             vbbClips[0].gifNote,
             ...editBits,
@@ -11619,6 +11628,7 @@
               if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
               else if (isWide && !usedFallback) bits.push(`宽≤${usedWidth}`);
               if (encoded.framesCapped) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
+              if (vbbCrop) bits.push("去色边");
               clip.gifBlob = encoded.blob;
               clip.gifNote = bits.join(" · ");
               clip.error = "";
