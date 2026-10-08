@@ -158,8 +158,11 @@
             <label class="flag" for="vbb-quality-first" title="默认关：≤10s 守画质≥80 再掉帧；更长片保帧+420，允许低于80。打开后任意时长都按≥80 再降宽/降帧，最低帧+380 才允许低于80。">
               <input type="checkbox" id="vbb-quality-first" /> 画质优先
             </label>
+            <label class="flag" for="vbb-auto-crop" title="默认开。检测并裁掉上下左右纯色边（黑边 letterbox/pillarbox 等）。编辑里若手动裁了画面则用绿框，不再叠自动裁。">
+              <input type="checkbox" id="vbb-auto-crop" checked /> 自动裁剪纯色边框
+            </label>
           </div>
-          <p class="hint tight" id="vbb-quality-first-hint">画质优先：全程守 gifski ≥80 再让渡宽/帧；默认关闭，长片仍优先保流畅。</p>
+          <p class="hint tight" id="vbb-quality-first-hint">画质优先：全程守 gifski ≥80 再让渡宽/帧；默认关闭，长片仍优先保流畅。自动去色边默认开启（四边）。</p>
         </details>
 
         <details class="vbb-more" id="vbb-more-process">
@@ -175,9 +178,6 @@
                   <option value="done">仅全部完成</option>
                 </select>
               </label>
-            </div>
-            <div class="field-row" id="vbb-process-row" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.85rem">
-              <label class="flag" for="vbb-auto-crop"><input type="checkbox" id="vbb-auto-crop" /> 自动裁剪纯色边框（任意纯色；编辑里只裁时长时不套）</label>
             </div>
           </div>
         </details>

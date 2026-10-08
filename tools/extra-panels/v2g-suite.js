@@ -8129,13 +8129,11 @@
       }
 
       async function resolveVbbEncodeCrop(file, edit, srcW, srcH, duration) {
+        // 用户在编辑里手动裁了画面 → 用绿框，不再叠自动去色边
         if (edit?.cropOn && edit.crop) {
           return normalizeV2gCrop(edit.crop, srcW, srcH);
         }
-        // 用户进编辑只裁了时长、没开裁画面 → 尊重整幅，禁止再叠「自动去色边」
-        if (edit && !edit.cropOn && vbbEditIsDirty(edit, duration, srcW, srcH)) {
-          return null;
-        }
+        // 只裁时长 / 删中间：仍走自动去色边（勾选开启时）；与 tools/lib/vbb-auto-crop.js 对齐
         return vbbResolveCrop(file);
       }
 
@@ -10414,7 +10412,8 @@
        *  1) 暗边（letterbox/pillarbox）：按「暗像素占比」吃边，能吞压缩噪点 + 渐变过渡列
        *     （旧「纯度」在过渡暗列/最外列噪点上会提前停，缩成 GIF 后左右仍留黑条）
        *  2) 非暗纯色边（白/灰/绿…）：仍用严纯度，防雾气误裁
-       *  单边 ≤18%；暗边在 detectVideoCrop 映射时多吃约 1 缩略像素，非暗边才做 1px 回退。 */
+       *  单边 ≤18%；暗边在 detectVideoCrop 映射时多吃约 1 缩略像素，非暗边才做 1px 回退。
+       *  与 tools/lib/vbb-auto-crop.js 同步（v8）。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -10550,8 +10549,9 @@
       /** 采样多帧取「内容并集」（各边取最浅裁），只裁所有帧都同意是边框的区域；无边框返回 null */
       async function detectVideoCrop(file) {
         if (!file) return null;
-        // v7：暗边按占比检测 + 映射多吃 1 缩略像素；编辑只裁时长时不走自动裁（见 resolveVbbEncodeCrop）
-        const cacheKey = `v7|${file.name}|${file.size}|${file.lastModified || 0}`;
+        // v8：暗边占比 + 映射多吃 1 缩略像素；四边对称；手动裁画面才跳过自动裁（见 resolveVbbEncodeCrop）
+        // 算法源：tools/lib/vbb-auto-crop.js（改这里必须同步）
+        const cacheKey = `v8|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         const url = URL.createObjectURL(file);
@@ -12552,7 +12552,14 @@
         }
         const vbbCropChk = $("#vbb-auto-crop", root);
         if (vbbCropChk) {
-          try { vbbCropChk.checked = localStorage.getItem("devtools-vbb-auto-crop") === "1"; } catch (_) {}
+          // 默认开：未写过 localStorage 或非 "0" 都勾选（旧版默认关导致成片仍留黑边）
+          try {
+            const stored = localStorage.getItem("devtools-vbb-auto-crop");
+            vbbCropChk.checked = stored !== "0";
+            if (stored == null) localStorage.setItem("devtools-vbb-auto-crop", "1");
+          } catch (_) {
+            vbbCropChk.checked = true;
+          }
           vbbCropChk.addEventListener("change", () => {
             try { localStorage.setItem("devtools-vbb-auto-crop", vbbCropChk.checked ? "1" : "0"); } catch (_) {}
             toast(vbbCropChk.checked ? "已开启：自动裁纯色边" : "已关闭自动裁剪");
