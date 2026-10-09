@@ -1,10 +1,32 @@
 <section id="piano" class="panel tool-panel" data-reveal>
   <div class="panel-head">
     <h1>在线钢琴</h1>
-    <p>88 键标准钢琴（A0–C8）。鼠标/触摸点按（靠下更响）、或电脑键盘（Z/Q/I 三行约 2.5 八度）。默认 Web Audio 低延迟合成；可选 <a href="https://github.com/danigb/soundfont-player" target="_blank" rel="noopener noreferrer">soundfont-player</a> 三角钢琴采样。布局参考 <a href="https://github.com/kevinsqi/react-piano" target="_blank" rel="noopener noreferrer">kevinsqi/react-piano</a>（MIT）。</p>
+    <p>
+      交互参考高赞开源
+      <a href="https://github.com/AutoPiano/AutoPiano" target="_blank" rel="noopener noreferrer">AutoPiano</a>（键位谱 / 键位提示）与
+      <a href="https://github.com/kevinsqi/react-piano" target="_blank" rel="noopener noreferrer">kevinsqi/react-piano</a>（MIT · 黑键几何）；
+      声学音色用
+      <a href="https://github.com/danigb/soundfont-player" target="_blank" rel="noopener noreferrer">soundfont-player</a>。
+      支持 VirtualPiano 字母谱、钢琴家双排键、Web MIDI、可切换音域。
+    </p>
   </div>
   <div class="panel-body piano-body">
     <div class="piano-toolbar">
+      <label class="piano-field" for="piano-layout">
+        <span>键位</span>
+        <select id="piano-layout" class="select-input">
+          <option value="virtual">VirtualPiano（字母谱）</option>
+          <option value="piano">钢琴家（Z/Q 双排）</option>
+        </select>
+      </label>
+      <label class="piano-field" for="piano-range">
+        <span>音域</span>
+        <select id="piano-range" class="select-input">
+          <option value="auto">跟键位（推荐）</option>
+          <option value="61">61 键 C2–C7</option>
+          <option value="88">88 键 A0–C8</option>
+        </select>
+      </label>
       <label class="piano-field" for="piano-engine">
         <span>音色</span>
         <select id="piano-engine" class="select-input">
@@ -24,18 +46,40 @@
           <button type="button" class="ghost-btn" id="piano-oct-up" aria-label="升高八度">+</button>
         </div>
       </div>
-      <button type="button" class="ghost-btn" id="piano-goto-c4">中央 C</button>
+      <label class="piano-field" for="piano-labels">
+        <span>键上标注</span>
+        <select id="piano-labels" class="select-input">
+          <option value="hot">电脑键</option>
+          <option value="note">音名</option>
+          <option value="both">键+音名</option>
+          <option value="none">隐藏</option>
+        </select>
+      </label>
+      <label class="piano-field" for="piano-midi">
+        <span>MIDI 输入</span>
+        <select id="piano-midi" class="select-input">
+          <option value="">浏览器不支持 / 未连接</option>
+        </select>
+      </label>
       <label class="flag" for="piano-sustain">
         <input type="checkbox" id="piano-sustain" /> 延音
       </label>
+      <button type="button" class="ghost-btn" id="piano-goto-c4">中央 C</button>
       <button type="button" class="secondary-btn" id="piano-demo-twinkle">小星星</button>
       <button type="button" class="ghost-btn" id="piano-demo-ode">欢乐颂</button>
       <button type="button" class="ghost-btn" id="piano-demo-stop" hidden>停止试听</button>
     </div>
-    <p class="hint tight" id="piano-status">88 键 A0–C8，可左右滑动。高亮键为电脑键盘区。Z 行 C3、Q 行 C4、I 行 C5；↑↓ 移八度，空格延音。</p>
-    <p class="piano-now" id="piano-now" aria-live="polite">—</p>
+    <p class="hint tight" id="piano-status">加载中…</p>
+    <div class="piano-meta">
+      <p class="piano-now" id="piano-now" aria-live="polite">—</p>
+      <p class="piano-hint-keys mono" id="piano-hint-keys"></p>
+    </div>
     <div class="piano-bed" id="piano-bed">
       <div class="piano-kb" id="piano-kb" role="application" aria-label="钢琴键盘"></div>
     </div>
+    <details class="piano-guide" id="piano-guide">
+      <summary>电脑键盘示意（与上方键位模式同步）</summary>
+      <div class="piano-guide-rows" id="piano-guide-rows" aria-hidden="false"></div>
+    </details>
   </div>
 </section>

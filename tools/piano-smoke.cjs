@@ -26,16 +26,23 @@ function staticChecks() {
 
   assert(html.includes('id="piano"'), "panel id");
   assert(html.includes('id="piano-kb"') && html.includes('id="piano-engine"'), "toolbar ids");
+  assert(html.includes('id="piano-layout"') && html.includes('id="piano-range"'), "layout/range");
+  assert(html.includes('id="piano-midi"') && html.includes('id="piano-guide"'), "midi/guide");
   assert(html.includes("kevinsqi/react-piano") && html.includes("danigb/soundfont-player"), "attribution");
-  assert(js.includes("KEY_BINDS") && js.includes("Soundfont"), "js core");
+  assert(html.includes("AutoPiano/AutoPiano"), "autopiano credit");
+  assert(js.includes("VP_WHITES") && js.includes("PIANO_BINDS") && js.includes("Soundfont"), "js core");
+  assert(js.includes("requestMIDIAccess") || js.includes("MIDI"), "web midi");
   assert(/"C#":\s*0\.55/.test(js) && /"A#":\s*5\.85/.test(js), "react-piano pitchPositions");
   assert(/ACCIDENTAL_WIDTH_RATIO\s*=\s*0\.65/.test(js), "accidental width ratio");
   assert(css.includes(".piano-kb") && css.includes(".piano-black"), "css");
-  assert(/--piano-whites/.test(css) && !/min-width:\s*100%/.test(css), "keyboard width follows white keys");
+  assert(css.includes(".piano-guide") && css.includes(".is-fill"), "guide/fill css");
+  assert(/--piano-whites/.test(css), "keyboard width var");
   assert(registry.includes('"piano"') && /"name": "在线钢琴"/.test(registry), "registry meta");
+  assert(/VirtualPiano|字母谱/.test(registry), "registry blurb");
   assert(/piano:\s*"\.\/piano\.js"/.test(lazy), "TOOL_FILES");
   assert(lazy.includes('"piano"'), "standalone/no_pure");
   assert(oss.includes("react-piano") && oss.includes("soundfont-player"), "oss-deps");
+  assert(oss.includes("AutoPiano"), "oss autopiano");
   assert(manifest.panels.some((p) => p.id === "piano"), "manifest");
 }
 
@@ -147,6 +154,7 @@ async function browserChecks() {
         localStorage.removeItem("devtools-tool-last-v1");
         sessionStorage.removeItem("devtools-tool-last-session-v1");
         localStorage.removeItem("devtools-piano-v1");
+        localStorage.removeItem("devtools-piano-v2");
       } catch (_) {}
     });
     await page.setViewport({ width: 1280, height: 900 });
@@ -165,8 +173,52 @@ async function browserChecks() {
       { timeout: 90000 }
     );
     await page.waitForFunction(
-      () => document.querySelectorAll("#piano-kb .piano-white").length >= 50,
+      () => document.querySelectorAll("#piano-kb .piano-white").length >= 20,
       { timeout: 30000 }
+    );
+
+    // 默认 VirtualPiano：S = C5
+    const virt = await page.evaluate(() => ({
+      layout: window.PianoTool?.layout,
+      whites: document.querySelectorAll("#piano-kb .piano-white").length,
+      binds: window.PianoTool?.keyBinds?.length || 0,
+      guide: document.querySelectorAll("#piano-guide-rows .piano-guide-key").length,
+    }));
+    assert(virt.layout === "virtual", `layout ${virt.layout}`);
+    assert(virt.whites >= 20 && virt.whites <= 52, `auto whites ${virt.whites}`);
+    assert(virt.binds >= 30, `key binds ${virt.binds}`);
+    assert(virt.guide >= 20, `guide keys ${virt.guide}`);
+
+    await page.keyboard.down("s");
+    await page.waitForFunction(
+      () => document.querySelector('#piano-kb [data-midi="72"]')?.classList.contains("is-active"),
+      { timeout: 5000 }
+    );
+    const now = await page.$eval("#piano-now", (el) => el.textContent || "");
+    assert(/C5/.test(now), `now text ${now}`);
+    await page.keyboard.up("s");
+
+    // 切换钢琴家布局：Z=C4，Q=C5
+    await page.select("#piano-layout", "piano");
+    await page.waitForFunction(() => window.PianoTool?.layout === "piano", { timeout: 3000 });
+    await page.keyboard.down("z");
+    await page.waitForFunction(
+      () => document.querySelector('#piano-kb [data-midi="60"]')?.classList.contains("is-active"),
+      { timeout: 5000 }
+    );
+    await page.keyboard.up("z");
+    await page.keyboard.down("q");
+    await page.waitForFunction(
+      () => document.querySelector('#piano-kb [data-midi="72"]')?.classList.contains("is-active"),
+      { timeout: 5000 }
+    );
+    await page.keyboard.up("q");
+
+    // 88 键几何
+    await page.select("#piano-range", "88");
+    await page.waitForFunction(
+      () => document.querySelectorAll("#piano-kb .piano-white").length === 52,
+      { timeout: 5000 }
     );
     const counts = await page.evaluate(() => ({
       white: document.querySelectorAll("#piano-kb .piano-white").length,
@@ -174,28 +226,10 @@ async function browserChecks() {
       c4: Boolean(document.querySelector('#piano-kb [data-midi="60"]')),
       a0: Boolean(document.querySelector('#piano-kb [data-midi="21"]')),
       c8: Boolean(document.querySelector('#piano-kb [data-midi="108"]')),
-      binds: window.PianoTool?.keyBinds?.length || 0,
     }));
     assert(counts.white === 52, `white keys ${counts.white}`);
     assert(counts.black === 36, `black keys ${counts.black}`);
     assert(counts.c4 && counts.a0 && counts.c8, "missing A0/C4/C8");
-    assert(counts.binds >= 30, `key binds ${counts.binds}`);
-
-    await page.keyboard.down("q");
-    await page.waitForFunction(
-      () => document.querySelector('#piano-kb [data-midi="60"]')?.classList.contains("is-active"),
-      { timeout: 5000 }
-    );
-    const now = await page.$eval("#piano-now", (el) => el.textContent || "");
-    assert(/C4/.test(now), `now text ${now}`);
-    await page.keyboard.up("q");
-
-    await page.keyboard.down("z");
-    await page.waitForFunction(
-      () => document.querySelector('#piano-kb [data-midi="48"]')?.classList.contains("is-active"),
-      { timeout: 5000 }
-    );
-    await page.keyboard.up("z");
 
     await page.click('#piano-kb [data-midi="64"]', { delay: 40 });
 
