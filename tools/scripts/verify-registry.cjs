@@ -21,6 +21,11 @@ function read(file) {
   return fs.readFileSync(file, "utf8");
 }
 
+/** Windows autocrlf 检出 CRLF 时与生成期望（LF）对齐 */
+function normalizeNl(s) {
+  return String(s).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
 function expectedRegistryJs(data) {
   return `(() => {
   "use strict";
@@ -44,8 +49,8 @@ function main() {
     return;
   }
 
-  const built = read(REGISTRY_JS);
-  const expected = expectedRegistryJs(registry);
+  const built = normalizeNl(read(REGISTRY_JS));
+  const expected = normalizeNl(expectedRegistryJs(registry));
   if (built !== expected) {
     fail("lib/tool-registry.js 与 registry/tools.json 不同步，请运行 node tools/scripts/build-tool-registry.cjs");
   }
