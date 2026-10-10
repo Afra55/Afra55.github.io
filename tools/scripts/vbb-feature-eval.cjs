@@ -436,18 +436,30 @@ async function main() {
         cutClosedKeep:
           typeof window.DevToolsVtrimEditor?.keepRangesFromEdit === "function"
             ? (() => {
+                const END_KEEP = Number(window.DevToolsVtrimEditor.END_KEEP_SEC) || 1 / 25;
+                const START_KEEP = Number(window.DevToolsVtrimEditor.START_KEEP_SEC) || 1 / 50;
                 const ks = window.DevToolsVtrimEditor.keepRangesFromEdit(
                   { trimStart: 0, trimEnd: 10, cutouts: [{ start: 2, end: 4 }] },
                   10
                 );
+                const seek =
+                  typeof window.DevToolsVtrimEditor.previewSeekForKeepRanges === "function"
+                    ? window.DevToolsVtrimEditor.previewSeekForKeepRanges
+                    : null;
+                const atHandle = seek ? seek(ks, 2, { paused: false }) : null;
+                const earlyResume = seek ? seek(ks, (ks[1]?.start || 0) - 0.015, { paused: false }) : null;
                 return {
                   n: ks.length,
                   k0end: ks[0]?.end,
                   k1start: ks[1]?.start,
+                  atHandle,
+                  earlyResume,
                   ok:
                     ks.length === 2 &&
-                    Math.abs((ks[0]?.end || 0) - 2) < 0.02 &&
-                    (ks[1]?.start || 0) >= 4 + 1 / 25 - 0.01,
+                    Math.abs((ks[0]?.end || 0) - (2 - END_KEEP)) < 0.02 &&
+                    (ks[1]?.start || 0) >= 4 + END_KEEP + START_KEEP - 0.01 &&
+                    Math.abs((atHandle || 0) - (ks[1]?.start || 0)) < 1e-6 &&
+                    Math.abs((earlyResume || 0) - (ks[1]?.start || 0)) < 1e-6,
                 };
               })()
             : { ok: false, reason: "no-keepRanges" },

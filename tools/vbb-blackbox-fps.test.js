@@ -130,7 +130,7 @@ assert(
   assert(/END_KEEP_SEC\s*=\s*1\s*\/\s*25/.test(vtrimEd), "编辑预览片尾半开 1/25s");
   assert(/last\.end\s*=\s*Math\.max\([\s\S]{0,80}END_KEEP_SEC/.test(vtrimEd), "keepRanges 成片须收掉预览半开片尾");
   assert(/from currentTime|a = t|当前进度/.test(vtrimEd) && /addCutoutAtPlayhead/.test(vtrimEd), "删中间从播放头起");
-  assert(/c\.end\s*[^\n]*\+\s*END_KEEP_SEC/.test(vtrimEd), "删中间闭区间：成片须越过预览终点帧");
+  assert(/cutStart\s*-\s*END_KEEP_SEC/.test(vtrimEd) && /END_KEEP_SEC\s*\+\s*START_KEEP_SEC/.test(vtrimEd), "删中间须用 END/START_KEEP 对齐红柄");
   assert(/下载编辑后的视频/.test(vtrimEd) && /function exportKeepVideo/.test(vtrimEd), "编辑层须能下载编辑后 mp4");
   assert(/正在导出/.test(vtrimEd) && /export-progress/.test(vtrimEd), "下载编辑后视频须有进度反馈");
   {
@@ -138,15 +138,15 @@ assert(
     const k = vtrimEd.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?return keeps;\s*\}/);
     assert(n && k, "须能抽出 keepRangesFromEdit");
     const fn = new Function(`
-      const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2, END_KEEP_SEC = 1 / 25;
+      const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2, END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50;
       ${n[0]}
       ${k[0]}
       return keepRangesFromEdit;
     `)();
     const ks = fn({ trimStart: 0, trimEnd: 10, cutouts: [{ start: 2, end: 4 }] }, 10);
     assert(ks.length === 2, "中间删除应得两段 keep");
-    assert(Math.abs(ks[0].end - 2) < 1e-6, "keep 须在预览起点处断开");
-    assert(ks[1].start >= 4 + 1 / 25 - 1e-6, "下一段须越过预览终点帧（含该帧）");
+    assert(Math.abs(ks[0].end - (2 - 1 / 25)) < 1e-6, "上一段须在红柄起点前半开收掉（对齐片尾）");
+    assert(ks[1].start >= 4 + 1 / 25 + 1 / 50 - 1e-6, "下一段须越过终点帧并加片头半开");
     assert(ks[1].end <= 10 - 1 / 25 + 1e-6, "末段仍半开片尾");
     const p = vtrimEd.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start;\s*\}/);
     assert(p, "须能抽出 previewSeekForKeepRanges");
@@ -159,6 +159,9 @@ assert(
     const skipTo = seekFn(ks, 3, { paused: false });
     assert(Math.abs(skipTo - ks[1].start) < 1e-6, "cutout 内须跳到下一段 keep");
     assert(Math.abs(seekFn(ks, ks[0].end, { paused: false }) - ks[1].start) < 1e-6, "keep 终点须跳下一段");
+    assert(seekFn(ks, 2, { paused: false }) === ks[1].start, "红柄起点须已在删段内并跳下一段");
+    const early = ks[1].start - 0.015;
+    assert(Math.abs(seekFn(ks, early, { paused: false }) - ks[1].start) < 1e-6, "下一段前 15ms 仍须跳，勿少删");
     assert(Math.abs(seekFn(ks, ks[1].end, { paused: false }) - ks[0].start) < 1e-6, "末段后播放须循环到首段");
   }
   assert(/previewSeekForKeepRanges/.test(vbbUi) && /is-edit-crop/.test(vbbUi), "外预览须跳 cutouts 并套 crop");

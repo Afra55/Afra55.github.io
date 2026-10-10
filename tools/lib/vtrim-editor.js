@@ -408,11 +408,6 @@
       );
     }
 
-    /** 删除段在成片侧的半开终点：含预览终点帧，再多收约 1 帧 */
-    function cutResumeSec(c) {
-      return Math.min(endKeepSec(), (Number(c?.end) || 0) + END_KEEP_SEC);
-    }
-
     function clipCutoutsToWindow() {
       cutouts = normalizeCutoutsList(cutouts, startSec, endSec);
       if (selectedCutout >= cutouts.length) selectedCutout = cutouts.length ? cutouts.length - 1 : -1;
@@ -1007,12 +1002,10 @@
 
     async function seekPlayheadExact(t) {
       let target = clamp(t, startSec, endKeepSec());
-      // 若落在删除段内，跳到下一段保留起点
-      for (const c of normalizeCutoutsList(cutouts, startSec, endSec)) {
-        if (target >= c.start - 0.001 && target < cutResumeSec(c)) {
-          target = clamp(cutResumeSec(c), startSec, endKeepSec());
-          break;
-        }
+      // 与外预览同一套 keepRanges：落在删段/半开尾则跳到应播点
+      const jump = previewSeekForKeepRanges(keepRangesLocal(), target, { paused: true });
+      if (jump != null && Number.isFinite(jump)) {
+        target = clamp(jump, startSec, endKeepSec());
       }
       scrubSeekWanted = null;
       if (dragSeekTimer) {
@@ -1057,32 +1050,21 @@
     function clipPlayWindow(mediaTime) {
       if (closed || !duration || video.paused || playWindowLooping || drag) return false;
       const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
-      if (cur < startSec - 0.02) {
-        loopPlayToStart();
-        return true;
-      }
-      // 跳过删除段
-      for (const c of normalizeCutoutsList(cutouts, startSec, endSec)) {
-        if (cur >= c.start - 0.01 && cur < cutResumeSec(c) - 0.001) {
-          playWindowLooping = true;
-          const gen = ++playWindowGen;
-          seekPlayheadExact(cutResumeSec(c))
-            .then(() => {
-              if (closed || gen !== playWindowGen) return;
-              playWindowLooping = false;
-              return video.play();
-            })
-            .catch(() => {
-              playWindowLooping = false;
-            });
-          return true;
-        }
-      }
-      if (cur >= endKeepSec() - 0.0005) {
-        loopPlayToStart();
-        return true;
-      }
-      return false;
+      const jump = previewSeekForKeepRanges(keepRangesLocal(), cur, { paused: false });
+      if (jump == null || !Number.isFinite(jump)) return false;
+      if (Math.abs(jump - cur) < 0.001) return false;
+      playWindowLooping = true;
+      const gen = ++playWindowGen;
+      seekPlayheadExact(jump)
+        .then(() => {
+          if (closed || gen !== playWindowGen) return;
+          playWindowLooping = false;
+          return video.play();
+        })
+        .catch(() => {
+          playWindowLooping = false;
+        });
+      return true;
     }
 
     function armFrameWatch() {
@@ -1710,12 +1692,15 @@
     const keeps = [];
     let cursor = trimStart;
     for (const c of cuts) {
-      // 闭区间：预览 cut.start / cut.end 两帧都要删。keep 在 start 处断开（半开），
-      // 下一 keep 从 end+END_KEEP_SEC 再接，避免成片再放出终点所见帧；宁可多删 1 帧。
-      const delFrom = Math.max(trimStart, Number(c.start) || 0);
-      const delTo = Math.min(trimEnd, (Number(c.end) || 0) + END_KEEP_SEC);
-      if (delFrom > cursor + 0.02) keeps.push({ start: cursor, end: delFrom });
-      cursor = Math.max(cursor, delTo);
+      // 闭区间：红柄 cut.start / cut.end 所见帧都要删。
+      // 上一段按片尾半开在 start 前收掉 END_KEEP，避免 HTML5 播到 start 仍画出该帧（外预览偏后）；
+      // 下一段从 end+END_KEEP 起再加 START_KEEP 片头半开，避免 seek 回退少删。宁可多删 1 帧。
+      const cutStart = Math.max(trimStart, Number(c.start) || 0);
+      const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
+      const keepEnd = Math.max(cursor + 0.05, cutStart - END_KEEP_SEC);
+      const resumeAt = Math.min(trimEnd, cutEnd + END_KEEP_SEC + START_KEEP_SEC);
+      if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
+      cursor = Math.max(cursor, resumeAt);
     }
     if (trimEnd > cursor + 0.02) keeps.push({ start: cursor, end: trimEnd });
     if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
@@ -1742,11 +1727,13 @@
     const first = keeps[0];
     const last = keeps[keeps.length - 1];
     const endEps = 0.0005;
+    // 勿用大 start 容差提前进入下一段 keep，否则删段尾会少播进保留区约 1～数帧
+    const startEps = 0.0005;
     for (let i = 0; i < keeps.length; i++) {
       const k = keeps[i];
-      if (time >= k.start - 0.02 && time < k.end - endEps) return null;
+      if (time >= k.start - startEps && time < k.end - endEps) return null;
     }
-    if (time < first.start - 0.02) return first.start;
+    if (time < first.start - startEps) return first.start;
     for (let i = 0; i < keeps.length; i++) {
       const nxt = keeps[i + 1];
       if (nxt && time < nxt.start) return nxt.start;
