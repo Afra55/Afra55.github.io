@@ -91,13 +91,64 @@
   word-break: break-all;
 }
 
+.adb-info-loading {
+  margin: 0.35rem 0 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+}
+
+.adb-info-loading[hidden] {
+  display: none !important;
+}
+
+.adb-info-loading-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 85%, transparent);
+  overflow: hidden;
+}
+
+.adb-info-loading-fill {
+  display: block;
+  height: 100%;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 65%, #5eead4) 50%,
+    var(--accent) 100%
+  );
+  background-size: 28px 100%;
+  animation: adb-info-loading-stripe 0.75s linear infinite;
+}
+
+.adb-info-loading-text {
+  margin: 0.45rem 0 0;
+}
+
+@keyframes adb-info-loading-stripe {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 28px 0;
+  }
+}
+
+.adb-info.is-loading {
+  display: none !important;
+}
+
 .adb-getprop-open-row {
   margin-top: 0.85rem;
 }
 
 .adb-getprop-dlg {
-  max-width: min(96vw, 720px);
-  width: min(96vw, 720px);
+  max-width: min(98vw, 1100px);
+  width: min(98vw, 1100px);
   padding: 0;
 }
 
@@ -134,13 +185,28 @@
   padding: 0.35rem 0.55rem;
 }
 
+.adb-getprop-row {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
 .adb-getprop-row .adb-getprop-key {
-  word-break: break-all;
+  flex: 0 1 40%;
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   color: var(--muted);
 }
 
 .adb-getprop-row .adb-getprop-val {
-  word-break: break-all;
+  flex: 1 1 60%;
+  min-width: 0;
+  max-width: 100%;
+  text-align: right;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  word-break: normal;
 }
 
 .adb-dev-section {

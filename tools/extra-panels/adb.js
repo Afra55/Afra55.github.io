@@ -878,21 +878,39 @@
         updateSelectedMeta();
       }
   
-      function fillAdbInfo(info) {
-        const set = (id, value) => {
-          const el = $(id);
-          if (el) el.textContent = value || "—";
-        };
+      let adbInfoLoadToken = 0;
+
+      function setAdbInfoLoading(on) {
+        const loading = $("#adb-info-loading");
+        const info = $("#adb-info");
+        if (loading) loading.hidden = !on;
+        if (info) info.classList.toggle("is-loading", Boolean(on));
+        if (on && adbInfoMeta) adbInfoMeta.textContent = "正在抓取信息…";
+      }
+
+      function clearAdbInfoFields() {
         const ALL = [
           "#adb-info-serial", "#adb-info-state", "#adb-info-model", "#adb-info-android",
           "#adb-info-screen", "#adb-info-battery", "#adb-info-storage", "#adb-info-build",
           "#adb-info-imei", "#adb-info-brand", "#adb-info-platform", "#adb-info-baseband",
           "#adb-info-patch", "#adb-info-ram", "#adb-info-kernel", "#adb-info-locale",
-          "#adb-info-fingerprint", "#adb-info-cycle", "#adb-info-capacity", "#adb-info-frp",
-          "#adb-info-launch",
+          "#adb-info-fingerprint", "#adb-info-variant", "#adb-info-cycle", "#adb-info-capacity",
+          "#adb-info-frp", "#adb-info-launch",
         ];
+        ALL.forEach((id) => {
+          const el = $(id);
+          if (el) el.textContent = "—";
+        });
+      }
+
+      function fillAdbInfo(info) {
+        const set = (id, value) => {
+          const el = $(id);
+          if (el) el.textContent = value || "—";
+        };
+        setAdbInfoLoading(false);
         if (!info) {
-          ALL.forEach((id) => set(id, "—"));
+          clearAdbInfoFields();
           if (adbInfoMeta) adbInfoMeta.textContent = "未选择设备";
           resetGetpropPanel();
           return;
@@ -923,6 +941,7 @@
         set("#adb-info-kernel", [info.kernel, info.uptime].filter(Boolean).join(" / "));
         set("#adb-info-locale", info.locale);
         set("#adb-info-fingerprint", info.fingerprint);
+        set("#adb-info-variant", info.variantId);
         const cycleBits = [];
         if (info.cycleCount != null) cycleBits.push(`循环 ${info.cycleCount} 次`);
         if (info.usefulLife != null) cycleBits.push(`寿命剩 ${info.usefulLife}%`);
@@ -2226,16 +2245,24 @@
       }
   
       async function loadAdbInfo(serial) {
+        const token = ++adbInfoLoadToken;
         if (!serial) {
+          setAdbInfoLoading(false);
           fillAdbInfo(null);
           return;
         }
+        clearAdbInfoFields();
+        setAdbInfoLoading(true);
         try {
           const data = await adbFetch(`/device/info?serial=${encodeURIComponent(serial)}`);
+          if (token !== adbInfoLoadToken) return;
           fillAdbInfo(data.info);
         } catch (err) {
+          if (token !== adbInfoLoadToken) return;
           fillAdbInfo({ serial, state: "error", ready: false, message: err.message || String(err) });
           setError(adbError, err.message || String(err));
+        } finally {
+          if (token === adbInfoLoadToken) setAdbInfoLoading(false);
         }
       }
   

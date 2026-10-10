@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.51";
+const BRIDGE_VERSION = "0.9.52";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -683,6 +683,7 @@ async function deviceInfo(serial) {
     "gsm.version.baseband",
     "persist.sys.locale",
     "ro.product.locale",
+    "persist.vendor.custom.variant.id",
   ];
   const props = {};
   await Promise.all(
@@ -837,6 +838,7 @@ async function deviceInfo(serial) {
     buildDate: props["ro.build.date"] || "",
     baseband: props["gsm.version.baseband"] || "",
     locale: props["persist.sys.locale"] || props["ro.product.locale"] || "",
+    variantId: props["persist.vendor.custom.variant.id"] || "",
     ram,
     cpuCores,
     kernel,
