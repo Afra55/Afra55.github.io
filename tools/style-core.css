@@ -543,18 +543,6 @@ body.theme-reduce-glow .bg-grid {
   z-index: 2;
 }
 
-.nav-cache-meta {
-  margin: 0;
-  width: auto;
-  max-width: 100%;
-  color: var(--muted);
-  font-size: 0.68rem;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .nav-footer-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -652,21 +640,6 @@ body.theme-reduce-glow .bg-grid {
 .nav-setting:hover,
 .nav-setting-inline:hover {
   color: var(--ink);
-}
-
-.nav-cache-clear {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.nav-cache-clear:hover {
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
-}
-
-.nav-cache-clear:disabled {
-  opacity: 0.65;
-  cursor: wait;
 }
 
 .tool-nav-link {

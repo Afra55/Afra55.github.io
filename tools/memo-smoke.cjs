@@ -1380,6 +1380,7 @@ async function main() {
       hasReset: Boolean(document.getElementById("nav-reset")),
       hasCompact: Boolean(document.getElementById("nav-compact")),
       hasMeta: Boolean(document.getElementById("nav-cache-meta")),
+      noCacheInNav: !document.getElementById("nav-cache-clear") && !document.getElementById("nav-cache-meta"),
       inScroll: Boolean(navScrollEl && navFooter && navScrollEl.contains(navFooter)),
       belowList: Boolean(
         navFooter &&
@@ -1493,12 +1494,22 @@ async function main() {
       window.DevToolsPwa?.setInstallVisible?.(false);
     }
 
-    const cacheMeta = document.getElementById("nav-cache-meta");
+    try {
+      await window.DevToolsPanels?.ensure?.("about");
+    } catch (_) {}
+    const cacheMeta = document.getElementById("about-cache-meta");
+    const cacheBtn = document.getElementById("about-cache-clear");
+    const about = document.getElementById("about");
     const cacheCs = cacheMeta ? getComputedStyle(cacheMeta) : null;
+    try {
+      await window.DevToolsTemp?.refresh?.();
+    } catch (_) {}
     out.cacheMeta = {
-      nowrap: cacheCs?.whiteSpace === "nowrap",
+      inAbout: Boolean(about?.contains(cacheMeta) && about?.contains(cacheBtn)),
+      wraps: cacheCs ? cacheCs.whiteSpace !== "nowrap" : false,
       noLongTail: !/可一键清理/.test(cacheMeta?.textContent || ""),
       hasTitle: /备忘录/.test(cacheMeta?.getAttribute("title") || ""),
+      btnText: (cacheBtn?.textContent || "").trim(),
     };
 
     const recentListEl = document.getElementById("tool-recent-list");
@@ -2175,8 +2186,14 @@ async function main() {
   if (!result.pwa?.standaloneApi || !result.pwa?.cssHidesInstall) {
     failed.push("standalone/PWA window should hide the install button");
   }
-  if (!result.cacheMeta?.nowrap || !result.cacheMeta?.noLongTail || !result.cacheMeta?.hasTitle) {
-    failed.push("nav cache hint should be a single short line with details in title");
+  if (
+    !result.cacheMeta?.inAbout ||
+    !result.cacheMeta?.wraps ||
+    !result.cacheMeta?.noLongTail ||
+    !result.cacheMeta?.hasTitle ||
+    !/清理缓存/.test(result.cacheMeta?.btnText || "")
+  ) {
+    failed.push("about page should host cache clear with wrap-friendly hint and title details");
   }
   if (
     !result.recentUi?.hasToggle ||
@@ -2339,17 +2356,18 @@ async function main() {
     failed.push("batch delete should mention pinned items when the selection includes them");
   }
   if (
-    !result.navFooter?.hasClear ||
+    !result.navFooter?.noCacheInNav ||
+    result.navFooter?.hasClear ||
+    result.navFooter?.hasMeta ||
     !result.navFooter?.hasReset ||
     !result.navFooter?.hasCompact ||
-    !result.navFooter?.hasMeta ||
     !result.navFooter?.inScroll ||
     !result.navFooter?.belowList ||
     !result.navFooter?.noOverlap ||
     !result.navFooter?.atBottom ||
     !result.navFooter?.footerVisible
   ) {
-    failed.push("nav footer (cache clear / compact / reset) should stay at the bottom, not overlap the tool list");
+    failed.push("nav footer (compact / reset) should stay at the bottom without cache clear");
   }
   if (!result.moreKeep?.preview || !result.moreKeep?.note || !result.moreKeep?.del || !result.moreKeep?.top || !result.moreKeep?.pin) {
     failed.push("memo more menu should keep preview/note/delete plus pin/move-to-top");

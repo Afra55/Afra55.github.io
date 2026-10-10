@@ -3924,8 +3924,8 @@
     location.replace(`${url.pathname}${url.search}${url.hash}`);
   }
 
-  async function runNavCacheClear() {
-    const btn = $("#nav-cache-clear");
+  async function runAboutCacheClear() {
+    const btn = $("#about-cache-clear");
     if (btn?.disabled) return;
     if (btn) btn.disabled = true;
     try {
@@ -3955,8 +3955,11 @@
     }
   }
 
-  $("#nav-cache-clear")?.addEventListener("click", () => {
-    runNavCacheClear();
+  document.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("#about-cache-clear");
+    if (!btn) return;
+    e.preventDefault();
+    runAboutCacheClear();
   });
 
   $("#site-force-refresh")?.addEventListener("click", () => {

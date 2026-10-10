@@ -2,6 +2,54 @@
   margin-bottom: 1rem;
 }
 
+.about-cache-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.85rem;
+  padding: 0.7rem 0.8rem;
+}
+
+.about-cache-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.about-cache-title {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.about-cache-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.about-cache-clear {
+  flex: 0 0 auto;
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.about-cache-clear:hover {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+}
+
+.about-cache-clear:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .about-share-bar {
   display: grid;
   gap: 0.4rem;

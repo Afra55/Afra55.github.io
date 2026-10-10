@@ -147,8 +147,8 @@ async function tap(page, selector) {
       vsplitPreload: document.getElementById("vsplit-video")?.getAttribute("preload") || "",
       autoRelease: Boolean(window.DevToolsTemp?.autoReleaseOnLeave),
       hasReleaseOnLeave: typeof window.DevToolsTemp?.releaseOnLeave === "function",
-      hasCacheBtn: Boolean(document.getElementById("nav-cache-clear")),
-      hasCacheMeta: Boolean(document.getElementById("nav-cache-meta")),
+      noNavCacheBtn: !document.getElementById("nav-cache-clear"),
+      noNavCacheMeta: !document.getElementById("nav-cache-meta"),
       hasPurge: typeof window.DevToolsTemp?.purgeSiteCache === "function",
       autoPackVsplit: Boolean(document.getElementById("vsplit-auto-pack")),
       autoPackVbb: Boolean(document.getElementById("vbb-auto-pack")),
@@ -720,12 +720,22 @@ async function tap(page, selector) {
     history.replaceState(null, "", "#timestamp");
   });
   await page.waitForFunction(() => location.hash === "#timestamp", { timeout: 10000 });
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#about`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(
+    () => document.getElementById("about-cache-clear") && document.getElementById("about-cache-meta"),
+    { timeout: 15000 }
+  );
   const cacheUi = await page.evaluate(async () => {
     if (typeof window.DevToolsTemp?.purgeSiteCache !== "function") {
       return { skipped: true, reason: "DevToolsTemp not ready" };
     }
-    const btn = document.getElementById("nav-cache-clear");
-    const meta = document.getElementById("nav-cache-meta");
+    const btn = document.getElementById("about-cache-clear");
+    const meta = document.getElementById("about-cache-meta");
+    const about = document.getElementById("about");
+    const inAbout = Boolean(about?.contains(btn) && about?.contains(meta));
     const inNav = Boolean(document.getElementById("nav-bar")?.contains(btn));
     const result = await window.DevToolsTemp.purgeSiteCache();
     let idbGone = true;
@@ -734,6 +744,7 @@ async function tap(page, selector) {
       idbGone = !(dbs || []).some((d) => String(d?.name || "").includes("ffmpeg"));
     } catch (_) {}
     return {
+      inAbout,
       inNav,
       btnText: (btn?.textContent || "").trim(),
       hasMeta: Boolean(meta),
@@ -747,7 +758,8 @@ async function tap(page, selector) {
     console.warn("vbb-smoke: skip cache purge —", cacheUi.reason);
     Object.assign(cacheUi, {
       skipped: false,
-      inNav: true,
+      inAbout: true,
+      inNav: false,
       btnText: "清理缓存",
       hasMeta: true,
       msg: "skipped",
@@ -756,8 +768,8 @@ async function tap(page, selector) {
       idbGone: true,
     });
   }
-  if (!cacheUi.inNav || !String(cacheUi.btnText || "").includes("清理缓存")) {
-    throw new Error(`sidebar cache button missing: ${JSON.stringify(cacheUi)}`);
+  if (!cacheUi.inAbout || cacheUi.inNav || !String(cacheUi.btnText || "").includes("清理缓存")) {
+    throw new Error(`about cache button missing: ${JSON.stringify(cacheUi)}`);
   }
   if (!cacheUi.skipped && (!cacheUi.msg || cacheUi.blobs !== 0)) {
     throw new Error(`purgeSiteCache failed: ${JSON.stringify(cacheUi)}`);
@@ -1590,8 +1602,8 @@ async function tap(page, selector) {
   if (result.vbbPreload !== "metadata") problems.push(`vbb preload should be metadata, got ${result.vbbPreload}`);
   if (!result.autoRelease) problems.push("DevToolsTemp.autoReleaseOnLeave missing");
   if (!result.hasReleaseOnLeave) problems.push("DevToolsTemp.releaseOnLeave missing");
-  if (!result.hasCacheBtn) problems.push("missing #nav-cache-clear in sidebar");
-  if (!result.hasCacheMeta) problems.push("missing #nav-cache-meta in sidebar");
+  if (!result.noNavCacheBtn) problems.push("#nav-cache-clear should be removed from sidebar");
+  if (!result.noNavCacheMeta) problems.push("#nav-cache-meta should be removed from sidebar");
   if (!result.hasPurge) problems.push("DevToolsTemp.purgeSiteCache missing");
   if (!result.autoPackVsplit && !result.autoPackVbb) {
     problems.push("missing auto-pack zip toggles on vsplit/vbb");

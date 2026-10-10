@@ -377,7 +377,7 @@
   }
 
   const FFMPEG_VENDOR_BASE = resolveFfmpegVendorBase();
-  /** IndexedDB / Cache 均用 persist 前缀；侧栏「一键清理缓存」可整库删除 */
+  /** IndexedDB / Cache 均用 persist 前缀；关于页「清理缓存」可整库删除 */
   const FFMPEG_IDB_NAME = "devtools-persist-ffmpeg";
   const FFMPEG_IDB_STORE = "assets";
   const FFMPEG_IDB_VERSION = 1;
@@ -402,7 +402,7 @@
    */
   const ffmpegInputCacheByInstance = new WeakMap();
   const FFMPEG_SEG_FILE_BYTES = 48 * 1024 * 1024;
-  /** 用户点「一键清理缓存」后，不再自动预热，以免马上重新占空间 */
+  /** 用户点关于页「清理缓存」后，不再自动预热，以免马上重新占空间 */
   let ffmpegSkipAutoPrewarm = false;
   let ffmpegEngineEpoch = 0;
 

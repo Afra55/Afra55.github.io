@@ -153,7 +153,7 @@
   }
 
   async function refreshCacheHint() {
-    const el = document.getElementById("nav-cache-meta");
+    const el = document.getElementById("about-cache-meta");
     if (!el) return;
     const blobs = blobStats();
     const est = await storageStats();

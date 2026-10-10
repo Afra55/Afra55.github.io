@@ -249,6 +249,9 @@
       .join("");
 
     renderOssDeps();
+    try {
+      window.DevToolsTemp?.refresh?.();
+    } catch (_) {}
   }
 
   function bindShare() {

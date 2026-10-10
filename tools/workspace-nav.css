@@ -1343,7 +1343,6 @@ body.nav-open {
     gap: 0.28rem;
   }
 
-  .nav-cache-clear,
   .nav-footer-actions .nav-reset,
   .nav-footer-actions .nav-footer-btn {
     width: auto;
