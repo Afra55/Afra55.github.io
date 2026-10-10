@@ -173,12 +173,132 @@
       }
       return [];
     }
+
+    function setExportButtons(on) {
+      const saveBtn = $("#qr-save");
+      const shareBtn = $("#qr-share");
+      if (saveBtn) saveBtn.hidden = !on;
+      if (shareBtn) shareBtn.hidden = !on;
+    }
+
+    function listQrSurfaces() {
+      if (!wrap) return [];
+      return [...wrap.querySelectorAll(".qr-box canvas, .qr-box img")];
+    }
+
+    function triggerBlobDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "qrcode.png";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (_) {}
+      }, 2000);
+    }
+
+    function surfaceToCanvas(el) {
+      if (el instanceof HTMLCanvasElement) return el;
+      if (el instanceof HTMLImageElement) {
+        const c = document.createElement("canvas");
+        const w = el.naturalWidth || el.width;
+        const h = el.naturalHeight || el.height;
+        if (!w || !h) throw new Error("无法读取图片尺寸");
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(el, 0, 0, w, h);
+        return c;
+      }
+      throw new Error("无可导出的二维码");
+    }
+
+    function canvasToPngBlob(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("导出 PNG 失败"));
+        }, "image/png");
+      });
+    }
+
+    async function collectQrPngFiles() {
+      const surfaces = listQrSurfaces();
+      if (!surfaces.length) throw new Error("请先生成二维码");
+      const files = [];
+      for (let i = 0; i < surfaces.length; i += 1) {
+        const canvas = surfaceToCanvas(surfaces[i]);
+        const blob = await canvasToPngBlob(canvas);
+        const name =
+          surfaces.length === 1 ? "qrcode.png" : `qrcode-${i + 1}-of-${surfaces.length}.png`;
+        if (typeof File !== "undefined") {
+          files.push(new File([blob], name, { type: "image/png" }));
+        } else {
+          blob.name = name;
+          files.push(blob);
+        }
+      }
+      return files;
+    }
+
+    async function saveQrImages() {
+      try {
+        const files = await collectQrPngFiles();
+        files.forEach((f) => triggerBlobDownload(f, f.name || "qrcode.png"));
+        toast(files.length > 1 ? `已保存 ${files.length} 张图片` : "已保存图片");
+      } catch (err) {
+        setError($("#qr-error"), err.message || String(err));
+      }
+    }
+
+    function canShareFiles(files) {
+      if (typeof navigator.share !== "function" || typeof File === "undefined") return false;
+      try {
+        if (typeof navigator.canShare === "function") {
+          return Boolean(navigator.canShare({ files }));
+        }
+        return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "");
+      } catch (_) {
+        return false;
+      }
+    }
+
+    async function shareQrImages() {
+      try {
+        const files = await collectQrPngFiles();
+        if (canShareFiles(files)) {
+          try {
+            await navigator.share({
+              files,
+              title: files.length > 1 ? "二维码图片" : "二维码",
+            });
+            toast("已打开系统分享");
+            return;
+          } catch (err) {
+            if (err && (err.name === "AbortError" || /abort|cancel|取消/i.test(String(err.message || "")))) {
+              return;
+            }
+          }
+        }
+        files.forEach((f) => triggerBlobDownload(f, f.name || "qrcode.png"));
+        toast(canShareFiles(files) ? "分享未成功，已改为下载" : "当前环境不支持分享，已下载图片");
+      } catch (err) {
+        setError($("#qr-error"), err.message || String(err));
+      }
+    }
   
     function generateQr() {
       const text = $("#qr-text")?.value.trim() || "";
       if (!wrap) return;
       wrap.innerHTML = "";
       if (meta) meta.textContent = "";
+      setExportButtons(false);
       if (!text) {
         setError($("#qr-error"), "请输入内容");
         return;
@@ -196,10 +316,11 @@
             const side = canvas?.width || canvas?.naturalWidth || 0;
             if (meta) {
               meta.textContent = side
-                ? `已生成 · ${label} · 约 ${text.length} 字 · 图 ${side}×${side}px（可放大屏扫）`
+                ? `已生成 · ${label} · 约 ${text.length} 字 · 图 ${side}×${side}px（屏上自适应完整显示）`
                 : `已生成 · ${label} · 约 ${text.length} 字`;
             }
             setError($("#qr-error"), "");
+            setExportButtons(true);
             return;
           } catch (err) {
             if (!/Too long|overflow/i.test(String(err.message || err))) throw err;
@@ -224,8 +345,10 @@
           meta.textContent = `内容较长，已拆成 ${chunks.length} 张二维码。扫描后去掉 [n/m] 前缀并按顺序拼接。`;
         }
         setError($("#qr-error"), "");
+        setExportButtons(true);
       } catch (err) {
         setError($("#qr-error"), err.message || String(err));
+        setExportButtons(false);
       }
     }
     bindPanel("qrcode", () => {
@@ -244,6 +367,12 @@
         const qrSupportHint = $("#qr-support-hint");
   
         $("#qr-gen")?.addEventListener("click", generateQr);
+        $("#qr-save")?.addEventListener("click", () => {
+          saveQrImages().catch((err) => setError($("#qr-error"), err.message || String(err)));
+        });
+        $("#qr-share")?.addEventListener("click", () => {
+          shareQrImages().catch((err) => setError($("#qr-error"), err.message || String(err)));
+        });
     if ($("#qr-text")) generateQr();
   
     let qrStream = null;
@@ -279,11 +408,17 @@
       });
       return qrLibsReady;
     }
+
+    function showScanStage(on) {
+      const stage = $("#qr-scan-stage");
+      if (stage) stage.hidden = !on;
+    }
   
     function showResultUi(on) {
       const stage = $("#qr-scan-stage");
       const head = $("#qr-result-head");
       const reticle = stage?.querySelector(".qr-scan-reticle");
+      if (on) showScanStage(true);
       stage?.classList.toggle("is-result-only", !!on);
       if (reticle) reticle.hidden = !!on;
       if (head) head.hidden = !on;
@@ -291,8 +426,8 @@
       if (qrDecodeList) qrDecodeList.hidden = !on || qrHits.length < 2;
       if (qrDecodeMeta) qrDecodeMeta.hidden = true;
       if (qrCamStart) {
-        qrCamStart.hidden = !on;
-        qrCamStart.textContent = "继续扫";
+        qrCamStart.hidden = false;
+        qrCamStart.textContent = on ? "继续扫" : "扫码";
       }
       if (qrCamStop) qrCamStop.hidden = true;
     }
@@ -445,9 +580,10 @@
       if (qrCamStop) qrCamStop.hidden = true;
       const hasResult = qrDecoded && !qrDecoded.hidden && String(qrDecoded.value || "").trim();
       if (qrCamStart) {
-        qrCamStart.hidden = !hasResult;
+        qrCamStart.hidden = false;
         qrCamStart.textContent = hasResult ? "继续扫" : "扫码";
       }
+      if (!hasResult) showScanStage(false);
     }
 
     function drawScanFrame() {
@@ -510,10 +646,12 @@
         qrCanvas.classList.remove("qr-hit-preview");
       }
       showResultUi(false);
+      showScanStage(true);
       await ensureScanLibs();
       try {
         stopCamera();
         qrUserStopped = false;
+        showScanStage(true);
         qrStream = await Scan().getRearCameraStream();
         if (qrPreview) qrPreview.hidden = true;
         qrVideo.hidden = false;
@@ -528,6 +666,7 @@
         scanCameraFrame();
       } catch (err) {
         stopCamera();
+        showScanStage(false);
         if (qrCamStart) {
           qrCamStart.hidden = false;
           qrCamStart.textContent = "扫码";
@@ -540,6 +679,7 @@
       const file = e.target.files?.[0];
       if (!file) return;
       stopCamera({ fromUser: true });
+      showScanStage(true);
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = async () => {
@@ -549,11 +689,13 @@
           qrPreview.src = url;
           await decodeFromImageElement(img, `图片识别 · ${file.name}`);
         } catch (err) {
+          showScanStage(false);
           setError(qrDecodeError, err.message || String(err));
         }
       };
       img.onerror = () => {
         URL.revokeObjectURL(url);
+        showScanStage(false);
         setError(qrDecodeError, "图片加载失败");
       };
       img.src = url;
@@ -572,12 +714,13 @@
   
     window.addEventListener("pagehide", () => stopCamera());
 
-    startCamera().catch(() => {
-      if (qrCamStart) {
-        qrCamStart.hidden = false;
-        qrCamStart.textContent = "扫码";
-      }
-    });
+    // 默认不开启摄像头；本页以生成为主，扫码请点「扫码」或用独立页
+    if (qrCamStart) {
+      qrCamStart.hidden = false;
+      qrCamStart.textContent = "扫码";
+    }
+    if (qrCamStop) qrCamStop.hidden = true;
+    showScanStage(false);
     });
 
   window.DevToolsExtraBoot = window.DevToolsExtraBoot || {};

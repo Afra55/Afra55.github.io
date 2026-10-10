@@ -10,6 +10,8 @@
             <textarea id="qr-text" class="mono area" rows="4" placeholder="输入文本或网址" spellcheck="false"></textarea>
             <div class="btn-row tool-actions">
               <button type="button" class="primary-btn" id="qr-gen">生成</button>
+              <button type="button" class="ghost-btn" id="qr-save" hidden>保存图片</button>
+              <button type="button" class="ghost-btn" id="qr-share" hidden>分享图片</button>
             </div>
             <div id="qr-box-wrap" class="qr-box-wrap" aria-live="polite"></div>
             <p class="hint tight" id="qr-meta"></p>
@@ -18,14 +20,15 @@
 
           <div class="field-block">
             <h2 class="subhead">扫码</h2>
+            <p class="hint tight">默认不开启摄像头；需要时点「扫码」，或用独立扫码页。</p>
             <div class="btn-row tool-actions">
-              <button type="button" class="primary-btn" id="qr-cam-start" hidden>继续扫</button>
+              <button type="button" class="primary-btn" id="qr-cam-start">扫码</button>
               <button type="button" class="ghost-btn" id="qr-cam-stop" hidden>关闭</button>
               <label class="file-btn" for="qr-file">选图</label>
               <input id="qr-file" type="file" accept="image/*" hidden />
               <a class="ghost-btn" href="./qrscan/" target="_blank" rel="noopener">独立页</a>
             </div>
-            <div class="qr-scan-wrap" id="qr-scan-stage">
+            <div class="qr-scan-wrap" id="qr-scan-stage" hidden>
               <video id="qr-video" class="qr-video" playsinline webkit-playsinline muted hidden></video>
               <div class="qr-scan-reticle" aria-hidden="true"></div>
               <canvas id="qr-scan-canvas" hidden></canvas>
