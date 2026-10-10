@@ -66,7 +66,7 @@
           } else {
             if (!ffmpegInstance?.loaded) terminateFfmpegInstance({ revokeAssets: false });
             scheduleFfmpegPrewarm();
-            setError(v2gError, err.message || String(err));
+            setError(v2gError, friendlyLocalFileError(err, err.message || String(err)));
             setV2gProgress(false, 0, "");
           }
         } finally {

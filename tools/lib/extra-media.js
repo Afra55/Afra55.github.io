@@ -423,7 +423,140 @@
     return ffmpegModsPromise;
   }
 
-  async function fetchFileBytes(file, onProgress) {
+  /**
+   * 浏览器 `<input type=file>` 拿到的 File 在切后台、锁屏、长时间等待后可能 NotReadableError。
+   * 选中后尽快拷贝到 Blob / OPFS 稳定副本再编码。
+   */
+  const PINNED_LOCAL_MEDIA = new WeakSet();
+  const LOCAL_FILE_UNREADABLE_HINT =
+    "视频文件引用已失效（常见于切后台、锁屏或长时间等待后）。请重新选择同一视频后再试。";
+  /** ≥ 此体积优先写 OPFS，减轻 JS 堆双份拷贝（手机尤甚） */
+  const PIN_OPFS_MIN_BYTES = 32 * 1024 * 1024;
+  const PIN_OPFS_DIR = "devtools-pinned-media";
+
+  function isLocalFileUnreadableError(err) {
+    const name = String(err && err.name ? err.name : "");
+    const msg = String(err && (err.message || err) || "");
+    if (name === "NotReadableError") return true;
+    if (/NotReadableError/i.test(msg)) return true;
+    if (/could not be read/i.test(msg) && /permission/i.test(msg)) return true;
+    if (/The requested file could not be read/i.test(msg)) return true;
+    return false;
+  }
+
+  function friendlyLocalFileError(err, fallback) {
+    if (isLocalFileUnreadableError(err)) return LOCAL_FILE_UNREADABLE_HINT;
+    const msg = String(err && (err.message || err) || "").trim();
+    return msg || fallback || "读取本地文件失败";
+  }
+
+  function isPinnedLocalMediaFile(file) {
+    return Boolean(file) && PINNED_LOCAL_MEDIA.has(file);
+  }
+
+  async function pinLocalMediaViaOpfs(file, onProgress) {
+    if (!navigator.storage?.getDirectory) throw new Error("no-opfs");
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle(PIN_OPFS_DIR, { create: true });
+    const safeName = `pin-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.bin`;
+    const handle = await dir.getFileHandle(safeName, { create: true });
+    const writable = await handle.createWritable();
+    const size = Number(file.size) || 0;
+    try {
+      onProgress?.(0.05, "写入本机稳定副本（OPFS，不上传）…");
+      if (typeof file.stream === "function" && typeof writable.write === "function") {
+        const reader = file.stream().getReader();
+        let offset = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value?.byteLength) {
+            await writable.write(value);
+            offset += value.byteLength;
+            if (size > 0) {
+              onProgress?.(
+                Math.min(0.95, offset / size),
+                `写入稳定副本 ${formatKb(offset)} / ${formatKb(size)}（不上传）`
+              );
+            }
+          }
+        }
+      } else {
+        const bytes = await fetchFileBytesRaw(file, onProgress);
+        await writable.write(bytes);
+      }
+      await writable.close();
+    } catch (err) {
+      try {
+        await writable.abort();
+      } catch (_) {}
+      try {
+        await dir.removeEntry(safeName);
+      } catch (_) {}
+      throw err;
+    }
+    const opfsFile = await handle.getFile();
+    const pinned = new File([opfsFile], file.name || "video.bin", {
+      type: file.type || "application/octet-stream",
+      lastModified: file.lastModified || Date.now(),
+    });
+    onProgress?.(1, "本地视频稳定副本已就绪");
+    return pinned;
+  }
+
+  async function pinLocalMediaViaBlob(file, onProgress) {
+    const name = file.name || "video.bin";
+    const type = file.type || "application/octet-stream";
+    const lastModified = file.lastModified || Date.now();
+    onProgress?.(0.08, "锁定本地视频副本（防切后台失效）…");
+    let blob = null;
+    if (typeof file.stream === "function" && typeof Response !== "undefined") {
+      try {
+        blob = await new Response(file.stream()).blob();
+      } catch (err) {
+        if (isLocalFileUnreadableError(err)) throw err;
+        blob = null;
+      }
+    }
+    if (!blob) {
+      const bytes = await fetchFileBytesRaw(file, onProgress);
+      blob = new Blob([bytes], { type });
+    }
+    const pinned = new File([blob], name, { type, lastModified });
+    onProgress?.(1, "本地视频稳定副本已就绪");
+    return pinned;
+  }
+
+  /**
+   * 选文件后立刻调用：返回可反复读的稳定 File（Blob/OPFS）。
+   * 已 pin 过的对象直接返回，避免二次拷贝。
+   */
+  async function pinLocalMediaFile(file, onProgress) {
+    if (!file) throw new Error("缺少文件");
+    if (file instanceof Uint8Array) return file;
+    if (isPinnedLocalMediaFile(file)) return file;
+    const size = Number(file.size) || 0;
+    try {
+      let pinned;
+      if (size >= PIN_OPFS_MIN_BYTES) {
+        try {
+          pinned = await pinLocalMediaViaOpfs(file, onProgress);
+        } catch (err) {
+          if (isLocalFileUnreadableError(err)) throw err;
+          pinned = await pinLocalMediaViaBlob(file, onProgress);
+        }
+      } else {
+        pinned = await pinLocalMediaViaBlob(file, onProgress);
+      }
+      PINNED_LOCAL_MEDIA.add(pinned);
+      return pinned;
+    } catch (err) {
+      throw new Error(friendlyLocalFileError(err, "无法读取视频文件"));
+    }
+  }
+
+  /** 底层读字节；不包装友好文案（由上层 pin / fetchFileBytes 统一处理） */
+  async function fetchFileBytesRaw(file, onProgress) {
     if (!file) throw new Error("缺少文件");
     if (file instanceof Uint8Array) return file;
     const size = Number(file.size) || 0;
@@ -452,6 +585,18 @@
     return out;
   }
 
+  async function fetchFileBytes(file, onProgress) {
+    try {
+      const src =
+        file instanceof Uint8Array || isPinnedLocalMediaFile(file)
+          ? file
+          : await pinLocalMediaFile(file, onProgress);
+      return await fetchFileBytesRaw(src, onProgress);
+    } catch (err) {
+      throw new Error(friendlyLocalFileError(err, "读取本地文件失败"));
+    }
+  }
+
   function ffmpegInputKey(file) {
     if (!file) return "";
     return `${file.name || "file"}:${file.size || 0}:${file.lastModified || 0}`;
@@ -467,9 +612,13 @@
   }
 
   async function ensureFfmpegInputWritten(ffmpeg, file, onWrite) {
-    const ext = guessVideoExt(file);
+    const stable =
+      file instanceof Uint8Array || isPinnedLocalMediaFile(file)
+        ? file
+        : await pinLocalMediaFile(file, onWrite);
+    const ext = guessVideoExt(stable);
     const inName = `in.${ext}`;
-    const key = ffmpegInputKey(file);
+    const key = ffmpegInputKey(stable);
     const cached = ffmpegInputCacheByInstance.get(ffmpeg);
     if (cached?.key === key && cached?.name === inName) {
       return inName;
@@ -480,7 +629,7 @@
       } catch (_) {}
     }
     onWrite?.(0, "载入本地编码器（不上传）…");
-    await ffmpeg.writeFile(inName, await fetchFileBytes(file, onWrite));
+    await ffmpeg.writeFile(inName, await fetchFileBytesRaw(stable, onWrite));
     onWrite?.(1, "已载入本地编码器（未上传）");
     ffmpegInputCacheByInstance.set(ffmpeg, { key, name: inName });
     return inName;
@@ -1774,7 +1923,9 @@
     maybeAutoShareGallery, guessMediaShareMime,
     canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors, gifQualityToGifskiQuality,
     resolveFfmpegVendorBase,
-    loadFfmpegMods, fetchFileBytes, ffmpegInputKey, guessVideoExt, ensureFfmpegInputWritten,
+    loadFfmpegMods, fetchFileBytes, pinLocalMediaFile, isPinnedLocalMediaFile,
+    isLocalFileUnreadableError, friendlyLocalFileError, LOCAL_FILE_UNREADABLE_HINT,
+    ffmpegInputKey, guessVideoExt, ensureFfmpegInputWritten,
     clearFfmpegInputCache, openFfmpegIdb, idbGetAsset, idbPutAsset, deleteFfmpegIndexedDb,
     purgePersistedEngine, createEngineObjectURL, fetchArrayBufferProgress, loadEngineBuffer,
     ensureFfmpegAssets, getFfmpegInstance, createFfmpegInstance, destroyFfmpegInstance,

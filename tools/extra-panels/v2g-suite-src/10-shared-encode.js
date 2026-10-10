@@ -1153,8 +1153,17 @@
 
       async function encodeV2gGifFfmpeg(opts) {
         const tPhase = performance.now();
-        const file = opts.file || v2gSourceFile;
+        let file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
+        try {
+          if (!(file instanceof Uint8Array) && !isPinnedLocalMediaFile(file)) {
+            file = await pinLocalMediaFile(file, opts.onProgress);
+            if (opts.file) opts.file = file;
+            else if (!opts.file && v2gSourceFile) v2gSourceFile = file;
+          }
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "缺少原始视频文件，请重新选择视频"));
+        }
         const fpsCap = opts.allowWide ? V2G_MANUAL_MAX_FPS : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
         const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
         const hardCapW = opts.allowWide
@@ -1657,22 +1666,35 @@
         return `${file.name || ""}|${file.size || 0}|${file.lastModified || 0}`;
       }
       async function ensureNativeGifskiSession(file, probe) {
-        const key = nativeSessionKey(file);
+        let stable = file;
+        try {
+          if (!(file instanceof Uint8Array) && !isPinnedLocalMediaFile(file)) {
+            stable = await pinLocalMediaFile(file);
+          }
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "无法读取视频文件"));
+        }
+        const key = nativeSessionKey(stable);
         const hit = nativeGifskiSessions.get(key);
         if (hit && hit.sessionId && Date.now() - hit.at < 40 * 60 * 1000) {
           hit.at = Date.now();
           return hit.sessionId;
         }
         const url = `${probe.base}${probe.prefix}/gifski/session`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: nativeGifskiHeaders({
-            "X-Filename": encodeURIComponent(file.name || "video.bin"),
-            "Content-Type": "application/octet-stream",
-          }),
-          body: file,
-          mode: "cors",
-        });
+        let res;
+        try {
+          res = await fetch(url, {
+            method: "POST",
+            headers: nativeGifskiHeaders({
+              "X-Filename": encodeURIComponent(stable.name || "video.bin"),
+              "Content-Type": "application/octet-stream",
+            }),
+            body: stable,
+            mode: "cors",
+          });
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "上传到本机编码器失败"));
+        }
         const data = await res.json().catch(() => null);
         if (!res.ok || !data?.sessionId) {
           throw new Error(data?.error || `原生会话失败 HTTP ${res.status}`);
@@ -1686,8 +1708,17 @@
        * 失败返回 null，由上层回退 wasm。
        */
       async function encodeV2gGifNative(opts) {
-        const file = opts.file || v2gSourceFile;
+        let file = opts.file || v2gSourceFile;
         if (!file) return null;
+        try {
+          if (!(file instanceof Uint8Array) && !isPinnedLocalMediaFile(file)) {
+            file = await pinLocalMediaFile(file, opts.onProgress);
+            if (opts.file) opts.file = file;
+            else if (!opts.file && v2gSourceFile) v2gSourceFile = file;
+          }
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "缺少原始视频文件，请重新选择视频"));
+        }
         // 需要水印时不走原生（桥路径未烧水印）
         if (!opts.skipWatermark && !opts.forceNative) return null;
         const probe = await probeNativeGifski();
@@ -1851,8 +1882,17 @@
 
       async function encodeV2gGifGifski(opts) {
         const tPhase = performance.now();
-        const file = opts.file || v2gSourceFile;
+        let file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
+        try {
+          if (!(file instanceof Uint8Array) && !isPinnedLocalMediaFile(file)) {
+            file = await pinLocalMediaFile(file, opts.onProgress);
+            if (opts.file) opts.file = file;
+            else if (!opts.file && v2gSourceFile) v2gSourceFile = file;
+          }
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "缺少原始视频文件，请重新选择视频"));
+        }
         const fpsCap = opts.allowWide ? V2G_MANUAL_MAX_FPS : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
         const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
         const hardCapW = opts.allowWide

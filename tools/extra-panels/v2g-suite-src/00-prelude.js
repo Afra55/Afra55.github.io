@@ -27,6 +27,8 @@
   const DN = window.DevToolsDeviceNotify || {};
   const {
     mergeGifBlobs, compressGifBlob, getFfmpegInstance, ensureFfmpegAssets, fetchFileBytes,
+    pinLocalMediaFile, isPinnedLocalMediaFile, isLocalFileUnreadableError, friendlyLocalFileError,
+    LOCAL_FILE_UNREADABLE_HINT,
     ensureFfmpegInputWritten, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions, drawGifTextWatermark,
     encodeAnimatedWebpFromStillFrames, isAutoPackZipEnabled, setAutoPackZipEnabled, syncAutoPackZipToggles,

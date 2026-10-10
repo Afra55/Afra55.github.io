@@ -27,6 +27,8 @@
   const DN = window.DevToolsDeviceNotify || {};
   const {
     mergeGifBlobs, compressGifBlob, getFfmpegInstance, ensureFfmpegAssets, fetchFileBytes,
+    pinLocalMediaFile, isPinnedLocalMediaFile, isLocalFileUnreadableError, friendlyLocalFileError,
+    LOCAL_FILE_UNREADABLE_HINT,
     ensureFfmpegInputWritten, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions, drawGifTextWatermark,
     encodeAnimatedWebpFromStillFrames, isAutoPackZipEnabled, setAutoPackZipEnabled, syncAutoPackZipToggles,
@@ -1200,8 +1202,17 @@
 
       async function encodeV2gGifFfmpeg(opts) {
         const tPhase = performance.now();
-        const file = opts.file || v2gSourceFile;
+        let file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
+        try {
+          if (!(file instanceof Uint8Array) && !isPinnedLocalMediaFile(file)) {
+            file = await pinLocalMediaFile(file, opts.onProgress);
+            if (opts.file) opts.file = file;
+            else if (!opts.file && v2gSourceFile) v2gSourceFile = file;
+          }
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "缺少原始视频文件，请重新选择视频"));
+        }
         const fpsCap = opts.allowWide ? V2G_MANUAL_MAX_FPS : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
         const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
         const hardCapW = opts.allowWide
@@ -1704,22 +1715,35 @@
         return `${file.name || ""}|${file.size || 0}|${file.lastModified || 0}`;
       }
       async function ensureNativeGifskiSession(file, probe) {
-        const key = nativeSessionKey(file);
+        let stable = file;
+        try {
+          if (!(file instanceof Uint8Array) && !isPinnedLocalMediaFile(file)) {
+            stable = await pinLocalMediaFile(file);
+          }
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "无法读取视频文件"));
+        }
+        const key = nativeSessionKey(stable);
         const hit = nativeGifskiSessions.get(key);
         if (hit && hit.sessionId && Date.now() - hit.at < 40 * 60 * 1000) {
           hit.at = Date.now();
           return hit.sessionId;
         }
         const url = `${probe.base}${probe.prefix}/gifski/session`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: nativeGifskiHeaders({
-            "X-Filename": encodeURIComponent(file.name || "video.bin"),
-            "Content-Type": "application/octet-stream",
-          }),
-          body: file,
-          mode: "cors",
-        });
+        let res;
+        try {
+          res = await fetch(url, {
+            method: "POST",
+            headers: nativeGifskiHeaders({
+              "X-Filename": encodeURIComponent(stable.name || "video.bin"),
+              "Content-Type": "application/octet-stream",
+            }),
+            body: stable,
+            mode: "cors",
+          });
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "上传到本机编码器失败"));
+        }
         const data = await res.json().catch(() => null);
         if (!res.ok || !data?.sessionId) {
           throw new Error(data?.error || `原生会话失败 HTTP ${res.status}`);
@@ -1733,8 +1757,17 @@
        * 失败返回 null，由上层回退 wasm。
        */
       async function encodeV2gGifNative(opts) {
-        const file = opts.file || v2gSourceFile;
+        let file = opts.file || v2gSourceFile;
         if (!file) return null;
+        try {
+          if (!(file instanceof Uint8Array) && !isPinnedLocalMediaFile(file)) {
+            file = await pinLocalMediaFile(file, opts.onProgress);
+            if (opts.file) opts.file = file;
+            else if (!opts.file && v2gSourceFile) v2gSourceFile = file;
+          }
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "缺少原始视频文件，请重新选择视频"));
+        }
         // 需要水印时不走原生（桥路径未烧水印）
         if (!opts.skipWatermark && !opts.forceNative) return null;
         const probe = await probeNativeGifski();
@@ -1898,8 +1931,17 @@
 
       async function encodeV2gGifGifski(opts) {
         const tPhase = performance.now();
-        const file = opts.file || v2gSourceFile;
+        let file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
+        try {
+          if (!(file instanceof Uint8Array) && !isPinnedLocalMediaFile(file)) {
+            file = await pinLocalMediaFile(file, opts.onProgress);
+            if (opts.file) opts.file = file;
+            else if (!opts.file && v2gSourceFile) v2gSourceFile = file;
+          }
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, "缺少原始视频文件，请重新选择视频"));
+        }
         const fpsCap = opts.allowWide ? V2G_MANUAL_MAX_FPS : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
         const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
         const hardCapW = opts.allowWide
@@ -4297,7 +4339,7 @@
           } else {
             if (!ffmpegInstance?.loaded) terminateFfmpegInstance({ revokeAssets: false });
             scheduleFfmpegPrewarm();
-            setError(v2gError, err.message || String(err));
+            setError(v2gError, friendlyLocalFileError(err, err.message || String(err)));
             setV2gProgress(false, 0, "");
           }
         } finally {
@@ -6575,11 +6617,14 @@
       async function loadVsplitFile(file) {
         if (!file) return;
         clearVsplit();
-        vsplitSourceFile = file;
         setError(vsplitError, "");
-        if (vsplitMeta) vsplitMeta.textContent = formatLocalPickMeta(file, "正在读取时长…");
+        if (vsplitMeta) vsplitMeta.textContent = formatLocalPickMeta(file, "正在锁定本地副本…");
         toast("已选择，仅本机处理，不会上传");
-        vsplitObjectUrl = URL.createObjectURL(file);
+        const pinned = await pinLocalMediaFile(file, (ratio, text) => {
+          if (vsplitMeta) vsplitMeta.textContent = formatLocalPickMeta(file, text || "锁定本地副本…");
+        });
+        vsplitSourceFile = pinned;
+        vsplitObjectUrl = URL.createObjectURL(pinned);
         attachLocalVideoPreview(vsplitVideo, vsplitObjectUrl);
         applyVsplitMute();
         await waitVideoMetadata(vsplitVideo);
@@ -6587,7 +6632,7 @@
         if (!(duration > 0) || !vsplitVideo.videoWidth) throw new Error("视频时长或尺寸无效");
         if (vsplitMeta) {
           vsplitMeta.textContent = formatLocalPickMeta(
-            file,
+            pinned,
             `${duration.toFixed(1)}s · ${vsplitVideo.videoWidth}×${vsplitVideo.videoHeight}`
           );
         }
@@ -7164,7 +7209,7 @@
             vsplitFile?.addEventListener("change", (e) => {
         loadVsplitFile(e.target.files?.[0]).catch((err) => {
           clearVsplit();
-          setError(vsplitError, err.message || String(err));
+          setError(vsplitError, friendlyLocalFileError(err, err.message || String(err)));
         });
       });
       $("#vsplit-clear")?.addEventListener("click", clearVsplit);
@@ -7209,7 +7254,7 @@
       flushPendingFileInput(vsplitFile, (files) =>
         loadVsplitFile(files?.[0]).catch((err) => {
           clearVsplit();
-          setError(vsplitError, err.message || String(err));
+          setError(vsplitError, friendlyLocalFileError(err, err.message || String(err)));
         })
       );
   
@@ -7311,6 +7356,8 @@
       /** 单文件可选 trim/crop（整段模式） */
       let vbbSingleEdit = null;
       let vbbObjectUrl = "";
+      /** 编码因 File 引用失效失败后，允许重选同视频并保留方案/打点 */
+      let vbbNeedReselect = false;
       let vbbBusy = false;
       let vbbFileEdit = null;
       let vbbFileEditLabel = null;
@@ -7806,15 +7853,16 @@
         const first = keeps[0];
         const last = keeps[keeps.length - 1];
         const endEps = 0.0005;
+        const startEps = 0.0005;
         const endKeep =
           Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
             ? window.DevToolsVtrimEditor.END_KEEP_SEC
             : 1 / 25;
         for (let i = 0; i < keeps.length; i++) {
           const k = keeps[i];
-          if (time >= k.start - 0.02 && time < k.end - endEps) return null;
+          if (time >= k.start - startEps && time < k.end - endEps) return null;
         }
-        if (time < first.start - 0.02) return first.start;
+        if (time < first.start - startEps) return first.start;
         for (let i = 0; i < keeps.length; i++) {
           const nxt = keeps[i + 1];
           if (nxt && time < nxt.start) return nxt.start;
@@ -7836,11 +7884,17 @@
           Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
             ? window.DevToolsVtrimEditor.END_KEEP_SEC
             : 1 / 25;
+        const startKeep =
+          Number(window.DevToolsVtrimEditor?.START_KEEP_SEC) > 0
+            ? window.DevToolsVtrimEditor.START_KEEP_SEC
+            : 1 / 50;
         for (const c of cuts) {
-          const delFrom = Math.max(trimStart, Number(c.start) || 0);
-          const delTo = Math.min(trimEnd, (Number(c.end) || 0) + endKeep);
-          if (delFrom > cursor + 0.02) keeps.push({ start: cursor, end: delFrom });
-          cursor = Math.max(cursor, delTo);
+          const cutStart = Math.max(trimStart, Number(c.start) || 0);
+          const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
+          const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep);
+          const resumeAt = Math.min(trimEnd, cutEnd + endKeep + startKeep);
+          if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
+          cursor = Math.max(cursor, resumeAt);
         }
         if (trimEnd > cursor + 0.02) keeps.push({ start: cursor, end: trimEnd });
         if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
@@ -8393,7 +8447,8 @@
         const t = Number.isFinite(mediaTime) ? mediaTime : Number(vbbVideo.currentTime) || 0;
         const next = vbbPreviewSeekForKeepRanges(keeps, t, { paused: vbbVideo.paused });
         if (next == null || !Number.isFinite(next)) return;
-        if (Math.abs(t - next) < 0.04) return;
+        // 须小于约 1 帧；原先 0.04 会让删段尾近边界少跳、外预览偏后
+        if (Math.abs(t - next) < 0.001) return;
         const keepPlaying = !vbbVideo.paused;
         vbbEditSkipBusy = true;
         applyVbbSeek(next, { keepPlaying: true });
@@ -8434,18 +8489,19 @@
         if (!item) return;
         persistActiveVbbMarks();
         pauseVbbPreview();
-        if (vbbObjectUrl) {
-          try {
-            URL.revokeObjectURL(vbbObjectUrl);
-          } catch (_) {}
-          vbbObjectUrl = "";
-        }
+        const prevUrl = vbbObjectUrl;
         vbbEditBatchIdx = idx;
         vbbSourceFile = item.file;
         ensureVbbItemEdit(item);
         loadItemVbbMarks(item);
+        // 先挂新 URL，再 revoke 旧的，避免预览短暂指向已失效地址
         vbbObjectUrl = URL.createObjectURL(item.file);
         attachLocalVideoPreview(vbbVideo, vbbObjectUrl);
+        if (prevUrl && prevUrl !== vbbObjectUrl) {
+          try {
+            URL.revokeObjectURL(prevUrl);
+          } catch (_) {}
+        }
         await waitVideoMetadata(vbbVideo);
         if (vbbVideo) {
           vbbVideo.hidden = false;
@@ -8720,23 +8776,55 @@
   
       async function probeVbbVideoFile(file, videoEl = vbbVideo) {
         if (!file || !videoEl) throw new Error("无法读取视频");
-        const url = URL.createObjectURL(file);
+        let pinned = file;
+        try {
+          if (!isPinnedLocalMediaFile(file)) {
+            pinned = await pinLocalMediaFile(file, (ratio, text) => {
+              if (vbbMeta) vbbMeta.textContent = formatLocalPickMeta(file, text || "锁定本地副本…");
+            });
+          }
+        } catch (err) {
+          throw new Error(friendlyLocalFileError(err, `${file.name || "视频"}：无法读取`));
+        }
+        const url = URL.createObjectURL(pinned);
         try {
           attachLocalVideoPreview(videoEl, url);
           await waitVideoMetadata(videoEl);
           const duration = Number(videoEl.duration) || 0;
           const srcW = videoEl.videoWidth || 0;
           const srcH = videoEl.videoHeight || 0;
-          if (!(duration >= VBB_MIN_SPAN)) throw new Error(`${file.name || "视频"}：太短，至少约 ${VBB_MIN_SPAN} 秒`);
-          if (!srcW) throw new Error(`${file.name || "视频"}：无法读取尺寸`);
-          return { file, duration, srcW, srcH };
+          if (!(duration >= VBB_MIN_SPAN)) throw new Error(`${pinned.name || "视频"}：太短，至少约 ${VBB_MIN_SPAN} 秒`);
+          if (!srcW) throw new Error(`${pinned.name || "视频"}：无法读取尺寸`);
+          return { file: pinned, duration, srcW, srcH };
         } finally {
-          URL.revokeObjectURL(url);
-          videoEl.pause?.();
-          videoEl.removeAttribute("src");
-          videoEl.load?.();
-          videoEl.hidden = true;
+          // 探测用临时 URL：先卸 src 再 revoke，避免 video 仍引用已撤销地址
+          try {
+            videoEl.pause?.();
+            videoEl.removeAttribute("src");
+            videoEl.load?.();
+            videoEl.hidden = true;
+          } catch (_) {}
+          try {
+            URL.revokeObjectURL(url);
+          } catch (_) {}
         }
+      }
+
+      function markVbbNeedReselect(err) {
+        if (isLocalFileUnreadableError(err)) {
+          vbbNeedReselect = true;
+          return true;
+        }
+        const msg = String(err && (err.message || err) || "");
+        if (msg.includes("请重新选择") || msg.includes("引用已失效")) {
+          vbbNeedReselect = true;
+          return true;
+        }
+        return false;
+      }
+
+      function vbbFriendlyErr(err) {
+        return friendlyLocalFileError(err, err?.message || String(err));
       }
   
       function renderVbbBatchList(opts = {}) {
@@ -10160,6 +10248,7 @@
           scheduleFfmpegPrewarm();
         }
         vbbBusy = false;
+        vbbNeedReselect = false;
         vbbSourceFile = null;
         vbbBatchFiles = [];
         vbbEditBatchIdx = -1;
@@ -10230,15 +10319,61 @@
   
       async function loadVbbFile(file) {
         if (!file) return;
+        const keepSession =
+          vbbNeedReselect &&
+          !vbbBusy &&
+          Boolean(
+            vbbAnalysis?.active ||
+              vbbAnalysis?.clarity ||
+              vbbAnalysis?.durationPlan ||
+              vbbSingleEdit ||
+              (typeof completeVbbMarks === "function" && completeVbbMarks().length) ||
+              (vbbClips && vbbClips.length)
+          );
+
+        if (vbbMeta) vbbMeta.textContent = formatLocalPickMeta(file, "正在锁定本地副本…");
+        const pinned = await pinLocalMediaFile(file, (ratio, text) => {
+          if (vbbMeta) vbbMeta.textContent = formatLocalPickMeta(file, text || "锁定本地副本…");
+        });
+
+        if (keepSession) {
+          const oldUrl = vbbObjectUrl;
+          vbbSourceFile = pinned;
+          vbbObjectUrl = URL.createObjectURL(pinned);
+          attachLocalVideoPreview(vbbVideo, vbbObjectUrl);
+          await waitVideoMetadata(vbbVideo);
+          // 新预览挂好后再 revoke 旧 URL，避免中间态黑屏/读失败
+          if (oldUrl && oldUrl !== vbbObjectUrl) {
+            try {
+              URL.revokeObjectURL(oldUrl);
+            } catch (_) {}
+          }
+          vbbNeedReselect = false;
+          setError(vbbError, "");
+          if (vbbMeta) {
+            const duration = Number(vbbVideo.duration) || 0;
+            vbbMeta.textContent = formatLocalPickMeta(
+              pinned,
+              duration > 0
+                ? `${duration.toFixed(1)}s · ${vbbVideo.videoWidth}×${vbbVideo.videoHeight}`
+                : "已重新锁定"
+            );
+          }
+          setVbbButtons();
+          toast("已重新锁定视频，可继续「一键黑盒」/「按方案生成」");
+          return;
+        }
+
         clearVbb();
         vbbBatchFiles = [];
         vbbEditBatchIdx = -1;
         renderVbbBatchList();
-        vbbSourceFile = file;
+        vbbSourceFile = pinned;
+        vbbNeedReselect = false;
         setError(vbbError, "");
-        if (vbbMeta) vbbMeta.textContent = formatLocalPickMeta(file, "正在读取时长…");
+        if (vbbMeta) vbbMeta.textContent = formatLocalPickMeta(pinned, "正在读取时长…");
         toast("已选择，仅本机处理，不会上传");
-        vbbObjectUrl = URL.createObjectURL(file);
+        vbbObjectUrl = URL.createObjectURL(pinned);
         attachLocalVideoPreview(vbbVideo, vbbObjectUrl);
         await waitVideoMetadata(vbbVideo);
         const duration = Number(vbbVideo.duration) || 0;
@@ -10247,7 +10382,7 @@
         vbbSingleEdit = makeVbbEditState(duration, vbbVideo.videoWidth, vbbVideo.videoHeight);
         if (vbbMeta) {
           vbbMeta.textContent = formatLocalPickMeta(
-            file,
+            pinned,
             `${duration.toFixed(1)}s · ${vbbVideo.videoWidth}×${vbbVideo.videoHeight}`
           );
         }
@@ -10362,8 +10497,10 @@
               : `已完成 ${ranges.length} 段 · 可逐条下载或打包`
           );
         } catch (err) {
-          if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
-          else toast("已取消");
+          if (String(err?.message) !== "已取消") {
+            markVbbNeedReselect(err);
+            setError(vbbError, vbbFriendlyErr(err));
+          } else toast("已取消");
           setVbbProgress(false, 0, "");
         } finally {
           vbbBusy = false;
@@ -11138,6 +11275,13 @@
         return /memory|OOM|out of memory|Allocation failed|Array buffer allocation|Cannot allocate|oom/i.test(msg);
       }
 
+      function reportVbbEncodeError(err, clip) {
+        const msg = vbbFriendlyErr(err);
+        markVbbNeedReselect(err);
+        if (clip) clip.error = msg;
+        return msg;
+      }
+
       async function runVbbBatchBlackbox() {
         if (!isVbbBatchMode() || vbbBusy) return;
         persistActiveVbbMarks();
@@ -11345,8 +11489,8 @@
             } catch (err) {
               if (String(err?.message) === "已取消") throw err;
               const elapsedSec = (performance.now() - t0) / 1000;
-              vbbLog(`[vbb] #${i + 1} FAIL ${Math.round(elapsedSec * 1000)}ms · ${err?.message || err}`);
-              vbbClips[i].error = err.message || String(err);
+              const msg = reportVbbEncodeError(err, vbbClips[i]);
+              vbbLog(`[vbb] #${i + 1} FAIL ${Math.round(elapsedSec * 1000)}ms · ${msg}`);
               setVbbClipJob(i, { status: "error", progress: 0, text: "失败" });
               refreshVbbClipRow(i);
               return { ok: false, memory: isLikelyMemoryError(err), err };
@@ -11694,8 +11838,10 @@
             toast("大视频在手机上易内存不足。已优化分段写入；仍建议少段处理或用电脑。");
           }
         } catch (err) {
-          if (String(err && err.message) !== "已取消") setError(vbbError, err.message || String(err));
-          else toast("已取消分析");
+          if (String(err && err.message) !== "已取消") {
+            markVbbNeedReselect(err);
+            setError(vbbError, vbbFriendlyErr(err));
+          } else toast("已取消分析");
           if (String(err && err.message) === "已取消") setVbbProgress(false, 0, "");
         } finally {
           vbbBusy = false;
@@ -11919,7 +12065,7 @@
               maybeAutoDownloadVbbGif(clip, i);
             } catch (err) {
               if (String(err && err.message) === "已取消") throw err;
-              clip.error = err.message || String(err);
+              reportVbbEncodeError(err, clip);
               setVbbClipJob(i, { status: "error", progress: 1, text: "失败" });
             }
             // 只刷新列表元数据，不自动展开全部预览
@@ -11971,8 +12117,10 @@
             toast(failN ? `完成，${failN} 段有问题` : "未生成 GIF");
           }
         } catch (err) {
-          if (String(err && err.message) !== "已取消") setError(vbbError, err.message || String(err));
-          else toast("已取消");
+          if (String(err && err.message) !== "已取消") {
+            markVbbNeedReselect(err);
+            setError(vbbError, vbbFriendlyErr(err));
+          } else toast("已取消");
           clearVbbClipJobs();
           renderVbbResults();
         } finally {
@@ -12986,16 +13134,18 @@
             vbbFile.value = "";
           });
           vbbFile.addEventListener("change", (e) => {
+            const keepOnFail = vbbNeedReselect;
             loadVbbFiles(e.target.files).catch((err) => {
-              clearVbb();
-              setError(vbbError, err.message || String(err));
+              // 重选续跑失败时保留方案/打点，便于再选一次
+              if (!keepOnFail && !vbbNeedReselect) clearVbb();
+              setError(vbbError, vbbFriendlyErr(err));
             });
           });
           const pending = window.DevToolsPendingFiles?.take?.("vbb");
           if (pending?.length) {
             loadVbbFiles(pending).catch((err) => {
               clearVbb();
-              setError(vbbError, err.message || String(err));
+              setError(vbbError, vbbFriendlyErr(err));
             });
           }
         }

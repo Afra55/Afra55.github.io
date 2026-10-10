@@ -1963,11 +1963,14 @@
       async function loadVsplitFile(file) {
         if (!file) return;
         clearVsplit();
-        vsplitSourceFile = file;
         setError(vsplitError, "");
-        if (vsplitMeta) vsplitMeta.textContent = formatLocalPickMeta(file, "正在读取时长…");
+        if (vsplitMeta) vsplitMeta.textContent = formatLocalPickMeta(file, "正在锁定本地副本…");
         toast("已选择，仅本机处理，不会上传");
-        vsplitObjectUrl = URL.createObjectURL(file);
+        const pinned = await pinLocalMediaFile(file, (ratio, text) => {
+          if (vsplitMeta) vsplitMeta.textContent = formatLocalPickMeta(file, text || "锁定本地副本…");
+        });
+        vsplitSourceFile = pinned;
+        vsplitObjectUrl = URL.createObjectURL(pinned);
         attachLocalVideoPreview(vsplitVideo, vsplitObjectUrl);
         applyVsplitMute();
         await waitVideoMetadata(vsplitVideo);
@@ -1975,7 +1978,7 @@
         if (!(duration > 0) || !vsplitVideo.videoWidth) throw new Error("视频时长或尺寸无效");
         if (vsplitMeta) {
           vsplitMeta.textContent = formatLocalPickMeta(
-            file,
+            pinned,
             `${duration.toFixed(1)}s · ${vsplitVideo.videoWidth}×${vsplitVideo.videoHeight}`
           );
         }
@@ -2552,7 +2555,7 @@
             vsplitFile?.addEventListener("change", (e) => {
         loadVsplitFile(e.target.files?.[0]).catch((err) => {
           clearVsplit();
-          setError(vsplitError, err.message || String(err));
+          setError(vsplitError, friendlyLocalFileError(err, err.message || String(err)));
         });
       });
       $("#vsplit-clear")?.addEventListener("click", clearVsplit);
@@ -2597,7 +2600,7 @@
       flushPendingFileInput(vsplitFile, (files) =>
         loadVsplitFile(files?.[0]).catch((err) => {
           clearVsplit();
-          setError(vsplitError, err.message || String(err));
+          setError(vsplitError, friendlyLocalFileError(err, err.message || String(err)));
         })
       );
   
