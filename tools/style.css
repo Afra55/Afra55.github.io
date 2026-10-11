@@ -4127,28 +4127,16 @@ html[data-boot-loading="1"] body {
   color: var(--muted, #9aabc4);
 }
 
-.tool-panel.is-tool-assets-loading .panel-body {
-  pointer-events: none;
+/* 加载中只降非文件控件透明度，不再 pointer-events:none（会偶发挡掉选文件） */
+.tool-panel.is-tool-assets-loading .panel-body :is(button, input, textarea, select) {
+  opacity: 0.72;
 }
 
 .tool-panel.is-tool-assets-loading .panel-body :is(label.file-btn, a.file-btn, input[type="file"]) {
-  pointer-events: auto !important;
   cursor: pointer;
   opacity: 1;
   position: relative;
   z-index: 6;
-}
-
-.tool-panel.is-tool-assets-loading .panel-body :is(button, input, textarea, select, a.file-btn, label.file-btn) {
-  cursor: not-allowed;
-}
-
-.tool-panel.is-tool-assets-loading .panel-body :is(label.file-btn, a.file-btn) {
-  cursor: pointer;
-}
-
-.tool-panel.is-tool-assets-loading .panel-body :is(button, input, textarea, select) {
-  opacity: 0.72;
 }
 
 .yd-opts {

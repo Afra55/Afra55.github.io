@@ -4338,7 +4338,7 @@
       },
       true
     );
-    // 部分手机对 display:none / [hidden] 的 file input + label 点按无反应：改走 showPicker/click
+    // visually-hidden / clip 的 file input + label 在部分浏览器偶发无反应：始终走 showPicker/click
     document.addEventListener(
       "click",
       (e) => {
@@ -4348,22 +4348,24 @@
         if (!id) return;
         const input = document.getElementById(id);
         if (!input || input.type !== "file" || input.disabled) return;
-        // 浏览器会先激活 for= 关联；若被挡板/合成层吃掉则补一次
         const panel = input.closest(".tool-panel");
+        // 粘滞 loading 挡板会吃掉原生 label→input；点选文件时强制清掉
         if (panel?.classList.contains("is-tool-assets-loading")) {
+          panel.classList.remove("is-tool-assets-loading");
+          panel.removeAttribute("aria-busy");
+        }
+        try {
+          // 便于重选同一文件也能触发 change；showPicker 不会走 input 的 click 清空逻辑
+          input.value = "";
+        } catch (_) {}
+        e.preventDefault();
+        try {
+          if (typeof input.showPicker === "function") input.showPicker();
+          else input.click();
+        } catch (_) {
           try {
-            if (typeof input.showPicker === "function") {
-              e.preventDefault();
-              input.showPicker();
-            } else {
-              e.preventDefault();
-              input.click();
-            }
-          } catch (_) {
-            try {
-              input.click();
-            } catch (_) {}
-          }
+            input.click();
+          } catch (_) {}
         }
       },
       true

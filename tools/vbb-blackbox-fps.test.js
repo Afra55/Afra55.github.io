@@ -190,7 +190,8 @@ assert(
   assert(/translate\(|clipPath/.test(vbbUi), "外预览裁切须 clip + 放大绿框");
   assert(/exportKeepVideo/.test(vbbUi), "黑盒删中间拼接须走同一套导出");
   assert(/force serial: cutouts|needsMaterialize/.test(vbbUi), "有删中间时批量须串行防第二路僵死");
-  assert(/编码无进度超时|VBB_ITEM_STALL_MS/.test(vbbUi), "批量须有单条僵死超时");
+  assert(!/编码无进度超时，已跳过该条|单条转换超时，已跳过|VBB_ITEM_STALL_MS|VBB_ITEM_HARD_MS/.test(vbbUi), "批量不得因进度/硬超时跳过");
+  assert(/VBB_STALL_HINT_MS|still waiting \(no skip\)/.test(vbbUi), "无进度时只提示续等，不 skip");
   const gifskiCore = fs.readFileSync(path.join(__dirname, "ffmpeg-bridge/gifski-core.js"), "utf8");
   assert(!/srcSpan\s*\+\s*0\.05/.test(gifskiCore), "原生 gifski 不得再给片尾 +50ms");
   assert(/-ss"[\s\S]{0,80}opts\.startSec/.test(gifskiCore), "原生裁剪须有 -ss");
