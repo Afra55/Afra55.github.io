@@ -1109,8 +1109,9 @@
         Math.abs(crop.h - srcH) < 2;
       const cuts = normalizeCutoutsList(cutouts, startSec, endSec);
       return {
-        // 片头半开：提交略晚于预览锁定帧，与片尾 END_KEEP 对称
-        trimStart: quantizeTrimSec(startKeepSec()),
+        // 提交黄/红柄所见时间（勿在此加 START_KEEP，否则外预览/成片比编辑内偏后）
+        // 片头半开只在 keepRangesForEncode / 切片时施加，成片可略多删不可少删
+        trimStart: quantizeTrimSec(startSec),
         trimEnd: quantizeTrimSec(endSec),
         cutouts: cuts.map((c) => ({
           start: quantizeTrimSec(c.start),
@@ -1684,6 +1685,10 @@
     return merged;
   }
 
+  /**
+   * 预览用 keep：与黄/红柄所见对齐（编辑内 = 外预览）。
+   * 成片请用 keepRangesForEncode（可略多删一帧，避免 ffmpeg seek 少删）。
+   */
   function keepRangesFromEdit(edit, duration) {
     const d = Math.max(0, Number(duration) || 0);
     const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
@@ -1693,8 +1698,8 @@
     let cursor = trimStart;
     for (const c of cuts) {
       // 闭区间：红柄 cut.start / cut.end 所见帧都要删。
-      // 上一段按片尾半开在 start 前收掉 END_KEEP，避免 HTML5 播到 start 仍画出该帧（外预览偏后）；
-      // 下一段从 end+END_KEEP 起再加 START_KEEP 片头半开，避免 seek 回退少删。宁可多删 1 帧。
+      // 上一段按片尾半开在 start 前收掉 END_KEEP，避免 HTML5 播到 start 仍画出该帧；
+      // 下一段从 end+END_KEEP 起再加 START_KEEP 片头半开，避免 seek 回退少删。
       const cutStart = Math.max(trimStart, Number(c.start) || 0);
       const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
       const keepEnd = Math.max(cursor + 0.05, cutStart - END_KEEP_SEC);
@@ -1704,6 +1709,43 @@
     }
     if (trimEnd > cursor + 0.02) keeps.push({ start: cursor, end: trimEnd });
     if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
+    const last = keeps[keeps.length - 1];
+    if (last && last.end >= trimEnd - 0.001) {
+      last.end = Math.max(last.start + 0.05, last.end - END_KEEP_SEC);
+    }
+    return keeps;
+  }
+
+  /**
+   * 成片/导出用 keep：在预览 keep 上再略收片头、略扩删段，宁可多删一帧不可偏后少删。
+   */
+  function keepRangesForEncode(edit, duration) {
+    const preview = keepRangesFromEdit(edit, duration);
+    if (!preview.length) return preview;
+    // 成片比预览再多收约半帧片头 + 删段两侧各多 ~半帧（对抗 -ss/关键帧少删）
+    const padStart = START_KEEP_SEC;
+    const padCut = END_KEEP_SEC;
+    const d = Math.max(0, Number(duration) || 0);
+    const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
+    const trimEnd = Math.min(d, Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || d));
+    const cuts = normalizeCutouts(edit?.cutouts, trimStart, trimEnd);
+    if (!cuts.length) {
+      const k0 = preview[0];
+      const start = Math.min(k0.end - 0.05, k0.start + padStart);
+      return [{ start, end: k0.end }];
+    }
+    const keeps = [];
+    let cursor = Math.min(trimEnd - 0.05, trimStart + padStart);
+    for (const c of cuts) {
+      const cutStart = Math.max(trimStart, Number(c.start) || 0);
+      const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
+      const keepEnd = Math.max(cursor + 0.05, cutStart - END_KEEP_SEC - padCut);
+      const resumeAt = Math.min(trimEnd, cutEnd + END_KEEP_SEC + START_KEEP_SEC + padCut);
+      if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
+      cursor = Math.max(cursor, resumeAt);
+    }
+    if (trimEnd > cursor + 0.02) keeps.push({ start: cursor, end: trimEnd });
+    if (!keeps.length) keeps.push({ start: cursor, end: Math.max(cursor + 0.05, trimEnd - END_KEEP_SEC) });
     const last = keeps[keeps.length - 1];
     if (last && last.end >= trimEnd - 0.001) {
       last.end = Math.max(last.start + 0.05, last.end - END_KEEP_SEC);
@@ -1756,7 +1798,7 @@
   }
 
   /**
-   * 按 keepRangesFromEdit 切出 trim+cutouts 后的 mp4（wasm ffmpeg）。
+   * 按 keepRangesForEncode 切出 trim+cutouts 后的 mp4（wasm ffmpeg）。
    * @returns {Promise<{ file: File, blob: Blob, duration: number, srcW: number, srcH: number, filename: string }>}
    */
   async function exportKeepVideo(file, edit, duration, opts = {}) {
@@ -1768,9 +1810,11 @@
     if (typeof getFf !== "function" || typeof writeIn !== "function") {
       throw new Error("编码器未就绪，请稍等本机 FFmpeg 加载后再试");
     }
-    const ffmpeg = await getFf((r, t) => onProgress(r, t || "准备编码器…"));
+    // 批处理可传入租赁实例，避免与单例并行互踢导致第二路僵死
+    const ffmpeg =
+      opts.ffmpeg || (await getFf((r, t) => onProgress(r, t || "准备编码器…")));
     if (!ffmpeg) throw new Error("无法加载编码器");
-    const keeps = keepRangesFromEdit(edit, duration);
+    const keeps = keepRangesForEncode(edit, duration);
     if (!keeps.length) throw new Error("没有可保留的片段");
     const inName = await writeIn(ffmpeg, file, () => onProgress(0.05, "载入视频…"));
     const srcW = Math.max(2, Number(opts.srcW) || 720);
@@ -1784,6 +1828,7 @@
       const end = Math.max(start + 0.05, Number(k.end) || 0);
       const dur = Math.max(0.05, end - start);
       const out = `keep${i}.mp4`;
+      // trim=start:end 半开 [start,end)，与 keep 一致；失败再退 -ss/-t
       const vfCore = [
         cropVf,
         useTrim ? `trim=start=${start}:end=${end}` : "",
@@ -1827,38 +1872,30 @@
     let merged = parts[0];
     if (parts.length > 1) {
       merged = "keep-merged.mp4";
-      const listName = "keep-concat.txt";
-      const listBody = parts.map((p) => `file '${p}'`).join("\n");
-      await ffmpeg.writeFile(listName, new TextEncoder().encode(listBody));
-      let code = await ffmpeg
-        .exec(["-f", "concat", "-safe", "0", "-i", listName, "-c", "copy", "-y", merged])
-        .catch(() => 1);
-      if (code !== 0) {
-        const filter = parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
-        const args = [];
-        parts.forEach((p) => args.push("-i", p));
-        args.push(
-          "-filter_complex",
-          filter,
-          "-map",
-          "[v]",
-          "-an",
-          "-c:v",
-          "libx264",
-          "-preset",
-          "ultrafast",
-          "-crf",
-          "18",
-          "-pix_fmt",
-          "yuv420p",
-          "-y",
-          merged
-        );
-        code = await ffmpeg.exec(args).catch(() => 1);
-      }
-      try {
-        await ffmpeg.deleteFile(listName);
-      } catch (_) {}
+      // 多段一律重编码拼接：copy 易在接点吐出删段边界帧（成片偏后少删）
+      const filter = parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
+      const args = [];
+      parts.forEach((p) => args.push("-i", p));
+      args.push(
+        "-filter_complex",
+        filter,
+        "-map",
+        "[v]",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-y",
+        merged
+      );
+      const code = await ffmpeg.exec(args).catch(() => 1);
       if (code !== 0) throw new Error("拼接失败");
     }
     const data = await ffmpeg.readFile(merged);
@@ -1887,6 +1924,7 @@
     ensureCss: ensureVtrimCss,
     normalizeCutouts,
     keepRangesFromEdit,
+    keepRangesForEncode,
     previewSeekForKeepRanges,
     exportKeepVideo,
     END_KEEP_SEC,

@@ -968,9 +968,11 @@ button.tool-nav-link {
 }
 
 .tool-panel.is-tool-assets-loading .panel-body :is(label.file-btn, a.file-btn, input[type="file"]) {
-  pointer-events: auto;
+  pointer-events: auto !important;
   cursor: pointer;
   opacity: 1;
+  position: relative;
+  z-index: 6;
 }
 
 .tool-panel.is-tool-assets-loading .panel-body :is(button, input, textarea, select, a.file-btn, label.file-btn) {

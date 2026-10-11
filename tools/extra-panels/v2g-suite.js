@@ -1115,13 +1115,15 @@
         let phase = initialPhase || "处理中";
         let lastP = 0;
         let lastBumpAt = Date.now();
+        let lastRealAt = Date.now();
         const startedAt = Date.now();
         const aborted = typeof isAborted === "function" ? isAborted : () => abortV2g;
         const timer = setInterval(() => {
           if (aborted()) return;
           const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-          const stalled = Date.now() - lastBumpAt > 900;
+          const stalled = Date.now() - lastRealAt > 900;
           if (stalled) {
+            // 心跳假进度：不刷新 lastRealAt，否则同值 progress 会把僵死伪装成「还活着」
             lastP = Math.min(0.97, lastP + 0.012);
             lastBumpAt = Date.now();
           }
@@ -1135,17 +1137,27 @@
           setPhase(next) {
             phase = next || phase;
             lastBumpAt = Date.now();
+            lastRealAt = Date.now();
           },
           setProgress(p) {
             const n = Math.max(0, Math.min(1, Number(p) || 0));
-            if (n >= lastP) {
+            if (n > lastP + 0.002) {
               lastP = n;
               lastBumpAt = Date.now();
+              lastRealAt = Date.now();
+            } else if (n >= lastP) {
+              // 同进度反复上报：不刷新 lastRealAt，便于心跳/超时检出僵死
+              lastP = n;
             }
           },
           bump() {
             lastP = Math.min(0.96, lastP + 0.004);
             lastBumpAt = Date.now();
+            lastRealAt = Date.now();
+          },
+          /** 真实进度多久没涨（ms），供批处理超时 */
+          stalledFor() {
+            return Date.now() - lastRealAt;
           },
           stop() {
             clearInterval(timer);
@@ -7905,6 +7917,29 @@
         return keeps;
       }
 
+      /** 成片/拼接用：可比预览略多删，避免 ffmpeg 少删 */
+      function vbbKeepRangesForEncode(edit, duration) {
+        const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
+        if (typeof fn === "function") return fn(edit, duration);
+        const preview = vbbKeepRangesFromEdit(edit, duration);
+        if (!preview.length) return preview;
+        const startKeep =
+          Number(window.DevToolsVtrimEditor?.START_KEEP_SEC) > 0
+            ? window.DevToolsVtrimEditor.START_KEEP_SEC
+            : 1 / 50;
+        const endKeep =
+          Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
+            ? window.DevToolsVtrimEditor.END_KEEP_SEC
+            : 1 / 25;
+        return preview.map((k, i) => {
+          let start = Number(k.start) || 0;
+          let end = Number(k.end) || 0;
+          if (i === 0) start = Math.min(end - 0.05, start + startKeep);
+          if (i > 0) start = Math.min(end - 0.05, start + endKeep * 0.5);
+          return { start, end };
+        });
+      }
+
       function vbbEditIsDirty(edit, duration, srcW, srcH) {
         if (!edit) return false;
         const d = Math.max(0, Number(duration) || 0);
@@ -8012,9 +8047,12 @@
         let startSec = 0;
         let span = Math.max(0, Number(duration) || 0);
         let keepRanges = [{ start: 0, end: span }];
+        let previewKeeps = keepRanges;
         if (edit) {
           clampVbbEdit(edit, duration, srcW, srcH);
-          keepRanges = vbbKeepRangesFromEdit(edit, duration);
+          previewKeeps = vbbKeepRangesFromEdit(edit, duration);
+          // 编码时间线用略多删的 keep，预览仍用 previewKeeps
+          keepRanges = vbbKeepRangesForEncode(edit, duration);
           startSec = Number(keepRanges[0]?.start) || 0;
           const last = keepRanges[keepRanges.length - 1];
           const end = Number(last?.end) || duration;
@@ -8026,15 +8064,15 @@
             span = keepRanges.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
           }
         }
-        return { startSec, span, edit, keepRanges };
+        return { startSec, span, edit, keepRanges, previewKeeps };
       }
 
       /**
        * 有多段 keep（删中间）时，先拼成一条临时片再黑盒，保证仍是一条 GIF。
        * @returns {Promise<{ file: File, duration: number, srcW: number, srcH: number, materialized: boolean }>}
        */
-      async function materializeVbbKeepVideo(file, edit, srcW, srcH, duration, onProgress) {
-        const keeps = vbbKeepRangesFromEdit(edit, duration);
+      async function materializeVbbKeepVideo(file, edit, srcW, srcH, duration, onProgress, ffmpegLease) {
+        const keeps = vbbKeepRangesForEncode(edit, duration);
         if (keeps.length <= 1) {
           return { file, duration, srcW, srcH, materialized: false };
         }
@@ -8045,9 +8083,16 @@
             srcH,
             applyCrop: false,
             onProgress,
+            ffmpeg: ffmpegLease || null,
           });
+          let outFile = out.file;
+          try {
+            if (typeof pinLocalMediaFile === "function" && outFile && !isPinnedLocalMediaFile?.(outFile)) {
+              outFile = await pinLocalMediaFile(outFile, () => {});
+            }
+          } catch (_) {}
           return {
-            file: out.file,
+            file: outFile,
             duration: Number(out.duration) || duration,
             srcW: out.srcW || srcW,
             srcH: out.srcH || srcH,
@@ -8055,9 +8100,10 @@
           };
         }
         const ffmpeg =
-          typeof getFfmpegInstance === "function"
+          ffmpegLease ||
+          (typeof getFfmpegInstance === "function"
             ? await getFfmpegInstance((r, t) => onProgress?.(r, t || "准备拼接编辑…"))
-            : null;
+            : null);
         if (!ffmpeg) throw new Error("无法加载编码器以应用「删中间」");
         const ext = typeof v2gSourceExt === "function" ? v2gSourceExt(file) : "mp4";
         const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => onProgress?.(0.05, "载入视频…"));
@@ -8068,18 +8114,17 @@
           if (abortVbb || abortV2g) throw new Error("已取消");
           onProgress?.(0.08 + (i / keeps.length) * 0.5, `应用删中间 ${i + 1}/${keeps.length}`);
           const k = keeps[i];
-          const dur = Math.max(0.05, k.end - k.start);
+          const start = Math.max(0, Number(k.start) || 0);
+          const end = Math.max(start + 0.05, Number(k.end) || 0);
+          const dur = Math.max(0.05, end - start);
           const out = `keep${i}.mp4`;
-          const args = [
+          // 优先 trim 半开；失败再 -ss/-t
+          let args = [
             "-i",
             inName,
-            "-ss",
-            String(k.start),
-            "-t",
-            String(dur),
             "-an",
             "-vf",
-            `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`,
+            `trim=start=${start}:end=${end},setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`,
             "-c:v",
             "libx264",
             "-preset",
@@ -8093,59 +8138,80 @@
             "-y",
             out,
           ];
-          const code = await ffmpeg.exec(args).catch(() => 1);
+          let code = await ffmpeg.exec(args).catch(() => 1);
+          if (code !== 0) {
+            args = [
+              "-i",
+              inName,
+              "-ss",
+              String(start),
+              "-t",
+              String(dur),
+              "-an",
+              "-vf",
+              `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`,
+              "-c:v",
+              "libx264",
+              "-preset",
+              "ultrafast",
+              "-crf",
+              "18",
+              "-pix_fmt",
+              "yuv420p",
+              "-movflags",
+              "+faststart",
+              "-y",
+              out,
+            ];
+            code = await ffmpeg.exec(args).catch(() => 1);
+          }
           if (code !== 0) throw new Error(`删中间切片失败（段 ${i + 1}）`);
           parts.push(out);
         }
         onProgress?.(0.65, "拼接保留段…");
-        const listName = "keep-concat.txt";
-        const listBody = parts.map((p) => `file '${p}'`).join("\n");
-        await ffmpeg.writeFile(listName, new TextEncoder().encode(listBody));
         const merged = "keep-merged.mp4";
-        let code = await ffmpeg
-          .exec(["-f", "concat", "-safe", "0", "-i", listName, "-c", "copy", "-y", merged])
-          .catch(() => 1);
-        if (code !== 0) {
-          // copy 失败则重编码拼接
-          const filter = parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
-          const args = [];
-          parts.forEach((p) => args.push("-i", p));
-          args.push(
-            "-filter_complex",
-            filter,
-            "-map",
-            "[v]",
-            "-an",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-crf",
-            "18",
-            "-pix_fmt",
-            "yuv420p",
-            "-y",
-            merged
-          );
-          code = await ffmpeg.exec(args).catch(() => 1);
-        }
+        const filter = parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
+        const concatArgs = [];
+        parts.forEach((p) => concatArgs.push("-i", p));
+        concatArgs.push(
+          "-filter_complex",
+          filter,
+          "-map",
+          "[v]",
+          "-an",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-crf",
+          "18",
+          "-pix_fmt",
+          "yuv420p",
+          "-movflags",
+          "+faststart",
+          "-y",
+          merged
+        );
+        const code = await ffmpeg.exec(concatArgs).catch(() => 1);
         if (code !== 0) throw new Error("删中间拼接失败");
         const data = await ffmpeg.readFile(merged);
         const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
         const bytes = new Uint8Array(raw.byteLength);
         bytes.set(raw);
-        const outFile = new File([bytes], (file.name || "edit").replace(/\.[^.]+$/, "") + "-cut.mp4", {
+        let outFile = new File([bytes], (file.name || "edit").replace(/\.[^.]+$/, "") + "-cut.mp4", {
           type: "video/mp4",
         });
+        try {
+          if (typeof pinLocalMediaFile === "function") {
+            outFile = await pinLocalMediaFile(outFile, () => {});
+          }
+        } catch (_) {}
         const totalSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
         for (const p of parts) {
           try {
             await ffmpeg.deleteFile(p);
           } catch (_) {}
         }
-        try {
-          await ffmpeg.deleteFile(listName);
-        } catch (_) {}
         try {
           await ffmpeg.deleteFile(merged);
         } catch (_) {}
@@ -8165,16 +8231,28 @@
         let outH = Math.max(1, Math.round(Number(srcH) || 1));
         let cutNote = "";
         if (!fromMark && edit) {
-          const keeps = vbbKeepRangesFromEdit(edit, duration);
+          const keeps = vbbKeepRangesForEncode(edit, duration);
           const cuts = vbbNormalizeCutouts(edit.cutouts, edit.trimStart, edit.trimEnd);
           if (keeps.length > 1) {
-            const mat = await materializeVbbKeepVideo(file, edit, srcW, srcH, duration, opts.onProgress);
+            const mat = await materializeVbbKeepVideo(
+              file,
+              edit,
+              srcW,
+              srcH,
+              duration,
+              opts.onProgress,
+              opts.ffmpeg || null
+            );
             outFile = mat.file;
             startSec = 0;
             span = Math.max(VBB_MIN_SPAN, Number(mat.duration) || span);
             outW = mat.srcW;
             outH = mat.srcH;
             cutNote = cuts.length ? `删${cuts.length}段` : "删中间";
+          } else if (keeps.length === 1) {
+            startSec = Number(keeps[0].start) || startSec;
+            span = Math.max(VBB_MIN_SPAN, (Number(keeps[0].end) || 0) - startSec);
+            if (cuts.length) cutNote = `删${cuts.length}段`;
           } else if (cuts.length) {
             cutNote = `删${cuts.length}段`;
           }
@@ -8349,8 +8427,15 @@
             };
             clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
             if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
-            applyVbbSeek(Number(item.edit.trimStart) || 0, { keepPlaying: false });
+            // 外预览落点与编辑内 keep 首帧一致（预览 keep，非成片加垫）
+            const previewKeeps = vbbKeepRangesFromEdit(item.edit, item.duration);
+            const seekTo = Number(previewKeeps[0]?.start);
+            applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
+              keepPlaying: false,
+            });
             syncVbbEditPreview();
+            // 立刻按 keep 校正一次，避免落在删段内
+            enforceVbbEditPlaybackWindow();
             toast(
               vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)
                 ? "已保存编辑 · 预览为裁切后片段"
@@ -8509,15 +8594,22 @@
         }
         const edit = item.edit;
         clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
-        const seekTo = isVbbManualMode()
-          ? vbbDraftStart != null
-            ? vbbDraftStart
-            : completeVbbMarks()[0]?.start ?? 0
-          : edit.trimStart;
+        let seekTo = 0;
+        if (isVbbManualMode()) {
+          seekTo =
+            vbbDraftStart != null
+              ? vbbDraftStart
+              : completeVbbMarks()[0]?.start ?? 0;
+        } else {
+          const previewKeeps = vbbKeepRangesFromEdit(edit, item.duration);
+          seekTo = Number(previewKeeps[0]?.start);
+          if (!Number.isFinite(seekTo)) seekTo = Number(edit.trimStart) || 0;
+        }
         applyVbbSeek(seekTo, { keepPlaying: false });
         renderVbbBatchList({ keepSelection: true });
         syncVbbEditUi();
         syncVbbEditPreview();
+        if (!isVbbManualMode()) enforceVbbEditPlaybackWindow();
         paintVbbManualUi();
         setVbbButtons();
       }
@@ -11352,6 +11444,16 @@
         try {
           await prewarmFfmpegEngine().catch(() => {});
           conc = resolveBatchConcurrency(total);
+          // 删中间要走单例拼接/裁剪：并行会互踢卡住第二路 → 强制串行
+          const needsMaterialize = jobs.some((j) => {
+            const cuts = Array.isArray(j.edit?.cutouts) ? j.edit.cutouts.length : 0;
+            const keeps = j.edit ? vbbKeepRangesForEncode(j.edit, j.item.duration) : [];
+            return cuts > 0 || keeps.length > 1;
+          });
+          if (needsMaterialize && conc > 1) {
+            conc = 1;
+            vbbLog(`[vbb] batch force serial: cutouts/materialize`);
+          }
           // 旗舰/桌面：预开 N 路独立 FFmpeg Worker；gifski/gifsicle 仍上锁串行
           if (conc > 1 && typeof createFfmpegInstance === "function") {
             try {
@@ -11373,6 +11475,9 @@
             }
           }
 
+          const VBB_ITEM_STALL_MS = 120000;
+          const VBB_ITEM_HARD_MS = 12 * 60 * 1000;
+
           const encodeOne = async (i, ffmpegLease) => {
             if (abortVbb) throw new Error("已取消");
             const job = jobs[i];
@@ -11388,68 +11493,116 @@
                   : null);
               const t0 = performance.now();
               const usedSeed = Boolean(seedForItem);
+              let lastRealProgressAt = Date.now();
+              let lastLocal = 0;
+              let itemDead = false;
+              const itemAborted = () => abortVbb || itemDead;
+              const killItem = (why) => {
+                if (itemDead) return;
+                itemDead = true;
+                vbbLog(`[vbb] #${i + 1} ${why}`);
+                try {
+                  terminateFfmpegInstance({ revokeAssets: false });
+                } catch (_) {}
+                if (ffmpegLease) {
+                  try {
+                    destroyFfmpegInstance?.(ffmpegLease);
+                  } catch (_) {}
+                }
+              };
+              const watchdog = window.setInterval(() => {
+                if (itemAborted()) return;
+                const stalled = Date.now() - lastRealProgressAt;
+                if (stalled > VBB_ITEM_STALL_MS) killItem(`stall ${Math.round(stalled / 1000)}s → skip item`);
+              }, 2000);
               try {
-                // 串行才重启单例：并行用租赁实例，避免互踢
+                // 串行才重启单例：并行用租赁实例，避免互踢；删中间后多歇一会让 worker 干净退出
                 if (conc <= 1 && i > 0 && !ffmpegLease) {
                   try {
                     terminateFfmpegInstance({ revokeAssets: false });
                   } catch (_) {}
-                  await new Promise((r) => setTimeout(r, 50));
+                  await new Promise((r) => setTimeout(r, needsMaterialize ? 280 : 80));
                 }
-                const prepared = await prepareVbbEncodeSource(
-                  item.file,
-                  win.edit,
-                  item.srcW,
-                  item.srcH,
-                  item.duration,
-                  {
-                    fromMark: job.fromMark,
-                    startSec: win.startSec,
-                    span: win.span,
+                const runBody = async () => {
+                  const prepared = await prepareVbbEncodeSource(
+                    item.file,
+                    win.edit,
+                    item.srcW,
+                    item.srcH,
+                    item.duration,
+                    {
+                      fromMark: job.fromMark,
+                      startSec: win.startSec,
+                      span: win.span,
+                      ffmpeg: ffmpegLease || null,
+                      onProgress: (local, text) => {
+                        if (itemAborted()) return;
+                        const n = Number(local) || 0;
+                        if (n > lastLocal + 0.002) {
+                          lastLocal = n;
+                          lastRealProgressAt = Date.now();
+                        }
+                        setVbbClipJob(i, {
+                          status: "running",
+                          progress: Math.min(0.12, 0.02 + Math.min(0.1, n) * 0.1),
+                          text: text || "应用删中间…",
+                        });
+                      },
+                    }
+                  );
+                  if (itemAborted()) throw new Error(itemDead ? "编码无进度超时，已跳过该条" : "已取消");
+                  // crop 相对原片坐标；删中间成片尺寸≈原片，仍用原宽高归一化
+                  const vbbCrop = await resolveVbbEncodeCrop(
+                    item.file,
+                    win.edit,
+                    item.srcW,
+                    item.srcH,
+                    item.duration
+                  );
+                  if (itemAborted()) throw new Error(itemDead ? "编码无进度超时，已跳过该条" : "已取消");
+                  const encoded = await encodeBlackboxClip({
+                    file: prepared.file,
+                    startSec: prepared.startSec,
+                    span: prepared.span,
+                    srcW: prepared.srcW,
+                    srcH: prepared.srcH,
+                    qualityFirst: vbbQualityFirstOn(),
+                    seed: seedForItem,
+                    speedLimitSec: vbbSpeedLimitSec(),
+                    crop: vbbCrop,
+                    ffmpeg: ffmpegLease || null,
+                    isAborted: itemAborted,
                     onProgress: (local, text) => {
+                      if (itemAborted()) return;
+                      const n = Number(local) || 0;
+                      if (n > lastLocal + 0.002) {
+                        lastLocal = n;
+                        lastRealProgressAt = Date.now();
+                      }
+                      const stage = vbbTickerLine(text) || (conc > 1 ? "并行编码" : "编码");
                       setVbbClipJob(i, {
                         status: "running",
-                        progress: Math.min(0.12, 0.02 + Math.min(0.1, local) * 0.1),
-                        text: text || "应用删中间…",
+                        progress: Math.min(0.98, 0.12 + Math.min(0.86, n) * 0.86),
+                        text: stage,
+                      });
+                      const overall = (doneCount + Math.min(0.95, n)) / total;
+                      setVbbProgress(true, overall, `批量转换 · ${doneCount}/${total}${conc > 1 ? ` · ${conc}路` : ""}`, {
+                        sub: item.file.name,
+                        busy: true,
                       });
                     },
-                  }
-                );
-                // crop 相对原片坐标；删中间成片尺寸≈原片，仍用原宽高归一化
-                const vbbCrop = await resolveVbbEncodeCrop(
-                  item.file,
-                  win.edit,
-                  item.srcW,
-                  item.srcH,
-                  item.duration
-                );
-                const encoded = await encodeBlackboxClip({
-                  file: prepared.file,
-                  startSec: prepared.startSec,
-                  span: prepared.span,
-                  srcW: prepared.srcW,
-                  srcH: prepared.srcH,
-                  qualityFirst: vbbQualityFirstOn(),
-                  seed: seedForItem,
-                  speedLimitSec: vbbSpeedLimitSec(),
-                  crop: vbbCrop,
-                  ffmpeg: ffmpegLease || null,
-                  isAborted: () => abortVbb,
-                  onProgress: (local, text) => {
-                    const stage = vbbTickerLine(text) || (conc > 1 ? "并行编码" : "编码");
-                    setVbbClipJob(i, {
-                      status: "running",
-                      progress: Math.min(0.98, 0.12 + Math.min(0.86, local) * 0.86),
-                      text: stage,
-                    });
-                    const overall = (doneCount + Math.min(0.95, Number(local) || 0)) / total;
-                    setVbbProgress(true, overall, `批量转换 · ${doneCount}/${total}${conc > 1 ? ` · ${conc}路` : ""}`, {
-                      sub: item.file.name,
-                      busy: true,
-                    });
-                  },
+                  });
+                  return { prepared, vbbCrop, encoded };
+                };
+                const hardTimer = new Promise((_, reject) => {
+                  window.setTimeout(() => {
+                    killItem("hard timeout");
+                    reject(new Error("单条转换超时，已跳过"));
+                  }, VBB_ITEM_HARD_MS);
                 });
+                const { prepared, vbbCrop, encoded } = await Promise.race([runBody(), hardTimer]);
                 if (abortVbb) throw new Error("已取消");
+                if (itemDead) throw new Error("编码无进度超时，已跳过该条");
                 applyVbbClipEncoded(vbbClips[i], encoded);
                 if (encoded && encoded.fps) {
                   reuseSeed = {
@@ -11487,14 +11640,23 @@
                 );
                 return { ok: true };
             } catch (err) {
-              if (String(err?.message) === "已取消") throw err;
+              const msg0 = String(err?.message || err || "");
+              if (msg0 === "已取消" && !itemDead) throw err;
               const elapsedSec = (performance.now() - t0) / 1000;
-              const msg = reportVbbEncodeError(err, vbbClips[i]);
+              const failErr =
+                itemDead || /超时|无进度/.test(msg0)
+                  ? new Error(msg0.includes("超时") ? msg0 : "编码无进度超时，已跳过该条")
+                  : err;
+              const msg = reportVbbEncodeError(failErr, vbbClips[i]);
               vbbLog(`[vbb] #${i + 1} FAIL ${Math.round(elapsedSec * 1000)}ms · ${msg}`);
               setVbbClipJob(i, { status: "error", progress: 0, text: "失败" });
               refreshVbbClipRow(i);
-              return { ok: false, memory: isLikelyMemoryError(err), err };
+              try {
+                terminateFfmpegInstance({ revokeAssets: false });
+              } catch (_) {}
+              return { ok: false, memory: isLikelyMemoryError(failErr), err: failErr };
             } finally {
+              window.clearInterval(watchdog);
               if (!finishedIdx.has(i)) {
                 finishedIdx.add(i);
                 doneCount += 1;
@@ -13133,21 +13295,29 @@
           vbbFile.addEventListener("click", () => {
             vbbFile.value = "";
           });
-          vbbFile.addEventListener("change", (e) => {
+          const ingestFiles = (files) => {
             const keepOnFail = vbbNeedReselect;
-            loadVbbFiles(e.target.files).catch((err) => {
+            return loadVbbFiles(files).catch((err) => {
               // 重选续跑失败时保留方案/打点，便于再选一次
               if (!keepOnFail && !vbbNeedReselect) clearVbb();
               setError(vbbError, vbbFriendlyErr(err));
             });
+          };
+          vbbFile.addEventListener("change", (e) => {
+            ingestFiles(e.target.files);
           });
+          // 懒加载前 early capture 的文件：绑定时 take，之后靠事件补吃
           const pending = window.DevToolsPendingFiles?.take?.("vbb");
-          if (pending?.length) {
-            loadVbbFiles(pending).catch((err) => {
-              clearVbb();
-              setError(vbbError, vbbFriendlyErr(err));
-            });
-          }
+          if (pending?.length) ingestFiles(pending);
+          const onPending = (ev) => {
+            if (ev?.detail?.tool !== "vbb") return;
+            const files = window.DevToolsPendingFiles?.take?.("vbb");
+            if (files?.length) ingestFiles(files);
+          };
+          window.addEventListener("devtools:pending-files", onPending);
+          window.DevToolsTemp?.registerCleanup?.(() => {
+            window.removeEventListener("devtools:pending-files", onPending);
+          });
         }
         $("#vbb-clear", root)?.addEventListener("click", clearVbb);
         vbbTargetSpan?.addEventListener("change", () => syncCustomTarget(vbbTargetSpan.value));
@@ -13249,8 +13419,13 @@
           };
           clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
           if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
-          applyVbbSeek(Number(item.edit.trimStart) || 0, { keepPlaying: false });
+          const previewKeeps = vbbKeepRangesFromEdit(item.edit, item.duration);
+          const seekTo = Number(previewKeeps[0]?.start);
+          applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
+            keepPlaying: false,
+          });
           syncVbbEditPreview();
+          enforceVbbEditPlaybackWindow();
           syncVbbEditUi();
           return true;
         },

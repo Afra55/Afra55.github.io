@@ -1066,13 +1066,15 @@
         let phase = initialPhase || "处理中";
         let lastP = 0;
         let lastBumpAt = Date.now();
+        let lastRealAt = Date.now();
         const startedAt = Date.now();
         const aborted = typeof isAborted === "function" ? isAborted : () => abortV2g;
         const timer = setInterval(() => {
           if (aborted()) return;
           const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-          const stalled = Date.now() - lastBumpAt > 900;
+          const stalled = Date.now() - lastRealAt > 900;
           if (stalled) {
+            // 心跳假进度：不刷新 lastRealAt，否则同值 progress 会把僵死伪装成「还活着」
             lastP = Math.min(0.97, lastP + 0.012);
             lastBumpAt = Date.now();
           }
@@ -1086,17 +1088,27 @@
           setPhase(next) {
             phase = next || phase;
             lastBumpAt = Date.now();
+            lastRealAt = Date.now();
           },
           setProgress(p) {
             const n = Math.max(0, Math.min(1, Number(p) || 0));
-            if (n >= lastP) {
+            if (n > lastP + 0.002) {
               lastP = n;
               lastBumpAt = Date.now();
+              lastRealAt = Date.now();
+            } else if (n >= lastP) {
+              // 同进度反复上报：不刷新 lastRealAt，便于心跳/超时检出僵死
+              lastP = n;
             }
           },
           bump() {
             lastP = Math.min(0.96, lastP + 0.004);
             lastBumpAt = Date.now();
+            lastRealAt = Date.now();
+          },
+          /** 真实进度多久没涨（ms），供批处理超时 */
+          stalledFor() {
+            return Date.now() - lastRealAt;
           },
           stop() {
             clearInterval(timer);

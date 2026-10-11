@@ -2940,14 +2940,15 @@
     const bar = shell?.querySelector(".workspace-panel-load-bar");
     const labelEl = document.getElementById("devtools-tool-load-label");
     if (!shell || !fill) return;
+    const v = Math.min(100, Math.max(0, pct));
     if (toolLoadPanelId) {
       mountToolLoadBar(toolLoadPanelId);
-      setPanelAssetLoading(toolLoadPanelId, true);
+      // 100%「已就绪」只亮进度条，勿再挡住 panel-body（否则选文件要点好几次刷新）
+      setPanelAssetLoading(toolLoadPanelId, v < 99.5);
     }
-    const v = Math.min(100, Math.max(0, pct));
     shell.hidden = false;
     shell.setAttribute("aria-hidden", "false");
-    shell.setAttribute("aria-busy", "true");
+    shell.setAttribute("aria-busy", v < 99.5 ? "true" : "false");
     if (bar) bar.setAttribute("aria-valuenow", String(Math.round(v)));
     fill.style.width = `${v}%`;
     if (labelEl) {
@@ -2960,12 +2961,13 @@
   }
 
   function hideToolLoadProgress(gen = toolLoadGen) {
+    // 始终撤掉当前面板 loading 挡板；进度条本身仍按 gen 防串台
+    if (toolLoadPanelId) setPanelAssetLoading(toolLoadPanelId, false);
     if (gen !== toolLoadGen) return;
     const shell = document.getElementById("devtools-tool-load");
     const fill = shell?.querySelector(".devtools-tool-load-fill");
     const bar = shell?.querySelector(".workspace-panel-load-bar");
     const labelEl = document.getElementById("devtools-tool-load-label");
-    if (toolLoadPanelId) setPanelAssetLoading(toolLoadPanelId, false);
     if (!shell) return;
     shell.hidden = true;
     shell.setAttribute("aria-hidden", "true");
@@ -4303,6 +4305,13 @@
       "v2g-file": "v2g",
       "vsplit-file": "vsplit",
     };
+    const emitPending = (tool, files) => {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("devtools:pending-files", { detail: { tool, files } })
+        );
+      } catch (_) {}
+    };
     window.DevToolsPendingFiles = {
       take(tool) {
         const key = String(tool || "");
@@ -4310,7 +4319,12 @@
         delete store[key];
         return files && files.length ? files : null;
       },
+      peek(tool) {
+        const files = store[String(tool || "")];
+        return files && files.length ? files : null;
+      },
     };
+    // 懒加载未绑 change 时先存 FileList；绑好后 take / pending-files 再喂给面板
     document.addEventListener(
       "change",
       (e) => {
@@ -4318,7 +4332,39 @@
         if (!el || el.type !== "file") return;
         const tool = idToTool[el.id];
         if (!tool || !el.files?.length) return;
-        store[tool] = Array.from(el.files);
+        const files = Array.from(el.files);
+        store[tool] = files;
+        emitPending(tool, files);
+      },
+      true
+    );
+    // 部分手机对 display:none / [hidden] 的 file input + label 点按无反应：改走 showPicker/click
+    document.addEventListener(
+      "click",
+      (e) => {
+        const label = e.target?.closest?.("label.file-btn");
+        if (!label || label.closest(".tool-panel") == null) return;
+        const id = label.getAttribute("for");
+        if (!id) return;
+        const input = document.getElementById(id);
+        if (!input || input.type !== "file" || input.disabled) return;
+        // 浏览器会先激活 for= 关联；若被挡板/合成层吃掉则补一次
+        const panel = input.closest(".tool-panel");
+        if (panel?.classList.contains("is-tool-assets-loading")) {
+          try {
+            if (typeof input.showPicker === "function") {
+              e.preventDefault();
+              input.showPicker();
+            } else {
+              e.preventDefault();
+              input.click();
+            }
+          } catch (_) {
+            try {
+              input.click();
+            } catch (_) {}
+          }
+        }
       },
       true
     );
