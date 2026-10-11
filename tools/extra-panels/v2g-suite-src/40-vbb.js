@@ -593,10 +593,6 @@
         const last = keeps[keeps.length - 1];
         const endEps = 0.0005;
         const startEps = 0.0005;
-        const endKeep =
-          Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
-            ? window.DevToolsVtrimEditor.END_KEEP_SEC
-            : 1 / 25;
         for (let i = 0; i < keeps.length; i++) {
           const k = keeps[i];
           if (time >= k.start - startEps && time < k.end - endEps) return null;
@@ -606,7 +602,8 @@
           const nxt = keeps[i + 1];
           if (nxt && time < nxt.start) return nxt.start;
         }
-        if (paused) return Math.max(last.start, last.end - endKeep);
+        // keep.end 已在 keepRangesFromEdit 收过片尾半开，暂停时勿再减 END_KEEP
+        if (paused) return Math.max(last.start, last.end - endEps);
         return first.start;
       }
 
@@ -1180,6 +1177,9 @@
           if (!editorOpened) unlockVbbEditBootScroll(lockY, shell, shellY);
           vbbEditOpening = false;
           syncVbbEditUi();
+          // finally 后再同步一次外预览，避免中间状态清掉 crop/keep
+          syncVbbEditPreview();
+          if (!isVbbManualMode()) enforceVbbEditPlaybackWindow();
           renderVbbBatchList({ keepSelection: true });
           syncVbbBatchMeta();
         }
@@ -2129,6 +2129,24 @@
         clip.gifFps = play || Number(encoded.fps) || 0;
         clip.gifSpeed = Math.max(1, Number(encoded.speed) || 1);
         clip.gifDuration = vbbEncodedGifDurationSec(encoded);
+        // 画质独立挂字段：桥 ffmpeg-palette 时 engine≠gifski，但仍带 gifskiQuality
+        const gq = Number(encoded.gifskiQuality);
+        clip.gifskiQuality = Number.isFinite(gq) && gq > 0 ? gq : 0;
+        clip.gifQualityLadder = Number(encoded.quality) > 0 ? Number(encoded.quality) : 0;
+        clip.gifMaxColors = Number(encoded.maxColors) > 0 ? Number(encoded.maxColors) : 0;
+        clip.gifEngine = String(encoded.engine || "");
+      }
+
+      /** 结果卡画质文案：优先字段，避免只靠 gifNote 被白名单滤掉 */
+      function formatVbbQualityBit(c) {
+        const gq = Number(c?.gifskiQuality);
+        if (Number.isFinite(gq) && gq > 0) {
+          const ladder = Number(c.gifQualityLadder);
+          return `画质 ${gq}${ladder > 1 ? `(档${ladder})` : ""}`;
+        }
+        const colors = Number(c?.gifMaxColors);
+        if (Number.isFinite(colors) && colors > 0) return `${colors} 色`;
+        return "";
       }
   
       function simplifyVbbGifNote(note, { mobile = false } = {}) {
@@ -2221,6 +2239,8 @@
         bits.push(fmtShortBytes(c.gifBlob.size));
         const videoSec = Number(c.gifDuration) > 0 ? Number(c.gifDuration) : Number(c.span) || 0;
         if (videoSec > 0) bits.push(formatVsplitSpanSec(videoSec));
+        const qBit = formatVbbQualityBit(c);
+        if (qBit) bits.push(qBit);
         const extra = simplifyVbbGifNote(c.gifNote, { mobile });
         if (extra) {
           extra.split(" · ").forEach((part) => {
@@ -2228,7 +2248,8 @@
             if (/^\d+\s*×\s*\d+$/.test(part) || /^GIF\s*\d+×\d+$/.test(part)) return; // 尺寸已在前面
             if (/^\d+\s*FPS$/i.test(part)) return; // 帧率已在最前
             if (/^宽/.test(part)) return; // 宽度不再展示
-            if (/^已压|^超限|^已抽稀|^降宽|^沿用|^耗时|^加速|^已重启|^画质|^\d+\s*色/.test(part)) bits.push(part);
+            if (/^画质|^\d+\s*色/.test(part)) return; // 画质已用字段展示
+            if (/^已压|^超限|^已抽稀|^降宽|^沿用|^耗时|^加速|^已重启/.test(part)) bits.push(part);
           });
         }
         if (c.error) bits.push(c.error);
@@ -2262,12 +2283,10 @@
               : "";
         if (fpsLabel) bits.push(fpsLabel.replace(/FPS$/i, "FPS"));
         if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
-        // 质量档位：gifski 显示自适应量化 quality，ffmpeg 回退显示色数
-        if (encoded.engine === "gifski" && Number.isFinite(Number(encoded.gifskiQuality))) {
-          bits.push(`画质 ${Number(encoded.gifskiQuality)}${encoded.quality > 1 ? `(档${encoded.quality})` : ""}`);
-        } else if (encoded.maxColors) {
-          bits.push(`${encoded.maxColors} 色`);
-        }
+        // 质量档位：有 gifskiQuality 就标画质（含桥 ffmpeg-palette）；否则色数
+        const qBit = formatVbbQualityBit(clip);
+        if (qBit) bits.push(qBit);
+        else if (encoded.maxColors) bits.push(`${encoded.maxColors} 色`);
         if (encoded.vbbPickNote) bits.push(encoded.vbbPickNote);
         if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
         if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
@@ -4921,24 +4940,16 @@
               if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
                 throw new Error(`仍超 ${blackboxBudgetLabel()}（${formatKb(encoded.blob.size)}）`);
               }
-              attachVbbEncodedMeta(clip, encoded);
-              // 延迟创建 ObjectURL：列表默认不解码预览
-              clip.gifUrl = "";
-              const bits = [];
-              if (reuse.fromCache) bits.push("沿用方案");
-              else if (reuseSeed) bits.push("沿用#01");
-              if (usedFallback) bits.push("超限");
-              else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) bits.push(`已降宽${usedWidth}`);
-              if (encoded.fps) bits.push(`${encoded.playbackFps || encoded.fps}FPS`);
-              if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
-              if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
-              if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
-              else if (isWide && !usedFallback) bits.push(`宽≤${usedWidth}`);
-              if (encoded.framesCapped) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
-              if (vbbCrop) bits.push("去色边");
-              clip.gifBlob = encoded.blob;
-              clip.gifNote = bits.join(" · ");
-              clip.error = "";
+              // 与整段/批量同一套：挂 meta + gifNote（含画质），勿手写漏掉 gifskiQuality
+              const extraBits = [];
+              if (reuse.fromCache) extraBits.push("沿用方案");
+              else if (reuseSeed) extraBits.push("沿用#01");
+              if (usedFallback) extraBits.push("超限");
+              else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) {
+                extraBits.push(`已降宽${usedWidth}`);
+              }
+              if (vbbCrop) extraBits.push("去色边");
+              applyVbbClipEncoded(clip, encoded, extraBits);
               if (i === 0) firstSeed = snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback });
               saveVbbSpanScheme(
                 r.span,

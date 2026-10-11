@@ -328,6 +328,8 @@ select.meta-input.text-choice {
 }
 
 .vbb-preview-wrap.is-edit-crop #vbb-video {
+  /* 铺满元素盒，使 clip-path % 与源像素裁切一致（避免 contain 黑边错位） */
+  object-fit: fill;
   transform-box: fill-box;
 }
 
@@ -346,6 +348,32 @@ select.meta-input.text-choice {
 
 .vbb-file-edit[hidden] {
   display: none !important;
+}
+
+.vbb-file-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.vbb-file-edit-row #vbb-file-edit-label {
+  margin: 0;
+  flex: 1 1 12rem;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.vbb-file-edit-actions {
+  flex: 0 0 auto;
+  margin: 0;
+  gap: 0.45rem;
+}
+
+.vbb-file-edit-actions .secondary-btn,
+.vbb-file-edit-actions .ghost-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .vbb-edit-badge {

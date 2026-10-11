@@ -35,10 +35,12 @@
           <video id="vbb-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
         </div>
         <div class="vbb-file-edit" id="vbb-file-edit" hidden>
-          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
-            <p class="hint tight" id="vbb-file-edit-label" style="margin:0;flex:1 1 auto">可选编辑</p>
-            <button type="button" class="secondary-btn" id="vbb-edit-open" disabled>编辑</button>
-            <button type="button" class="ghost-btn" id="vbb-edit-reset" disabled>重置编辑</button>
+          <div class="vbb-file-edit-row">
+            <p class="hint tight" id="vbb-file-edit-label">可选编辑</p>
+            <div class="btn-row tool-actions vbb-file-edit-actions">
+              <button type="button" class="secondary-btn" id="vbb-edit-open" disabled>编辑</button>
+              <button type="button" class="ghost-btn" id="vbb-edit-reset" disabled>重置编辑</button>
+            </div>
           </div>
           <p class="hint tight" id="vbb-edit-hint" hidden></p>
         </div>

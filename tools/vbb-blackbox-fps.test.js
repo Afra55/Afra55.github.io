@@ -174,8 +174,17 @@ assert(
     const early = ks[1].start - 0.015;
     assert(Math.abs(seekFn(ks, early, { paused: false }) - ks[1].start) < 1e-6, "下一段前 15ms 仍须跳，勿少删");
     assert(Math.abs(seekFn(ks, ks[1].end, { paused: false }) - ks[0].start) < 1e-6, "末段后播放须循环到首段");
+    const pausedAtEnd = seekFn(ks, ks[1].end, { paused: true });
+    assert(
+      pausedAtEnd != null && pausedAtEnd >= ks[1].end - 0.002 - 1e-6,
+      "暂停在 keep 尾勿再减 END_KEEP（keep 已半开）"
+    );
   }
   assert(/previewSeekForKeepRanges/.test(vbbUi) && /is-edit-crop/.test(vbbUi), "外预览须跳 cutouts 并套 crop");
+  assert(/formatVbbQualityBit|gifskiQuality/.test(vbbUi), "结果卡须用字段展示 gifski 画质");
+  assert(/snapNudgeToShown/.test(vtrimEd), "片头片尾微调松手须对齐解码画面");
+  assert(/object-fit:\s*fill/.test(fs.readFileSync(path.join(__dirname, "styles/panels/vbb.css"), "utf8")), "裁切外预览须 fill 对齐绿框");
+  assert(/vbb-file-edit-actions/.test(fs.readFileSync(path.join(__dirname, "panels/vbb.html"), "utf8")), "编辑按钮须独立 actions 行");
   assert(/vbbKeepRangesForEncode/.test(vbbUi), "黑盒编码须用成片 keep");
   assert(/devtools:pending-files/.test(vbbUi), "须接住 early capture 选文件");
   assert(/translate\(|clipPath/.test(vbbUi), "外预览裁切须 clip + 放大绿框");

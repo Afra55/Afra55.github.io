@@ -2352,13 +2352,11 @@
           ? ` · 已抽稀到 ${c.frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
           : "";
         const widthTip = c.maxW ? ` · 宽≤${c.maxW}` : "";
-        // 质量档位：gifski 显示其自适应量化 quality（1-100），ffmpeg 回退显示色数
+        // 质量档位：有 gifskiQuality 就标（含桥 ffmpeg-palette）；否则色数
         let qTip = "";
-        if (c.engine === "gifski") {
-          const gq = Number(c.gifskiQuality);
-          qTip = Number.isFinite(gq)
-            ? ` · 画质 ${gq}${c.quality && c.quality > 1 ? `（档${c.quality}）` : ""}`
-            : "";
+        const gq = Number(c.gifskiQuality);
+        if (Number.isFinite(gq) && gq > 0) {
+          qTip = ` · 画质 ${gq}${c.quality && c.quality > 1 ? `（档${c.quality}）` : ""}`;
         } else if (c.maxColors) {
           qTip = ` · ${c.maxColors} 色`;
         }

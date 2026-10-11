@@ -1309,11 +1309,52 @@
       fitCropToAspect();
       toast("已重置裁剪框");
     });
-    function bindNudgeHold(btn, stepFn) {
+    /** 微调松手后对齐解码器实际画面，与拖拽抬手一致，避免 nudge 所见 ≠ 提交/成片 */
+    let nudgeSnapKind = null;
+    let nudgeSnapGen = 0;
+    async function snapNudgeToShown(kind) {
+      const gen = ++nudgeSnapGen;
+      try {
+        video.pause();
+      } catch (_) {}
+      scrubSeekWanted = null;
+      if (dragSeekTimer) {
+        clearTimeout(dragSeekTimer);
+        dragSeekTimer = 0;
+      }
+      if (kind === "start") {
+        const want = quantizeTrimSec(startSec);
+        try {
+          video.currentTime = want;
+        } catch (_) {}
+        await waitSeek(video);
+        if (gen !== nudgeSnapGen || closed) return;
+        const shown = Number(video.currentTime) || want;
+        startSec = quantizeTrimSec(clamp(Math.max(want, shown), 0, endSec - MIN_SPAN));
+        clipCutoutsToWindow();
+        previewSeek(startSec, { throttle: false });
+      } else {
+        const want = quantizeTrimSec(endSec);
+        const keep = Math.max(startSec, want - END_KEEP_SEC);
+        try {
+          video.currentTime = keep;
+        } catch (_) {}
+        await waitSeek(video);
+        if (gen !== nudgeSnapGen || closed) return;
+        const shown = Number(video.currentTime) || keep;
+        // 所见应对齐片尾半开点；解码偏早则收紧 end，避免成片多出尾帧
+        endSec = quantizeTrimSec(clamp(Math.max(want, shown + END_KEEP_SEC), startSec + MIN_SPAN, duration));
+        clipCutoutsToWindow();
+        previewSeek(endKeepSec(), { throttle: false });
+      }
+      paintTimeline();
+      updateLabels();
+    }
+    function bindNudgeHold(btn, stepFn, kind) {
       if (!btn) return;
       let holdTimer = 0;
       let holdRepeat = 0;
-      const clearHold = () => {
+      const stopRepeat = () => {
         if (holdTimer) {
           clearTimeout(holdTimer);
           holdTimer = 0;
@@ -1324,7 +1365,16 @@
         }
       };
       const fire = () => {
+        nudgeSnapKind = kind;
         stepFn();
+      };
+      const onRelease = () => {
+        stopRepeat();
+        if (nudgeSnapKind) {
+          const k = nudgeSnapKind;
+          nudgeSnapKind = null;
+          void snapNudgeToShown(k);
+        }
       };
       btn.addEventListener("pointerdown", (e) => {
         if (e.button != null && e.button !== 0) return;
@@ -1332,23 +1382,23 @@
         try {
           btn.setPointerCapture?.(e.pointerId);
         } catch (_) {}
+        stopRepeat();
         fire();
-        clearHold();
         holdTimer = window.setTimeout(() => {
           holdTimer = 0;
           holdRepeat = window.setInterval(fire, 70);
         }, 280);
       });
-      btn.addEventListener("pointerup", clearHold);
-      btn.addEventListener("pointercancel", clearHold);
-      btn.addEventListener("lostpointercapture", clearHold);
+      btn.addEventListener("pointerup", onRelease);
+      btn.addEventListener("pointercancel", onRelease);
+      btn.addEventListener("lostpointercapture", onRelease);
       // 避免 click 再触发一次
       btn.addEventListener("click", (e) => e.preventDefault());
     }
-    bindNudgeHold($("nudge-start-m"), () => setStart(startSec - 0.1, { immediateSeek: true }));
-    bindNudgeHold($("nudge-start-p"), () => setStart(startSec + 0.1, { immediateSeek: true }));
-    bindNudgeHold($("nudge-end-m"), () => setEnd(endSec - 0.1, { immediateSeek: true }));
-    bindNudgeHold($("nudge-end-p"), () => setEnd(endSec + 0.1, { immediateSeek: true }));
+    bindNudgeHold($("nudge-start-m"), () => setStart(startSec - 0.1, { immediateSeek: true }), "start");
+    bindNudgeHold($("nudge-start-p"), () => setStart(startSec + 0.1, { immediateSeek: true }), "start");
+    bindNudgeHold($("nudge-end-m"), () => setEnd(endSec - 0.1, { immediateSeek: true }), "end");
+    bindNudgeHold($("nudge-end-p"), () => setEnd(endSec + 0.1, { immediateSeek: true }), "end");
     cutAddBtn?.addEventListener("click", () => addCutoutAtPlayhead());
     cutDelBtn?.addEventListener("click", () => deleteSelectedCutout());
     cutClearBtn?.addEventListener("click", () => {
@@ -1780,7 +1830,8 @@
       const nxt = keeps[i + 1];
       if (nxt && time < nxt.start) return nxt.start;
     }
-    if (paused) return Math.max(last.start, last.end - END_KEEP_SEC);
+    // keepRangesFromEdit 已对末段收过 END_KEEP；暂停停在 keep 尾前一丁点，勿再减半开
+    if (paused) return Math.max(last.start, last.end - endEps);
     return first.start;
   }
 
