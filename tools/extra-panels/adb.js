@@ -918,7 +918,7 @@
         return hit && String(hit.value || "").trim() ? String(hit.value).trim() : "";
       }
 
-      /** 旧桥无 variantId、或单 key getprop 空返回时，从 shell / 全量属性补齐 */
+      /** 旧桥无 variantId 时用 shell 补齐；全量 dump 只在桥 ≥0.9.53 的 /device/info 里做，避免双次拉取 */
       async function resolveVariantIdFallback(serial, token) {
         if (!serial) return;
         const cached = variantFromGetpropCache(serial);
@@ -935,19 +935,7 @@
           const v = String(data?.stdout || "")
             .replace(/\r/g, "")
             .trim();
-          if (v) {
-            if (token === adbInfoLoadToken) setAdbInfoVariant(v);
-            return;
-          }
-        } catch {
-          /* continue */
-        }
-        try {
-          const data = await adbFetch(`/device/getprop?serial=${encodeURIComponent(serial)}`);
-          if (token !== adbInfoLoadToken) return;
-          adbGetpropCache = { serial, props: Array.isArray(data?.props) ? data.props : [] };
-          const v = variantFromGetpropCache(serial);
-          if (v) setAdbInfoVariant(v);
+          if (v && token === adbInfoLoadToken) setAdbInfoVariant(v);
         } catch {
           /* keep — */
         }
