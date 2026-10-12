@@ -2770,6 +2770,14 @@ body.nav-organize-open {
   width: min(96vw, 44rem);
 }
 
+/* ADB 系统属性弹框在壳层；双 class 压过 .memo-dialog 的 420px */
+.memo-dialog.adb-getprop-dlg,
+dialog.adb-getprop-dlg {
+  max-width: min(98vw, 1400px);
+  width: min(98vw, 1400px);
+  padding: 0;
+}
+
 .theme-dlg-shell {
   display: flex;
   flex-direction: column;
