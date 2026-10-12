@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.52";
+const BRIDGE_VERSION = "0.9.53";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -576,9 +576,50 @@ async function listDevices() {
 }
 
 async function getprop(serial, key) {
+  const k = String(key || "").trim();
+  if (!k) return "";
+  // 1) adb shell getprop <key>（参数分传，最常见）
   try {
-    const { stdout } = await adbSerial(serial, ["shell", "getprop", key], { timeout: 8000 });
-    return stdout.trim();
+    const { stdout } = await adbSerial(serial, ["shell", "getprop", k], { timeout: 8000 });
+    const v = String(stdout || "").replace(/\r/g, "").trim();
+    if (v) return v;
+  } catch {
+    /* continue */
+  }
+  // 2) 整段 shell 命令（部分机型对 persist.vendor.* 单 key 分参会空返回）
+  try {
+    const v = String(await shellCapture(serial, `getprop ${shellQuote(k)}`, 8000) || "")
+      .replace(/\r/g, "")
+      .trim();
+    if (v) return v;
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+/** 单 key 拿不到时，从全量 getprop 抠指定 key（与系统属性弹框同源）。 */
+async function getpropFromDump(serial, key) {
+  const k = String(key || "").trim();
+  if (!k) return "";
+  try {
+    // || true：grep 未匹配 exit 1 时不让 adb 整句失败；空输出 = 无此 key，避免再全量 dump
+    const { stdout } = await adbSerial(
+      serial,
+      ["shell", `getprop | grep -F ${shellQuote(`[${k}]:`)} | head -n 1 || true`],
+      { timeout: 45000 }
+    );
+    const line = String(stdout || "").replace(/\r/g, "").trim();
+    if (!line) return "";
+    const hit = parseGetpropOutput(line).find((p) => p.key === k);
+    return hit && String(hit.value || "").trim() ? String(hit.value).trim() : "";
+  } catch {
+    /* 无 grep 等：再走完整解析 */
+  }
+  try {
+    const props = await getAllGetprop(serial);
+    const hit = props.find((p) => p.key === k);
+    return hit && String(hit.value || "").trim() ? String(hit.value).trim() : "";
   } catch {
     return "";
   }
@@ -802,6 +843,12 @@ async function deviceInfo(serial) {
     storage = "";
   }
 
+  // 部分机型单 key getprop 对 persist.vendor.* 会空返回，但全量 getprop（系统属性弹框）有值
+  let variantId = String(props["persist.vendor.custom.variant.id"] || "").trim();
+  if (!variantId) {
+    variantId = await getpropFromDump(serial, "persist.vendor.custom.variant.id");
+  }
+
   return {
     ...base,
     ready: true,
@@ -838,7 +885,7 @@ async function deviceInfo(serial) {
     buildDate: props["ro.build.date"] || "",
     baseband: props["gsm.version.baseband"] || "",
     locale: props["persist.sys.locale"] || props["ro.product.locale"] || "",
-    variantId: props["persist.vendor.custom.variant.id"] || "",
+    variantId,
     ram,
     cpuCores,
     kernel,

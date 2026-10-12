@@ -903,6 +903,56 @@
         });
       }
 
+      const ADB_VARIANT_PROP = "persist.vendor.custom.variant.id";
+
+      function setAdbInfoVariant(value) {
+        const el = $("#adb-info-variant");
+        if (!el) return;
+        const v = String(value || "").trim();
+        if (v) el.textContent = v;
+      }
+
+      function variantFromGetpropCache(serial) {
+        if (!serial || adbGetpropCache.serial !== serial) return "";
+        const hit = adbGetpropCache.props.find((p) => p.key === ADB_VARIANT_PROP);
+        return hit && String(hit.value || "").trim() ? String(hit.value).trim() : "";
+      }
+
+      /** 旧桥无 variantId、或单 key getprop 空返回时，从 shell / 全量属性补齐 */
+      async function resolveVariantIdFallback(serial, token) {
+        if (!serial) return;
+        const cached = variantFromGetpropCache(serial);
+        if (cached) {
+          if (token === adbInfoLoadToken) setAdbInfoVariant(cached);
+          return;
+        }
+        try {
+          const data = await adbFetch("/shell/exec", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial, command: `getprop ${ADB_VARIANT_PROP}` }),
+          });
+          const v = String(data?.stdout || "")
+            .replace(/\r/g, "")
+            .trim();
+          if (v) {
+            if (token === adbInfoLoadToken) setAdbInfoVariant(v);
+            return;
+          }
+        } catch {
+          /* continue */
+        }
+        try {
+          const data = await adbFetch(`/device/getprop?serial=${encodeURIComponent(serial)}`);
+          if (token !== adbInfoLoadToken) return;
+          adbGetpropCache = { serial, props: Array.isArray(data?.props) ? data.props : [] };
+          const v = variantFromGetpropCache(serial);
+          if (v) setAdbInfoVariant(v);
+        } catch {
+          /* keep — */
+        }
+      }
+
       function fillAdbInfo(info) {
         const set = (id, value) => {
           const el = $(id);
@@ -1040,6 +1090,8 @@
           adbGetpropCache = { serial, props: data.props || [] };
           renderGetpropList();
           if (!adbGetpropCache.props.length && meta) meta.textContent = "无属性";
+          const variant = variantFromGetpropCache(serial);
+          if (variant) setAdbInfoVariant(variant);
         } catch (err) {
           adbGetpropCache = { serial: "", props: [] };
           if (meta) meta.textContent = "加载失败";
@@ -2257,6 +2309,9 @@
           const data = await adbFetch(`/device/info?serial=${encodeURIComponent(serial)}`);
           if (token !== adbInfoLoadToken) return;
           fillAdbInfo(data.info);
+          if (!String(data?.info?.variantId || "").trim()) {
+            void resolveVariantIdFallback(serial, token);
+          }
         } catch (err) {
           if (token !== adbInfoLoadToken) return;
           fillAdbInfo({ serial, state: "error", ready: false, message: err.message || String(err) });
