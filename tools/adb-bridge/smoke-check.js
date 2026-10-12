@@ -73,6 +73,12 @@ async function main() {
   if (!/保持现有桥|结束旧桥/.test(resolveSrc)) {
     throw new Error("resolve-port.js should prompt keep/restart when our bridge is running");
   }
+  if (!/resolvePendingStart|结束旧服务并在本窗口启动/.test(resolveSrc)) {
+    throw new Error("resolve-port.js should prompt kill/restart when starter lock is stuck");
+  }
+  if (!/CONIN\$|CONOUT\$/.test(resolveSrc)) {
+    throw new Error("resolve-port.js should fall back to CONIN$/CONOUT$ for Windows prompts");
+  }
   if (!/isQuietMode|DEVTOOLS_BRIDGE_QUIET/.test(resolveSrc)) {
     throw new Error("resolve-port.js should support quiet mode for protocol launches");
   }
@@ -476,7 +482,6 @@ Package [com.other] (def):
 
     // APK signing: upload sample jarsigner APK and expect alias/SHA1
     const sampleApk = "/tmp/adb-apk-sign-test/sample.apk";
-    const fs = require("fs");
     if (fs.existsSync(sampleApk)) {
       const buf = fs.readFileSync(sampleApk);
       const up = await req("POST", "/upload?name=sample.apk", {
