@@ -67,6 +67,13 @@
       tags: ["ai", "安全", "渗透", "docker", "github"],
     },
     {
+      id: "rea",
+      title: "REA 逆向",
+      desc: "Reverse Engineer Anything：把 Ghidra / Hopper / IDA 等接成 MCP，让 Claude Code、Cursor 等 Agent 从应用行为逆向到原生二进制，结论带证据（MIT）。分析在本地跑。",
+      url: "https://github.com/morluto/rea",
+      tags: ["ai", "逆向", "mcp", "agent", "github"],
+    },
+    {
       id: "codebase-memory-mcp",
       title: "Codebase Memory MCP",
       desc: "本地代码智能引擎（原生可执行文件）：tree-sitter 建知识图谱，函数/调用链/路由/死代码/语义搜索等 15 个 MCP 工具；100% 本地、无需 API key，支持多个编码 Agent。",
