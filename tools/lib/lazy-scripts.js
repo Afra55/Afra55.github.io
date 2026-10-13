@@ -310,6 +310,8 @@
     if (TOOL_FILES[id] && !scriptLikelyLoaded(TOOL_FILES[id])) return false;
     // memo.js 若在 #memo 挂载前执行会静默 return，脚本标签仍算 loaded，但 DevToolsMemo 未创建
     if (id === "memo" && !window.DevToolsMemo) return false;
+    // lanboard.js 同理：面板未挂载时 IIFE 直接 return
+    if (id === "lanboard" && !window.DevToolsLanBoard) return false;
     if (id === "qrcode" && !window.DevToolsCodeScan && !scriptLikelyLoaded("./lib/code-scan.js")) return false;
     return true;
   }
@@ -613,14 +615,18 @@
       if (id === "qrcode") {
         await loadScript("./lib/code-scan.js");
       }
-      // 备忘录：必须先有面板节点，否则 memo.js 会空跑且不再初始化
-      if (id === "memo") {
+      // 备忘录 / 局域网看板：必须先有面板节点，否则脚本会空跑且不再初始化
+      if (id === "memo" || id === "lanboard") {
         try {
-          await window.DevToolsPanels?.ensure?.("memo");
+          await window.DevToolsPanels?.ensure?.(id);
         } catch (_) {}
-        if (scriptLikelyLoaded(TOOL_FILES.memo) && !window.DevToolsMemo) {
+        if (id === "memo" && scriptLikelyLoaded(TOOL_FILES.memo) && !window.DevToolsMemo) {
           bustToolScript(TOOL_FILES.memo);
           readyTools.delete("memo");
+        }
+        if (id === "lanboard" && scriptLikelyLoaded(TOOL_FILES.lanboard) && !window.DevToolsLanBoard) {
+          bustToolScript(TOOL_FILES.lanboard);
+          readyTools.delete("lanboard");
         }
       }
       await loadToolScript(id);

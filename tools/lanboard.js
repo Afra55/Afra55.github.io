@@ -17,6 +17,7 @@
   const CHUNK_SIZE = 32 * 1024;
   const DC_BUFFER_LIMIT = 512 * 1024;
   const NAME_KEY = "devtools-lanboard-name";
+  const PEER_ID_KEY = "devtools-lanboard-peer-id";
   const IDB_NAME = "devtools-lanboard";
   const IDB_STORE = "kv";
   const IDB_ITEMS_KEY = "items-v1";
@@ -28,8 +29,8 @@
   ];
   const MQTT_TOPIC = `devtools/lanboard/v1/${LOBBY_SLUG}`;
   const MQTT_MSG_TTL_MS = 120000;
-  const PRESENCE_MS = 6000;
-  const PEER_STALE_MS = 18000;
+  const PRESENCE_MS = 4000;
+  const PEER_STALE_MS = 12000;
   const TEXT_MQTT_MAX = 1800;
   const THUMB_TIMEOUT_MS = 2500;
   const MQTT_THUMB_MAX = 12000;
@@ -106,9 +107,13 @@
   }
 
   function fileKindOf(file) {
-    const mime = String(file?.type || "");
+    const mime = String(file?.type || "").toLowerCase();
     if (mime.startsWith("video/")) return "video";
     if (mime.startsWith("image/")) return "image";
+    // 部分手机选视频不带 MIME，按扩展名兜底，避免当普通文件且跳过缩略图路径
+    const name = String(file?.name || "").toLowerCase();
+    if (/\.(mp4|webm|mov|m4v|mkv|avi|3gp)$/.test(name)) return "video";
+    if (/\.(png|jpe?g|gif|webp|bmp|heic|heif)$/.test(name)) return "image";
     return "file";
   }
 
@@ -170,6 +175,28 @@
     } catch {
       /* ignore */
     }
+  }
+
+  function loadPeerId() {
+    try {
+      const id = String(sessionStorage.getItem(PEER_ID_KEY) || "").trim();
+      return /^[a-f0-9]{8,32}$/i.test(id) ? id : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function savePeerId(id) {
+    try {
+      if (id) sessionStorage.setItem(PEER_ID_KEY, id);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function publishBye() {
+    if (!state.peerId) return;
+    publishMqtt({ type: "bye", peerId: state.peerId });
   }
 
   function openIdb() {
@@ -433,7 +460,9 @@
   }
 
   async function makeVideoThumb(file) {
-    if (!file?.type?.startsWith("video/")) return "";
+    const mime = String(file?.type || "").toLowerCase();
+    const byExt = /\.(mp4|webm|mov|m4v|mkv|avi|3gp)$/i.test(String(file?.name || ""));
+    if (!mime.startsWith("video/") && !byExt) return "";
     // 部分编码/大文件永远不触发 loadeddata；无超时会卡住整批发送并表现为「点发送无反应」。
     const url = URL.createObjectURL(file);
     const video = document.createElement("video");
@@ -1376,20 +1405,46 @@
     pushMediaToBridge(item, file).catch(() => {});
   }
 
-  function queueFilesPicked(input) {
-    setPendingFromInput(input);
-    if (!pendingFiles.length) return;
-    sendCompose({ fromFiles: true }).catch((e) => setError(e?.message || "发送失败"));
+  function onFilesPicked(input) {
+    try {
+      const files = [...(input?.files || [])].filter(Boolean);
+      if (!files.length) return;
+      pendingFiles = files;
+      if (els.fileHint) els.fileHint.textContent = `已选 ${files.length} 个，发送中…`;
+      // 先拷贝 File 再清空 value，便于再次选同一文件也能触发 change
+      if (input) input.value = "";
+      if (input === els.fileInput && els.anyFileInput) els.anyFileInput.value = "";
+      if (input === els.anyFileInput && els.fileInput) els.fileInput.value = "";
+      sendCompose({ fromFiles: true }).catch((e) => {
+        const msg = e?.message || "发送失败";
+        setError(msg);
+        notifyToast(msg);
+      });
+    } catch (e) {
+      const msg = e?.message || "选文件后发送失败";
+      setError(msg);
+      notifyToast(msg);
+    }
   }
 
-  function queueFilesDropped(fileList) {
-    const files = [...(fileList || [])].filter(Boolean);
-    if (!files.length) return;
-    pendingFiles = files;
-    if (els.fileHint) els.fileHint.textContent = `已选 ${files.length} 个，发送中…`;
-    if (els.fileInput) els.fileInput.value = "";
-    if (els.anyFileInput) els.anyFileInput.value = "";
-    sendCompose({ fromFiles: true }).catch((e) => setError(e?.message || "发送失败"));
+  function onFilesDropped(fileList) {
+    try {
+      const files = [...(fileList || [])].filter(Boolean);
+      if (!files.length) return;
+      pendingFiles = files;
+      if (els.fileHint) els.fileHint.textContent = `已选 ${files.length} 个，发送中…`;
+      if (els.fileInput) els.fileInput.value = "";
+      if (els.anyFileInput) els.anyFileInput.value = "";
+      sendCompose({ fromFiles: true }).catch((e) => {
+        const msg = e?.message || "发送失败";
+        setError(msg);
+        notifyToast(msg);
+      });
+    } catch (e) {
+      const msg = e?.message || "拖入文件后发送失败";
+      setError(msg);
+      notifyToast(msg);
+    }
   }
 
   function bindBridgeUi() {
@@ -1510,7 +1565,8 @@
   async function boot() {
     if (state.started) return;
     state.started = true;
-    state.peerId = uid(12);
+    state.peerId = loadPeerId() || uid(12);
+    savePeerId(state.peerId);
     state.peerName = (els.nameInput?.value || loadName() || `设备-${uid(4)}`).trim();
     if (els.nameInput && !els.nameInput.value) els.nameInput.value = state.peerName;
     saveName(state.peerName);
@@ -1548,9 +1604,8 @@
     }, PRESENCE_MS);
     state.pruneTimer = setInterval(() => probeBridge().catch(() => {}), 20000);
 
-    window.addEventListener("beforeunload", () => {
-      publishMqtt({ type: "bye", peerId: state.peerId });
-    });
+    window.addEventListener("pagehide", publishBye);
+    window.addEventListener("beforeunload", publishBye);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
         publishPresence();
@@ -1560,11 +1615,19 @@
     });
   }
 
-  if (panel.classList.contains("is-active") || location.hash.replace(/^#/, "").split("?")[0] === "lanboard") {
+  function panelLooksActive() {
+    return (
+      panel.classList.contains("is-workspace-active") ||
+      panel.classList.contains("is-active") ||
+      (!panel.hidden && panel.offsetParent !== null)
+    );
+  }
+
+  if (panelLooksActive() || location.hash.replace(/^#/, "").split("?")[0] === "lanboard") {
     boot().catch((e) => setError(e?.message || "启动失败"));
   } else {
     const obs = new MutationObserver(() => {
-      if (panel.classList.contains("is-active") || panel.offsetParent !== null) {
+      if (panelLooksActive()) {
         obs.disconnect();
         boot().catch((e) => setError(e?.message || "启动失败"));
       }
@@ -1572,7 +1635,7 @@
     obs.observe(panel, { attributes: true, attributeFilter: ["class", "hidden", "style"] });
     // 懒加载后也可能已显示
     setTimeout(() => {
-      if (!state.started && (panel.classList.contains("is-active") || !panel.hidden)) {
+      if (!state.started && panelLooksActive()) {
         boot().catch((e) => setError(e?.message || "启动失败"));
       }
     }, 400);

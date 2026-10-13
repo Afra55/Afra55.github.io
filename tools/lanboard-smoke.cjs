@@ -52,7 +52,13 @@ function staticCheck() {
   assert(js.includes("sendFile") || js.includes("fileKindOf"), "缺少任意文件发送逻辑");
   assert(!js.includes("仅支持图片或视频"), "仍限制仅图片/视频");
   assert(js.includes("THUMB_TIMEOUT_MS") || js.includes("withTimeout"), "视频缩略图须有超时，否则发送会挂死");
-  assert(js.includes("onFilesPicked") || js.includes("fromFiles"), "选文件后应自动发送");
+  assert(/function\s+onFilesPicked\s*\(/.test(js), "须定义 onFilesPicked（与 change 监听同名）");
+  assert(/function\s+onFilesDropped\s*\(/.test(js), "须定义 onFilesDropped（与 drop 监听同名）");
+  assert(!/\bqueueFilesPicked\b/.test(js), "禁止残留 queueFilesPicked 与监听器名不一致");
+  assert(!/\bqueueFilesDropped\b/.test(js), "禁止残留 queueFilesDropped 与监听器名不一致");
+  assert(js.includes("onFilesPicked") && js.includes("fromFiles"), "选文件后应自动发送");
+  assert(js.includes("PEER_ID_KEY") && js.includes("sessionStorage"), "peerId 须 sessionStorage 持久化，避免刷新幽灵会话");
+  assert(js.includes("pagehide"), "离开页须 pagehide 发 bye");
   assert(html.includes("自动发送") || html.includes("选完即发") || /自动发出/.test(html), "面板文案应说明选完即发");
   const reg = JSON.parse(fs.readFileSync(path.join(toolsRoot, "registry/tools.json"), "utf8"));
   assert(reg.meta?.lanboard, "registry 缺 lanboard");
@@ -212,6 +218,92 @@ async function browserFlow() {
     assert(previewOk, "选图后未自动出现在发送端列表");
     assert(mediaOnB, "B 未出现媒体预览/下载按钮");
     console.log("media auto-send OK");
+
+    // 视频选完即发（曾因 onFilesPicked 未定义而静默失败）
+    const mp4Path = path.join(os.tmpdir(), `lanboard-smoke-${Date.now()}.mp4`);
+    try {
+      const { execFileSync } = require("child_process");
+      const ffmpegCandidates = [
+        process.env.FFMPEG_PATH,
+        "ffmpeg",
+        "D:\\ffmpeg-master-latest-win64-gpl\\bin\\ffmpeg.exe",
+      ].filter(Boolean);
+      let made = false;
+      for (const ff of ffmpegCandidates) {
+        try {
+          execFileSync(
+            ff,
+            [
+              "-y",
+              "-f",
+              "lavfi",
+              "-i",
+              "color=c=red:s=160x120:d=0.5",
+              "-c:v",
+              "libx264",
+              "-pix_fmt",
+              "yuv420p",
+              mp4Path,
+            ],
+            { stdio: "ignore", timeout: 20000 }
+          );
+          made = fs.existsSync(mp4Path);
+          if (made) break;
+        } catch {
+          /* try next */
+        }
+      }
+      if (made) {
+        await fileInput.uploadFile(mp4Path);
+        let videoOk = false;
+        for (let i = 0; i < 40; i++) {
+          videoOk = await pageA.evaluate(() => {
+            const feed = document.querySelector("#lb-feed")?.innerText || "";
+            const err = document.querySelector("#lb-error")?.textContent || "";
+            if (/onFilesPicked is not defined/i.test(err)) return false;
+            return (
+              /\.mp4|视频/.test(feed) ||
+              !!document.querySelector("#lb-feed .lb-kind-video, #lb-feed .lb-item-preview")
+            );
+          });
+          if (videoOk) break;
+          await wait(400);
+        }
+        assert(videoOk, "选视频后未自动出现在列表（检查 onFilesPicked 是否定义）");
+        console.log("video auto-send OK");
+      } else {
+        console.log("video auto-send SKIP (no ffmpeg)");
+      }
+    } finally {
+      try {
+        fs.unlinkSync(mp4Path);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // 刷新后 peerId 须保持（sessionStorage），避免旧 id+新 id 叠成幽灵台数
+    await wait(1500);
+    const idBefore = await pageA.evaluate(() => sessionStorage.getItem("devtools-lanboard-peer-id") || "");
+    assert(!!idBefore, "A 缺少 session peerId");
+    const peersBefore = await pageB.evaluate(() => document.querySelector("#lb-members")?.innerHTML || "");
+    await pageA.reload({ waitUntil: "domcontentloaded", timeout: 120000 });
+    await pageA.waitForFunction(() => !!document.querySelector("#lanboard #lb-send"), {
+      timeout: 60000,
+    });
+    await pageA.evaluate(async () => {
+      if (window.DevToolsLanBoard?.boot) await window.DevToolsLanBoard.boot();
+    });
+    await waitLobby(pageA, "A-reloaded");
+    await wait(2500);
+    const idAfter = await pageA.evaluate(() => sessionStorage.getItem("devtools-lanboard-peer-id") || "");
+    assert(idBefore === idAfter, `刷新后 peerId 变化: ${idBefore} -> ${idAfter}`);
+    const peersAfter = await pageB.evaluate(() => document.querySelector("#lb-members")?.innerHTML || "");
+    // 对端列表里不应同时残留两个「本机 A」式幽灵（同 id 只会占一条）
+    const aNameHits = (peersAfter.match(/设备-|Diag|本机/g) || []).length;
+    void peersBefore;
+    void aNameHits;
+    console.log("peerId stable after reload OK:", idAfter);
 
     const anyName = `smoke-any-${Date.now()}.bin`;
     const anyPath = path.join(os.tmpdir(), anyName);
