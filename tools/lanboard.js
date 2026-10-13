@@ -1834,6 +1834,14 @@
       }
     } finally {
       setSendingUi(false);
+      // 发送中又选了文件：pending 已更新但被 sending 早退挡住，收尾后自动续发
+      if (pendingFiles.length) {
+        sendCompose({ fromFiles: true }).catch((e) => {
+          const msg = e?.message || "发送失败";
+          setError(msg);
+          notifyToast(msg);
+        });
+      }
     }
   }
 

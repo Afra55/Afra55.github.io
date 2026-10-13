@@ -57,6 +57,10 @@ function staticCheck() {
   assert(!/\bqueueFilesPicked\b/.test(js), "禁止残留 queueFilesPicked 与监听器名不一致");
   assert(!/\bqueueFilesDropped\b/.test(js), "禁止残留 queueFilesDropped 与监听器名不一致");
   assert(js.includes("onFilesPicked") && js.includes("fromFiles"), "选文件后应自动发送");
+  assert(
+    /finally\s*\{[\s\S]*?pendingFiles\.length[\s\S]*?sendCompose\(\s*\{\s*fromFiles:\s*true/.test(js),
+    "发送中再选文件须在 finally 续发，避免选完卡住"
+  );
   assert(js.includes("PEER_ID_KEY") && js.includes("sessionStorage"), "peerId 须 sessionStorage 持久化，避免刷新幽灵会话");
   assert(js.includes("pagehide"), "离开页须 pagehide 发 bye");
   assert(js.includes("wipeAbandonedRoom") || js.includes("clearRoomLocal"), "空房须清空残留");
