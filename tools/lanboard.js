@@ -475,6 +475,7 @@
           thumbSig,
           mediaDownloadable(it) ? "1" : "0",
           peerLabel(it.ownerId),
+          dlUiState.get(it.id) || "",
         ].join("|");
       })
       .join(";");
@@ -506,12 +507,20 @@
           </div>`;
         }
         const canDl = mediaDownloadable(it);
+        const dlSt = dlUiState.get(it.id) || "";
+        const dlLabel = dlSt === "queued" ? "排队中" : dlSt === "downloading" ? "下载中…" : "下载";
         const canPreview = it.kind === "image" || it.kind === "video";
         const label = kindLabel(it.kind);
         const preview = it.thumb
           ? `<img src="${escapeHtml(it.thumb)}" alt="" loading="lazy" />`
           : `<span class="lb-kind lb-kind-${escapeHtml(it.kind === "video" || it.kind === "image" ? it.kind : "file")}">${escapeHtml(label)}</span>`;
-        const hint = canDl ? "" : `<span class="lb-dl-hint is-warn">${SOURCE_GONE}</span>`;
+        const hint = !canDl
+          ? `<span class="lb-dl-hint is-warn">${SOURCE_GONE}</span>`
+          : dlSt === "queued"
+            ? `<span class="lb-dl-hint">排队等待同设备传完</span>`
+            : dlSt === "downloading"
+              ? `<span class="lb-dl-hint">接收中</span>`
+              : "";
         const previewBtn = canPreview
           ? `<button type="button" class="ghost-btn lb-open-preview" data-id="${escapeHtml(it.id)}">预览</button>`
           : "";
@@ -527,8 +536,8 @@
           <div class="lb-item-actions">
             ${previewBtn}
             <button type="button" class="secondary-btn lb-download" data-id="${escapeHtml(it.id)}" ${
-              canDl ? "" : 'aria-disabled="true"'
-            }>下载</button>
+              !canDl || dlSt ? 'aria-disabled="true"' : ""
+            }>${escapeHtml(dlLabel)}</button>
             ${hint}
           </div>
         </div>`;
@@ -550,6 +559,7 @@
     });
     els.feed.querySelectorAll(".lb-download").forEach((btn) => {
       btn.addEventListener("click", () => {
+        if (btn.getAttribute("aria-disabled") === "true") return;
         const id = btn.getAttribute("data-id");
         downloadItem(id);
       });
@@ -1211,13 +1221,45 @@
     };
   }
 
-  /** @type {Map<string, { chunks: ArrayBuffer[], meta: object|null, resolve: Function, reject: Function, timer: any }>} */
+  /**
+   * 收端会话：key = `${from}:${fileId}`。
+   * 同一 DataChannel 上二进制无 fileId 标记，故同 peer 只允许一条活跃接收；多文件靠 recvTailByPeer 排队。
+   * @type {Map<string, { chunks: ArrayBuffer[], meta: object|null, resolve: Function, reject: Function, timer: any }>}
+   */
   const recvSessions = new Map();
+  /** @type {Map<string, string>} peerId → 当前活跃接收的 fileId */
+  const activeRecvByPeer = new Map();
+  /** @type {Map<string, Promise<void>>} 同 peer 发送排队（多端不同 peer 仍并行） */
+  const serveTailByPeer = new Map();
+  /** @type {Map<string, Promise<unknown>>} 同 owner 接收排队 */
+  const recvTailByPeer = new Map();
+  /** @type {Map<string, Promise<Blob|null>>} 同文件去重 inflight */
+  const resolveInflight = new Map();
+  /** @type {Map<string, "queued"|"downloading">} 下载按钮可见状态 */
+  const dlUiState = new Map();
+
+  function bumpFeedPaint() {
+    lastFeedSig = "";
+    paintFeed();
+  }
+
+  function enqueuePeerJob(map, peerId, job) {
+    const prev = map.get(peerId) || Promise.resolve();
+    const next = prev.then(job, job);
+    map.set(
+      peerId,
+      next.then(
+        () => undefined,
+        () => undefined
+      )
+    );
+    return next;
+  }
 
   function handleBinaryFrom(from, buf) {
-    const key = [...recvSessions.keys()].find((k) => k.startsWith(`${from}:`));
-    if (!key) return;
-    const sess = recvSessions.get(key);
+    const fileId = activeRecvByPeer.get(from);
+    if (!fileId) return;
+    const sess = recvSessions.get(`${from}:${fileId}`);
     if (!sess) return;
     sess.chunks.push(buf);
   }
@@ -1231,11 +1273,13 @@
       clearTimeout(sess.timer);
       sess.resolve({ meta: sess.meta, chunks: sess.chunks });
       recvSessions.delete(key);
+      if (activeRecvByPeer.get(from) === msg.fileId) activeRecvByPeer.delete(from);
     }
     if (msg.type === "file-error") {
       clearTimeout(sess.timer);
       sess.reject(new Error(msg.message || "传输失败"));
       recvSessions.delete(key);
+      if (activeRecvByPeer.get(from) === msg.fileId) activeRecvByPeer.delete(from);
     }
   }
 
@@ -1290,7 +1334,7 @@
     }
   }
 
-  async function serveFile(to, fileId) {
+  async function serveFileBody(to, fileId) {
     const blob = state.localBlobs.get(fileId);
     const meta = state.items.get(fileId);
     if (!blob || !meta) {
@@ -1321,10 +1365,33 @@
     dcSend(to, { type: "file-done", fileId });
   }
 
-  function requestFileFromPeer(ownerId, fileId) {
+  /** 多设备各走独立 DC → 可并行；同一设备多文件 → 同 DC 串行，避免分片交叉。 */
+  function serveFile(to, fileId) {
+    return enqueuePeerJob(serveTailByPeer, to, () => serveFileBody(to, fileId));
+  }
+
+  function requestFileFromPeerNow(ownerId, fileId, onStart) {
     return new Promise(async (resolve, reject) => {
       if (!ownerId || ownerId === state.peerId) {
         reject(new Error("无源设备"));
+        return;
+      }
+      const cached = state.localBlobs.get(fileId);
+      if (cached) {
+        try {
+          onStart?.();
+        } catch {
+          /* ignore */
+        }
+        resolve({
+          meta: {
+            fileId,
+            name: state.items.get(fileId)?.name,
+            mime: cached.type || state.items.get(fileId)?.mime,
+            size: cached.size,
+          },
+          chunks: [await cached.arrayBuffer()],
+        });
         return;
       }
       if (!state.links.has(ownerId)) {
@@ -1332,43 +1399,112 @@
         await new Promise((r) => setTimeout(r, 800));
       }
       const key = `${ownerId}:${fileId}`;
+      if (recvSessions.has(key)) {
+        reject(new Error("该文件已在传输"));
+        return;
+      }
+      try {
+        onStart?.();
+      } catch {
+        /* ignore */
+      }
       const timer = setTimeout(() => {
         recvSessions.delete(key);
+        if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
         reject(new Error("下载超时"));
       }, 120000);
-      recvSessions.set(key, { chunks: [], meta: null, resolve, reject, timer });
+      activeRecvByPeer.set(ownerId, fileId);
+      recvSessions.set(key, {
+        chunks: [],
+        meta: null,
+        resolve: (v) => {
+          if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
+          resolve(v);
+        },
+        reject: (e) => {
+          if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
+          reject(e);
+        },
+        timer,
+      });
       const ok = dcSend(ownerId, { type: "file-req", fileId, from: state.peerId });
       if (!ok) {
         clearTimeout(timer);
         recvSessions.delete(key);
+        if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
         reject(new Error(SOURCE_GONE));
       }
     });
   }
 
-  async function resolveMediaBlob(id, { quiet = false } = {}) {
+  function requestFileFromPeer(ownerId, fileId, onStart) {
+    return enqueuePeerJob(recvTailByPeer, ownerId, () =>
+      requestFileFromPeerNow(ownerId, fileId, onStart)
+    );
+  }
+
+  async function resolveMediaBlob(id, { quiet = false, onStart = null } = {}) {
     const it = state.items.get(id);
     if (!it || it.kind === "text") return null;
     let blob = state.localBlobs.get(id);
-    if (blob) return blob;
-    if (it.onBridge && state.bridgeOk) {
+    if (blob) {
       try {
-        blob = await fetchMediaFromBridge(id);
-        if (blob) return blob;
+        onStart?.();
       } catch {
-        /* fall through */
+        /* ignore */
       }
-    }
-    if (isOwnerOnline(it.ownerId)) {
-      const { meta, chunks } = await requestFileFromPeer(it.ownerId, id);
-      blob = new Blob(chunks, { type: meta?.mime || it.mime || "application/octet-stream" });
-      state.localBlobs.set(id, blob);
       return blob;
     }
-    if (!quiet && !mediaDownloadable(it)) {
-      setInfo(SOURCE_GONE);
+    const inflight = resolveInflight.get(id);
+    if (inflight) {
+      try {
+        onStart?.();
+      } catch {
+        /* ignore */
+      }
+      return inflight;
     }
-    return null;
+
+    const job = (async () => {
+      let got = state.localBlobs.get(id);
+      if (got) {
+        try {
+          onStart?.();
+        } catch {
+          /* ignore */
+        }
+        return got;
+      }
+      if (it.onBridge && state.bridgeOk) {
+        try {
+          onStart?.();
+          got = await fetchMediaFromBridge(id);
+          if (got) {
+            state.localBlobs.set(id, got);
+            return got;
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      if (isOwnerOnline(it.ownerId)) {
+        const { meta, chunks } = await requestFileFromPeer(it.ownerId, id, onStart);
+        got = new Blob(chunks, { type: meta?.mime || it.mime || "application/octet-stream" });
+        state.localBlobs.set(id, got);
+        return got;
+      }
+      if (!quiet && !mediaDownloadable(it)) {
+        setInfo(SOURCE_GONE);
+      }
+      return null;
+    })();
+
+    resolveInflight.set(id, job);
+    try {
+      return await job;
+    } finally {
+      if (resolveInflight.get(id) === job) resolveInflight.delete(id);
+    }
   }
 
   function clearPreviewMedia() {
@@ -1466,8 +1602,33 @@
       paintFeed();
       return;
     }
+    if (dlUiState.has(id)) {
+      notifyToast(dlUiState.get(id) === "queued" ? "已在排队" : "正在下载");
+      return;
+    }
+    const needPeer =
+      !state.localBlobs.has(id) &&
+      !(it.onBridge && state.bridgeOk) &&
+      isOwnerOnline(it.ownerId);
+    const peerBusy =
+      needPeer &&
+      [...dlUiState.keys()].some((otherId) => {
+        if (otherId === id) return false;
+        const other = state.items.get(otherId);
+        return other && other.ownerId === it.ownerId;
+      });
+    dlUiState.set(id, peerBusy ? "queued" : "downloading");
+    bumpFeedPaint();
     try {
-      const blob = await resolveMediaBlob(id);
+      if (peerBusy) notifyToast("已排队，等同设备当前文件传完");
+      const blob = await resolveMediaBlob(id, {
+        onStart: () => {
+          if (dlUiState.get(id) === "queued") {
+            dlUiState.set(id, "downloading");
+            bumpFeedPaint();
+          }
+        },
+      });
       if (!blob) {
         notifyToast(SOURCE_GONE);
         return;
@@ -1484,6 +1645,9 @@
     } catch (e) {
       notifyToast(e?.message || SOURCE_GONE);
       setError(e?.message || SOURCE_GONE);
+    } finally {
+      dlUiState.delete(id);
+      bumpFeedPaint();
     }
   }
 

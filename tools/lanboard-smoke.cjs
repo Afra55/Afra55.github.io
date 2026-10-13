@@ -63,6 +63,11 @@ function staticCheck() {
   assert(js.includes("ROOM_SETTLE_MS") || js.includes("persistGate"), "进场须空房结算门闩");
   assert(js.includes("/lanboard/clear"), "末人离开须清桥 /lanboard/clear");
   assert(js.includes("feedSignature") || js.includes("lastFeedSig"), "列表须签名防闪，避免心跳整表重绘缩略图");
+  assert(js.includes("serveTailByPeer") && js.includes("enqueuePeerJob"), "多端同文件：发送须按 peer 排队，跨 peer 可并行");
+  assert(js.includes("recvTailByPeer") && js.includes("activeRecvByPeer"), "单端多文件：同 owner 须排队且二进制按活跃 fileId 路由");
+  assert(js.includes("resolveInflight"), "同文件重复拉取须 inflight 去重");
+  assert(js.includes("dlUiState") && js.includes("排队中"), "下载排队/进行中须有可见状态");
+  assert(!/recvSessions\.keys\(\)\)\.find\(\s*\(k\)\s*=>\s*k\.startsWith/.test(js), "禁止把同 peer 二进制盲目塞进第一个会话");
   assert(html.includes("自动发送") || html.includes("选完即发") || /自动发出/.test(html), "面板文案应说明选完即发");
   assert(html.includes('id="lb-preview-dlg"'), "缺少媒体预览弹层");
   assert(js.includes("openPreview") && js.includes("closePreview"), "缺少预览打开/关闭逻辑");
