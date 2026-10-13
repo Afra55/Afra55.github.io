@@ -59,6 +59,10 @@ function staticCheck() {
   assert(js.includes("onFilesPicked") && js.includes("fromFiles"), "选文件后应自动发送");
   assert(js.includes("PEER_ID_KEY") && js.includes("sessionStorage"), "peerId 须 sessionStorage 持久化，避免刷新幽灵会话");
   assert(js.includes("pagehide"), "离开页须 pagehide 发 bye");
+  assert(js.includes("wipeAbandonedRoom") || js.includes("clearRoomLocal"), "空房须清空残留");
+  assert(js.includes("ROOM_SETTLE_MS") || js.includes("persistGate"), "进场须空房结算门闩");
+  assert(js.includes("/lanboard/clear"), "末人离开须清桥 /lanboard/clear");
+  assert(js.includes("feedSignature") || js.includes("lastFeedSig"), "列表须签名防闪，避免心跳整表重绘缩略图");
   assert(html.includes("自动发送") || html.includes("选完即发") || /自动发出/.test(html), "面板文案应说明选完即发");
   assert(html.includes('id="lb-preview-dlg"'), "缺少媒体预览弹层");
   assert(js.includes("openPreview") && js.includes("closePreview"), "缺少预览打开/关闭逻辑");

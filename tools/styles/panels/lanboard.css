@@ -72,6 +72,8 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  /* 减少 data-URL 缩略图在偶发重绘时的闪白 */
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .lb-item-preview .lb-kind {

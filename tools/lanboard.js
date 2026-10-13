@@ -31,6 +31,8 @@
   const MQTT_MSG_TTL_MS = 120000;
   const PRESENCE_MS = 4000;
   const PEER_STALE_MS = 12000;
+  /** 进场后等多久仍无他人 → 视为空房，丢掉上次残留 */
+  const ROOM_SETTLE_MS = 6500;
   const TEXT_MQTT_MAX = 1800;
   const THUMB_TIMEOUT_MS = 2500;
   const MQTT_THUMB_MAX = 12000;
@@ -66,6 +68,8 @@
 
   let previewObjectUrl = "";
   let previewItemId = "";
+  /** @type {string} */
+  let lastFeedSig = "";
 
   /** @type {File[]} */
   let pendingFiles = [];
@@ -78,6 +82,9 @@
     mqttSeen: null,
     presenceTimer: null,
     pruneTimer: null,
+    settleTimer: null,
+    /** pending=等同伴；live=有人在场可拉残留；solo=确认空房已清 */
+    persistGate: "pending",
     peers: new Map(),
     /** @type {Map<string, { pc: RTCPeerConnection, dc: RTCDataChannel|null, polite: boolean, makingOffer: boolean }>} */
     links: new Map(),
@@ -203,9 +210,116 @@
     }
   }
 
+  function onlinePeerCount() {
+    const now = Date.now();
+    let n = 0;
+    for (const p of state.peers.values()) {
+      if (now - (p.lastSeen || 0) < PEER_STALE_MS) n += 1;
+    }
+    return n;
+  }
+
+  function isAloneInRoom() {
+    return onlinePeerCount() === 0;
+  }
+
+  function clearBridgeKeepalive() {
+    const base = String(state.bridgeBase || "").replace(/\/+$/, "");
+    if (!base) return;
+    try {
+      fetch(`${base}/lanboard/clear`, {
+        method: "POST",
+        headers: bridgeHeaders(),
+        keepalive: true,
+        cache: "no-store",
+      }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function idbClearItems() {
+    await idbSet(IDB_ITEMS_KEY, { v: 1, items: [], savedAt: Date.now() });
+  }
+
+  /** 清空本机看板内存 / IDB / 可选桥；不发 MQTT（离开页用 keepalive） */
+  function clearRoomLocal({ bridge = false, paint = true } = {}) {
+    state.items.clear();
+    state.localBlobs.clear();
+    lastFeedSig = "";
+    try {
+      closePreview();
+    } catch {
+      /* ignore */
+    }
+    void idbClearItems();
+    if (bridge) clearBridgeKeepalive();
+    if (paint) paintFeed();
+  }
+
+  function publishRoomClear() {
+    publishMqtt({ type: "room-clear", peerId: state.peerId });
+  }
+
+  /** 末人离开或确认空房：清残留，下次进是干净大厅 */
+  function wipeAbandonedRoom({ announce = false, bridge = true } = {}) {
+    clearRoomLocal({ bridge, paint: true });
+    state.persistGate = "solo";
+    if (announce) publishRoomClear();
+  }
+
   function publishBye() {
     if (!state.peerId) return;
+    // 末人离开：清 IDB/桥，避免下次进房看到旧帖
+    if (isAloneInRoom()) {
+      wipeAbandonedRoom({ announce: true, bridge: true });
+    }
     publishMqtt({ type: "bye", peerId: state.peerId });
+  }
+
+  async function promotePersistLive() {
+    if (state.persistGate === "live") return;
+    state.persistGate = "live";
+    if (state.settleTimer) {
+      clearTimeout(state.settleTimer);
+      state.settleTimer = null;
+    }
+    await restoreLocalItems();
+    paintFeed();
+    pullBridgeSnapshot().catch(() => {});
+    requestSnapshots();
+  }
+
+  function scheduleRoomSettle() {
+    if (state.settleTimer) clearTimeout(state.settleTimer);
+    state.settleTimer = setTimeout(() => {
+      state.settleTimer = null;
+      if (state.persistGate !== "pending") return;
+      if (!isAloneInRoom()) {
+        promotePersistLive().catch(() => {});
+        return;
+      }
+      // 结算期若已本机发过帖：保留会话内容，只清桥/IDB 里的旧残留再回写
+      if (state.items.size > 0) {
+        state.persistGate = "solo";
+        clearBridgeKeepalive();
+        void (async () => {
+          await idbClearItems();
+          await persistItems();
+          for (const it of state.items.values()) {
+            if (it.kind === "text") pushTextToBridge(it);
+            else {
+              const blob = state.localBlobs.get(it.id);
+              if (blob) pushMediaToBridge(it, blob).catch(() => {});
+            }
+          }
+        })();
+        paintFeed();
+        return;
+      }
+      // 空房且无本会话内容：丢掉上次 IDB/桥残留
+      wipeAbandonedRoom({ announce: false, bridge: true });
+    }, ROOM_SETTLE_MS);
   }
 
   function openIdb() {
@@ -341,13 +455,36 @@
     }
     if (els.bridgeNote) {
       els.bridgeNote.textContent = state.bridgeOk
-        ? "桥在线：文字快照会写入本机桥；媒体也可暂存到桥。"
-        : "未连上桥：文字靠在线设备互相同步；全员退出后再进可能为空。";
+        ? "桥在线：有人在场时可暂存文字/媒体；全员离开后自动清空。"
+        : "未连上桥：靠在线设备互相同步；全员离开后本地残留也会清掉。";
     }
+  }
+
+  function feedSignature() {
+    const list = [...state.items.values()].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    return list
+      .map((it) => {
+        const thumb = String(it.thumb || "");
+        const thumbSig = thumb ? `${thumb.length}:${thumb.slice(0, 24)}:${thumb.slice(-12)}` : "";
+        return [
+          it.id,
+          it.kind,
+          it.kind === "text" ? it.text || "" : "",
+          it.name || "",
+          it.size || 0,
+          thumbSig,
+          mediaDownloadable(it) ? "1" : "0",
+          peerLabel(it.ownerId),
+        ].join("|");
+      })
+      .join(";");
   }
 
   function paintFeed() {
     if (!els.feed) return;
+    const sig = feedSignature();
+    if (sig === lastFeedSig) return;
+    lastFeedSig = sig;
     const list = [...state.items.values()].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     if (els.emptySteps) els.emptySteps.hidden = list.length > 0;
     if (!list.length) {
@@ -769,19 +906,30 @@
       case "bye":
         dropPeer(msg.peerId || msg.from);
         break;
+      case "room-clear":
+        // 末人清房广播：若本地已无他人，跟着清掉残留
+        if (isAloneInRoom()) wipeAbandonedRoom({ announce: false, bridge: false });
+        break;
       case "signal":
         handleRtcSignal(msg).catch(() => {});
         break;
       case "item-meta":
-        if (msg.item) upsertItem({ ...msg.item, text: undefined });
+        if (msg.item) {
+          if (state.persistGate === "pending") promotePersistLive().catch(() => {});
+          upsertItem({ ...msg.item, text: undefined });
+        }
         break;
       case "item-text":
-        if (msg.item?.kind === "text") upsertItem(msg.item);
+        if (msg.item?.kind === "text") {
+          if (state.persistGate === "pending") promotePersistLive().catch(() => {});
+          upsertItem(msg.item);
+        }
         break;
       case "snap-req":
         sendSnapshotTo(msg.from, via === "mqtt" ? "mqtt" : "dc");
         break;
       case "snap":
+        if (state.persistGate === "pending") promotePersistLive().catch(() => {});
         applySnapshot(msg);
         break;
       default:
@@ -792,13 +940,25 @@
   function notePeer(id, name) {
     if (!id || id === state.peerId) return;
     const prev = state.peers.get(id) || {};
+    const wasOnline = prev.lastSeen && Date.now() - prev.lastSeen < PEER_STALE_MS;
     state.peers.set(id, {
       id,
       name: name || prev.name || id.slice(0, 8),
       lastSeen: Date.now(),
     });
     paintStatus();
-    paintFeed();
+    if (state.persistGate === "pending") {
+      promotePersistLive().catch(() => {});
+    } else if (state.persistGate === "solo") {
+      // 空房结算后有人进来：切到 live，收对方快照（不再 restore 已清的 IDB）
+      state.persistGate = "live";
+      requestSnapshots();
+      pullBridgeSnapshot().catch(() => {});
+      paintFeed();
+    } else if (!wasOnline) {
+      // 同伴重新上线：下载态可能变化，允许 paintFeed（签名不变则跳过）
+      paintFeed();
+    }
   }
 
   function dropPeer(id) {
@@ -858,6 +1018,10 @@
   }
 
   function applySnapshot(msg) {
+    if (state.persistGate === "solo" && isAloneInRoom()) {
+      // 空房已清：忽略迟到的旧快照，避免把残留又灌回来
+      return;
+    }
     (msg.texts || []).forEach((it) => upsertItem(it, { paint: false, persist: false }));
     (msg.media || []).forEach((it) => upsertItem(it, { paint: false, persist: false }));
     persistItems();
@@ -1030,10 +1194,16 @@
       } catch {
         return;
       }
-      if (msg.type === "item-text" && msg.item) upsertItem(msg.item);
-      else if (msg.type === "item-meta" && msg.item) upsertItem(msg.item);
-      else if (msg.type === "snap") applySnapshot(msg);
-      else if (msg.type === "snap-req") sendSnapshotTo(remoteId, "dc");
+      if (msg.type === "item-text" && msg.item) {
+        if (state.persistGate !== "live") state.persistGate = "live";
+        upsertItem(msg.item);
+      } else if (msg.type === "item-meta" && msg.item) {
+        if (state.persistGate !== "live") state.persistGate = "live";
+        upsertItem(msg.item);
+      } else if (msg.type === "snap") {
+        if (state.persistGate !== "live") state.persistGate = "live";
+        applySnapshot(msg);
+      } else if (msg.type === "snap-req") sendSnapshotTo(remoteId, "dc");
       else if (msg.type === "file-req") serveFile(remoteId, msg.fileId).catch(() => {});
       else if (msg.type === "file-meta" || msg.type === "file-done" || msg.type === "file-error") {
         handleFileCtrl(remoteId, msg);
@@ -1351,6 +1521,8 @@
 
   async function pullBridgeSnapshot() {
     if (!state.bridgeOk) return;
+    // 空房结算前 / 已确认空房：不拉桥上旧帖，避免残留回灌
+    if (state.persistGate !== "live") return;
     const base = state.bridgeBase;
     const res = await fetch(`${base}/lanboard/snapshot`, {
       headers: bridgeHeaders(),
@@ -1398,6 +1570,7 @@
         body: blob,
       });
       if (res.ok) {
+        // 仅标记 onBridge；签名不变时 paintFeed 会跳过，避免缩略图闪烁
         upsertItem({ ...item, onBridge: true }, { paint: true, persist: false, relay: false });
       }
     } catch {
@@ -1711,7 +1884,8 @@
     bindBroadcastChannel();
     bindUi();
     bindBridgeUi();
-    await restoreLocalItems();
+    // 不立刻 restore IDB / 拉桥：等同伴或结算，避免空房残留回灌
+    state.persistGate = "pending";
     paintFeed();
     paintStatus();
 
@@ -1732,11 +1906,13 @@
     } catch (e) {
       setError(e?.message || "无法进入大厅，请检查网络后刷新");
     }
+    scheduleRoomSettle();
 
     state.presenceTimer = setInterval(() => {
       publishPresence();
       prunePeers();
       paintStatus();
+      // 不在心跳里强制 paintFeed：整表 innerHTML 会让视频缩略图反复闪
       paintFeed();
     }, PRESENCE_MS);
     state.pruneTimer = setInterval(() => probeBridge().catch(() => {}), 20000);
@@ -1746,8 +1922,10 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
         publishPresence();
-        requestSnapshots();
-        pullBridgeSnapshot().catch(() => {});
+        if (state.persistGate === "live") {
+          requestSnapshots();
+          pullBridgeSnapshot().catch(() => {});
+        }
       }
     });
   }
