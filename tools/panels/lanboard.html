@@ -60,4 +60,19 @@
           需要加密房间互传请用 <a href="#lanshare">局域网互传</a>。
         </p>
       </div>
+      <dialog id="lb-preview-dlg" class="lb-preview-dlg" aria-label="媒体预览">
+        <div class="lb-preview-inner">
+          <div class="lb-preview-bar">
+            <div class="lb-preview-meta">
+              <strong id="lb-preview-title">预览</strong>
+              <p class="hint tight" id="lb-preview-sub" hidden></p>
+            </div>
+            <div class="btn-row lb-preview-actions">
+              <button type="button" class="secondary-btn" id="lb-preview-dl" hidden>下载</button>
+              <button type="button" class="ghost-btn" id="lb-preview-close">关闭</button>
+            </div>
+          </div>
+          <div class="lb-preview-stage" id="lb-preview-stage"></div>
+        </div>
+      </dialog>
     </section>

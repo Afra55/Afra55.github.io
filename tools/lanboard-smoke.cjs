@@ -60,6 +60,12 @@ function staticCheck() {
   assert(js.includes("PEER_ID_KEY") && js.includes("sessionStorage"), "peerId 须 sessionStorage 持久化，避免刷新幽灵会话");
   assert(js.includes("pagehide"), "离开页须 pagehide 发 bye");
   assert(html.includes("自动发送") || html.includes("选完即发") || /自动发出/.test(html), "面板文案应说明选完即发");
+  assert(html.includes('id="lb-preview-dlg"'), "缺少媒体预览弹层");
+  assert(js.includes("openPreview") && js.includes("closePreview"), "缺少预览打开/关闭逻辑");
+  const css = fs.readFileSync(path.join(toolsRoot, "styles/panels/lanboard.css"), "utf8");
+  assert(css.includes(".lb-preview-dlg") && css.includes("object-fit: contain"), "预览弹层须 contain");
+  assert(/@media\s*\(\s*max-width:\s*640px\s*\)/.test(css), "窄屏须有媒体查询");
+  assert(css.includes("100dvh") || css.includes("safe-area-inset"), "手机预览须兼顾 dvh/安全区");
   const reg = JSON.parse(fs.readFileSync(path.join(toolsRoot, "registry/tools.json"), "utf8"));
   assert(reg.meta?.lanboard, "registry 缺 lanboard");
   assert((reg.groups.find((g) => g.id === "device")?.tools || []).includes("lanboard"), "device 组未挂 lanboard");

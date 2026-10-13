@@ -56,7 +56,16 @@
     bridgeShell: $("#lb-bridge-shell"),
     bridgeNote: $("#lb-bridge-note"),
     bridgeQr: $("#lb-bridge-qr"),
+    previewDlg: $("#lb-preview-dlg"),
+    previewTitle: $("#lb-preview-title"),
+    previewSub: $("#lb-preview-sub"),
+    previewStage: $("#lb-preview-stage"),
+    previewDl: $("#lb-preview-dl"),
+    previewClose: $("#lb-preview-close"),
   };
+
+  let previewObjectUrl = "";
+  let previewItemId = "";
 
   /** @type {File[]} */
   let pendingFiles = [];
@@ -360,18 +369,26 @@
           </div>`;
         }
         const canDl = mediaDownloadable(it);
+        const canPreview = it.kind === "image" || it.kind === "video";
         const label = kindLabel(it.kind);
         const preview = it.thumb
           ? `<img src="${escapeHtml(it.thumb)}" alt="" loading="lazy" />`
           : `<span class="lb-kind lb-kind-${escapeHtml(it.kind === "video" || it.kind === "image" ? it.kind : "file")}">${escapeHtml(label)}</span>`;
         const hint = canDl ? "" : `<span class="lb-dl-hint is-warn">${SOURCE_GONE}</span>`;
+        const previewBtn = canPreview
+          ? `<button type="button" class="ghost-btn lb-open-preview" data-id="${escapeHtml(it.id)}">预览</button>`
+          : "";
+        const previewHit = canPreview
+          ? `<button type="button" class="lb-item-preview" data-id="${escapeHtml(it.id)}" aria-label="预览 ${escapeHtml(it.name || label)}">${preview}</button>`
+          : `<div class="lb-item-preview" style="cursor:default">${preview}</div>`;
         return `<div class="lb-item" data-id="${escapeHtml(it.id)}">
-          <div class="lb-item-preview">${preview}</div>
+          ${previewHit}
           <div class="lb-item-main">
             <strong>${escapeHtml(it.name || label)}</strong>
             <p class="hint tight lb-item-meta mono">${escapeHtml(label)} · ${fmtSize(it.size)} · ${escapeHtml(peerLabel(it.ownerId))}</p>
           </div>
           <div class="lb-item-actions">
+            ${previewBtn}
             <button type="button" class="secondary-btn lb-download" data-id="${escapeHtml(it.id)}" ${
               canDl ? "" : 'aria-disabled="true"'
             }>下载</button>
@@ -398,6 +415,12 @@
       btn.addEventListener("click", () => {
         const id = btn.getAttribute("data-id");
         downloadItem(id);
+      });
+    });
+    els.feed.querySelectorAll(".lb-open-preview, button.lb-item-preview").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        openPreview(id).catch((e) => notifyToast(e?.message || "预览失败"));
       });
     });
   }
@@ -1153,6 +1176,117 @@
     });
   }
 
+  async function resolveMediaBlob(id, { quiet = false } = {}) {
+    const it = state.items.get(id);
+    if (!it || it.kind === "text") return null;
+    let blob = state.localBlobs.get(id);
+    if (blob) return blob;
+    if (it.onBridge && state.bridgeOk) {
+      try {
+        blob = await fetchMediaFromBridge(id);
+        if (blob) return blob;
+      } catch {
+        /* fall through */
+      }
+    }
+    if (isOwnerOnline(it.ownerId)) {
+      const { meta, chunks } = await requestFileFromPeer(it.ownerId, id);
+      blob = new Blob(chunks, { type: meta?.mime || it.mime || "application/octet-stream" });
+      state.localBlobs.set(id, blob);
+      return blob;
+    }
+    if (!quiet && !mediaDownloadable(it)) {
+      setInfo(SOURCE_GONE);
+    }
+    return null;
+  }
+
+  function clearPreviewMedia() {
+    if (els.previewStage) {
+      const vid = els.previewStage.querySelector("video");
+      if (vid) {
+        try {
+          vid.pause();
+        } catch {
+          /* ignore */
+        }
+        vid.removeAttribute("src");
+        vid.load?.();
+      }
+      els.previewStage.innerHTML = "";
+    }
+    if (previewObjectUrl) {
+      URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = "";
+    }
+    previewItemId = "";
+  }
+
+  function closePreview() {
+    clearPreviewMedia();
+    if (els.previewDlg?.open) els.previewDlg.close();
+  }
+
+  async function openPreview(id) {
+    const it = state.items.get(id);
+    if (!it || (it.kind !== "image" && it.kind !== "video")) return;
+    if (!els.previewDlg || !els.previewStage) {
+      notifyToast("预览不可用");
+      return;
+    }
+    clearPreviewMedia();
+    previewItemId = id;
+    if (els.previewTitle) els.previewTitle.textContent = it.name || kindLabel(it.kind);
+    if (els.previewSub) {
+      els.previewSub.hidden = true;
+      els.previewSub.textContent = "";
+    }
+    if (els.previewDl) {
+      const canDl = mediaDownloadable(it);
+      els.previewDl.hidden = !canDl;
+      els.previewDl.disabled = !canDl;
+    }
+    els.previewStage.innerHTML = `<p class="lb-preview-fallback hint">加载中…</p>`;
+    if (!els.previewDlg.open) els.previewDlg.showModal();
+
+    let blob = null;
+    try {
+      blob = await resolveMediaBlob(id, { quiet: true });
+    } catch (e) {
+      /* thumb fallback below */
+    }
+    if (previewItemId !== id) return;
+
+    if (blob) {
+      previewObjectUrl = URL.createObjectURL(blob);
+      if (it.kind === "video") {
+        els.previewStage.innerHTML = `<video controls playsinline src="${previewObjectUrl}"></video>`;
+      } else {
+        els.previewStage.innerHTML = `<img src="${previewObjectUrl}" alt="" />`;
+      }
+      if (els.previewDl) {
+        els.previewDl.hidden = false;
+        els.previewDl.disabled = false;
+      }
+      return;
+    }
+
+    if (it.thumb) {
+      els.previewStage.innerHTML = `<img src="${escapeHtml(it.thumb)}" alt="" />`;
+      if (els.previewSub) {
+        els.previewSub.hidden = false;
+        els.previewSub.textContent = it.kind === "video"
+          ? (mediaDownloadable(it) ? "完整视频加载中或可点下载" : `${SOURCE_GONE}（缩略图）`)
+          : (mediaDownloadable(it) ? "" : SOURCE_GONE);
+        if (!els.previewSub.textContent) els.previewSub.hidden = true;
+      }
+      return;
+    }
+
+    els.previewStage.innerHTML = `<p class="lb-preview-fallback hint">${SOURCE_GONE}</p>`;
+    notifyToast(SOURCE_GONE);
+  }
+
   async function downloadItem(id) {
     const it = state.items.get(id);
     if (!it || it.kind === "text") return;
@@ -1163,15 +1297,7 @@
       return;
     }
     try {
-      let blob = state.localBlobs.get(id);
-      if (!blob && it.onBridge && state.bridgeOk) {
-        blob = await fetchMediaFromBridge(id);
-      }
-      if (!blob && isOwnerOnline(it.ownerId)) {
-        const { meta, chunks } = await requestFileFromPeer(it.ownerId, id);
-        blob = new Blob(chunks, { type: meta?.mime || it.mime || "application/octet-stream" });
-        state.localBlobs.set(id, blob);
-      }
+      const blob = await resolveMediaBlob(id);
       if (!blob) {
         notifyToast(SOURCE_GONE);
         return;
@@ -1560,6 +1686,17 @@
         onFilesDropped(ev.dataTransfer?.files);
       });
     }
+    els.previewClose?.addEventListener("click", () => closePreview());
+    els.previewDl?.addEventListener("click", () => {
+      if (previewItemId) downloadItem(previewItemId);
+    });
+    els.previewDlg?.addEventListener("cancel", (ev) => {
+      ev.preventDefault();
+      closePreview();
+    });
+    els.previewDlg?.addEventListener("click", (ev) => {
+      if (ev.target === els.previewDlg) closePreview();
+    });
   }
 
   async function boot() {
