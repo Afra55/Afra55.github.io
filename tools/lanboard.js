@@ -31,6 +31,8 @@
   const PRESENCE_MS = 6000;
   const PEER_STALE_MS = 18000;
   const TEXT_MQTT_MAX = 1800;
+  const THUMB_TIMEOUT_MS = 2500;
+  const MQTT_THUMB_MAX = 12000;
   const SOURCE_GONE = "源设备已离开，仅可预览";
 
   const els = {
@@ -46,6 +48,7 @@
     anyFileInput: $("#lb-any-file-input"),
     fileHint: $("#lb-file-hint"),
     emptySteps: $("#lb-empty-steps"),
+    compose: panel.querySelector(".lb-compose"),
     feed: $("#lb-feed"),
     members: $("#lb-members"),
     memberCount: $("#lb-member-count"),
@@ -56,6 +59,7 @@
 
   /** @type {File[]} */
   let pendingFiles = [];
+  let sending = false;
 
   const state = {
     peerId: "",
@@ -312,7 +316,7 @@
     if (els.emptySteps) els.emptySteps.hidden = list.length > 0;
     if (!list.length) {
       els.feed.innerHTML =
-        '<p class="hint tight lb-empty">大厅还没有内容。发一条文字，或选文件点「发送」。</p>';
+        '<p class="hint tight lb-empty">大厅还没有内容。发一条文字，或直接选文件（选完即发）。</p>';
       return;
     }
     els.feed.innerHTML = list
@@ -373,68 +377,140 @@
 
   async function makeImageThumb(file) {
     if (!file?.type?.startsWith("image/") || file.size > 12 * 1024 * 1024) return "";
-    try {
-      let bmp;
-      if (typeof createImageBitmap === "function") {
-        bmp = await createImageBitmap(file);
-      } else {
-        const url = URL.createObjectURL(file);
-        try {
-          bmp = await new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = url;
-          });
-        } finally {
-          URL.revokeObjectURL(url);
+    return withTimeout(
+      (async () => {
+        let bmp;
+        if (typeof createImageBitmap === "function") {
+          bmp = await createImageBitmap(file);
+        } else {
+          const url = URL.createObjectURL(file);
+          try {
+            bmp = await new Promise((resolve, reject) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.onerror = reject;
+              img.src = url;
+            });
+          } finally {
+            URL.revokeObjectURL(url);
+          }
         }
-      }
-      const maxSide = 128;
-      const scale = Math.min(1, maxSide / Math.max(bmp.width || 1, bmp.height || 1));
-      const w = Math.max(1, Math.round((bmp.width || 1) * scale));
-      const h = Math.max(1, Math.round((bmp.height || 1) * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext("2d")?.drawImage(bmp, 0, 0, w, h);
-      bmp.close?.();
-      return canvas.toDataURL("image/jpeg", 0.72);
-    } catch {
-      return "";
-    }
+        const maxSide = 128;
+        const scale = Math.min(1, maxSide / Math.max(bmp.width || 1, bmp.height || 1));
+        const w = Math.max(1, Math.round((bmp.width || 1) * scale));
+        const h = Math.max(1, Math.round((bmp.height || 1) * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d")?.drawImage(bmp, 0, 0, w, h);
+        bmp.close?.();
+        return canvas.toDataURL("image/jpeg", 0.72);
+      })(),
+      THUMB_TIMEOUT_MS,
+      ""
+    );
+  }
+
+  function withTimeout(promise, ms, fallback = "") {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        resolve(v);
+      };
+      const to = setTimeout(() => finish(fallback), ms);
+      Promise.resolve(promise)
+        .then((v) => {
+          clearTimeout(to);
+          finish(v);
+        })
+        .catch(() => {
+          clearTimeout(to);
+          finish(fallback);
+        });
+    });
   }
 
   async function makeVideoThumb(file) {
     if (!file?.type?.startsWith("video/")) return "";
-    try {
-      const url = URL.createObjectURL(file);
+    // 部分编码/大文件永远不触发 loadeddata；无超时会卡住整批发送并表现为「点发送无反应」。
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    let settled = false;
+    const cleanup = () => {
       try {
-        const video = document.createElement("video");
-        video.muted = true;
-        video.playsInline = true;
-        video.preload = "metadata";
-        await new Promise((resolve, reject) => {
-          video.onloadeddata = () => resolve();
-          video.onerror = reject;
-          video.src = url;
-        });
-        video.currentTime = Math.min(0.4, (video.duration || 1) * 0.1);
-        await new Promise((resolve) => {
-          video.onseeked = () => resolve();
-          setTimeout(resolve, 800);
-        });
-        const canvas = document.createElement("canvas");
-        const maxSide = 128;
-        const scale = Math.min(1, maxSide / Math.max(video.videoWidth || 1, video.videoHeight || 1));
-        canvas.width = Math.max(1, Math.round((video.videoWidth || 1) * scale));
-        canvas.height = Math.max(1, Math.round((video.videoHeight || 1) * scale));
-        canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
-        return canvas.toDataURL("image/jpeg", 0.7);
-      } finally {
-        URL.revokeObjectURL(url);
+        video.onloadedmetadata = null;
+        video.onloadeddata = null;
+        video.onerror = null;
+        video.onseeked = null;
+        video.removeAttribute("src");
+        video.load?.();
+      } catch {
+        /* ignore */
       }
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        /* ignore */
+      }
+    };
+    try {
+      return await new Promise((resolve) => {
+        const done = (value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(watchdog);
+          cleanup();
+          resolve(value);
+        };
+        const watchdog = setTimeout(() => done(""), THUMB_TIMEOUT_MS);
+        const draw = () => {
+          try {
+            if (video.videoWidth < 2 || video.videoHeight < 2) {
+              done("");
+              return;
+            }
+            const canvas = document.createElement("canvas");
+            const maxSide = 128;
+            const scale = Math.min(1, maxSide / Math.max(video.videoWidth || 1, video.videoHeight || 1));
+            canvas.width = Math.max(1, Math.round((video.videoWidth || 1) * scale));
+            canvas.height = Math.max(1, Math.round((video.videoHeight || 1) * scale));
+            canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+            done(canvas.toDataURL("image/jpeg", 0.7));
+          } catch {
+            done("");
+          }
+        };
+        const afterMeta = () => {
+          if (settled) return;
+          video.onloadedmetadata = null;
+          video.onloadeddata = null;
+          const seekTo = Math.min(0.4, Math.max(0, (video.duration || 1) * 0.05));
+          if (Number.isFinite(seekTo) && seekTo > 0) {
+            try {
+              video.onseeked = () => draw();
+              video.currentTime = seekTo;
+              setTimeout(() => {
+                if (!settled) draw();
+              }, 600);
+              return;
+            } catch {
+              /* fall through */
+            }
+          }
+          draw();
+        };
+        video.onloadedmetadata = afterMeta;
+        video.onloadeddata = afterMeta;
+        video.onerror = () => done("");
+        video.src = url;
+      });
     } catch {
+      cleanup();
       return "";
     }
   }
@@ -783,7 +859,10 @@
     const meta = { ...item };
     delete meta._objUrl;
     broadcastDc({ type: "item-meta", item: meta });
-    publishMqtt({ type: "item-meta", item: meta });
+    // MQTT 载荷有限：大缩略图只走 DataChannel，避免静默丢消息
+    const mqttMeta = { ...meta };
+    if (String(mqttMeta.thumb || "").length > MQTT_THUMB_MAX) mqttMeta.thumb = "";
+    publishMqtt({ type: "item-meta", item: mqttMeta });
   }
 
   function BufferByteLength(s) {
@@ -1192,49 +1271,94 @@
   function setPendingFromInput(input) {
     pendingFiles = [...(input?.files || [])];
     if (els.fileHint) {
-      els.fileHint.textContent = pendingFiles.length
-        ? `已选 ${pendingFiles.length} 个，点发送`
-        : "";
+      els.fileHint.textContent = pendingFiles.length ? `已选 ${pendingFiles.length} 个，发送中…` : "";
     }
     // 两个 input 互斥：从一个选完后清空另一个，避免重复
     if (input === els.fileInput && els.anyFileInput) els.anyFileInput.value = "";
     if (input === els.anyFileInput && els.fileInput) els.fileInput.value = "";
   }
 
-  async function sendText() {
+  function setSendingUi(on, label = "") {
+    sending = !!on;
+    if (els.sendBtn) {
+      els.sendBtn.disabled = sending;
+      els.sendBtn.textContent = sending ? label || "发送中…" : "发送";
+    }
+  }
+
+  async function sendCompose({ fromFiles = false } = {}) {
     const text = String(els.textInput?.value || "").trim();
     if (!text && !pendingFiles.length) {
-      setError("请输入文字或选择文件");
+      if (!fromFiles) setError("请输入文字或选择文件");
+      return;
+    }
+    if (sending) {
+      setInfo("正在发送，请稍候…");
       return;
     }
     setError("");
-    if (text) {
-      const item = {
-        id: uid(12),
-        kind: "text",
-        text,
-        ownerId: state.peerId,
-        ownerName: state.peerName,
-        addedAt: Date.now(),
-      };
-      upsertItem(item, { relay: true });
-      if (els.textInput) els.textInput.value = "";
-    }
+    setInfo("");
+    setSendingUi(true, "发送中…");
     const files = pendingFiles.slice();
     clearPendingFiles();
-    for (const file of files) {
-      await sendFile(file);
+    const fails = [];
+    try {
+      if (text) {
+        const item = {
+          id: uid(12),
+          kind: "text",
+          text,
+          ownerId: state.peerId,
+          ownerName: state.peerName,
+          addedAt: Date.now(),
+        };
+        upsertItem(item, { relay: true });
+        if (els.textInput) els.textInput.value = "";
+      }
+      const total = files.length;
+      for (let i = 0; i < total; i++) {
+        const file = files[i];
+        const name = file?.name || `文件${i + 1}`;
+        setSendingUi(true, `发送 ${i + 1}/${total}`);
+        if (els.fileHint) els.fileHint.textContent = `正在发送 ${i + 1}/${total}：${name}`;
+        try {
+          await sendFile(file);
+        } catch (e) {
+          fails.push(`${name}：${e?.message || e || "失败"}`);
+        }
+      }
+      paintFeed();
+      if (fails.length) {
+        const msg =
+          fails.length === total
+            ? `全部 ${total} 个文件发送失败：${fails.slice(0, 3).join("；")}${fails.length > 3 ? "…" : ""}`
+            : `${fails.length}/${total} 个失败：${fails.slice(0, 3).join("；")}${fails.length > 3 ? "…" : ""}`;
+        setError(msg);
+        notifyToast(msg);
+      } else if (total > 0) {
+        setInfo(total === 1 ? "已发送 1 个文件" : `已发送 ${total} 个文件`);
+        notifyToast(total === 1 ? "已发送" : `已发送 ${total} 个文件`);
+        if (els.fileHint) els.fileHint.textContent = "";
+      }
+    } finally {
+      setSendingUi(false);
     }
-    paintFeed();
   }
 
   async function sendFile(file) {
     if (!file) return;
+    if (typeof file.size === "number" && file.size <= 0) {
+      throw new Error("空文件无法发送");
+    }
     const id = uid(12);
     const kind = fileKindOf(file);
     let thumb = "";
-    if (kind === "image") thumb = await makeImageThumb(file);
-    else if (kind === "video") thumb = await makeVideoThumb(file);
+    try {
+      if (kind === "image") thumb = await makeImageThumb(file);
+      else if (kind === "video") thumb = await makeVideoThumb(file);
+    } catch {
+      thumb = "";
+    }
     const item = {
       id,
       kind,
@@ -1250,6 +1374,22 @@
     state.localBlobs.set(id, file);
     upsertItem(item, { relay: true });
     pushMediaToBridge(item, file).catch(() => {});
+  }
+
+  function queueFilesPicked(input) {
+    setPendingFromInput(input);
+    if (!pendingFiles.length) return;
+    sendCompose({ fromFiles: true }).catch((e) => setError(e?.message || "发送失败"));
+  }
+
+  function queueFilesDropped(fileList) {
+    const files = [...(fileList || [])].filter(Boolean);
+    if (!files.length) return;
+    pendingFiles = files;
+    if (els.fileHint) els.fileHint.textContent = `已选 ${files.length} 个，发送中…`;
+    if (els.fileInput) els.fileInput.value = "";
+    if (els.anyFileInput) els.anyFileInput.value = "";
+    sendCompose({ fromFiles: true }).catch((e) => setError(e?.message || "发送失败"));
   }
 
   function bindBridgeUi() {
@@ -1337,15 +1477,34 @@
         paintStatus();
       });
     }
-    els.sendBtn?.addEventListener("click", () => sendText().catch((e) => setError(e.message || "发送失败")));
-    els.fileInput?.addEventListener("change", () => setPendingFromInput(els.fileInput));
-    els.anyFileInput?.addEventListener("change", () => setPendingFromInput(els.anyFileInput));
+    els.sendBtn?.addEventListener("click", () =>
+      sendCompose().catch((e) => setError(e?.message || "发送失败"))
+    );
+    els.fileInput?.addEventListener("change", () => onFilesPicked(els.fileInput));
+    els.anyFileInput?.addEventListener("change", () => onFilesPicked(els.anyFileInput));
     els.textInput?.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
         ev.preventDefault();
-        sendText().catch((e) => setError(e.message || "发送失败"));
+        sendCompose().catch((e) => setError(e?.message || "发送失败"));
       }
     });
+    if (els.compose) {
+      els.compose.addEventListener("dragover", (ev) => {
+        if (![...ev.dataTransfer?.types || []].includes("Files")) return;
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "copy";
+        els.compose.classList.add("lb-compose-drag");
+      });
+      els.compose.addEventListener("dragleave", (ev) => {
+        if (ev.target === els.compose) els.compose.classList.remove("lb-compose-drag");
+      });
+      els.compose.addEventListener("drop", (ev) => {
+        els.compose.classList.remove("lb-compose-drag");
+        if (![...ev.dataTransfer?.types || []].includes("Files")) return;
+        ev.preventDefault();
+        onFilesDropped(ev.dataTransfer?.files);
+      });
+    }
   }
 
   async function boot() {

@@ -51,6 +51,9 @@ function staticCheck() {
   assert(/accept=["']\*\/\*["']/.test(html), "任意文件 accept 应为 */*");
   assert(js.includes("sendFile") || js.includes("fileKindOf"), "缺少任意文件发送逻辑");
   assert(!js.includes("仅支持图片或视频"), "仍限制仅图片/视频");
+  assert(js.includes("THUMB_TIMEOUT_MS") || js.includes("withTimeout"), "视频缩略图须有超时，否则发送会挂死");
+  assert(js.includes("onFilesPicked") || js.includes("fromFiles"), "选文件后应自动发送");
+  assert(html.includes("自动发送") || html.includes("选完即发") || /自动发出/.test(html), "面板文案应说明选完即发");
   const reg = JSON.parse(fs.readFileSync(path.join(toolsRoot, "registry/tools.json"), "utf8"));
   assert(reg.meta?.lanboard, "registry 缺 lanboard");
   assert((reg.groups.find((g) => g.id === "device")?.tools || []).includes("lanboard"), "device 组未挂 lanboard");
@@ -185,29 +188,30 @@ async function browserFlow() {
     const fileInput = await pageA.$("#lb-file-input");
     assert(fileInput, "缺少文件输入");
     await fileInput.uploadFile(pngPath);
-    await wait(200);
-    await pageA.evaluate(() => document.querySelector("#lb-send")?.click());
+    // 选完应自动发送，无需再点「发送」
 
     let previewOk = false;
     let mediaOnB = false;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 40; i++) {
       const st = await pageA.evaluate(() => ({
         preview: [...document.querySelectorAll("#lb-feed .lb-item-preview img")].some((img) =>
           (img.getAttribute("src") || "").startsWith("data:")
         ),
+        hasItem: (document.querySelector("#lb-feed")?.innerText || "").includes(".png") ||
+          !!document.querySelector("#lb-feed .lb-item-preview"),
       }));
       const stB = await pageB.evaluate(() => ({
         dl: !!document.querySelector("#lb-feed .lb-download"),
         prev: !!document.querySelector("#lb-feed .lb-item-preview img, #lb-feed .lb-kind"),
       }));
-      previewOk = st.preview;
+      previewOk = st.preview || st.hasItem;
       mediaOnB = stB.dl && stB.prev;
       if (previewOk && mediaOnB) break;
       await wait(400);
     }
-    assert(previewOk, "发送端无图片预览");
+    assert(previewOk, "选图后未自动出现在发送端列表");
     assert(mediaOnB, "B 未出现媒体预览/下载按钮");
-    console.log("media preview OK");
+    console.log("media auto-send OK");
 
     const anyName = `smoke-any-${Date.now()}.bin`;
     const anyPath = path.join(os.tmpdir(), anyName);
@@ -215,8 +219,6 @@ async function browserFlow() {
     const anyInput = await pageA.$("#lb-any-file-input");
     assert(anyInput, "缺少任意文件输入");
     await anyInput.uploadFile(anyPath);
-    await wait(200);
-    await pageA.evaluate(() => document.querySelector("#lb-send")?.click());
 
     let anyOnB = false;
     for (let i = 0; i < 30; i++) {

@@ -19,6 +19,11 @@
   cursor: pointer;
 }
 
+#lanboard .lb-compose.lb-compose-drag {
+  outline: 2px dashed var(--accent, #3b82f6);
+  outline-offset: 2px;
+}
+
 #lb-file-hint:empty {
   display: none;
 }
