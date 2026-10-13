@@ -258,9 +258,13 @@
   ]);
 
   const scriptPromises = new Map();
+  /** 本会话已成功执行过的脚本 URL（绝对地址 + ?v=）：比扫 DOM 更稳，再次进入直接命中 */
+  const loadedScriptKeys = new Set();
   let extraCorePromise = null;
   /** 本会话已完整加载过的工具：再次进入跳过下载与进度条 */
   const readyTools = new Set();
+  /** 同工具并发 ensure 合并为一次，避免进度条抖动 */
+  const ensureInflight = new Map();
 
   function isToolReady(toolId) {
     return readyTools.has(String(toolId || "").trim());
@@ -268,11 +272,20 @@
 
   function markToolReady(toolId) {
     const id = String(toolId || "").trim();
-    if (id) readyTools.add(id);
+    if (!id) return;
+    readyTools.add(id);
+    // 共享同一入口脚本的工具（如 vbb/v2g/vsplit）在依赖已齐时一并标记，避免同组切换再走全量进度
+    const src = TOOL_FILES[id];
+    if (!src) return;
+    for (const [other, otherSrc] of Object.entries(TOOL_FILES)) {
+      if (other === id || otherSrc !== src || readyTools.has(other)) continue;
+      if (toolRuntimeOk(other) && scriptLikelyLoaded(otherSrc)) readyTools.add(other);
+    }
   }
 
   function clearReadyTools() {
     readyTools.clear();
+    ensureInflight.clear();
   }
 
   function vendorReady(vendorId) {
@@ -280,19 +293,48 @@
     return Boolean(spec?.probe?.());
   }
 
+  function scriptKeysMatch(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    try {
+      const ua = new URL(a, document.baseURI || location.href);
+      const ub = new URL(b, document.baseURI || location.href);
+      return ua.pathname === ub.pathname && ua.search === ub.search;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function scriptLikelyLoaded(src) {
     if (!src) return true;
     const key = withVersion(src);
+    if (loadedScriptKeys.has(key)) return true;
     // 仅「已成功执行」算 loaded；in-flight / 失败标签不算（否则 isToolWarm 会跳过 await）
     return [...document.scripts].some((s) => {
       try {
         if (s.dataset.devtoolsLoaded !== "1") return false;
-        const attr = s.getAttribute("src") || "";
-        return withVersion(attr) === key;
+        const attr = s.getAttribute("src") || s.src || "";
+        return scriptKeysMatch(withVersion(attr), key);
       } catch (_) {
         return false;
       }
     });
+  }
+
+  /** 运行时全局是否齐（不含 readyTools / 脚本标签） */
+  function toolRuntimeOk(toolId) {
+    const id = String(toolId || "").trim();
+    if (!id) return false;
+    const vendors = TOOL_VENDORS[id] || [];
+    if (!vendors.every((v) => vendorReady(v))) return false;
+    if (!NO_PURE.has(id) && !window.DevToolsPure) return false;
+    if (EXTRA_MEDIA_TOOLS.has(id) && !window.DevToolsExtraMedia) return false;
+    if (EXTRA_PANEL_IDS.has(id) && !window.__devtoolsExtraCore) return false;
+    if (id === "diff" && !window.DiffCore) return false;
+    if (id === "memo" && !window.DevToolsMemo) return false;
+    if (id === "lanboard" && !window.DevToolsLanBoard) return false;
+    if (id === "qrcode" && !window.DevToolsCodeScan && !scriptLikelyLoaded("./lib/code-scan.js")) return false;
+    return true;
   }
 
   /** 依赖是否已在内存：再次进入或同组切换时可跳过加载条 */
@@ -300,19 +342,9 @@
     const id = String(toolId || "").trim();
     if (!id) return false;
     if (readyTools.has(id)) return true;
-    if (window.DevToolsPanels?.isForceFreshLoad?.()) return false;
-    const vendors = TOOL_VENDORS[id] || [];
-    if (!vendors.every((v) => vendorReady(v))) return false;
-    if (!NO_PURE.has(id) && !window.DevToolsPure) return false;
-    if (EXTRA_MEDIA_TOOLS.has(id) && !window.DevToolsExtraMedia) return false;
-    if (EXTRA_PANEL_IDS.has(id) && !window.__devtoolsExtraCore) return false;
-    if (id === "diff" && !(window.DiffCore && scriptLikelyLoaded("./diff.js"))) return false;
+    if (!toolRuntimeOk(id)) return false;
+    if (id === "diff" && !scriptLikelyLoaded("./diff.js")) return false;
     if (TOOL_FILES[id] && !scriptLikelyLoaded(TOOL_FILES[id])) return false;
-    // memo.js 若在 #memo 挂载前执行会静默 return，脚本标签仍算 loaded，但 DevToolsMemo 未创建
-    if (id === "memo" && !window.DevToolsMemo) return false;
-    // lanboard.js 同理：面板未挂载时 IIFE 直接 return
-    if (id === "lanboard" && !window.DevToolsLanBoard) return false;
-    if (id === "qrcode" && !window.DevToolsCodeScan && !scriptLikelyLoaded("./lib/code-scan.js")) return false;
     return true;
   }
 
@@ -320,25 +352,29 @@
     if (!src) return;
     const key = withVersion(src);
     scriptPromises.delete(key);
+    loadedScriptKeys.delete(key);
     [...document.scripts].forEach((s) => {
       try {
-        const attr = s.getAttribute("src") || "";
-        const same = withVersion(attr) === key || s.src.endsWith(src.replace(/^\.\//, ""));
+        const attr = s.getAttribute("src") || s.src || "";
+        const same =
+          scriptKeysMatch(withVersion(attr), key) ||
+          (s.src && s.src.includes(src.replace(/^\.\//, "")));
         if (same) s.remove();
       } catch (_) {}
     });
   }
 
   function withVersion(src) {
+    const raw = String(src || "").trim();
+    if (!raw) return raw;
     const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
-    if (typeof resolve === "function" && /^\.?\/?(?:vendor|lib|extra-panels|styles|panels)\//i.test(String(src || "").replace(/^\.\//, ""))) {
-      const rel = String(src || "").replace(/^\.\//, "");
+    const bare = raw.replace(/^\.\//, "").replace(/[?#].*$/, "");
+    if (typeof resolve === "function" && /^(?:vendor|lib|extra-panels|styles|panels)\//i.test(bare)) {
       try {
-        const abs = resolve(rel, {
-          version: isVendorSrc(src) ? VENDOR_V : BUILD,
+        const abs = resolve(bare, {
+          version: isVendorSrc(raw) || isVendorSrc(bare) ? VENDOR_V : BUILD,
         });
-        const u = new URL(abs);
-        return u.pathname + u.search;
+        return new URL(abs, document.baseURI || location.href).href;
       } catch (_) {
         /* fall through */
       }
@@ -353,19 +389,21 @@
     } catch (_) {
       /* ignore */
     }
-    const url = new URL(src, base);
-    url.searchParams.set("v", isVendorSrc(src) ? VENDOR_V : BUILD);
-    return url.pathname + url.search;
+    const url = new URL(raw, base);
+    url.searchParams.set("v", isVendorSrc(raw) || /\/vendor\//i.test(url.pathname) ? VENDOR_V : BUILD);
+    return url.href;
   }
 
   function loadScript(src, { timeoutMs = 60000 } = {}) {
     const key = withVersion(src);
+    if (loadedScriptKeys.has(key)) return Promise.resolve();
     if (scriptPromises.has(key)) return scriptPromises.get(key);
     const promise = new Promise((resolve, reject) => {
       let settled = false;
       const finishOk = () => {
         if (settled) return;
         settled = true;
+        loadedScriptKeys.add(key);
         window.clearTimeout(timer);
         resolve();
       };
@@ -374,6 +412,7 @@
         settled = true;
         window.clearTimeout(timer);
         scriptPromises.delete(key); // 失败不缓存，允许重试
+        loadedScriptKeys.delete(key);
         reject(err || new Error(`脚本加载失败：${src}`));
       };
       const timer = window.setTimeout(() => finishErr(new Error(`脚本加载超时：${src}`)), timeoutMs);
@@ -381,8 +420,10 @@
       // 否则 addEventListener("error") 等不到重放事件，会一直卡到超时。
       [...document.scripts].forEach((s) => {
         try {
-          const attr = s.getAttribute("src") || "";
-          const same = withVersion(attr) === key || s.src.endsWith(src.replace(/^\.\//, ""));
+          const attr = s.getAttribute("src") || s.src || "";
+          const same =
+            scriptKeysMatch(withVersion(attr), key) ||
+            (s.src && s.src.includes(String(src || "").replace(/^\.\//, "")));
           if (!same) return;
           if (s.dataset.devtoolsLoaded === "1") return;
           s.remove();
@@ -390,8 +431,8 @@
       });
       const ready = [...document.scripts].find((s) => {
         try {
-          const attr = s.getAttribute("src") || "";
-          return s.dataset.devtoolsLoaded === "1" && withVersion(attr) === key;
+          const attr = s.getAttribute("src") || s.src || "";
+          return s.dataset.devtoolsLoaded === "1" && scriptKeysMatch(withVersion(attr), key);
         } catch (_) {
           return false;
         }
@@ -416,6 +457,7 @@
       document.head.appendChild(node);
     }).catch((err) => {
       scriptPromises.delete(key);
+      loadedScriptKeys.delete(key);
       throw err;
     });
     scriptPromises.set(key, promise);
@@ -545,7 +587,9 @@
   async function ensureForTool(toolId, opts = {}) {
     const id = String(toolId || "").trim();
     if (!id) return;
-    const force = Boolean(opts.force) || Boolean(window.DevToolsPanels?.isForceFreshLoad?.());
+    // 注意：不再把 isForceFreshLoad 当成每次 ensure 的 force——?_fresh 只影响首次拉网，
+    // 本会话 readyTools / loadedScriptKeys 仍应复用，否则每次进面板都全量走进度条。
+    const force = Boolean(opts.force);
     const onProgress = typeof opts.onProgress === "function" ? opts.onProgress : null;
     const report = (ratio, label) => onProgress?.(Math.max(0, Math.min(1, Number(ratio) || 0)), label);
 
@@ -553,6 +597,9 @@
       if (id === "memo" && !window.DevToolsMemo) {
         readyTools.delete("memo");
         bustToolScript(TOOL_FILES.memo);
+      } else if (id === "lanboard" && !window.DevToolsLanBoard) {
+        readyTools.delete("lanboard");
+        bustToolScript(TOOL_FILES.lanboard);
       } else {
         report(1, "已缓存");
         return;
@@ -566,6 +613,14 @@
       return;
     }
 
+    let run = ensureInflight.get(id);
+    if (!force && run) {
+      await run;
+      report(1, "已缓存");
+      return;
+    }
+
+    run = (async () => {
     if (id === "about") {
       report(0.2, "加载关于页…");
       await loadScript("./about.js");
@@ -636,20 +691,35 @@
         readyTools.delete("memo");
         await loadToolScript(id);
       }
+      if (id === "lanboard" && !window.DevToolsLanBoard) {
+        bustToolScript(TOOL_FILES.lanboard);
+        readyTools.delete("lanboard");
+        await loadToolScript(id);
+      }
     }
     report(1, "工具已就绪");
+    // 空跑脚本勿标 ready，否则下次进面板会误判已缓存又立刻 bust 重拉
+    if (id === "memo" && !window.DevToolsMemo) return;
+    if (id === "lanboard" && !window.DevToolsLanBoard) return;
     markToolReady(id);
+    })();
+
+    if (!force) ensureInflight.set(id, run);
+    try {
+      await run;
+    } finally {
+      if (ensureInflight.get(id) === run) ensureInflight.delete(id);
+    }
   }
 
   /** 空闲预取：不弹进度条；失败静默 */
   let prefetchChain = Promise.resolve();
   function prefetchTool(toolId) {
     const id = String(toolId || "").trim();
-    if (!id || readyTools.has(id)) return prefetchChain;
-    if (window.DevToolsPanels?.isForceFreshLoad?.()) return prefetchChain;
+    if (!id || readyTools.has(id) || isToolWarm(id)) return prefetchChain;
     prefetchChain = prefetchChain
       .then(async () => {
-        if (readyTools.has(id)) return;
+        if (readyTools.has(id) || isToolWarm(id)) return;
         try {
           await window.DevToolsPanels?.ensure?.(id);
         } catch (_) {
@@ -667,7 +737,7 @@
 
   function prefetchTools(ids, { limit = 6 } = {}) {
     const list = [...new Set((ids || []).map((x) => String(x || "").trim()).filter(Boolean))];
-    const todo = list.filter((id) => !readyTools.has(id)).slice(0, Math.max(0, limit));
+    const todo = list.filter((id) => !readyTools.has(id) && !isToolWarm(id)).slice(0, Math.max(0, limit));
     for (const id of todo) prefetchTool(id);
     return prefetchChain;
   }

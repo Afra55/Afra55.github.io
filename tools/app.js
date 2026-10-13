@@ -3005,16 +3005,15 @@
     const loadGen = ++toolLoadGen;
     toolLoadPanelId = String(toolId || "").trim();
     const name = toolName(toolId);
-    const forceFresh = Boolean(window.DevToolsPanels?.isForceFreshLoad?.());
     const alreadyReady =
-      !forceFresh &&
-      (Boolean(window.DevToolsLazy?.isToolReady?.(toolId)) || Boolean(window.DevToolsLazy?.isToolWarm?.(toolId)));
+      Boolean(window.DevToolsLazy?.isToolReady?.(toolId)) || Boolean(window.DevToolsLazy?.isToolWarm?.(toolId));
 
     // 本会话已加载 / 依赖已在内存：直接发路由事件，不遮挡、不重拉
     if (alreadyReady) {
       if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, false);
       // 上一次加载留下的进度条可能还挂着，这里一并隐藏，避免「XX 已就绪」不消失
       hideToolLoadProgress(loadGen);
+      window.DevToolsPanels?.endForceFreshLoad?.();
       // warm 但未 mark 时补一次静默 ensure（极快）
       void window.DevToolsLazy?.ensureForTool?.(toolId).catch(() => {});
       window.dispatchEvent(
@@ -3074,6 +3073,7 @@
       );
 
       if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, false);
+      window.DevToolsPanels?.endForceFreshLoad?.();
 
       scheduleToolPrefetch(toolId);
 
@@ -3093,7 +3093,6 @@
   /** 空闲预取：最近用过的、同组的、收藏的工具（面板 HTML + 脚本） */
   let toolPrefetchTimer = 0;
   function scheduleToolPrefetch(activeId) {
-    if (window.DevToolsPanels?.isForceFreshLoad?.()) return;
     window.clearTimeout(toolPrefetchTimer);
     toolPrefetchTimer = window.setTimeout(() => {
       const idle = window.requestIdleCallback || ((cb) => window.setTimeout(() => cb({ timeRemaining: () => 12 }), 600));

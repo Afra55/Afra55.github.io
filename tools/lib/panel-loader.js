@@ -9,16 +9,36 @@
   const mounted = new Set();
   const inflight = new Map();
 
+  /**
+   * 「强制刷新」带入的 ?_fresh=：只在本页引导阶段绕过 HTTP 缓存拉面板 HTML。
+   * 绝不能让 URL 常驻参数在整个会话里一直返回 true——否则每次进面板都走 no-store +
+   * 跳过 readyTools 暖缓存，表现为「每次都要重新加载模块」。
+   */
+  let freshNoStore = false;
+
   function isForceFreshLoad() {
+    return freshNoStore;
+  }
+
+  function endForceFreshLoad() {
+    freshNoStore = false;
+  }
+
+  function consumeFreshParamFromUrl() {
     try {
-      return new URLSearchParams(location.search).has("_fresh");
+      const url = new URL(location.href);
+      if (!url.searchParams.has("_fresh")) return false;
+      url.searchParams.delete("_fresh");
+      const q = url.searchParams.toString();
+      history.replaceState(null, "", `${url.pathname}${q ? `?${q}` : ""}${url.hash}`);
+      return true;
     } catch (_) {
       return false;
     }
   }
 
   function fetchInit(extra = {}) {
-    return isForceFreshLoad() ? { cache: "no-store", ...extra } : { cache: "default", ...extra };
+    return freshNoStore ? { cache: "no-store", ...extra } : { cache: "default", ...extra };
   }
 
   function withVersion(src) {
@@ -36,7 +56,8 @@
   async function loadPanelHtml(toolId) {
     const id = String(toolId || "").trim();
     if (!id) throw new Error("panel id required");
-    if (!isForceFreshLoad() && htmlCache.has(id)) return htmlCache.get(id);
+    // 会话内内存命中即复用；?_fresh 只影响首次网络请求的 cache: no-store
+    if (htmlCache.has(id)) return htmlCache.get(id);
     if (inflight.has(`html:${id}`)) return inflight.get(`html:${id}`);
     const promise = fetchText(`./panels/${id}.html`)
       .then((html) => {
@@ -135,7 +156,10 @@
     inflight.clear();
   }
 
-  if (isForceFreshLoad()) clearSessionCache();
+  if (consumeFreshParamFromUrl()) {
+    freshNoStore = true;
+    clearSessionCache();
+  }
 
   window.DevToolsPanels = {
     BUILD,
@@ -144,6 +168,7 @@
     isMounted: (id) => mounted.has(String(id || "").trim()),
     clearSessionCache,
     isForceFreshLoad,
+    endForceFreshLoad,
     prefetchHtml: (toolId) => loadPanelHtml(toolId).catch(() => null),
   };
   window.DevToolsPanelLoader = window.DevToolsPanels;

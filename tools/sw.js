@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20261013-203611";
+const SHELL_CACHE = "devtools-shell-20261013-204611";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -120,9 +120,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 构建戳入口与备忘录主脚本：网络优先，避免壳缓存把坏掉的旧 memo.js 一直喂给用户
+  // 构建戳入口：网络优先，保证新发布能看到新的 TOOLS_BUILD / ?v=
+  // memo.js 等业务脚本已带 ?v=<BUILD>，走下方缓存优先即可；勿再网络优先，否则每次进备忘录都像重新拉模块
   const path = url.pathname || "";
-  if (/\/(?:tools-build|memo)\.js$/i.test(path) || /\/lib\/tools-build\.js$/i.test(path)) {
+  if (/\/(?:tools-build)\.js$/i.test(path) || /\/lib\/tools-build\.js$/i.test(path)) {
     event.respondWith(networkFetch(req, url));
     return;
   }
