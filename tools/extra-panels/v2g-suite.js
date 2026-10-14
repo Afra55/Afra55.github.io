@@ -1123,13 +1123,16 @@
           const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
           const stalled = Date.now() - lastRealAt > 900;
           if (stalled) {
-            // 心跳假进度：不刷新 lastRealAt，否则同值 progress 会把僵死伪装成「还活着」
-            lastP = Math.min(0.97, lastP + 0.012);
+            // 心跳：百分比缓增到 97%；顶满后用「时间微抖」推动映射值，避免批量 stall 误报
+            if (lastP < 0.97) lastP = Math.min(0.97, lastP + 0.012);
             lastBumpAt = Date.now();
           }
           const pct = Math.round(lastP * 100);
+          // 顶满后附加极小时间相位，让 onProgress 数值仍变化（外层靠 delta 判定存活）
+          const timeWiggle =
+            lastP >= 0.97 - 1e-6 ? ((Date.now() - startedAt) % 20000) / 20000 * 0.004 : 0;
           mapProgress(
-            base + lastP * span,
+            base + Math.min(0.995, lastP + timeWiggle) * span,
             `${phase} · ${pct}% · 已用时 ${elapsed}s${stalled ? " · 编码中请稍候" : ""}`
           );
         }, 700);
@@ -2178,7 +2181,19 @@
             await ffmpeg.writeFile(wmName, wmBytes);
           }
 
-          const encodeChunk = async (chunkStartFrame, chunkFrames) => {
+          /**
+           * 单段：FFmpeg 导 RGBA → gifski wasm。
+           * 手机分块时旧逻辑会 stop 外层 ticker，整段 exec 无回调 → 批量误报「1800s 无进度」。
+           * 这里自带心跳 + ffmpeg progress，保证 mapProgress 持续有信号。
+           */
+          const encodeChunk = async (chunkStartFrame, chunkFrames, chunkMap) => {
+            const report =
+              typeof chunkMap === "function"
+                ? chunkMap
+                : (local, text) => {
+                    ticker.setPhase(text || `${stageLabel}导出 RGBA 帧`);
+                    if (Number.isFinite(local)) ticker.setProgress(local);
+                  };
             const startEff = chunkStartFrame / fps; // effSpan 时间轴（秒）
             const ss = encodeSs + startEff * speed; // 原始时间轴
             const absEnd = encodeSs + encodeT;
@@ -2192,12 +2207,46 @@
             if (usedWm) baseArgs.push("-i", wmName);
             const outArgs = ["-frames:v", String(chunkFrames), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
             const useDenoise = needDenoise(effW, outW);
-            let code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(useDenoise), ...outArgs]);
-            if (code !== 0 && useDenoise) {
-              code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(false), ...outArgs]);
+            const tChunk = Date.now();
+            report(0.08, `${stageLabel}导出 RGBA · ${chunkFrames}帧`);
+            const onChunkFfmpegProgress = ({ progress }) => {
+              if (aborted()) return;
+              const p = Math.max(0, Math.min(1, Number(progress) || 0));
+              report(0.08 + p * 0.52, `${stageLabel}导出 RGBA · ${Math.round(p * 100)}%`);
+            };
+            const onChunkFfmpegLog = () => {
+              if (aborted()) return;
+              const sec = Math.max(1, Math.round((Date.now() - tChunk) / 1000));
+              report(0.2, `${stageLabel}导出 RGBA · 已 ${sec}s`);
+            };
+            // FFmpeg 偶发不报 progress：定时心跳，避免批量 stall 误判
+            const chunkHb = window.setInterval(() => {
+              if (aborted()) return;
+              const sec = Math.max(1, Math.round((Date.now() - tChunk) / 1000));
+              report(0.35, `${stageLabel}导出 RGBA · 已 ${sec}s（解码中）`);
+            }, 2500);
+            let code;
+            try {
+              ffmpeg.on("progress", onChunkFfmpegProgress);
+              try {
+                ffmpeg.on("log", onChunkFfmpegLog);
+              } catch (_) {}
+              code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(useDenoise), ...outArgs]);
+              if (code !== 0 && useDenoise) {
+                code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(false), ...outArgs]);
+              }
+            } finally {
+              window.clearInterval(chunkHb);
+              try {
+                ffmpeg.off("progress", onChunkFfmpegProgress);
+              } catch (_) {}
+              try {
+                ffmpeg.off("log", onChunkFfmpegLog);
+              } catch (_) {}
             }
             if (aborted()) throw new Error("已取消");
             if (code !== 0) throw new Error(`FFmpeg 导出 RGBA 失败（code=${code}）`);
+            report(0.62, `${stageLabel}读取帧数据…`);
             const data = await ffmpeg.readFile(rawName);
             const frames = data instanceof Uint8Array ? data : new Uint8Array(data);
             // 先释放 ffmpeg 侧文件，降低 gifski 拷贝帧时的峰值内存
@@ -2230,7 +2279,8 @@
             // 一律显式写 delay（毫秒→厘秒）：20→50ms / 15→70ms / 12→80ms 固定均匀
             if (!durations) durations = buildUniformGifDurationsMs(encodedFrames, fps);
             const mergedView = view.subarray(0, encodedFrames * stride);
-            // gifski.encode 是同步 wasm：先让出一帧给滚动，再编码
+            // gifski.encode 是同步 wasm：先让出一帧给滚动，再编码（此间主线程会卡住，无法刷新 UI）
+            report(0.72, `${stageLabel}gifski 编码 ${encodedFrames}帧（手机可能短暂无响应）`);
             await yieldToUi();
             if (aborted()) throw new Error("已取消");
             const fpsInt = Math.max(1, Math.round(fps));
@@ -2248,6 +2298,7 @@
               )
             );
             if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
+            report(0.95, `${stageLabel}gifski 完成`);
             return { blob: new Blob([gifBytes], { type: "image/gif" }), n, mergedOut: encodedFrames };
           };
 
@@ -2264,6 +2315,7 @@
               `[vbb-phase] gifski rawvideo ${Math.round(performance.now() - tPhase)}ms · ${fps}fps 宽${outW} ${n}帧`
             );
           } else {
+            // 分块也保持进度心跳：勿再裸跑 encodeChunk（否则手机批量易假死提示）
             ticker.stop();
             const chunks = [];
             let totalFrames = 0;
@@ -2272,12 +2324,16 @@
               const startFrame = k * chunkMax;
               const cFrames = Math.min(chunkMax, frameCount - startFrame);
               const base = 0.2 + (k / chunkCount) * 0.45;
-              mapProgress(base, `${stageLabel}分段 ${k + 1}/${chunkCount} · 导出 RGBA…`);
-              const { blob: cb, n } = await encodeChunk(startFrame, cFrames);
+              const spanK = 0.42 / chunkCount;
+              const chunkMap = (local, text) => {
+                mapProgress(base + Math.min(1, Number(local) || 0) * spanK, text);
+              };
+              chunkMap(0.02, `${stageLabel}分段 ${k + 1}/${chunkCount} · 导出 RGBA…`);
+              const { blob: cb, n } = await encodeChunk(startFrame, cFrames, chunkMap);
               totalFrames += n;
               chunks.push(cb);
               await yieldToUi();
-              mapProgress(base + 0.4 / chunkCount, `${stageLabel}分段 ${k + 1}/${chunkCount} · gifski 编码完成`);
+              chunkMap(1, `${stageLabel}分段 ${k + 1}/${chunkCount} · gifski 编码完成`);
               vbbLog(
                 `[vbb-phase] gifski 分段 ${k + 1}/${chunkCount} · ${n}帧 ${formatKb(cb.size)}（累计 ${Math.round(performance.now() - tPhase)}ms）`
               );
@@ -11514,6 +11570,7 @@
               let lastRealProgressAt = Date.now();
               let lastLocal = 0;
               let lastStallHintAt = 0;
+              let lastProgressText = "";
               const itemAborted = () => abortVbb;
               const watchdog = window.setInterval(() => {
                 if (itemAborted()) return;
@@ -11522,11 +11579,13 @@
                 if (Date.now() - lastStallHintAt < VBB_STALL_HINT_EVERY_MS) return;
                 lastStallHintAt = Date.now();
                 const sec = Math.round(stalled / 1000);
+                const wall = Math.max(1, Math.round((performance.now() - t0) / 1000));
                 vbbLog(`[vbb] #${i + 1} stall ${sec}s · still waiting (no skip)`);
+                // 不是跳过：手机 wasm/FFmpeg 重活时常几十秒无百分比变化，只提示续等
                 setVbbClipJob(i, {
                   status: "running",
                   progress: Math.min(0.98, Math.max(0.02, 0.12 + Math.min(0.86, lastLocal) * 0.86)),
-                  text: `编码中（已 ${sec}s 无新进度，继续等待）`,
+                  text: `仍在编码（本条已 ${wall}s · ${sec}s 无百分比更新；手机较慢属正常，可取消）`,
                 });
               }, 2000);
               try {
@@ -11551,10 +11610,13 @@
                     onProgress: (local, text) => {
                       if (itemAborted()) return;
                       const n = Number(local) || 0;
-                      if (n > lastLocal + 0.002) {
-                        lastLocal = n;
+                      const t = String(text || "");
+                      // 任意回调（含心跳文案）都算存活，避免百分比顶满后误报「1800s 无进度」
+                      if (n > lastLocal + 0.0005 || t !== lastProgressText) {
                         lastRealProgressAt = Date.now();
                       }
+                      if (n > lastLocal) lastLocal = n;
+                      lastProgressText = t;
                       setVbbClipJob(i, {
                         status: "running",
                         progress: Math.min(0.12, 0.02 + Math.min(0.1, n) * 0.1),
@@ -11588,10 +11650,12 @@
                   onProgress: (local, text) => {
                     if (itemAborted()) return;
                     const n = Number(local) || 0;
-                    if (n > lastLocal + 0.002) {
-                      lastLocal = n;
+                    const t = String(text || "");
+                    if (n > lastLocal + 0.0005 || t !== lastProgressText) {
                       lastRealProgressAt = Date.now();
                     }
+                    if (n > lastLocal) lastLocal = n;
+                    lastProgressText = t;
                     const stage = vbbTickerLine(text) || (conc > 1 ? "并行编码" : "编码");
                     setVbbClipJob(i, {
                       status: "running",
@@ -11667,8 +11731,18 @@
           };
 
           if (conc <= 1) {
+            const mobileBatch = typeof isLikelyMobileBrowser === "function" && isLikelyMobileBrowser();
             for (let i = 0; i < total; i++) {
               if (abortVbb) throw new Error("已取消");
+              // 手机连续多条：条间多歇一会，让 wasm/FFmpeg 堆有机会回收，减轻第 N 条假死
+              if (mobileBatch && i > 0) {
+                setVbbClipJob(i, { status: "running", progress: 0.01, text: "清理内存后继续…" });
+                try {
+                  terminateFfmpegInstance({ revokeAssets: false });
+                } catch (_) {}
+                await new Promise((r) => setTimeout(r, i >= 4 ? 480 : 220));
+                await yieldToUi();
+              }
               await encodeOne(i, null);
             }
           } else {
