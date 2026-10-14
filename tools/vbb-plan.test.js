@@ -470,17 +470,64 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
-  function vbbSpanSchemeKey(span, speed = 1) {
+  function vbbSrcFpsBucket(srcFps) {
+    const src = Number(srcFps) || 0;
+    if (src >= 23.5 && src < 24.5) return "24";
+    if (src >= 24.5 && src <= 25.8) return "25";
+    if (src >= 29.2 && src <= 30.8) return "30";
+    if (src >= 47 && src <= 50.8) return "50";
+    if (src >= 55 && src <= 60.8) return "60";
+    if (src >= 5) return String(Math.round(src));
+    return "";
+  }
+  function vbbSchemeSizeBucket(srcW, srcH) {
+    const w = Math.max(0, Math.round(Number(srcW) || 0));
+    const h = Math.max(0, Math.round(Number(srcH) || 0));
+    if (!(w >= 16 && h >= 16)) return "";
+    return `${Math.round(w / 40) * 40}x${Math.round(h / 40) * 40}`;
+  }
+  function vbbSpanSchemeKey(span, speed = 1, meta = null) {
     const s = Math.max(0.5, Number(span) || 0.5);
     const sp = Math.max(1, Number(speed) || 1);
-    if (sp > 1.02) return `${s.toFixed(1)}@x${sp.toFixed(2)}`;
-    return s.toFixed(1);
+    let base = sp > 1.02 ? `${s.toFixed(1)}@x${sp.toFixed(2)}` : s.toFixed(1);
+    const size = vbbSchemeSizeBucket(meta?.srcW, meta?.srcH);
+    const fpsB = vbbSrcFpsBucket(meta?.srcFps);
+    if (size && fpsB) return `${base}#${size}|${fpsB}`;
+    return base;
+  }
+  function vbbSeedFitsMeta(seed, meta) {
+    if (!seed?.fps || !meta) return false;
+    const sizeA = vbbSchemeSizeBucket(seed.srcW, seed.srcH);
+    const sizeB = vbbSchemeSizeBucket(meta.srcW, meta.srcH);
+    if (!sizeA || !sizeB || sizeA !== sizeB) return false;
+    const fpsA = vbbSrcFpsBucket(seed.srcFps);
+    const fpsB = vbbSrcFpsBucket(meta.srcFps);
+    if (!fpsA || !fpsB || fpsA !== fpsB) return false;
+    return true;
   }
   assert(vbbSpanSchemeKey(12.04) === "12.0", "span scheme key rounds to 0.1s");
   assert(vbbSpanSchemeKey(12.06) === "12.1", "span scheme key rounds");
   assert(vbbSpanSchemeKey(12.02) === vbbSpanSchemeKey(12.04), "same 0.1s bucket shares key");
   assert(vbbSpanSchemeKey(40, 2) === "40.0@x2.00", "speed buckets separate from plain span");
   assert(vbbSpanSchemeKey(40, 1) !== vbbSpanSchemeKey(40, 2), "speed on/off must not collide");
+  const metaA = { srcW: 860, srcH: 610, srcFps: 25 };
+  const metaB = { srcW: 1280, srcH: 720, srcFps: 25 };
+  const metaC = { srcW: 860, srcH: 610, srcFps: 30 };
+  assert(
+    vbbSpanSchemeKey(12, 1, metaA) === "12.0#880x600|25",
+    "key includes size+fps fingerprint"
+  );
+  assert(
+    vbbSpanSchemeKey(12, 1, metaA) !== vbbSpanSchemeKey(12, 1, metaB),
+    "different resolution must not share scheme"
+  );
+  assert(
+    vbbSpanSchemeKey(12, 1, metaA) !== vbbSpanSchemeKey(12, 1, metaC),
+    "25fps and 30fps must not share scheme"
+  );
+  assert(vbbSeedFitsMeta({ fps: 15, ...metaA }, metaA), "same meta fits");
+  assert(!vbbSeedFitsMeta({ fps: 15, ...metaA }, metaB), "diff size must not fit");
+  assert(!vbbSeedFitsMeta({ fps: 15, ...metaA }, metaC), "diff fps must not fit");
 }
 
 {

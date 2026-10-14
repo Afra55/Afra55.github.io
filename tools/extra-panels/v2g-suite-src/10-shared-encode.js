@@ -2837,12 +2837,59 @@
       const VBB_SPAN_SCHEME_KEY = "devtools-vbb-span-scheme-v1";
       const VBB_SPAN_SCHEME_MAX = 48;
   
-      function vbbSpanSchemeKey(span, speed = 1) {
+      /** 源帧率分桶：25 与 30 不可互沿用 */
+      function vbbSrcFpsBucket(srcFps) {
+        const src = Number(srcFps) || 0;
+        if (src >= 23.5 && src < 24.5) return "24";
+        if (src >= 24.5 && src <= 25.8) return "25";
+        if (src >= 29.2 && src <= 30.8) return "30";
+        if (src >= 47 && src <= 50.8) return "50";
+        if (src >= 55 && src <= 60.8) return "60";
+        if (src >= 5) return String(Math.round(src));
+        return "";
+      }
+
+      /** 宽高分桶（约 40px），860 与 864 可沿用，860 与 1280 不可 */
+      function vbbSchemeSizeBucket(srcW, srcH) {
+        const w = Math.max(0, Math.round(Number(srcW) || 0));
+        const h = Math.max(0, Math.round(Number(srcH) || 0));
+        if (!(w >= 16 && h >= 16)) return "";
+        return `${Math.round(w / 40) * 40}x${Math.round(h / 40) * 40}`;
+      }
+
+      /**
+       * 沿用方案键：时长 + 加速 + 源尺寸桶 + 源帧率桶。
+       * 旧版只按时长 → 不同视频同秒数会误沿用（如 800 宽编到不相关片）。
+       */
+      function vbbSpanSchemeKey(span, speed = 1, meta = null) {
         const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
         const sp = Math.max(1, Number(speed) || 1);
         // 加速与否分桶，避免「压时长开/关」互相沿用错误档位
-        if (sp > 1.02) return `${s.toFixed(1)}@x${sp.toFixed(2)}`;
-        return s.toFixed(1);
+        let base = sp > 1.02 ? `${s.toFixed(1)}@x${sp.toFixed(2)}` : s.toFixed(1);
+        const size = vbbSchemeSizeBucket(meta?.srcW, meta?.srcH);
+        const fpsB = vbbSrcFpsBucket(meta?.srcFps);
+        if (size && fpsB) return `${base}#${size}|${fpsB}`;
+        // 缺元数据时不加后缀：刻意不命中带指纹的新缓存
+        return base;
+      }
+
+      /** 内存 seed / 缓存条目是否与当前片「够像」才可沿用 */
+      function vbbSeedFitsMeta(seed, meta) {
+        if (!seed?.fps || !meta) return false;
+        const sizeA = vbbSchemeSizeBucket(seed.srcW, seed.srcH);
+        const sizeB = vbbSchemeSizeBucket(meta.srcW, meta.srcH);
+        if (!sizeA || !sizeB || sizeA !== sizeB) return false;
+        const fpsA = vbbSrcFpsBucket(seed.srcFps);
+        const fpsB = vbbSrcFpsBucket(meta.srcFps);
+        if (!fpsA || !fpsB || fpsA !== fpsB) return false;
+        const sw = Number(seed.srcW) || 0;
+        const sh = Number(seed.srcH) || 0;
+        const mw = Number(meta.srcW) || 0;
+        const mh = Number(meta.srcH) || 0;
+        // 桶相同仍再卡相对误差，避免边界误并桶
+        if (sw > 0 && mw > 0 && Math.abs(sw - mw) / Math.max(sw, mw) > 0.1) return false;
+        if (sh > 0 && mh > 0 && Math.abs(sh - mh) / Math.max(sh, mh) > 0.1) return false;
+        return true;
       }
   
       function loadVbbSpanSchemes() {
@@ -2855,22 +2902,32 @@
       }
   
       /** 「沿用方案」缓存版本：编码参数/分配算法变更时递增，旧缓存自动失效（避免沿用旧的低帧率） */
-      const VBB_SPAN_SCHEME_VER = 7;
+      const VBB_SPAN_SCHEME_VER = 8;
 
-      function loadVbbSpanScheme(span, speed = 1) {
-        const hit = loadVbbSpanSchemes()[vbbSpanSchemeKey(span, speed)];
+      function loadVbbSpanScheme(span, speed = 1, meta = null) {
+        // 无尺寸/帧率指纹时拒绝命中，避免「只按时长」误沿用
+        if (!vbbSchemeSizeBucket(meta?.srcW, meta?.srcH) || !vbbSrcFpsBucket(meta?.srcFps)) return null;
+        const hit = loadVbbSpanSchemes()[vbbSpanSchemeKey(span, speed, meta)];
         if (!hit || !(Number(hit.fps) > 0)) return null;
         // 旧版本（编码参数不同）算出的档位不再沿用
         if (Number(hit.ver) !== VBB_SPAN_SCHEME_VER) return null;
+        if (!vbbSeedFitsMeta(hit, meta)) return null;
         return hit;
       }
 
       function saveVbbSpanScheme(span, seed, encode) {
         if (!seed?.fps) return;
+        const meta = {
+          srcW: Number(seed.srcW) || 0,
+          srcH: Number(seed.srcH) || 0,
+          srcFps: Number(seed.srcFps) || 0,
+        };
+        // 缺指纹不写：宁可下次完整探测，也不留下「只按时长」的脏缓存
+        if (!vbbSchemeSizeBucket(meta.srcW, meta.srcH) || !vbbSrcFpsBucket(meta.srcFps)) return;
         try {
           const map = loadVbbSpanSchemes();
           const speed = Math.max(1, Number(seed.speed) || 1);
-          const key = vbbSpanSchemeKey(span, speed);
+          const key = vbbSpanSchemeKey(span, speed, meta);
           map[key] = {
             ver: VBB_SPAN_SCHEME_VER,
             fps: Number(seed.fps) || 15,
@@ -2878,6 +2935,9 @@
             compressRounds: Number(seed.compressRounds) || 0,
             usedFallback: Boolean(seed.usedFallback),
             speed,
+            srcW: meta.srcW,
+            srcH: meta.srcH,
+            srcFps: meta.srcFps,
             encode: encode || "blackbox",
             at: Date.now(),
           };
@@ -2887,14 +2947,19 @@
         } catch (_) {}
       }
   
-      function resolveVbbSegmentReuse(ranges, index, firstSeed, planEncode, speed = 1) {
+      function resolveVbbSegmentReuse(ranges, index, firstSeed, planEncode, speed = 1, meta = null) {
         const sp = Math.max(1, Number(speed) || 1);
-        const cached = loadVbbSpanScheme(ranges[index]?.span, sp);
+        const cached = loadVbbSpanScheme(ranges[index]?.span, sp, meta);
         if (cached) {
           return { seed: cached, fromCache: true, encode: cached.encode || planEncode };
         }
         const seedSp = Math.max(1, Number(firstSeed?.speed) || 1);
-        if (firstSeed && shouldReuseVbbFirstPlan(ranges, index) && Math.abs(seedSp - sp) < 0.05) {
+        if (
+          firstSeed &&
+          shouldReuseVbbFirstPlan(ranges, index) &&
+          Math.abs(seedSp - sp) < 0.05 &&
+          (!meta || vbbSeedFitsMeta(firstSeed, meta))
+        ) {
           return { seed: firstSeed, fromCache: false, encode: planEncode };
         }
         return { seed: null, fromCache: false, encode: planEncode };
@@ -2908,6 +2973,9 @@
           compressRounds: Number(encoded.compressRounds) || 0,
           usedFallback: Boolean(extras.usedFallback),
           speed: Math.max(1, Number(encoded.speed) || 1),
+          srcW: Math.max(0, Number(extras.srcW || encoded.srcW) || 0),
+          srcH: Math.max(0, Number(extras.srcH || encoded.srcH) || 0),
+          srcFps: Math.max(0, Number(extras.srcFps || encoded.srcFps) || 0),
         };
       }
   
