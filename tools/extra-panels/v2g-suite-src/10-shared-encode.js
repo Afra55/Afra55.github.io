@@ -2954,11 +2954,13 @@
           return { seed: cached, fromCache: true, encode: cached.encode || planEncode };
         }
         const seedSp = Math.max(1, Number(firstSeed?.speed) || 1);
+        // 必须带元数据且通过相似度：禁止 meta 缺失时退回「只按时长沿用」
         if (
           firstSeed &&
+          meta &&
           shouldReuseVbbFirstPlan(ranges, index) &&
           Math.abs(seedSp - sp) < 0.05 &&
-          (!meta || vbbSeedFitsMeta(firstSeed, meta))
+          vbbSeedFitsMeta(firstSeed, meta)
         ) {
           return { seed: firstSeed, fromCache: false, encode: planEncode };
         }
