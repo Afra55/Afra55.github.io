@@ -1827,7 +1827,7 @@
         if ((m = t.match(/^试\s*(\d+)\s*帧\/秒/i))) return t;
         if ((m = t.match(/^压缩\s*(\d+)\s*FPS/i))) return t;
         if ((m = t.match(/^加宽至\s*(\d+)px/i))) return t;
-        if (/^沿用方案/.test(t)) return t.replace(/\s*·\s*/g, " · ");
+        if (/^沿用帧率/.test(t) || /^沿用方案/.test(t)) return t.replace(/\s*·\s*/g, " · ");
         if ((m = t.match(/^沿用后超限降宽\s*·\s*(\d+)/i))) return `方案超限，降宽至 ${m[1]}px`;
 
         if (/^(完成|失败|等待|编码|合并|分析|压缩|降宽)/.test(t) && t.length <= 12) return t;
