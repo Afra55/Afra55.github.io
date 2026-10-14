@@ -2855,7 +2855,7 @@
       }
   
       /** 「沿用方案」缓存版本：编码参数/分配算法变更时递增，旧缓存自动失效（避免沿用旧的低帧率） */
-      const VBB_SPAN_SCHEME_VER = 6;
+      const VBB_SPAN_SCHEME_VER = 7;
 
       function loadVbbSpanScheme(span, speed = 1) {
         const hit = loadVbbSpanSchemes()[vbbSpanSchemeKey(span, speed)];
@@ -3774,16 +3774,18 @@
         if (seed?.fps) {
           const fps = Number(seed.fps) || 15;
           const isLastFps = fpsList[fpsList.length - 1] === fps;
-          let width = Math.max(64, Number(seed.maxW) || V2G_BLACKBOX_BASE_W);
-          onProgress(0.04, `沿用方案 · ${fps}FPS · 宽${width}`);
+          // 沿用只借帧率：宽度一律从 420 清晰点起，进预算且有余量再加宽。
+          // 旧逻辑直接用上次加宽后的 800+，超限再 -20 阶梯降宽 → 手机上白白多编十几档。
+          const width = Math.max(
+            64,
+            Math.min(V2G_BLACKBOX_BASE_W, srcW > 0 ? srcW : V2G_BLACKBOX_BASE_W)
+          );
+          onProgress(0.04, `沿用帧率 · ${fps}FPS · 宽${width}`);
+          vbbLog(
+            `[vbb-phase] seed 只沿用 fps=${fps}，宽从 ${width} 起（忽略缓存宽 ${Number(seed.maxW) || "?" }）`
+          );
           let candidate = await encodeAt(fps, width, 0.04, 0.5, `${fps}FPS·宽${width}`);
           candidate = await compressAt(candidate, fps, isLastFps, 0.55);
-          while (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES && width > V2G_BLACKBOX_BASE_W) {
-            width = Math.max(V2G_BLACKBOX_BASE_W, width - V2G_BLACKBOX_WIDTH_STEP);
-            onProgress(0.74, `沿用后超限降宽 · ${width}`);
-            candidate = await encodeAt(fps, width, 0.74, 0.08, `${fps}FPS·宽${width}`);
-            candidate = await compressAt(candidate, fps, isLastFps, 0.84);
-          }
           if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
             const seedHardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
             const widened = await widenFrom(candidate, fps);
@@ -3794,7 +3796,10 @@
               seedHardMax
             );
           }
-          // 沿用失败再走完整探测
+          // 420 仍超限 → 走完整探测（降质/降帧），勿从历史宽往下啃
+          vbbLog(
+            `[vbb-phase] seed ${fps}fps@${width} 仍超限 ${formatKb(candidate.blob.size)} → 完整阶梯`
+          );
         }
   
         // ---- 智能分配：标定一次 + 压缩一轮量出「压缩比」→ 目标只压 1 轮（画质最优）----
