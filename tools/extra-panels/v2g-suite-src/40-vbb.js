@@ -4243,6 +4243,7 @@
               let lastRealProgressAt = Date.now();
               let lastLocal = 0;
               let lastStallHintAt = 0;
+              let lastProgressText = "";
               const itemAborted = () => abortVbb;
               const watchdog = window.setInterval(() => {
                 if (itemAborted()) return;
@@ -4251,11 +4252,13 @@
                 if (Date.now() - lastStallHintAt < VBB_STALL_HINT_EVERY_MS) return;
                 lastStallHintAt = Date.now();
                 const sec = Math.round(stalled / 1000);
+                const wall = Math.max(1, Math.round((performance.now() - t0) / 1000));
                 vbbLog(`[vbb] #${i + 1} stall ${sec}s · still waiting (no skip)`);
+                // 不是跳过：手机 wasm/FFmpeg 重活时常几十秒无百分比变化，只提示续等
                 setVbbClipJob(i, {
                   status: "running",
                   progress: Math.min(0.98, Math.max(0.02, 0.12 + Math.min(0.86, lastLocal) * 0.86)),
-                  text: `编码中（已 ${sec}s 无新进度，继续等待）`,
+                  text: `仍在编码（本条已 ${wall}s · ${sec}s 无百分比更新；手机较慢属正常，可取消）`,
                 });
               }, 2000);
               try {
@@ -4280,10 +4283,13 @@
                     onProgress: (local, text) => {
                       if (itemAborted()) return;
                       const n = Number(local) || 0;
-                      if (n > lastLocal + 0.002) {
-                        lastLocal = n;
+                      const t = String(text || "");
+                      // 任意回调（含心跳文案）都算存活，避免百分比顶满后误报「1800s 无进度」
+                      if (n > lastLocal + 0.0005 || t !== lastProgressText) {
                         lastRealProgressAt = Date.now();
                       }
+                      if (n > lastLocal) lastLocal = n;
+                      lastProgressText = t;
                       setVbbClipJob(i, {
                         status: "running",
                         progress: Math.min(0.12, 0.02 + Math.min(0.1, n) * 0.1),
@@ -4317,10 +4323,12 @@
                   onProgress: (local, text) => {
                     if (itemAborted()) return;
                     const n = Number(local) || 0;
-                    if (n > lastLocal + 0.002) {
-                      lastLocal = n;
+                    const t = String(text || "");
+                    if (n > lastLocal + 0.0005 || t !== lastProgressText) {
                       lastRealProgressAt = Date.now();
                     }
+                    if (n > lastLocal) lastLocal = n;
+                    lastProgressText = t;
                     const stage = vbbTickerLine(text) || (conc > 1 ? "并行编码" : "编码");
                     setVbbClipJob(i, {
                       status: "running",
@@ -4396,8 +4404,18 @@
           };
 
           if (conc <= 1) {
+            const mobileBatch = typeof isLikelyMobileBrowser === "function" && isLikelyMobileBrowser();
             for (let i = 0; i < total; i++) {
               if (abortVbb) throw new Error("已取消");
+              // 手机连续多条：条间多歇一会，让 wasm/FFmpeg 堆有机会回收，减轻第 N 条假死
+              if (mobileBatch && i > 0) {
+                setVbbClipJob(i, { status: "running", progress: 0.01, text: "清理内存后继续…" });
+                try {
+                  terminateFfmpegInstance({ revokeAssets: false });
+                } catch (_) {}
+                await new Promise((r) => setTimeout(r, i >= 4 ? 480 : 220));
+                await yieldToUi();
+              }
               await encodeOne(i, null);
             }
           } else {

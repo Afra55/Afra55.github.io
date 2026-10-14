@@ -192,6 +192,9 @@ assert(
   assert(/force serial: cutouts|needsMaterialize/.test(vbbUi), "有删中间时批量须串行防第二路僵死");
   assert(!/编码无进度超时，已跳过该条|单条转换超时，已跳过|VBB_ITEM_STALL_MS|VBB_ITEM_HARD_MS/.test(vbbUi), "批量不得因进度/硬超时跳过");
   assert(/VBB_STALL_HINT_MS|still waiting \(no skip\)/.test(vbbUi), "无进度时只提示续等，不 skip");
+  assert(/仍在编码（本条已/.test(vbbUi), "stall 文案须标明本条已用时，勿只写无进度");
+  assert(/导出 RGBA · 已 \$\{sec\}s（解码中）|解码中/.test(src), "分块导出须有心跳，避免手机批量假死提示");
+  assert(/清理内存后继续/.test(vbbUi), "手机批量条间须清理内存再续");
   const gifskiCore = fs.readFileSync(path.join(__dirname, "ffmpeg-bridge/gifski-core.js"), "utf8");
   assert(!/srcSpan\s*\+\s*0\.05/.test(gifskiCore), "原生 gifski 不得再给片尾 +50ms");
   assert(/-ss"[\s\S]{0,80}opts\.startSec/.test(gifskiCore), "原生裁剪须有 -ss");
