@@ -200,6 +200,10 @@ assert(
   assert(/VBB_SPAN_SCHEME_VER\s*=\s*8/.test(src), "改 seed 相似度策略须 bump 缓存版本");
   assert(/vbbSeedFitsMeta|vbbSchemeSizeBucket/.test(src), "沿用须校验源宽高/帧率");
   assert(/只按时长/.test(src), "须显式禁止只按时长沿用");
+  assert(
+    /firstSeed &&\s*meta &&\s*shouldReuseVbbFirstPlan/.test(src.replace(/\s+/g, " ")),
+    "firstSeed 沿用也必须带 meta，禁止缺省退回时长"
+  );
   const gifskiCore = fs.readFileSync(path.join(__dirname, "ffmpeg-bridge/gifski-core.js"), "utf8");
   assert(!/srcSpan\s*\+\s*0\.05/.test(gifskiCore), "原生 gifski 不得再给片尾 +50ms");
   assert(/-ss"[\s\S]{0,80}opts\.startSec/.test(gifskiCore), "原生裁剪须有 -ss");
