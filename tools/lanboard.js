@@ -75,6 +75,9 @@
   let previewItemId = "";
   /** @type {string} */
   let lastFeedSig = "";
+  /** @type {Set<string>} 多选下载已勾选的媒体 id（须在 paintFeed 之前初始化） */
+  const selectedDlIds = new Set();
+  let bulkDownloading = false;
 
   /** @type {File[]} */
   let pendingFiles = [];
@@ -1269,9 +1272,6 @@
   const resolveInflight = new Map();
   /** @type {Map<string, "queued"|"downloading">} 下载按钮可见状态 */
   const dlUiState = new Map();
-  /** @type {Set<string>} 多选下载已勾选的媒体 id */
-  const selectedDlIds = new Set();
-  let bulkDownloading = false;
 
   function bumpFeedPaint() {
     lastFeedSig = "";
@@ -1387,6 +1387,23 @@
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
 
+  function markDownloadUi(id, it) {
+    if (dlUiState.has(id)) return false;
+    const needPeer =
+      !state.localBlobs.has(id) &&
+      !(it.onBridge && state.bridgeOk) &&
+      isOwnerOnline(it.ownerId);
+    const peerBusy =
+      needPeer &&
+      [...dlUiState.keys()].some((otherId) => {
+        if (otherId === id) return false;
+        const other = state.items.get(otherId);
+        return other && other.ownerId === it.ownerId;
+      });
+    dlUiState.set(id, peerBusy ? "queued" : "downloading");
+    return true;
+  }
+
   async function downloadSelectedItems() {
     if (bulkDownloading) {
       notifyToast("正在批量下载");
@@ -1403,6 +1420,8 @@
     }
     if (ids.length === 1) {
       await downloadItem(ids[0]);
+      selectedDlIds.delete(ids[0]);
+      bumpFeedPaint();
       return;
     }
 
@@ -1424,16 +1443,12 @@
         if (els.selCount) {
           els.selCount.textContent = `打包中 ${i + 1}/${ids.length} · ${it.name || "文件"}`;
         }
-        if (dlUiState.has(id)) {
-          // 已在单条下载：等同一 inflight
-        } else {
-          dlUiState.set(id, "downloading");
-          bumpFeedPaint();
-        }
+        const ownedUi = markDownloadUi(id, it);
+        if (ownedUi) bumpFeedPaint();
         try {
           const blob = await resolveMediaBlob(id, {
             onStart: () => {
-              if (dlUiState.get(id) === "queued") {
+              if (ownedUi && dlUiState.get(id) === "queued") {
                 dlUiState.set(id, "downloading");
                 bumpFeedPaint();
               }
@@ -1447,7 +1462,8 @@
         } catch {
           fail += 1;
         } finally {
-          dlUiState.delete(id);
+          // 只清自己占的 UI 态，避免误删并行单条下载的排队/进行中标记
+          if (ownedUi) dlUiState.delete(id);
           bumpFeedPaint();
         }
       }
@@ -1838,21 +1854,18 @@
       notifyToast(dlUiState.get(id) === "queued" ? "已在排队" : "正在下载");
       return;
     }
-    const needPeer =
-      !state.localBlobs.has(id) &&
-      !(it.onBridge && state.bridgeOk) &&
-      isOwnerOnline(it.ownerId);
-    const peerBusy =
-      needPeer &&
-      [...dlUiState.keys()].some((otherId) => {
-        if (otherId === id) return false;
-        const other = state.items.get(otherId);
-        return other && other.ownerId === it.ownerId;
-      });
-    dlUiState.set(id, peerBusy ? "queued" : "downloading");
+    if (bulkDownloading) {
+      notifyToast("正在批量打包，请稍候");
+      return;
+    }
+    const ownedUi = markDownloadUi(id, it);
+    if (!ownedUi) {
+      notifyToast(dlUiState.get(id) === "queued" ? "已在排队" : "正在下载");
+      return;
+    }
     bumpFeedPaint();
     try {
-      if (peerBusy) notifyToast("已排队，等同设备当前文件传完");
+      if (dlUiState.get(id) === "queued") notifyToast("已排队，等同设备当前文件传完");
       const blob = await resolveMediaBlob(id, {
         onStart: () => {
           if (dlUiState.get(id) === "queued") {
@@ -1871,7 +1884,7 @@
       notifyToast(e?.message || SOURCE_GONE);
       setError(e?.message || SOURCE_GONE);
     } finally {
-      dlUiState.delete(id);
+      if (ownedUi) dlUiState.delete(id);
       bumpFeedPaint();
     }
   }

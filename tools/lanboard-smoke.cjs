@@ -79,6 +79,32 @@ function staticCheck() {
   assert(js.includes("downloadSelectedItems") && js.includes("selectedDlIds"), "缺少多选下载逻辑");
   assert(js.includes("ensureJsZip") && js.includes("打包下载"), "多选≥2须 ZIP 打包");
   assert(js.includes("uniqueZipName"), "ZIP 内重名须去重");
+  assert(js.includes("markDownloadUi") && js.includes("ownedUi"), "批量下载不得误清单条 dlUiState");
+  assert(/let lastFeedSig[\s\S]*?selectedDlIds[\s\S]*?function paintFeed/.test(js), "selectedDlIds 须在 paintFeed 前初始化");
+  {
+    function uniqueZipName(name, used) {
+      const raw = String(name || "download").replace(/[\\/:*?"<>|]+/g, "_").trim() || "download";
+      if (!used.has(raw)) {
+        used.add(raw);
+        return raw;
+      }
+      const dot = raw.lastIndexOf(".");
+      const base = dot > 0 ? raw.slice(0, dot) : raw;
+      const ext = dot > 0 ? raw.slice(dot) : "";
+      let i = 2;
+      let next = `${base}-${i}${ext}`;
+      while (used.has(next)) {
+        i += 1;
+        next = `${base}-${i}${ext}`;
+      }
+      used.add(next);
+      return next;
+    }
+    const used = new Set();
+    assert(uniqueZipName("a.png", used) === "a.png", "首个文件名原样保留");
+    assert(uniqueZipName("a.png", used) === "a-2.png", "重名须加 -2");
+    assert(uniqueZipName("a/b:c?.png", used) === "a_b_c_.png", "非法文件名字符须替换");
+  }
   const css = fs.readFileSync(path.join(toolsRoot, "styles/panels/lanboard.css"), "utf8");
   assert(css.includes(".lb-preview-dlg") && css.includes("object-fit: contain"), "预览弹层须 contain");
   assert(/@media\s*\(\s*max-width:\s*640px\s*\)/.test(css), "窄屏须有媒体查询");
