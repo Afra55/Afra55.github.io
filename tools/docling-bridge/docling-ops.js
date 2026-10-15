@@ -127,12 +127,12 @@ async function resolvePython({ refresh = false } = {}) {
   if (cachedPython && !refresh) return cachedPython;
   for (const c of pythonCandidates()) {
     try {
-      const { stdout } = await runCmd(c.file, [...c.argsPrefix, "--version"], { timeout: 12000 });
-      if (/Python\s+3\./i.test(stdout) || /Python\s+3\./i.test(c.file)) {
+      const { stdout, stderr } = await runCmd(c.file, [...c.argsPrefix, "--version"], { timeout: 12000 });
+      if (/Python\s+3\./i.test(stdout + stderr) || /Python\s+3\./i.test(c.file)) {
         cachedPython = c;
         return c;
       }
-      // py -3 有时只打 stderr
+      // py -3 有时只打 stderr；能跑通也先收下
       cachedPython = c;
       return c;
     } catch (_) {}
@@ -232,19 +232,22 @@ async function ensurePipReady(py) {
   return { ok: false, ...pipMissingGuide(py) };
 }
 
+function winDoclingScriptCandidates() {
+  const dirs = [];
+  const la = process.env.LOCALAPPDATA || "";
+  const home = os.homedir();
+  for (const ver of ["Python314", "Python313", "Python312", "Python311", "Python310"]) {
+    if (la) dirs.push(path.join(la, "Programs", "Python", ver, "Scripts", "docling.exe"));
+    dirs.push(path.join(home, "AppData", "Roaming", "Python", ver, "Scripts", "docling.exe"));
+  }
+  return dirs;
+}
+
 async function resolveDoclingBin({ refresh = false } = {}) {
   if (cachedDocling && !refresh) return cachedDocling;
   const pathCandidates = [];
   if (process.platform === "win32") {
-    const la = process.env.LOCALAPPDATA || "";
-    const home = os.homedir();
-    if (la) {
-      pathCandidates.push(path.join(la, "Programs", "Python", "Python312", "Scripts", "docling.exe"));
-      pathCandidates.push(path.join(la, "Programs", "Python", "Python311", "Scripts", "docling.exe"));
-      pathCandidates.push(path.join(la, "Programs", "Python", "Python310", "Scripts", "docling.exe"));
-    }
-    pathCandidates.push(path.join(home, "AppData", "Roaming", "Python", "Python312", "Scripts", "docling.exe"));
-    pathCandidates.push(path.join(home, "AppData", "Roaming", "Python", "Python311", "Scripts", "docling.exe"));
+    pathCandidates.push(...winDoclingScriptCandidates());
   } else {
     pathCandidates.push(
       path.join(os.homedir(), ".local", "bin", "docling"),
@@ -481,7 +484,6 @@ async function installDocling() {
       [...py.argsPrefix, "-m", "pip", "install", "-U", "docling[rapidocr]"],
       { timeout: 1200000 }
     );
-    resolveDoclingBin({ refresh: true });
     cachedDocling = null;
     const p = await checkDocling();
     if (!p.ok) {
