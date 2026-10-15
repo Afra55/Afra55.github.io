@@ -15,6 +15,9 @@
   const DEFAULT_BASE = "http://127.0.0.1:17888";
   const DEFAULT_TOKEN = "devtools-bridge";
   const INDEX_FILE = "mdindex.json";
+  /** 侧栏固定标签：UI 顺序为「全部」→「默认」→ 其它用户标签 */
+  const DEFAULT_TAG_ID = "default";
+  const DEFAULT_TAG_NAME = "默认";
 
   const PANDOC_FORMATS = [
     ["docx", "Word (.docx)"],
@@ -181,7 +184,48 @@
   } catch (_) {}
 
   function emptyIndex() {
-    return { version: 1, tags: [], items: [] };
+    return { version: 1, tags: [{ id: DEFAULT_TAG_ID, name: DEFAULT_TAG_NAME }], items: [] };
+  }
+
+  function isDefaultTag(t) {
+    return Boolean(t) && (t.id === DEFAULT_TAG_ID || String(t.name || "") === DEFAULT_TAG_NAME);
+  }
+
+  /** 「默认」固定第二位（紧挨「全部」）；其它标签保持相对顺序跟在后面 */
+  function sortTagsFixed(tags) {
+    const list = Array.isArray(tags) ? [...tags] : [];
+    const defs = list.filter(isDefaultTag);
+    const rest = list.filter((t) => !isDefaultTag(t));
+    const def = defs[0] || { id: DEFAULT_TAG_ID, name: DEFAULT_TAG_NAME };
+    if (defs[0]) {
+      def.id = DEFAULT_TAG_ID;
+      def.name = DEFAULT_TAG_NAME;
+    }
+    return [def, ...rest];
+  }
+
+  function ensureDefaultTagInIndex(index) {
+    if (!index || typeof index !== "object") return emptyIndex();
+    const before = Array.isArray(index.tags) ? index.tags : [];
+    // 旧库里「默认」可能是随机 id：合并进固定 DEFAULT_TAG_ID，并改写文档 tagIds
+    const oldDefIds = before.filter(isDefaultTag).map((t) => t.id).filter((id) => id && id !== DEFAULT_TAG_ID);
+    index.tags = sortTagsFixed(before);
+    if (oldDefIds.length && Array.isArray(index.items)) {
+      const oldSet = new Set(oldDefIds);
+      for (const it of index.items) {
+        if (!Array.isArray(it.tagIds) || !it.tagIds.length) continue;
+        let touched = false;
+        const next = [];
+        for (const id of it.tagIds) {
+          if (oldSet.has(id)) {
+            if (!next.includes(DEFAULT_TAG_ID)) next.push(DEFAULT_TAG_ID);
+            touched = true;
+          } else if (!next.includes(id)) next.push(id);
+        }
+        if (touched) it.tagIds = next;
+      }
+    }
+    return index;
   }
 
   function readIndexRaw() {
@@ -424,14 +468,14 @@
           const fh = await state.dirHandle.getFileHandle(INDEX_FILE);
           const file = await fh.getFile();
           const text = await file.text();
-          if (text.trim()) return JSON.parse(text);
+          if (text.trim()) return ensureDefaultTagInIndex(JSON.parse(text));
         } catch (_) {
           return emptyIndex();
         }
       }
       if (state.mode === "idb") {
         const val = await idbGet("kv", "index");
-        if (val) return val;
+        if (val) return ensureDefaultTagInIndex(val);
       }
       return emptyIndex();
     }
@@ -508,21 +552,35 @@
     function ensureTag(name) {
       const n = String(name || "").trim();
       if (!n) return "";
+      if (n === DEFAULT_TAG_NAME) {
+        ensureDefaultTagInIndex(state.index);
+        return DEFAULT_TAG_ID;
+      }
       let t = state.index.tags.find((x) => x.name === n);
       if (!t) {
         t = { id: uid(), name: n };
         state.index.tags.push(t);
+        state.index.tags = sortTagsFixed(state.index.tags);
       }
       return t.id;
     }
 
     async function manageTag(id) {
+      if (!id || id === "all") return;
       const tag = state.index.tags.find((t) => t.id === id);
       if (!tag) return;
+      if (isDefaultTag(tag)) {
+        toast("「默认」标签固定在「全部」下方，不能改名或删除");
+        return;
+      }
       const name = window.prompt(`标签「${tag.name}」：改名字（留空取消，输入 - 删除）`, tag.name);
       if (name === null) return;
       const v = name.trim();
       if (!v || v === tag.name) return;
+      if (v === DEFAULT_TAG_NAME) {
+        toast("「默认」为系统标签名，请换一个名字");
+        return;
+      }
       const affected = state.index.items.filter((it) => (it.tagIds || []).includes(id));
       if (v === "-") {
         if (!window.confirm(`删除标签「${tag.name}」？`)) return;
@@ -532,6 +590,7 @@
       } else {
         tag.name = v;
       }
+      state.index.tags = sortTagsFixed(state.index.tags);
       await saveIndexToStorage();
       const n = await refreshFrontMatter(affected);
       renderSidebar();
@@ -543,8 +602,13 @@
     function filteredItems() {
       return (state.index.items || [])
         .filter((it) => {
-          if (state.activeTag && !(it.tagIds || []).includes(state.activeTag)) return false;
-          return true;
+          if (!state.activeTag) return true;
+          const ids = it.tagIds || [];
+          // 「默认」= 带默认标签，或尚未打任何标签的文档
+          if (state.activeTag === DEFAULT_TAG_ID) {
+            return !ids.length || ids.includes(DEFAULT_TAG_ID);
+          }
+          return ids.includes(state.activeTag);
         })
         .sort((a, b) => {
           if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
@@ -790,23 +854,28 @@
       }
       const items = filteredItems();
       if (els.tags) {
+        ensureDefaultTagInIndex(state.index);
         const tags = state.index.tags || [];
-        els.tags.innerHTML =
-          `<div class="mdm-group-title">标签</div>` +
-          (tags.length
-            ? tags
-                .map(
-                  (t) =>
-                    `<span class="mdm-tag-item"><button type="button" class="mdm-chip${
-                      state.activeTag === t.id ? " is-active" : ""
-                    }" data-tag="${escapeHtml(t.id)}">#${escapeHtml(
-                      t.name
-                    )}</button><button type="button" class="mdm-chip-more" data-tag-manage="${escapeHtml(
-                      t.id
-                    )}" title="改名 / 删除标签" aria-label="管理标签">⋯</button></span>`
-                )
-                .join("")
-            : `<span class="hint tight">暂无标签</span>`);
+        const allChip =
+          `<span class="mdm-tag-item"><button type="button" class="mdm-chip${
+            !state.activeTag ? " is-active" : ""
+          }" data-tag="all" title="显示全部文档">全部</button></span>`;
+        const tagChips = tags
+          .map((t) => {
+            const locked = isDefaultTag(t);
+            const more = locked
+              ? ""
+              : `<button type="button" class="mdm-chip-more" data-tag-manage="${escapeHtml(
+                  t.id
+                )}" title="改名 / 删除标签" aria-label="管理标签">⋯</button>`;
+            return `<span class="mdm-tag-item"><button type="button" class="mdm-chip${
+              state.activeTag === t.id ? " is-active" : ""
+            }" data-tag="${escapeHtml(t.id)}" title="${
+              locked ? "未分类 / 默认标签（固定在全部下方）" : escapeHtml(t.name)
+            }">#${escapeHtml(t.name)}</button>${more}</span>`;
+          })
+          .join("");
+        els.tags.innerHTML = `<div class="mdm-group-title">标签</div>` + allChip + tagChips;
       }
       renderList();
       updateBatchBar();
@@ -841,7 +910,7 @@
           ? "导入本机文档（.md / .txt / .html / .docx / .pdf），可多选；其它格式会自动转成 Markdown 再入库；正文里引用的图片会一并导入"
           : "请先选择存储位置再导入";
       }
-      const inMenus = (sel) => els.toolsDropdown?.querySelector(sel) || els.insertDropdown?.querySelector(sel);
+      const inMenus = (sel) => els.toolsDropdown?.querySelector(sel) || els.insertDropdown?.querySelector(sel) || els.moreDropdown?.querySelector(sel);
       const changeDir = inMenus('[data-insert="change-dir"]');
       if (changeDir) changeDir.hidden = state.mode !== "dir";
       const rescan = inMenus('[data-insert="rescan"]');
@@ -849,6 +918,46 @@
         rescan.disabled = !dirOnly;
         rescan.title = dirOnly ? "" : "仅「文件夹」模式可用";
       }
+      const toolsImport = els.toolsDropdown?.querySelector('[data-insert="import"]');
+      if (toolsImport) {
+        toolsImport.disabled = !hasMode;
+        toolsImport.title = hasMode
+          ? "导入本机文档（.md / .txt / .html / .docx / .pdf 等），可多选；有桥优先 MinerU"
+          : "请先选择存储位置再导入";
+      }
+      const toolsImportDir = els.toolsDropdown?.querySelector('[data-insert="import-dir"]');
+      if (toolsImportDir) {
+        toolsImportDir.disabled = !dirOnly;
+        toolsImportDir.title = dirOnly
+          ? "选择文件夹批量导入（连同引用图片）"
+          : "仅「文件夹」模式可用";
+      }
+      const moreImport = els.moreDropdown?.querySelector('[data-more="import"]');
+      if (moreImport) moreImport.disabled = !hasMode;
+      const moreImportDir = els.moreDropdown?.querySelector('[data-more="import-dir"]');
+      if (moreImportDir) {
+        moreImportDir.disabled = !dirOnly;
+        moreImportDir.title = dirOnly ? "" : "仅「文件夹」模式可用";
+      }
+      refreshToolsDocActions();
+    }
+
+    /** 工具菜单「当前文档」项：随打开状态 / 置顶切换启用与文案 */
+    function refreshToolsDocActions() {
+      const item = findItem(state.currentId);
+      const has = Boolean(item);
+      const setDisabled = (sel, off) => {
+        const b = els.toolsDropdown?.querySelector(sel);
+        if (b) b.disabled = off;
+      };
+      setDisabled('[data-insert="pin"]', !has);
+      setDisabled('[data-insert="duplicate"]', !has);
+      setDisabled('[data-insert="rename"]', !has);
+      setDisabled('[data-insert="reveal-current"]', !has);
+      setDisabled('[data-insert="delete"]', !has);
+      setDisabled('[data-insert="history"]', !has);
+      const pinBtn = els.toolsDropdown?.querySelector('[data-insert="pin"]');
+      if (pinBtn) pinBtn.textContent = item?.pinned ? "取消置顶" : "置顶";
     }
 
     /** 站内风格确认弹窗（替代 window.confirm），返回 Promise<boolean> */
@@ -2329,9 +2438,11 @@
           }
         }
         const known = new Set((state.index.items || []).map((x) => x.fileName));
-          if (indexJson && Array.isArray(indexJson.items)) {
-            for (const t of indexJson.tags || [])
+        if (indexJson && Array.isArray(indexJson.items)) {
+          for (const t of indexJson.tags || []) {
             if (t?.id && !state.index.tags.find((x) => x.id === t.id)) state.index.tags.push(t);
+          }
+          ensureDefaultTagInIndex(state.index);
           for (const it of indexJson.items) {
             if (!it?.fileName || known.has(it.fileName)) continue;
             state.index.items.push({ ...it, id: it.id || uid(), order: undefined });
@@ -3756,6 +3867,7 @@
       item.pinned = !item.pinned;
       await saveIndexToStorage();
       renderSidebar();
+      refreshToolsDocActions();
       toast(item.pinned ? "已置顶" : "已取消置顶");
     }
 
@@ -3956,7 +4068,7 @@
       }
       if (els.exportToggle) els.exportToggle.disabled = !has;
       if (els.copyBtn) els.copyBtn.disabled = !has;
-      if (els.del) els.del.disabled = !has;
+      refreshToolsDocActions();
     }
 
     // ---- 分类 / 标签 ----
@@ -5165,7 +5277,7 @@ a{color:${v.accent}}
       state.persistedIdx.clear();
         state.index = await loadIndexFromStorage();
         if (!state.index || typeof state.index !== "object") state.index = emptyIndex();
-        state.index.tags = state.index.tags || [];
+        ensureDefaultTagInIndex(state.index);
       state.index.items = (state.index.items || []).map((it, i) => ({
         ...it,
         titleSaved: it.titleSaved == null ? it.title : it.titleSaved,
@@ -5391,12 +5503,14 @@ a{color:${v.accent}}
       }
       const b = e.target.closest?.("[data-tag]");
       if (!b) return;
-      state.activeTag = state.activeTag === b.dataset.tag ? "" : b.dataset.tag;
+      const id = b.dataset.tag;
+      if (id === "all") state.activeTag = "";
+      else state.activeTag = state.activeTag === id ? "" : id;
       renderSidebar();
     });
     els.tags?.addEventListener("contextmenu", (e) => {
       const b = e.target.closest?.("[data-tag]");
-      if (!b) return;
+      if (!b || b.dataset.tag === "all") return;
       e.preventDefault();
       void manageTag(b.dataset.tag);
     });
@@ -5969,6 +6083,61 @@ a{color:${v.accent}}
     });
 
     function handleInsertAction(kind) {
+      if (kind === "import") {
+        if (!state.mode) {
+          setErr("请先选择存储位置再导入");
+          return;
+        }
+        els.importBtn?.click();
+        return;
+      }
+      if (kind === "import-dir") {
+        if (state.mode !== "dir") {
+          setErr("「导入文件夹」仅文件夹模式可用");
+          return;
+        }
+        els.importDirInput?.click();
+        return;
+      }
+      if (kind === "pin") {
+        const cur = findItem(state.currentId);
+        if (!cur) {
+          setErr("请先打开一篇文档");
+          return;
+        }
+        void togglePin(cur);
+        return;
+      }
+      if (kind === "duplicate") {
+        const cur = findItem(state.currentId);
+        if (!cur) {
+          setErr("请先打开一篇文档");
+          return;
+        }
+        void duplicateItem(cur);
+        return;
+      }
+      if (kind === "rename") {
+        const cur = findItem(state.currentId);
+        if (!cur) {
+          setErr("请先打开一篇文档");
+          return;
+        }
+        // 侧栏可见时走列表内联改名；否则聚焦标题框
+        const row = els.list?.querySelector(`[data-id="${cur.id}"] .mdm-item-title`);
+        if (row && !document.getElementById("mdm")?.classList.contains("is-side-hidden")) {
+          startInlineRename(cur.id);
+        } else if (els.title) {
+          els.title.focus();
+          els.title.select?.();
+          toast("在标题框改名后自动保存");
+        }
+        return;
+      }
+      if (kind === "delete") {
+        void deleteCurrent();
+        return;
+      }
       if (kind === "file") {
         els.fileInput?.click();
         return;
@@ -6072,8 +6241,13 @@ a{color:${v.accent}}
         if (mo) {
           menu.hidden = true;
           const act = mo.dataset.more;
-          if (act === "import-dir") els.importDirBtn?.click();
-          else if (act === "export-lib") void exportLibrary();
+          if (act === "import") {
+            if (!state.mode) setErr("请先选择存储位置再导入");
+            else els.importBtn?.click();
+          } else if (act === "import-dir") {
+            if (state.mode !== "dir") setErr("「导入文件夹」仅文件夹模式可用");
+            else els.importDirInput?.click();
+          } else if (act === "export-lib") void exportLibrary();
           else if (act === "import-lib") els.importLibInput?.click();
           else if (act === "copy") void copyPreviewToClipboard();
           return;
@@ -6591,9 +6765,8 @@ a{color:${v.accent}}
       // 未绑定目录：显示上次缓存索引（若有），等用户选择
       const cached = readIndexRaw();
       if (cached) {
-          state.index = cached;
+          state.index = ensureDefaultTagInIndex(cached);
           state.index.items = state.index.items || [];
-          state.index.tags = state.index.tags || [];
         els.layout && (els.layout.hidden = false);
         els.dirLabel && (els.dirLabel.textContent = "存储：未连接（点「选择文件夹」）");
         renderSidebar();

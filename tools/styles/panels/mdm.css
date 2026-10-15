@@ -149,8 +149,7 @@
 /* 工具条永不被挤压：固定件 flex:none，标题给最小宽度，装不下就整块换行 */
 .mdm-main-toolbar > .seg,
 .mdm-main-toolbar > .mdm-max-btn,
-.mdm-main-toolbar > .mdm-insert-menu,
-.mdm-main-toolbar > #mdm-delete { flex: none; }
+.mdm-main-toolbar > .mdm-insert-menu { flex: none; }
 .mdm-main-toolbar .seg-btn { white-space: nowrap; }
 .mdm-main-toolbar > #mdm-save-status { flex: none; white-space: nowrap; }
 .mdm-title { flex: 1 1 12rem; min-width: 8rem; padding: 0.35rem 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 0.9rem; }
@@ -175,6 +174,12 @@
   border-radius: 7px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;
 }
 .mdm-insert-dropdown button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.mdm-insert-dropdown button.is-danger { color: #e06c75; }
+.mdm-insert-dropdown button.is-danger:hover { background: color-mix(in srgb, #e06c75 25%, transparent); }
+.mdm-insert-dropdown button:disabled {
+  opacity: 0.45; cursor: not-allowed;
+}
+.mdm-insert-dropdown button:disabled:hover { background: transparent; }
 .mdm-insert-dropdown { max-height: min(70vh, 30rem); overflow-y: auto; }
 .mdm-menu-flag { padding: 0.35rem 0.55rem; white-space: nowrap; }
 .mdm-insert-dropdown .mdm-menu-label { white-space: nowrap; }
