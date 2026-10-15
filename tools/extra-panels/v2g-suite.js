@@ -10832,7 +10832,7 @@
        *  2) 非暗纯色边（白/灰/绿…）：仍用严纯度，防雾气误裁
        *  单边 ≤18%；暗边在 detectVideoCrop 映射时多吃约 1 缩略像素，非暗边才做 1px 回退。
        *  各边独立（仅左右 / 仅上下 / 三边 / 四边均可）。
-       *  与 tools/lib/vbb-auto-crop.js 同步（v10）。 */
+       *  与 tools/lib/vbb-auto-crop.js 同步（v11）。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -10916,11 +10916,7 @@
               }
               break;
             }
-            // 再吃 1 列过渡（均值仍偏暗），避免缩 GIF 后剩一条发丝黑边
-            if (trim > 0 && trim < maxN) {
-              const st = lineStats(lineAt(idx), length);
-              if (st.avgMax <= 55 && st.darkRatio >= 0.35) trim += 1;
-            }
+            // 不再多吃过渡列：宁可留一丝边，也不裁进有画面像素
             return { trim, dark: true };
           }
           if (st0.pure) {
@@ -10974,16 +10970,11 @@
         let y = acc.top > 0 ? Math.max(0, Math.ceil(acc.top * sy)) : 0;
         let x2 = Math.min(vw, Math.floor((acc.right + 1) * sx));
         let y2 = Math.min(vh, Math.floor((acc.bottom + 1) * sy));
-        const extraX = Math.max(1, Math.round(sx));
-        const extraY = Math.max(1, Math.round(sy));
-        if (acc.darkLeft && x > 0) x = Math.min(x + extraX, Math.floor(vw * 0.2));
-        if (acc.darkRight && x2 < vw) x2 = Math.max(x + 8, x2 - extraX);
-        if (acc.darkTop && y > 0) y = Math.min(y + extraY, Math.floor(vh * 0.2));
-        if (acc.darkBottom && y2 < vh) y2 = Math.max(y + 8, y2 - extraY);
-        if (!acc.darkLeft && x > 0) x -= 1;
-        if (!acc.darkTop && y > 0) y -= 1;
-        if (!acc.darkRight && x2 < vw) x2 += 1;
-        if (!acc.darkBottom && y2 < vh) y2 += 1;
+        // 映射回源分辨率时各边回退 1px，避免缩略量化把画面边缘裁掉
+        if (x > 0) x -= 1;
+        if (y > 0) y -= 1;
+        if (x2 < vw) x2 += 1;
+        if (y2 < vh) y2 += 1;
         let w = x2 - x;
         let h = y2 - y;
         if (x + w > vw) w = vw - x;
@@ -11007,29 +10998,21 @@
         };
       }
 
-      function medianInt(arr) {
-        if (!arr.length) return 0;
-        const s = [...arr].sort((a, b) => a - b);
-        const m = Math.floor(s.length / 2);
-        return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
-      }
-
-      /** 多帧各边中位数合并（与 lib/vbb-auto-crop.mergeContentRects 对齐） */
+      /** 多帧各边最小裁量（与 lib/vbb-auto-crop.mergeContentRects 对齐）：有画面的边绝不裁 */
       function mergeCropRects(rects) {
         const list = (rects || []).filter((r) => r && r.w > 0 && r.h > 0);
         if (!list.length) return null;
         const w = list[0].w;
         const h = list[0].h;
-        const L = medianInt(list.map((r) => Math.max(0, r.left | 0)));
-        const T = medianInt(list.map((r) => Math.max(0, r.top | 0)));
-        const Rt = medianInt(list.map((r) => Math.max(0, r.w - 1 - (r.right | 0))));
-        const Bt = medianInt(list.map((r) => Math.max(0, r.h - 1 - (r.bottom | 0))));
+        const L = Math.min(...list.map((r) => Math.max(0, r.left | 0)));
+        const T = Math.min(...list.map((r) => Math.max(0, r.top | 0)));
+        const Rt = Math.min(...list.map((r) => Math.max(0, r.w - 1 - (r.right | 0))));
+        const Bt = Math.min(...list.map((r) => Math.max(0, r.h - 1 - (r.bottom | 0))));
         if (L === 0 && T === 0 && Rt === 0 && Bt === 0) return null;
         const right = w - 1 - Rt;
         const bottom = h - 1 - Bt;
         if (right <= L || bottom <= T) return null;
-        const majorityDark = (flag, trim) =>
-          trim > 0 && list.filter((r) => r[flag]).length * 2 >= list.length;
+        const allDark = (flag, trim) => trim > 0 && list.every((r) => r[flag]);
         return {
           left: L,
           top: T,
@@ -11037,10 +11020,10 @@
           bottom,
           w,
           h,
-          darkLeft: majorityDark("darkLeft", L),
-          darkRight: majorityDark("darkRight", Rt),
-          darkTop: majorityDark("darkTop", T),
-          darkBottom: majorityDark("darkBottom", Bt),
+          darkLeft: allDark("darkLeft", L),
+          darkRight: allDark("darkRight", Rt),
+          darkTop: allDark("darkTop", T),
+          darkBottom: allDark("darkBottom", Bt),
         };
       }
 
@@ -11217,12 +11200,12 @@
       }
 
       /**
-       * 起/中/末三取样，各边中位数合并；手机优先预览 video + ffmpeg 回退。
-       * v10：无边帧记整幅，避免片头色边误裁全程；单边～四边独立。
+       * 起/中/末三取样，各边取最小裁量；手机优先预览 video + ffmpeg 回退。
+       * v11：任一帧该边有画面 → 该边不裁；无边帧记整幅；单边～四边独立。
        */
       async function detectVideoCrop(file, hintW, hintH, hintDur) {
         if (!file) return null;
-        const cacheKey = `v10|${file.name}|${file.size}|${file.lastModified || 0}`;
+        const cacheKey = `v11|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         let failReason = "";

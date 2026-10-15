@@ -94,7 +94,8 @@ function nearestResize(img, cw, ch) {
   assert(crop.x >= 10 && rTrim >= 18, `细边映射不足 L${crop.x} R${rTrim}`);
   const cropped = cropRgba(big, crop);
   const bars = measureDarkBars(cropped, { avgMax: 40, darkCh: 40 });
-  assert(bars.L + bars.R + bars.T + bars.B === 0, `细边裁后应无暗条 ${JSON.stringify(bars)}`);
+  // 映射回退 1px 保画面，允许残留 ≤1px 发丝边
+  assert(bars.L <= 1 && bars.R <= 1 && bars.T <= 1 && bars.B <= 1, `细边裁后暗条≤1 ${JSON.stringify(bars)}`);
   void full;
 }
 
@@ -104,10 +105,11 @@ function nearestResize(img, cw, ch) {
   const panel = fs.readFileSync(path.join(__dirname, "panels/vbb.html"), "utf8");
   assert(/devtools-vbb-auto-crop[\s\S]{0,120}!==\s*"0"/.test(vbb), "默认开：localStorage !== \"0\"");
   assert(/stored\s*==\s*null[\s\S]{0,80}setItem\([\s\S]{0,40}"1"/.test(vbb), "首次写入默认 1");
-  assert(/cacheKey\s*=\s*`v10\|/.test(vbb), "crop 缓存键须为 v10");
+  assert(/cacheKey\s*=\s*`v11\|/.test(vbb), "crop 缓存键须为 v11");
   assert(/detectVideoCropViaFfmpeg/.test(vbb), "须有 ffmpeg 抽帧回退（手机 HTML5 seek 失败）");
   assert(/frameLooksDecoded/.test(vbb), "须过滤未解码近黑帧");
-  assert(/mergeCropRects/.test(vbb) && /fullFrameContentRect/.test(vbb), "须多帧中位数合并且无边记整幅");
+  assert(/mergeCropRects/.test(vbb) && /fullFrameContentRect/.test(vbb), "须多帧合并且无边记整幅");
+  assert(/Math\.min\(\.\.\.list\.map/.test(vbb), "各边须取最小裁量，禁止裁进有画面帧");
   assert(/d \* 0\.5/.test(vbb) && /start \+ 0\.05/.test(vbb), "取样须含起/中/末");
   assert(/去色边未生效/.test(vbb), "开关开着但无 crop 须 toast 提示");
   assert(/devtools-vbb-auto-crop"\)\s*!==\s*"0"/.test(vbb), "DOM 缺失时仍认 localStorage");
@@ -136,10 +138,17 @@ function nearestResize(img, cw, ch) {
   assert(rBorder, "有边帧应检出");
   const full = fullFrameContentRect(320, 240);
   const transient = mergeContentRects([rBorder, full, full]);
-  assert(!transient, "仅 1/3 帧有边 → 中位数应为 0，不裁");
+  assert(!transient, "仅 1/3 帧有边 → 最小裁量 0，不裁");
+  const mixed = mergeContentRects([rBorder, rBorder, full]);
+  assert(!mixed, "2/3 有边但 1 帧有画面顶边 → 最小裁量 0，绝不裁画面");
   const stable = mergeContentRects([rBorder, rBorder, rBorder]);
   assert(stable && stable.left >= 20 && stable.w - 1 - stable.right >= 24, "三帧都有左右边 → 应裁左右");
   assert(stable.top === 0 && stable.bottom === stable.h - 1, "稳定左右边不得误裁上下");
+  const uneven = makeBorderedRgba(320, 240, { L: 10, R: 10, T: 0, B: 0 });
+  const rNarrow = detectFrameContentRect(uneven, 14);
+  assert(rNarrow, "窄边应检出");
+  const minMerge = mergeContentRects([rBorder, rNarrow, rBorder]);
+  assert(minMerge && minMerge.left <= rNarrow.left, "多帧左右宽度不一 → 取最浅，不裁进窄边帧内容");
   const lrOnly = detectFrameContentRect(makeBorderedRgba(320, 240, { L: 20, R: 22 }), 14);
   const tbOnly = detectFrameContentRect(makeBorderedRgba(320, 240, { T: 16, B: 18 }), 14);
   assert(lrOnly && lrOnly.top === 0 && lrOnly.bottom === lrOnly.h - 1, "仅左右");

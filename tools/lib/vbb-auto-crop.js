@@ -2,8 +2,8 @@
  * 黑盒「自动裁剪纯色边框」纯函数（与 v2g-suite-src/40-vbb.js 对齐）。
  * Node 单测 / 离线回归用；浏览器套件内另有同名实现，改一处必须两边一起改。
  *
- * v10：暗边按占比吃边；映射多吃约 1 缩略像素；起/中/末三取样；
- * 各边独立、多帧中位数合并（片头有边后半无边 → 不误裁；仅左右/仅上下/三边/四边均可）。
+ * v11：暗边按占比吃边；起/中/末三取样；各边独立；
+ * 多帧合并取「各边最小裁量」（任一帧该边有画面 → 该边不裁，绝不裁进内容）。
  */
 "use strict";
 
@@ -95,10 +95,7 @@ function detectFrameContentRect(img, tol = 14) {
         }
         break;
       }
-      if (trim > 0 && trim < maxN) {
-        const st = lineStats(lineAt(idx), length);
-        if (st.avgMax <= 55 && st.darkRatio >= 0.35) trim += 1;
-      }
+      // 不再多吃过渡列：宁可留一丝边，也不裁进有画面像素
       return { trim, dark: true };
     }
     if (st0.pure) {
@@ -156,16 +153,11 @@ function mapThumbCropToSource(acc, vw, vh) {
   let y = acc.top > 0 ? Math.max(0, Math.ceil(acc.top * sy)) : 0;
   let x2 = Math.min(vw, Math.floor((acc.right + 1) * sx));
   let y2 = Math.min(vh, Math.floor((acc.bottom + 1) * sy));
-  const extraX = Math.max(1, Math.round(sx));
-  const extraY = Math.max(1, Math.round(sy));
-  if (acc.darkLeft && x > 0) x = Math.min(x + extraX, Math.floor(vw * 0.2));
-  if (acc.darkRight && x2 < vw) x2 = Math.max(x + 8, x2 - extraX);
-  if (acc.darkTop && y > 0) y = Math.min(y + extraY, Math.floor(vh * 0.2));
-  if (acc.darkBottom && y2 < vh) y2 = Math.max(y + 8, y2 - extraY);
-  if (!acc.darkLeft && x > 0) x -= 1;
-  if (!acc.darkTop && y > 0) y -= 1;
-  if (!acc.darkRight && x2 < vw) x2 += 1;
-  if (!acc.darkBottom && y2 < vh) y2 += 1;
+  // 映射回源分辨率时各边回退 1px，避免缩略量化把画面边缘裁掉
+  if (x > 0) x -= 1;
+  if (y > 0) y -= 1;
+  if (x2 < vw) x2 += 1;
+  if (y2 < vh) y2 += 1;
   let w = x2 - x;
   let h = y2 - y;
   if (x + w > vw) w = vw - x;
@@ -188,14 +180,6 @@ function fullFrameContentRect(w, h) {
     darkTop: false,
     darkBottom: false,
   };
-}
-
-/** @param {number[]} arr */
-function medianInt(arr) {
-  if (!arr.length) return 0;
-  const s = [...arr].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
 }
 
 /**
@@ -237,9 +221,8 @@ function unionContentRects(a, b) {
 }
 
 /**
- * 多帧合并：各边独立取中位数裁量。
- * 例：片头有左右黑边、中/末无边 → 左裁中位数偏 0，不误裁后半内容；
- * 三帧都有左右、上下没有 → 只裁左右。
+ * 多帧合并：各边取最小裁量（三帧交集）。
+ * 任一帧该边 trim=0（有画面顶到边）→ 该边不裁；只裁「每一帧都认定是色边」的部分。
  * @param {Array<ReturnType<typeof detectFrameContentRect>|ReturnType<typeof fullFrameContentRect>>} rects
  */
 function mergeContentRects(rects) {
@@ -247,20 +230,16 @@ function mergeContentRects(rects) {
   if (!list.length) return null;
   const w = list[0].w;
   const h = list[0].h;
-  const lefts = list.map((r) => Math.max(0, r.left | 0));
-  const tops = list.map((r) => Math.max(0, r.top | 0));
-  const rightTrims = list.map((r) => Math.max(0, r.w - 1 - (r.right | 0)));
-  const bottomTrims = list.map((r) => Math.max(0, r.h - 1 - (r.bottom | 0)));
-  const L = medianInt(lefts);
-  const T = medianInt(tops);
-  const Rt = medianInt(rightTrims);
-  const Bt = medianInt(bottomTrims);
+  const L = Math.min(...list.map((r) => Math.max(0, r.left | 0)));
+  const T = Math.min(...list.map((r) => Math.max(0, r.top | 0)));
+  const Rt = Math.min(...list.map((r) => Math.max(0, r.w - 1 - (r.right | 0))));
+  const Bt = Math.min(...list.map((r) => Math.max(0, r.h - 1 - (r.bottom | 0))));
   if (L === 0 && T === 0 && Rt === 0 && Bt === 0) return null;
   const right = w - 1 - Rt;
   const bottom = h - 1 - Bt;
   if (right <= L || bottom <= T) return null;
-  const majorityDark = (flag, trim) =>
-    trim > 0 && list.filter((r) => r[flag]).length * 2 >= list.length;
+  // 最小裁量 > 0 时，该边在所有样本上都有边 → dark 取「全员 dark」更稳妥
+  const allDark = (flag, trim) => trim > 0 && list.every((r) => r[flag]);
   return {
     left: L,
     top: T,
@@ -268,10 +247,10 @@ function mergeContentRects(rects) {
     bottom,
     w,
     h,
-    darkLeft: majorityDark("darkLeft", L),
-    darkRight: majorityDark("darkRight", Rt),
-    darkTop: majorityDark("darkTop", T),
-    darkBottom: majorityDark("darkBottom", Bt),
+    darkLeft: allDark("darkLeft", L),
+    darkRight: allDark("darkRight", Rt),
+    darkTop: allDark("darkTop", T),
+    darkBottom: allDark("darkBottom", Bt),
   };
 }
 
@@ -384,7 +363,6 @@ module.exports = {
   cropSampleMarks,
   unionContentRects,
   mergeContentRects,
-  medianInt,
   makeBorderedRgba,
   measureDarkBars,
   cropRgba,
