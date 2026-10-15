@@ -68,6 +68,16 @@
     mermaid: { src: "./vendor/mermaid/mermaid.min.js", probe: () => typeof globalThis.mermaid === "object" },
     jszip: { src: "./vendor/jszip.min.js", noAmd: true, probe: () => typeof globalThis.JSZip === "function" },
     turndown: { src: "./vendor/turndown/turndown.js", probe: () => typeof globalThis.TurndownService === "function" },
+    mammoth: {
+      src: "./vendor/mammoth/mammoth.browser.min.js",
+      noAmd: true,
+      probe: () => typeof globalThis.mammoth?.convertToHtml === "function",
+    },
+    pdfjs: {
+      src: "./vendor/pdfjs/pdf.min.js",
+      noAmd: true,
+      probe: () => typeof globalThis.pdfjsLib?.getDocument === "function",
+    },
     mdext: { src: "./vendor/mdext/mdext.js", probe: () => typeof globalThis.markdownItExtras === "object" },
     mdmpure: { src: "./lib/mdm-pure.js", probe: () => typeof globalThis.DevToolsMdmPure === "object" },
   };

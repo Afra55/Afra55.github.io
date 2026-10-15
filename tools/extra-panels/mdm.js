@@ -819,7 +819,7 @@
       if (els.importDirBtn) {
         els.importDirBtn.disabled = !dirOnly;
         els.importDirBtn.title = dirOnly
-          ? "选择一个文件夹，把里面所有 .md 连同引用的图片一起导入"
+          ? "选择一个文件夹，把里面的 .md / .txt / .html / .docx / .pdf 转成 Markdown 导入（连同引用图片）"
           : "仅「文件夹」模式可用";
       }
       const hasMode = Boolean(state.mode);
@@ -838,7 +838,7 @@
       if (els.importLabel) {
         els.importLabel.classList.toggle("is-disabled", !hasMode);
         els.importLabel.title = hasMode
-          ? "导入本机的 .md / .markdown 文件，可多选；正文里引用的图片会一并导入"
+          ? "导入本机文档（.md / .txt / .html / .docx / .pdf），可多选；其它格式会自动转成 Markdown 再入库；正文里引用的图片会一并导入"
           : "请先选择存储位置再导入";
       }
       const inMenus = (sel) => els.toolsDropdown?.querySelector(sel) || els.insertDropdown?.querySelector(sel);
@@ -2897,12 +2897,11 @@
           }
           void (async () => {
             try {
-              const isDoc = (f) => /\.(md|markdown)$/i.test(f.name || "") || /markdown/.test(f.type || "");
-              const docs = files.filter(isDoc);
+              const docs = files.filter(isImportableDoc);
               if (docs.length) {
-                // md 文件：① 导入进库（不切换当前文档）② 在当前文档插入引用链接
+                // 文档：① 导入进库（不切换当前文档）② 在当前文档插入引用链接
                 const before = new Set((state.index.items || []).map((x) => x.id));
-                // 传全部文件：importFiles 只取 .md，并只导入正文真正引用到的资源（不会把文件夹里其它文件全塞进来）
+                // 传全部文件：importFiles 只取可导入文档，并只导入正文真正引用到的资源
                 await importFiles(files, { open: false });
                 const added = (state.index.items || []).filter((x) => !before.has(x.id));
                 if (added.length && state.view) {
@@ -2910,8 +2909,8 @@
                   state.view.dispatch(state.view.state.replaceSelection(`${links}\n`));
                 }
                 toast(added.length ? `已导入 ${added.length} 篇并插入引用` : "已导入（同名已存在，未插入引用）");
-              } else if (assets.length) {
-                toast(`已插入 ${assets.length} 个附件`);
+              } else {
+                await insertAssetFiles(files);
               }
             } catch (err) {
               setErr(`拖入失败：${err.message || err}`);
@@ -4038,6 +4037,118 @@
     }
 
     // ---- import ----
+    const IMPORT_EXT_RE = /\.(md|markdown|txt|text|html?|docx|pdf)$/i;
+
+    function isLegacyWordDoc(f) {
+      const name = String(f?.name || "");
+      return /\.doc$/i.test(name) && !/\.docx$/i.test(name);
+    }
+
+    function isImportableDoc(f) {
+      if (!f) return false;
+      const name = String(f.name || "");
+      const type = String(f.type || "");
+      if (IMPORT_EXT_RE.test(name)) return true;
+      if (/markdown/i.test(type)) return true;
+      if (type === "text/plain" || type === "text/html" || type === "application/pdf") return true;
+      if (/officedocument\.wordprocessingml/i.test(type)) return true;
+      return false;
+    }
+
+    /** UTF-8 优先，失败再试 GBK（Chromium）；带 BOM 的 UTF-16 也能读 */
+    async function readTextSmart(file) {
+      const buf = await file.arrayBuffer();
+      const u8 = new Uint8Array(buf);
+      if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
+        return new TextDecoder("utf-8").decode(u8.subarray(3));
+      }
+      if (u8.length >= 2 && u8[0] === 0xff && u8[1] === 0xfe) {
+        return new TextDecoder("utf-16le").decode(u8.subarray(2));
+      }
+      if (u8.length >= 2 && u8[0] === 0xfe && u8[1] === 0xff) {
+        return new TextDecoder("utf-16be").decode(u8.subarray(2));
+      }
+      try {
+        return new TextDecoder("utf-8", { fatal: true }).decode(u8);
+      } catch (_) {
+        try {
+          return new TextDecoder("gbk").decode(u8);
+        } catch (_) {
+          return new TextDecoder("utf-8").decode(u8);
+        }
+      }
+    }
+
+    function pdfTextContentToPlain(content) {
+      let out = "";
+      for (const it of content.items || []) {
+        out += it.str || "";
+        if (it.hasEOL) out += "\n";
+      }
+      return out.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    }
+
+    async function ensurePdfjsReady() {
+      await ensureVendor("pdfjs");
+      const pdfjs = window.pdfjsLib;
+      if (!pdfjs?.getDocument) throw new Error("PDF 库未就绪");
+      const resolve = window.resolveToolsAssetUrl || window.DevToolsResolveToolsAsset;
+      if (pdfjs.GlobalWorkerOptions && typeof resolve === "function") {
+        pdfjs.GlobalWorkerOptions.workerSrc = resolve("vendor/pdfjs/pdf.worker.min.js");
+      }
+      return pdfjs;
+    }
+
+    /** 按扩展名/MIME 转成 Markdown 正文（进库前）；与粘贴共用 Turndown */
+    async function fileToMarkdown(file) {
+      const name = String(file.name || "");
+      const type = String(file.type || "");
+      if (isLegacyWordDoc(file)) {
+        throw new Error("不支持旧版 .doc，请另存为 .docx 后再导入");
+      }
+      if (/\.(md|markdown)$/i.test(name) || /markdown/i.test(type)) {
+        return await readTextSmart(file);
+      }
+      if (/\.(txt|text)$/i.test(name) || type === "text/plain") {
+        return await readTextSmart(file);
+      }
+      if (/\.html?$/i.test(name) || type === "text/html") {
+        if (typeof window.TurndownService !== "function") await ensureVendor("turndown");
+        if (typeof window.TurndownService !== "function") throw new Error("HTML 转换库未就绪");
+        const html = await readTextSmart(file);
+        const md = htmlToMarkdown(html);
+        if (!String(md || "").trim()) throw new Error("HTML 转 Markdown 为空");
+        return md;
+      }
+      if (/\.docx$/i.test(name) || /officedocument\.wordprocessingml/i.test(type)) {
+        await ensureVendor("mammoth");
+        if (typeof window.TurndownService !== "function") await ensureVendor("turndown");
+        if (typeof window.mammoth?.convertToHtml !== "function") throw new Error("Word 转换库未就绪");
+        if (typeof window.TurndownService !== "function") throw new Error("HTML 转换库未就绪");
+        const result = await window.mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
+        const md = htmlToMarkdown(result.value || "");
+        if (!String(md || "").trim()) throw new Error("Word 转 Markdown 为空");
+        return md;
+      }
+      if (/\.pdf$/i.test(name) || type === "application/pdf") {
+        const pdfjs = await ensurePdfjsReady();
+        const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+        const parts = [];
+        for (let i = 1; i <= doc.numPages; i += 1) {
+          const page = await doc.getPage(i);
+          const plain = pdfTextContentToPlain(await page.getTextContent());
+          if (plain) parts.push(plain);
+        }
+        try {
+          doc.destroy?.();
+        } catch (_) {}
+        const body = parts.join("\n\n").trim();
+        if (!body) throw new Error("PDF 无可提取文本（可能是扫描件）");
+        return body;
+      }
+      throw new Error("不支持的格式");
+    }
+
     async function importFiles(files, opts = {}) {
       const openAfter = opts.open !== false;
       if (!state.mode) {
@@ -4045,12 +4156,19 @@
         return;
       }
       const all = [...(files || [])];
-      const list = all.filter((f) => /\.(md|markdown)$/i.test(f.name) || /markdown/.test(f.type || ""));
+      const list = all.filter(isImportableDoc);
+      const legacy = all.filter(isLegacyWordDoc);
       if (!list.length) {
-        toast("没有可导入的 Markdown 文件");
+        if (legacy.length) {
+          const tip = `不支持旧版 .doc（${legacy[0].name}），请另存为 .docx`;
+          setErr(tip);
+          toast(tip);
+        } else {
+          toast("没有可导入的文档（支持 .md / .txt / .html / .docx / .pdf）");
+        }
         return;
       }
-      // 相对路径 → File（用于把 .md 引用的图片一起导入）
+      // 相对路径 → File（用于把正文引用的图片一起导入）
       const assetMap = new Map();
       for (const f of all) {
         const rel = String(f.webkitRelativePath || f.__relPath || f.name || "").replace(/\\/g, "/");
@@ -4062,42 +4180,58 @@
       let n = 0;
       let imgN = 0;
       let lastImported = "";
+      const failMsgs = [];
+      for (const f of legacy) {
+        failMsgs.push(`${f.name}：不支持旧版 .doc`);
+      }
       for (const f of list) {
-        const text = await f.text();
-        const fm = parseFrontMatter(text);
-        const title = fm.title || f.name.replace(/\.[^.]+$/, "");
-        const baseDir = String(f.webkitRelativePath || f.__relPath || f.name || "")
-          .replace(/\\/g, "/")
-          .split("/")
-          .slice(0, -1)
-          .join("/");
-        const res = await importDocImages(fm.body, baseDir, assetMap);
-        imgN += res.imported;
-        const item = {
-          id: uid(),
-          title,
-          titleSaved: title,
+        try {
+          const text = await fileToMarkdown(f);
+          const fm = parseFrontMatter(text);
+          const title = fm.title || f.name.replace(/\.[^.]+$/, "");
+          const baseDir = String(f.webkitRelativePath || f.__relPath || f.name || "")
+            .replace(/\\/g, "/")
+            .split("/")
+            .slice(0, -1)
+            .join("/");
+          const res = await importDocImages(fm.body, baseDir, assetMap);
+          imgN += res.imported;
+          const item = {
+            id: uid(),
+            title,
+            titleSaved: title,
             fileName: uniqueFileName(title, ""),
             tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          size: new Blob([res.text]).size,
-          excerpt: res.text.replace(/\s+/g, " ").trim().slice(0, 160),
-        };
-        item.fmHead = fm.head || "";
-        try {
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            size: new Blob([res.text]).size,
+            excerpt: res.text.replace(/\s+/g, " ").trim().slice(0, 160),
+          };
+          item.fmHead = fm.head || "";
           await writeDocText(item, buildFrontMatterBlock(item, res.text));
           state.index.items.push(item);
           n += 1;
           lastImported = item.id;
         } catch (err) {
-          setErr(`导入失败（${f.name}）：${err.message || err}`);
+          const msg = `${f.name}：${err.message || err}`;
+          failMsgs.push(msg);
+          setErr(`导入失败（${msg}）`);
         }
       }
       normalizeOrders();
       await saveIndexToStorage();
       renderSidebar();
-      if (n) toast(imgN ? `已导入 ${n} 篇 · 含 ${imgN} 张图片` : `已导入 ${n} 篇`);
+      if (n || failMsgs.length) {
+        const okPart = n
+          ? imgN
+            ? `已导入 ${n} 篇 · 含 ${imgN} 张图片`
+            : `已导入 ${n} 篇`
+          : "";
+        const failPart = failMsgs.length
+          ? `有 ${failMsgs.length} 个未导入：${failMsgs[0]}${failMsgs.length > 1 ? "…" : ""}`
+          : "";
+        toast([okPart, failPart].filter(Boolean).join(" · "));
+      }
       // 导入后直接打开（多篇则打开最后一篇）
       if (lastImported && openAfter) await openDoc(lastImported);
     }
@@ -5941,8 +6075,8 @@ a{color:${v.accent}}
         void (async () => {
           try {
             const files = await collectDroppedFiles(e.dataTransfer);
-            const hasMd = files.some((f) => /\.(md|markdown)$/i.test(f.name) || /markdown/.test(f.type || ""));
-            if (hasMd) await importFiles(files);
+            const hasDoc = files.some(isImportableDoc);
+            if (hasDoc) await importFiles(files);
             else await insertAssetFiles(files);
           } catch (err) {
             setErr(`拖入失败：${err.message || err}`);
