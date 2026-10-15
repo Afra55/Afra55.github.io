@@ -100,6 +100,8 @@
         unlockOpsJs,
         pandocServerJs,
         pandocOpsJs,
+        doclingServerJs,
+        doclingOpsJs,
         lanboardServerJs,
         scriptRaw,
         resolvePortJs,
@@ -121,6 +123,8 @@
         fetchTextAsset("./fileunlock-bridge/lock-ops.js").catch(() => ""),
         fetchTextAsset("./pandoc-bridge/server.js").catch(() => ""),
         fetchTextAsset("./pandoc-bridge/pandoc-ops.js").catch(() => ""),
+        fetchTextAsset("./docling-bridge/server.js").catch(() => ""),
+        fetchTextAsset("./docling-bridge/docling-ops.js").catch(() => ""),
         fetchTextAsset("./lanboard-bridge/server.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
         fetchTextAsset("./adb-bridge/resolve-port.js").catch(() => ""),
@@ -153,6 +157,7 @@
         "  - git-bridge/server.js + git-ops.js + noop-editor.*",
         "  - fileunlock-bridge/server.js + lock-ops.js（Windows 文件占用解锁）",
         "  - pandoc-bridge/server.js + pandoc-ops.js（Markdown → 任意格式，需本机装 pandoc）",
+        "  - docling-bridge/server.js + docling-ops.js（PDF/Office/图片 → Markdown + OCR，需本机 pip install docling）",
         "  - lanboard-bridge/server.js（局域网看板文字快照 / 媒体暂存）",
         "  - vendor/scrcpy-server-v3.1（可选）",
         "  - " + cfg.scriptName,
@@ -162,9 +167,10 @@
         "2. 本机已安装 Node.js；按需安装 adb / ffmpeg / yt-dlp / git",
         "3. " + cfg.runHint.replace(/\n/g, "\n   "),
         "4. 网页各工具都连 http://127.0.0.1:17888 · Token: devtools-bridge",
+        "5. 备忘录高质量导入（扫描 PDF）：pip install \"docling[rapidocr]\" 或网页一键装",
         "",
         "只需启动这一座桥。不要再下「独立 Git / 独立 FFmpeg」包。",
-        "API：/ff · /ytdlp · /git · /lanboard",
+        "API：/ff · /ytdlp · /git · /pandoc · /docling · /lanboard",
         "",
       ].join("\n");
 
@@ -187,6 +193,8 @@
       if (unlockOpsJs) zip.file("fileunlock-bridge/lock-ops.js", unlockOpsJs);
       if (pandocServerJs) zip.file("pandoc-bridge/server.js", pandocServerJs);
       if (pandocOpsJs) zip.file("pandoc-bridge/pandoc-ops.js", pandocOpsJs);
+      if (doclingServerJs) zip.file("docling-bridge/server.js", doclingServerJs);
+      if (doclingOpsJs) zip.file("docling-bridge/docling-ops.js", doclingOpsJs);
       if (lanboardServerJs) zip.file("lanboard-bridge/server.js", lanboardServerJs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {

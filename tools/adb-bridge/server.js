@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.54";
+const BRIDGE_VERSION = "0.9.55";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -115,6 +115,24 @@ function loadPandocBridge() {
 const pandocBridge = loadPandocBridge();
 if (!pandocBridge) {
   console.warn("未找到 Pandoc 模块（可选）：完整 ZIP 请包含 pandoc-bridge/server.js + pandoc-ops.js");
+}
+function loadDoclingBridge() {
+  const candidates = [
+    path.join(__dirname, "docling-bridge", "server.js"),
+    path.join(__dirname, "..", "docling-bridge", "server.js"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return require(candidate);
+    } catch (err) {
+      console.warn("加载 Docling 模块失败:", candidate, err.message || err);
+    }
+  }
+  return null;
+}
+const doclingBridge = loadDoclingBridge();
+if (!doclingBridge) {
+  console.warn("未找到 Docling 模块（可选）：完整 ZIP 请包含 docling-bridge/server.js + docling-ops.js");
 }
 function loadLanboardBridge() {
   const candidates = [
@@ -5304,6 +5322,25 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    // 统一桥：Docling 高质量文档→MD（含 OCR）挂在 /docling/*
+    if (url.pathname === "/docling" || url.pathname.startsWith("/docling/")) {
+      if (!doclingBridge?.handleRequest) {
+        sendJson(res, 503, { ok: false, error: "未找到 Docling 模块（请用完整 ZIP，含 docling-bridge）" }, origin);
+        return;
+      }
+      const stripped = url.pathname === "/docling" ? "/" : url.pathname.slice(8) || "/";
+      const isDoclingHealth =
+        (stripped === "/health" || stripped === "/") && req.method === "GET";
+      if (!isDoclingHealth && req.method !== "OPTIONS") requireToken(req);
+      wrapResWithCors(res, origin);
+      await doclingBridge.handleRequest(req, res, {
+        pathname: stripped,
+        alreadyAuthed: !isDoclingHealth,
+        embedded: true,
+      });
+      return;
+    }
+
     // 统一桥：局域网看板 API 挂在 /lanboard/*
     if (url.pathname === "/lanboard" || url.pathname.startsWith("/lanboard/")) {
       if (!lanboardBridge?.handleRequest) {
@@ -5442,6 +5479,7 @@ async function handleApi(req, res, url) {
             "git-mount",
             "unlock-mount",
             "pandoc-mount",
+            "docling-mount",
             "lanboard-mount",
             "device-perf",
             "device-processes",
@@ -5471,10 +5509,12 @@ async function handleApi(req, res, url) {
           gitMount: "/git",
           unlockMount: "/unlock",
           pandocMount: "/pandoc",
+          doclingMount: "/docling",
           lanboardMount: "/lanboard",
           lanboard: !!lanboardBridge,
+          docling: !!doclingBridge,
           note:
-            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock) + Pandoc(/pandoc) + 看板(/lanboard)。Token 默认 devtools-bridge。只需启动一次。",
+            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock) + Pandoc(/pandoc) + Docling(/docling) + 看板(/lanboard)。Token 默认 devtools-bridge。只需启动一次。",
         },
         origin
       );
@@ -6259,7 +6299,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
-  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / Pandoc(/pandoc) / 看板(/lanboard) / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / Pandoc(/pandoc) / Docling(/docling) / 看板(/lanboard) / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);

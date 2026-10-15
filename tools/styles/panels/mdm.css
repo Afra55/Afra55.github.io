@@ -384,6 +384,13 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
 .mdm-hdr-toggle { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; color: var(--muted); margin-right: auto; }
 
 .mdm-modal-body { white-space: pre-line; color: var(--muted); font-size: 0.88rem; line-height: 1.6; margin: 0.2rem 0 0.4rem; }
+.mdm-imp-bar { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 80%, transparent); overflow: hidden; margin: 0.55rem 0 0.4rem; }
+.mdm-imp-bar > i { display: block; height: 100%; width: 0; background: var(--accent, #6ea8fe); transition: width 0.2s ease; }
+.mdm-imp-log { list-style: none; margin: 0.35rem 0 0; padding: 0; max-height: 10rem; overflow: auto; font-size: 0.78rem; line-height: 1.45; color: var(--muted); }
+.mdm-imp-log li { padding: 0.12rem 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); word-break: break-all; }
+.mdm-imp-log li[data-kind="ok"] { color: color-mix(in srgb, #3dd68c 85%, var(--ink)); }
+.mdm-imp-log li[data-kind="err"] { color: #e5484d; }
+.mdm-imp-log li[data-kind="warn"] { color: #f5a524; }
 .mdm-modal .secondary-btn.is-danger { color: #e5484d; border-color: color-mix(in srgb, #e5484d 55%, transparent); }
 .mdm-modal .secondary-btn.is-danger:hover { background: color-mix(in srgb, #e5484d 16%, transparent); }
 

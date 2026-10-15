@@ -2897,18 +2897,19 @@
           }
           void (async () => {
             try {
-              const docs = files.filter(isImportableDoc);
+              // 编辑器内：纯图片/视频仍走附件插入；文档（含 PDF）走同一套转 MD 入库
+              const isImg = (f) =>
+                /\.(png|jpe?g|webp|tiff?|bmp|gif)$/i.test(f.name || "") || /^image\//i.test(f.type || "");
+              const docs = files.filter((f) => isImportableDoc(f) && !isImg(f));
               if (docs.length) {
-                // 文档：① 导入进库（不切换当前文档）② 在当前文档插入引用链接
                 const before = new Set((state.index.items || []).map((x) => x.id));
-                // 传全部文件：importFiles 只取可导入文档，并只导入正文真正引用到的资源
-                await importFiles(files, { open: false });
+                await importFiles(files, { open: false, quiet: true });
                 const added = (state.index.items || []).filter((x) => !before.has(x.id));
                 if (added.length && state.view) {
                   const links = added.map((it) => `[${it.title}](${it.fileName})`).join("\n");
                   state.view.dispatch(state.view.state.replaceSelection(`${links}\n`));
                 }
-                toast(added.length ? `已导入 ${added.length} 篇并插入引用` : "已导入（同名已存在，未插入引用）");
+                toast(added.length ? `已导入 ${added.length} 篇并插入引用` : "导入完成");
               } else {
                 await insertAssetFiles(files);
               }
@@ -4037,7 +4038,10 @@
     }
 
     // ---- import ----
-    const IMPORT_EXT_RE = /\.(md|markdown|txt|text|html?|docx|pdf)$/i;
+    // 文档入库：md/txt 直读；其余优先本机桥 Docling（OCR），无桥回退浏览器
+    const IMPORT_EXT_RE = /\.(md|markdown|txt|text|html?|docx|pdf|pptx|xlsx|png|jpe?g|webp|tiff?|bmp)$/i;
+    const BRIDGE_CONVERT_RE = /\.(pdf|docx|pptx|xlsx|html?|png|jpe?g|webp|tiff?|bmp)$/i;
+    const IMPORT_HINT = ".md / .txt / .html / .docx / .pdf / .pptx / .xlsx（扫描 PDF/图片需本机桥 Docling OCR）";
 
     function isLegacyWordDoc(f) {
       const name = String(f?.name || "");
@@ -4051,7 +4055,18 @@
       if (IMPORT_EXT_RE.test(name)) return true;
       if (/markdown/i.test(type)) return true;
       if (type === "text/plain" || type === "text/html" || type === "application/pdf") return true;
-      if (/officedocument\.wordprocessingml/i.test(type)) return true;
+      if (/officedocument\.(wordprocessingml|presentationml|spreadsheetml)/i.test(type)) return true;
+      if (/^image\/(png|jpeg|webp|tiff|bmp)$/i.test(type)) return true;
+      return false;
+    }
+
+    function wantsBridgeConvert(file) {
+      const name = String(file?.name || "");
+      const type = String(file?.type || "");
+      if (BRIDGE_CONVERT_RE.test(name)) return true;
+      if (type === "application/pdf" || type === "text/html") return true;
+      if (/officedocument\.(wordprocessingml|presentationml|spreadsheetml)/i.test(type)) return true;
+      if (/^image\//i.test(type)) return true;
       return false;
     }
 
@@ -4099,20 +4114,114 @@
       return pdfjs;
     }
 
-    /** 按扩展名/MIME 转成 Markdown 正文（进库前）；与粘贴共用 Turndown */
-    async function fileToMarkdown(file) {
+    let doclingHealthCache = { t: 0, data: null };
+    async function probeDoclingHealth() {
+      const now = Date.now();
+      if (doclingHealthCache.data && now - doclingHealthCache.t < 20000) return doclingHealthCache.data;
+      try {
+        const res = await fetch(`${baseUrl()}/docling/health`, { method: "GET", cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        const out = {
+          bridge: true,
+          ready: !!(res.ok && data?.ok && data?.docling?.ok),
+          error: data?.docling?.error || data?.error || "",
+        };
+        doclingHealthCache = { t: now, data: out };
+        return out;
+      } catch (_) {
+        const out = { bridge: false, ready: false, error: "本机桥未启动" };
+        doclingHealthCache = { t: now, data: out };
+        return out;
+      }
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const s = String(reader.result || "");
+          const i = s.indexOf(",");
+          resolve(i >= 0 ? s.slice(i + 1) : s);
+        };
+        reader.onerror = () => reject(reader.error || new Error("读取文件失败"));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function convertViaDocling(file, { forceOcr = false, signal, onStage } = {}) {
+      onStage?.("上传桥…");
+      const dataBase64 = await fileToBase64(file);
+      if (signal?.aborted) throw new Error("已取消");
+      onStage?.("Docling 转换中（含 OCR，大文件可能需数分钟）…");
+      const res = await fetch(`${baseUrl()}/docling/convert`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Adb-Token": token(),
+          "X-Ffmpeg-Token": token(),
+        },
+        body: JSON.stringify({
+          filename: file.name || "document.bin",
+          dataBase64,
+          forceOcr: !!forceOcr,
+        }),
+        signal,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        const msg = data?.error || `桥转换失败（HTTP ${res.status}）`;
+        throw new Error(msg);
+      }
+      const md = String(data.markdown || "").trim();
+      if (!md) throw new Error("Docling 输出为空");
+      return { text: md, via: "docling" };
+    }
+
+    async function runDoclingInstall(onProgress) {
+      const t0 = Date.now();
+      const tick = setInterval(() => {
+        onProgress?.(`正在安装 Docling（约 1–2GB，已用时 ${Math.round((Date.now() - t0) / 1000)} 秒）…`);
+      }, 1000);
+      try {
+        const res = await fetch(`${baseUrl()}/docling/install`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Adb-Token": token(),
+            "X-Ffmpeg-Token": token(),
+          },
+          body: "{}",
+        });
+        const data = await res.json().catch(() => null);
+        if (!data?.ok) throw new Error(data?.error || "安装请求失败");
+        if (data.installed) {
+          doclingHealthCache = { t: 0, data: null };
+          return true;
+        }
+        if (data.needsManual) throw new Error(`请手动安装：${data.command || 'pip install "docling[rapidocr]"'}`);
+        throw new Error(data.message || data.output || "安装未完成");
+      } finally {
+        clearInterval(tick);
+      }
+    }
+
+    /** 浏览器路径（无桥 / Docling 未装 / 桥失败时的回退） */
+    async function fileToMarkdownBrowser(file, { onStage } = {}) {
       const name = String(file.name || "");
       const type = String(file.type || "");
       if (isLegacyWordDoc(file)) {
         throw new Error("不支持旧版 .doc，请另存为 .docx 后再导入");
       }
       if (/\.(md|markdown)$/i.test(name) || /markdown/i.test(type)) {
+        onStage?.("读取 Markdown…");
         return await readTextSmart(file);
       }
       if (/\.(txt|text)$/i.test(name) || type === "text/plain") {
+        onStage?.("读取文本…");
         return await readTextSmart(file);
       }
       if (/\.html?$/i.test(name) || type === "text/html") {
+        onStage?.("浏览器转换 HTML…");
         if (typeof window.TurndownService !== "function") await ensureVendor("turndown");
         if (typeof window.TurndownService !== "function") throw new Error("HTML 转换库未就绪");
         const html = await readTextSmart(file);
@@ -4121,6 +4230,7 @@
         return md;
       }
       if (/\.docx$/i.test(name) || /officedocument\.wordprocessingml/i.test(type)) {
+        onStage?.("浏览器转换 Word…");
         await ensureVendor("mammoth");
         if (typeof window.TurndownService !== "function") await ensureVendor("turndown");
         if (typeof window.mammoth?.convertToHtml !== "function") throw new Error("Word 转换库未就绪");
@@ -4131,6 +4241,7 @@
         return md;
       }
       if (/\.pdf$/i.test(name) || type === "application/pdf") {
+        onStage?.("浏览器抽取 PDF 文本（无 OCR）…");
         const pdfjs = await ensurePdfjsReady();
         const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
         const parts = [];
@@ -4143,17 +4254,148 @@
           doc.destroy?.();
         } catch (_) {}
         const body = parts.join("\n\n").trim();
-        if (!body) throw new Error("PDF 无可提取文本（可能是扫描件）");
+        if (!body) {
+          throw new Error(
+            "PDF 无可提取文本（可能是扫描件）。请启动本机桥并安装 Docling 以启用 OCR：pip install \"docling[rapidocr]\""
+          );
+        }
         return body;
+      }
+      if (/\.(pptx|xlsx)$/i.test(name) || /officedocument\.(presentationml|spreadsheetml)/i.test(type)) {
+        throw new Error("PPTX/XLSX 需本机桥 Docling（启动桥后可一键安装）");
+      }
+      if (/\.(png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type)) {
+        throw new Error("图片 OCR 需本机桥 Docling（启动桥后可一键安装）");
       }
       throw new Error("不支持的格式");
     }
 
+    /**
+     * 转成 Markdown：可转换格式优先 Docling 桥；失败/未装则回退浏览器（并带提示）。
+     * opts.onStage(msg) / opts.signal / opts.allowInstall
+     */
+    async function fileToMarkdown(file, opts = {}) {
+      const onStage = opts.onStage;
+      const signal = opts.signal;
+      const name = String(file.name || "");
+      const type = String(file.type || "");
+
+      if (isLegacyWordDoc(file)) {
+        throw new Error("不支持旧版 .doc，请另存为 .docx 后再导入");
+      }
+      // 纯文本 / md：不走桥，避免无谓开销
+      if (/\.(md|markdown)$/i.test(name) || /markdown/i.test(type)) {
+        return await fileToMarkdownBrowser(file, { onStage });
+      }
+      if (/\.(txt|text)$/i.test(name) || type === "text/plain") {
+        return await fileToMarkdownBrowser(file, { onStage });
+      }
+
+      if (wantsBridgeConvert(file)) {
+        const health = await probeDoclingHealth();
+        if (health.ready) {
+          try {
+            const forceOcr = /\.(pdf|png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type);
+            const r = await convertViaDocling(file, { forceOcr, signal, onStage });
+            return r.text;
+          } catch (err) {
+            if (signal?.aborted || /已取消|AbortError/i.test(String(err?.message || err?.name || ""))) {
+              throw new Error("已取消");
+            }
+            const msg = String(err?.message || err);
+            // 未安装：可选一键装（仅当导入流程允许）
+            if (
+              opts.allowInstall !== false &&
+              /未找到 Docling|未安装|No module named|pip install/i.test(msg)
+            ) {
+              onStage?.("Docling 未安装，可一键安装…");
+              throw Object.assign(new Error(msg), { code: "DOCLING_MISSING" });
+            }
+            // PDF/DOCX/HTML 可回退；PPTX/XLSX/图片不能
+            if (
+              /\.(pdf|docx|html?)$/i.test(name) ||
+              type === "application/pdf" ||
+              type === "text/html" ||
+              /wordprocessingml/i.test(type)
+            ) {
+              onStage?.(`桥失败，浏览器回退：${msg.slice(0, 80)}`);
+              return await fileToMarkdownBrowser(file, { onStage });
+            }
+            throw err;
+          }
+        }
+        if (health.bridge && !health.ready) {
+          // 桥在、Docling 未装
+          if (
+            opts.allowInstall !== false &&
+            (/\.(pdf|pptx|xlsx|png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type))
+          ) {
+            throw Object.assign(new Error(health.error || "未安装 Docling"), { code: "DOCLING_MISSING" });
+          }
+          onStage?.("Docling 未就绪，浏览器回退（扫描件无 OCR）…");
+          return await fileToMarkdownBrowser(file, { onStage });
+        }
+        // 无桥
+        onStage?.("本机桥未启动，浏览器回退（扫描件无 OCR）…");
+        return await fileToMarkdownBrowser(file, { onStage });
+      }
+
+      return await fileToMarkdownBrowser(file, { onStage });
+    }
+
+    /** 导入进度弹层（串行队列；可取消） */
+    function openImportProgress(total) {
+      const box = els.modalBox;
+      const ctrl = { cancelled: false, abort: null };
+      els.modal.hidden = false;
+      els.modal.onclick = null;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>正在导入</strong><span class="hint tight" id="mdm-imp-count">0 / ${total}</span></div>` +
+        `<p class="mdm-modal-body" id="mdm-imp-name">准备中…</p>` +
+        `<p class="hint tight" id="mdm-imp-stage">排队等待</p>` +
+        `<div class="mdm-imp-bar" aria-hidden="true"><i id="mdm-imp-bar-fill"></i></div>` +
+        `<ul class="mdm-imp-log" id="mdm-imp-log"></ul>` +
+        `<div class="mdm-modal-foot"><button type="button" class="ghost-btn" id="mdm-imp-cancel">取消剩余</button></div>`;
+      const fill = box.querySelector("#mdm-imp-bar-fill");
+      const nameEl = box.querySelector("#mdm-imp-name");
+      const stageEl = box.querySelector("#mdm-imp-stage");
+      const countEl = box.querySelector("#mdm-imp-count");
+      const logEl = box.querySelector("#mdm-imp-log");
+      box.querySelector("#mdm-imp-cancel")?.addEventListener("click", () => {
+        ctrl.cancelled = true;
+        try {
+          ctrl.abort?.abort();
+        } catch (_) {}
+        if (stageEl) stageEl.textContent = "正在取消…（当前文件结束后停止）";
+      });
+      return {
+        ctrl,
+        update({ index, total: tot, name, stage, pct }) {
+          if (countEl) countEl.textContent = `${index} / ${tot}`;
+          if (nameEl) nameEl.textContent = name || "";
+          if (stageEl) stageEl.textContent = stage || "";
+          if (fill) fill.style.width = `${Math.max(0, Math.min(100, pct ?? (index / tot) * 100))}%`;
+        },
+        log(line, kind) {
+          if (!logEl) return;
+          const li = document.createElement("li");
+          if (kind) li.dataset.kind = kind;
+          li.textContent = line;
+          logEl.appendChild(li);
+          logEl.scrollTop = logEl.scrollHeight;
+        },
+        close() {
+          closeModal();
+        },
+      };
+    }
+
     async function importFiles(files, opts = {}) {
       const openAfter = opts.open !== false;
+      const quiet = opts.quiet === true;
       if (!state.mode) {
         setErr("请先选择存储位置（顶栏「选择文件夹」或「本地存储模式」）再导入");
-        return;
+        return { ok: 0, fail: 0, lastImported: "" };
       }
       const all = [...(files || [])];
       const list = all.filter(isImportableDoc);
@@ -4162,13 +4404,13 @@
         if (legacy.length) {
           const tip = `不支持旧版 .doc（${legacy[0].name}），请另存为 .docx`;
           setErr(tip);
-          toast(tip);
-        } else {
-          toast("没有可导入的文档（支持 .md / .txt / .html / .docx / .pdf）");
+          if (!quiet) toast(tip);
+        } else if (!quiet) {
+          toast(`没有可导入的文档（支持 ${IMPORT_HINT}）`);
         }
-        return;
+        return { ok: 0, fail: 0, lastImported: "" };
       }
-      // 相对路径 → File（用于把正文引用的图片一起导入）
+
       const assetMap = new Map();
       for (const f of all) {
         const rel = String(f.webkitRelativePath || f.__relPath || f.name || "").replace(/\\/g, "/");
@@ -4177,63 +4419,161 @@
         const base = rel.split("/").pop();
         if (base && !assetMap.has(base)) assetMap.set(base, f);
       }
+
       let n = 0;
       let imgN = 0;
       let lastImported = "";
       const failMsgs = [];
-      for (const f of legacy) {
-        failMsgs.push(`${f.name}：不支持旧版 .doc`);
+      for (const f of legacy) failMsgs.push(`${f.name}：不支持旧版 .doc`);
+
+      // 串行队列：Docling/OCR 吃内存与 CPU，并发易打爆；单文件失败不影响其它
+      let prog = openImportProgress(list.length);
+      let offeredInstall = false;
+
+      async function ingestMarkdownText(f, text, note) {
+        const fm = parseFrontMatter(text);
+        const title = fm.title || f.name.replace(/\.[^.]+$/, "");
+        const baseDir = String(f.webkitRelativePath || f.__relPath || f.name || "")
+          .replace(/\\/g, "/")
+          .split("/")
+          .slice(0, -1)
+          .join("/");
+        const res = await importDocImages(fm.body, baseDir, assetMap);
+        imgN += res.imported;
+        const item = {
+          id: uid(),
+          title,
+          titleSaved: title,
+          fileName: uniqueFileName(title, ""),
+          tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          size: new Blob([res.text]).size,
+          excerpt: res.text.replace(/\s+/g, " ").trim().slice(0, 160),
+        };
+        item.fmHead = fm.head || "";
+        await writeDocText(item, buildFrontMatterBlock(item, res.text));
+        state.index.items.push(item);
+        n += 1;
+        lastImported = item.id;
+        prog?.log(note ? `✓ ${f.name}（${note}）` : `✓ ${f.name}`, "ok");
       }
-      for (const f of list) {
+
+      for (let i = 0; i < list.length; i += 1) {
+        if (prog?.ctrl.cancelled) {
+          failMsgs.push(`已取消剩余 ${list.length - i} 个文件`);
+          prog?.log(`已取消剩余 ${list.length - i} 个`, "warn");
+          break;
+        }
+        const f = list[i];
+        const ac = new AbortController();
+        if (prog) prog.ctrl.abort = ac;
+        prog?.update({
+          index: i + 1,
+          total: list.length,
+          name: f.name,
+          stage: "准备转换…",
+          pct: (i / list.length) * 100,
+        });
         try {
-          const text = await fileToMarkdown(f);
-          const fm = parseFrontMatter(text);
-          const title = fm.title || f.name.replace(/\.[^.]+$/, "");
-          const baseDir = String(f.webkitRelativePath || f.__relPath || f.name || "")
-            .replace(/\\/g, "/")
-            .split("/")
-            .slice(0, -1)
-            .join("/");
-          const res = await importDocImages(fm.body, baseDir, assetMap);
-          imgN += res.imported;
-          const item = {
-            id: uid(),
-            title,
-            titleSaved: title,
-            fileName: uniqueFileName(title, ""),
-            tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            size: new Blob([res.text]).size,
-            excerpt: res.text.replace(/\s+/g, " ").trim().slice(0, 160),
-          };
-          item.fmHead = fm.head || "";
-          await writeDocText(item, buildFrontMatterBlock(item, res.text));
-          state.index.items.push(item);
-          n += 1;
-          lastImported = item.id;
+          const text = await fileToMarkdown(f, {
+            signal: ac.signal,
+            allowInstall: !offeredInstall,
+            onStage: (s) =>
+              prog?.update({
+                index: i + 1,
+                total: list.length,
+                name: f.name,
+                stage: s,
+                pct: ((i + 0.4) / list.length) * 100,
+              }),
+          });
+          prog?.update({
+            index: i + 1,
+            total: list.length,
+            name: f.name,
+            stage: "入库…",
+            pct: ((i + 0.85) / list.length) * 100,
+          });
+          await ingestMarkdownText(f, text);
         } catch (err) {
+          if (err?.code === "DOCLING_MISSING" && !offeredInstall) {
+            offeredInstall = true;
+            prog?.close();
+            const okInstall = await confirmModal({
+              title: "安装 Docling（OCR）",
+              body:
+                "扫描 PDF / 图片 OCR 需要本机 Docling（IBM 开源，约 1–2GB，含 RapidOCR，无 GPU 也可）。\n\n现在用本机桥自动 pip 安装？装完会继续导入。",
+              okText: "自动安装",
+            });
+            if (okInstall) {
+              prog = openImportProgress(list.length);
+              try {
+                await runDoclingInstall((s) =>
+                  prog.update({ index: i + 1, total: list.length, name: f.name, stage: s, pct: 5 })
+                );
+                toast("Docling 已安装，继续导入…");
+                i -= 1;
+                continue;
+              } catch (instErr) {
+                failMsgs.push(`Docling 安装失败：${instErr.message || instErr}`);
+                prog.log(`Docling 安装失败，后续走浏览器回退`, "err");
+              }
+            } else {
+              prog = openImportProgress(list.length);
+              prog.log("未安装 Docling，扫描件将无 OCR", "warn");
+            }
+            // 当前文件：尽量浏览器回退
+            try {
+              const text = await fileToMarkdownBrowser(f, {
+                onStage: (s) =>
+                  prog?.update({ index: i + 1, total: list.length, name: f.name, stage: s }),
+              });
+              await ingestMarkdownText(f, text, "浏览器回退，无 OCR");
+            } catch (err2) {
+              const msg = `${f.name}：${err2.message || err2}`;
+              failMsgs.push(msg);
+              prog?.log(`✗ ${msg}`, "err");
+            }
+            continue;
+          }
+          if (/已取消/i.test(String(err?.message || ""))) {
+            failMsgs.push(`已取消：${f.name}`);
+            prog?.log(`已取消 ${f.name}`, "warn");
+            break;
+          }
           const msg = `${f.name}：${err.message || err}`;
           failMsgs.push(msg);
+          prog?.log(`✗ ${msg}`, "err");
           setErr(`导入失败（${msg}）`);
         }
+        await new Promise((r) => setTimeout(r, 0));
       }
+
+      prog?.update({
+        index: list.length,
+        total: list.length,
+        name: "完成",
+        stage: `成功 ${n} · 失败 ${failMsgs.length}`,
+        pct: 100,
+      });
+      if (prog) {
+        await new Promise((r) => setTimeout(r, 400));
+        prog.close();
+      }
+
       normalizeOrders();
       await saveIndexToStorage();
       renderSidebar();
-      if (n || failMsgs.length) {
-        const okPart = n
-          ? imgN
-            ? `已导入 ${n} 篇 · 含 ${imgN} 张图片`
-            : `已导入 ${n} 篇`
-          : "";
+      if (!quiet && (n || failMsgs.length)) {
+        const okPart = n ? (imgN ? `已导入 ${n} 篇 · 含 ${imgN} 张图片` : `已导入 ${n} 篇`) : "";
         const failPart = failMsgs.length
-          ? `有 ${failMsgs.length} 个未导入：${failMsgs[0]}${failMsgs.length > 1 ? "…" : ""}`
+          ? `失败 ${failMsgs.length}：${failMsgs[0]}${failMsgs.length > 1 ? "…" : ""}`
           : "";
         toast([okPart, failPart].filter(Boolean).join(" · "));
       }
-      // 导入后直接打开（多篇则打开最后一篇）
       if (lastImported && openAfter) await openDoc(lastImported);
+      return { ok: n, fail: failMsgs.length, lastImported, failMsgs, imgN };
     }
 
     /** 把 .md 引用的本地资源（图/视频/音频/附件）一并写入目标文件夹（保留相对路径） */

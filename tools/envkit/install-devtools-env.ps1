@@ -221,6 +221,12 @@ function Sync-Bridges {
     try { Download-File "$BaseUrl/pandoc-bridge/$f" (Join-Path $BridgeDir "pandoc-bridge\$f") }
     catch { Write-Miss "下载失败 $f" }
   }
+  New-Item -ItemType Directory -Force -Path (Join-Path $BridgeDir "docling-bridge") | Out-Null
+  foreach ($f in @("server.js", "docling-ops.js")) {
+    Write-Info "docling-bridge/$f"
+    try { Download-File "$BaseUrl/docling-bridge/$f" (Join-Path $BridgeDir "docling-bridge\$f") }
+    catch { Write-Miss "下载失败 $f" }
+  }
   foreach ($f in @("server.js")) {
     Write-Info "lanboard-bridge/$f"
     try { Download-File "$BaseUrl/lanboard-bridge/$f" (Join-Path $BridgeDir "lanboard-bridge\$f") }
@@ -232,7 +238,7 @@ function Sync-Bridges {
   }
 
   $bad = $false
-  foreach ($rel in @("adb-bridge\server.js", "ffmpeg-bridge\server.js", "ffmpeg-bridge\gifski-core.js", "git-bridge\server.js", "git-bridge\git-ops.js", "fileunlock-bridge\server.js", "fileunlock-bridge\lock-ops.js", "pandoc-bridge\server.js", "pandoc-bridge\pandoc-ops.js", "lanboard-bridge\server.js")) {
+  foreach ($rel in @("adb-bridge\server.js", "ffmpeg-bridge\server.js", "ffmpeg-bridge\gifski-core.js", "git-bridge\server.js", "git-bridge\git-ops.js", "fileunlock-bridge\server.js", "fileunlock-bridge\lock-ops.js", "pandoc-bridge\server.js", "pandoc-bridge\pandoc-ops.js", "docling-bridge\server.js", "docling-bridge\docling-ops.js", "lanboard-bridge\server.js")) {
     $p = Join-Path $BridgeDir $rel
     if (-not (Test-Path $p) -or (Get-Item $p).Length -lt 10) {
       Write-Miss "缺失或空：$rel"

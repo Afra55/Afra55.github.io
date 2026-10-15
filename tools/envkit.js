@@ -4,7 +4,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-  /** 统一桥五大能力（均挂在 17888，勿再起独立端口） */
+  /** 统一桥能力探测（均挂在 17888，勿再起独立端口） */
   const BRIDGES = [
     {
       id: "adb",
@@ -62,8 +62,17 @@
       kind: "pandoc",
     },
     {
+      id: "docling-mount",
+      name: "⑦ Docling · /docling（OCR 导入，可选）",
+      url: "http://127.0.0.1:17888/docling/health",
+      token: "devtools-bridge",
+      tokenHeader: "X-Adb-Token",
+      link: "#mdm",
+      kind: "docling",
+    },
+    {
       id: "lanboard-mount",
-      name: "⑦ 局域网看板 · /lanboard（可选）",
+      name: "⑧ 局域网看板 · /lanboard（可选）",
       url: "http://127.0.0.1:17888/lanboard/health",
       token: "devtools-bridge",
       tokenHeader: "X-Adb-Token",

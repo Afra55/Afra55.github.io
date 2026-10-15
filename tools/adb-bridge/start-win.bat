@@ -244,6 +244,13 @@ if not exist "%SCRIPT_DIR%pandoc-bridge\server.js" (
   )
 )
 
+if not exist "%SCRIPT_DIR%docling-bridge\server.js" (
+  if not exist "%SCRIPT_DIR%..\docling-bridge\server.js" (
+    echo [WARN] docling-bridge/server.js not found - Docling OCR import disabled until full ZIP is used.
+    echo [WARN] missing docling-bridge>> "%LOG_FILE%"
+  )
+)
+
 if not exist "%SCRIPT_DIR%lanboard-bridge\server.js" (
   if not exist "%SCRIPT_DIR%..\lanboard-bridge\server.js" (
     echo [WARN] lanboard-bridge/server.js not found - Lan board API disabled until full ZIP is used.
