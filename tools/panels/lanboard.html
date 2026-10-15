@@ -38,7 +38,15 @@
           </ol>
         </div>
 
-        <div id="lb-feed" class="lb-feed" style="margin-top:0.85rem" aria-live="polite"></div>
+        <div class="lb-feed-bar" id="lb-feed-bar" hidden>
+          <span class="hint tight" id="lb-sel-count">已选 0</span>
+          <div class="btn-row lb-feed-bar-actions">
+            <button type="button" class="ghost-btn" id="lb-sel-all">全选可下载</button>
+            <button type="button" class="ghost-btn" id="lb-sel-clear" disabled>清空</button>
+            <button type="button" class="secondary-btn" id="lb-sel-download" disabled>下载已选</button>
+          </div>
+        </div>
+        <div id="lb-feed" class="lb-feed" style="margin-top:0.55rem" aria-live="polite"></div>
 
         <details class="hint tight lb-members-details" style="margin-top:0.85rem">
           <summary>在线成员 <span id="lb-member-count">0</span></summary>
