@@ -7,7 +7,9 @@
   if (!panel) return;
 
   const PROTO = "devtools-lanboard:v1";
-  const LOBBY_SLUG = "devtools-lanboard";
+  const LOBBY_SLUG_DEFAULT = "devtools-lanboard";
+  /** 文字条最长保留（超时丢弃，避免冒烟/他人旧帖长期滞留） */
+  const TEXT_ITEM_MAX_AGE_MS = 3 * 60 * 60 * 1000;
   const STUN = [
     { urls: "stun:stun.miwifi.com:3478" },
     { urls: "stun:stun.chat.bilibili.com:3478" },
@@ -27,7 +29,6 @@
     "wss://broker.hivemq.com:8884/mqtt",
     "wss://test.mosquitto.org:8081/mqtt",
   ];
-  const MQTT_TOPIC = `devtools/lanboard/v1/${LOBBY_SLUG}`;
   const MQTT_MSG_TTL_MS = 120000;
   const PRESENCE_MS = 4000;
   const PEER_STALE_MS = 12000;
@@ -36,7 +37,32 @@
   const TEXT_MQTT_MAX = 1800;
   const THUMB_TIMEOUT_MS = 2500;
   const MQTT_THUMB_MAX = 12000;
+  /** 多选逐个下载间隔（手机浏览器常拦连点） */
+  const BULK_DL_GAP_MS = 550;
   const SOURCE_GONE = "源设备已离开，仅可预览";
+
+  /** #lanboard?room=xxx 或 ?lbRoom=xxx → 隔离冒烟/私房，默认公共大厅 */
+  function resolveLobbySlug() {
+    try {
+      const hash = String(location.hash || "").replace(/^#/, "");
+      const qIdx = hash.indexOf("?");
+      const path = (qIdx >= 0 ? hash.slice(0, qIdx) : hash).split("/")[0];
+      const qs = qIdx >= 0 ? hash.slice(qIdx + 1) : "";
+      if (path === "lanboard" && qs) {
+        const room = new URLSearchParams(qs).get("room");
+        if (room && /^[a-zA-Z0-9_-]{2,64}$/.test(room)) return room;
+      }
+      const u = new URLSearchParams(location.search || "").get("lbRoom");
+      if (u && /^[a-zA-Z0-9_-]{2,64}$/.test(u)) return u;
+    } catch {
+      /* ignore */
+    }
+    return LOBBY_SLUG_DEFAULT;
+  }
+
+  const LOBBY_SLUG = resolveLobbySlug();
+  const MQTT_TOPIC = `devtools/lanboard/v1/${LOBBY_SLUG}`;
+  const BC_NAME = `devtools-lanboard-v1:${LOBBY_SLUG}`;
 
   const els = {
     statusDot: $("#lb-dot"),
@@ -69,6 +95,7 @@
     previewStage: $("#lb-preview-stage"),
     previewDl: $("#lb-preview-dl"),
     previewClose: $("#lb-preview-close"),
+    clearFeed: $("#lb-clear-feed"),
   };
 
   let previewObjectUrl = "";
@@ -384,14 +411,44 @@
     await idbSet(IDB_ITEMS_KEY, { v: 1, items: list, savedAt: Date.now() });
   }
 
+  function textItemFresh(it) {
+    if (!it || it.kind !== "text") return true;
+    const added = Number(it.addedAt || 0);
+    if (!(added > 0)) return false;
+    return Date.now() - added <= TEXT_ITEM_MAX_AGE_MS;
+  }
+
+  /** 丢掉过期文字（冒烟/他人旧帖）；返回是否有变更 */
+  function pruneStaleTextItems() {
+    let dropped = 0;
+    for (const [id, it] of [...state.items.entries()]) {
+      if (it.kind === "text" && !textItemFresh(it)) {
+        state.items.delete(id);
+        dropped += 1;
+      }
+    }
+    if (dropped) void persistItems();
+    return dropped > 0;
+  }
+
   async function restoreLocalItems() {
     const data = await idbGet(IDB_ITEMS_KEY);
     const items = data?.items;
     if (!Array.isArray(items)) return;
     for (const it of items) {
       if (!it?.id || it.kind !== "text") continue;
+      if (!textItemFresh(it)) continue;
       if (!state.items.has(it.id)) upsertItem(it, { paint: false, persist: false, relay: false });
     }
+  }
+
+  /** 用户一键清列表：本机立刻空；广播 room-clear（空房同伴跟着清） */
+  function clearFeedNow() {
+    selectedDlIds.clear();
+    clearRoomLocal({ bridge: true, paint: true });
+    publishRoomClear();
+    notifyToast("已清空本机列表");
+    setInfo(LOBBY_SLUG === LOBBY_SLUG_DEFAULT ? "若仍出现旧帖，多半是大厅里其他在线设备在同步；可让对方也点清空，或等对方离开。" : "");
   }
 
   function peerLabel(id) {
@@ -424,6 +481,7 @@
       kind: raw.kind || prev.kind || "text",
       addedAt: Number(raw.addedAt || prev.addedAt || Date.now()),
     };
+    if (next.kind === "text" && !textItemFresh(next)) return;
     state.items.set(next.id, next);
     if (persist && next.kind === "text") persistItems();
     if (paint) paintFeed();
@@ -497,6 +555,7 @@
 
   function paintFeed() {
     if (!els.feed) return;
+    if (pruneStaleTextItems()) lastFeedSig = "";
     const sig = feedSignature();
     if (sig === lastFeedSig) {
       paintFeedBar();
@@ -816,7 +875,7 @@
   function bindBroadcastChannel() {
     if (typeof BroadcastChannel !== "function") return;
     try {
-      state.bc = new BroadcastChannel("devtools-lanboard-v1");
+      state.bc = new BroadcastChannel(BC_NAME);
       state.bc.onmessage = (ev) => {
         const msg = ev?.data;
         if (!shouldAcceptMqtt(msg)) return;
@@ -1030,7 +1089,8 @@
   }
 
   function sendSnapshotTo(to, via) {
-    const texts = [...state.items.values()].filter((it) => it.kind === "text");
+    pruneStaleTextItems();
+    const texts = [...state.items.values()].filter((it) => it.kind === "text" && textItemFresh(it));
     const media = [...state.items.values()]
       .filter((it) => it.kind !== "text")
       .map((it) => ({
@@ -1067,7 +1127,9 @@
       // 空房已清：忽略迟到的旧快照，避免把残留又灌回来
       return;
     }
-    (msg.texts || []).forEach((it) => upsertItem(it, { paint: false, persist: false }));
+    (msg.texts || []).forEach((it) => {
+      if (textItemFresh(it)) upsertItem(it, { paint: false, persist: false });
+    });
     (msg.media || []).forEach((it) => upsertItem(it, { paint: false, persist: false }));
     persistItems();
     paintFeed();
@@ -1305,7 +1367,7 @@
     if (els.selDownload) {
       els.selDownload.disabled = bulkDownloading || n < 1;
       els.selDownload.textContent =
-        n > 1 ? `打包下载（${n}）` : n === 1 ? "下载已选" : "下载已选";
+        n > 1 ? `逐个下载（${n}）` : n === 1 ? "下载已选" : "下载已选";
     }
   }
 
@@ -1331,7 +1393,7 @@
     bumpFeedPaint();
   }
 
-  function uniqueZipName(name, used) {
+  function uniqueDownloadName(name, used) {
     const raw = String(name || "download").replace(/[\\/:*?"<>|]+/g, "_").trim() || "download";
     if (!used.has(raw)) {
       used.add(raw);
@@ -1350,32 +1412,6 @@
     return next;
   }
 
-  async function ensureJsZip() {
-    if (typeof globalThis.JSZip === "function") return globalThis.JSZip;
-    if (typeof window.DevToolsLazy?.loadVendor === "function") {
-      await window.DevToolsLazy.loadVendor("jszip");
-    } else {
-      await new Promise((resolve, reject) => {
-        const existing = document.querySelector('script[src*="jszip"]');
-        if (existing) {
-          existing.addEventListener("load", () => resolve(), { once: true });
-          existing.addEventListener("error", () => reject(new Error("JSZip 加载失败")), { once: true });
-          if (typeof globalThis.JSZip === "function") resolve();
-          return;
-        }
-        const s = document.createElement("script");
-        const v = window.TOOLS_BUILD || window.TOOLS_VERSION || "";
-        s.src = `./vendor/jszip.min.js${v ? `?v=${v}` : ""}`;
-        s.async = true;
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error("JSZip 加载失败"));
-        document.head.appendChild(s);
-      });
-    }
-    if (typeof globalThis.JSZip !== "function") throw new Error("JSZip 未加载");
-    return globalThis.JSZip;
-  }
-
   function triggerBlobDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1385,6 +1421,10 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+
+  function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
   }
 
   function markDownloadUi(id, it) {
@@ -1404,6 +1444,7 @@
     return true;
   }
 
+  /** 多选：串行逐个触发下载（进系统下载目录；网页无法直接写相册） */
   async function downloadSelectedItems() {
     if (bulkDownloading) {
       notifyToast("正在批量下载");
@@ -1427,11 +1468,11 @@
 
     bulkDownloading = true;
     paintFeedBar();
-    const entries = [];
     const usedNames = new Set();
+    let ok = 0;
     let fail = 0;
     try {
-      notifyToast(`开始打包 ${ids.length} 个文件…`);
+      notifyToast(`开始逐个下载 ${ids.length} 个文件…`);
       for (let i = 0; i < ids.length; i++) {
         const id = ids[i];
         const it = state.items.get(id);
@@ -1441,7 +1482,7 @@
           continue;
         }
         if (els.selCount) {
-          els.selCount.textContent = `打包中 ${i + 1}/${ids.length} · ${it.name || "文件"}`;
+          els.selCount.textContent = `下载中 ${i + 1}/${ids.length} · ${it.name || "文件"}`;
         }
         const ownedUi = markDownloadUi(id, it);
         if (ownedUi) bumpFeedPaint();
@@ -1458,29 +1499,21 @@
             fail += 1;
             continue;
           }
-          entries.push({ name: uniqueZipName(it.name || `file-${id}`, usedNames), blob });
+          triggerBlobDownload(blob, uniqueDownloadName(it.name || `file-${id}`, usedNames));
+          ok += 1;
+          selectedDlIds.delete(id);
+          if (i < ids.length - 1) await sleep(BULK_DL_GAP_MS);
         } catch {
           fail += 1;
         } finally {
-          // 只清自己占的 UI 态，避免误删并行单条下载的排队/进行中标记
           if (ownedUi) dlUiState.delete(id);
           bumpFeedPaint();
         }
       }
-      if (!entries.length) throw new Error(fail ? "所选文件均无法下载" : "没有可打包的文件");
-      await ensureJsZip();
-      const zip = new globalThis.JSZip();
-      for (const e of entries) zip.file(e.name, e.blob);
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      const stamp = new Date();
-      const pad = (n) => String(n).padStart(2, "0");
-      const zipName = `lanboard-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.zip`;
-      triggerBlobDownload(zipBlob, zipName);
       selectedDlIds.clear();
+      if (!ok && fail) throw new Error("所选文件均无法下载");
       notifyToast(
-        fail
-          ? `已打包 ${entries.length} 个（${fail} 个失败）`
-          : `已打包下载 ${entries.length} 个文件`
+        fail ? `已触发下载 ${ok} 个（${fail} 个失败）` : `已逐个下载 ${ok} 个文件`
       );
     } catch (e) {
       notifyToast(e?.message || "批量下载失败");
@@ -1855,7 +1888,7 @@
       return;
     }
     if (bulkDownloading) {
-      notifyToast("正在批量打包，请稍候");
+      notifyToast("正在逐个下载，请稍候");
       return;
     }
     const ownedUi = markDownloadUi(id, it);
@@ -2288,6 +2321,7 @@
         setError(e?.message || "批量下载失败");
       });
     });
+    els.clearFeed?.addEventListener("click", () => clearFeedNow());
   }
 
   async function boot() {

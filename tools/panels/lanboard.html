@@ -29,12 +29,13 @@
             <input id="lb-file-input" type="file" accept="image/*,video/*" multiple hidden />
             <label class="secondary-btn file-btn" for="lb-any-file-input">发送任意文件</label>
             <input id="lb-any-file-input" type="file" accept="*/*" multiple hidden />
+            <button type="button" class="ghost-btn" id="lb-clear-feed" title="清空本机列表并广播清房（避免旧帖/冒烟残留）">清空列表</button>
             <span class="hint tight" id="lb-file-hint"></span>
           </div>
           <ol class="lb-steps hint tight" id="lb-empty-steps">
             <li>双方打开本页（自动进大厅）</li>
             <li>输入文字点「发送」；选图/视频/任意文件后会自动发出（也可拖到此处）</li>
-            <li>对方列表立刻出现；全员离开后大厅自动清空</li>
+            <li>对方列表立刻出现；全员离开后大厅自动清空；也可点「清空列表」</li>
           </ol>
         </div>
 
@@ -42,7 +43,7 @@
           <span class="hint tight" id="lb-sel-count">已选 0</span>
           <div class="btn-row lb-feed-bar-actions">
             <button type="button" class="ghost-btn" id="lb-sel-all">全选可下载</button>
-            <button type="button" class="ghost-btn" id="lb-sel-clear" disabled>清空</button>
+            <button type="button" class="ghost-btn" id="lb-sel-clear" disabled>取消勾选</button>
             <button type="button" class="secondary-btn" id="lb-sel-download" disabled>下载已选</button>
           </div>
         </div>
@@ -64,7 +65,7 @@
         </details>
 
         <p class="hint tight" style="margin-top:0.75rem">
-          隐私：短文字可能经公共信令同步以便进场；大文件走 WebRTC 直连。敏感内容优先同 WiFi 直连；有桥时暂存仅在本机，全员离开即清。
+          隐私：短文字可能经公共信令同步以便进场（文字约 3 小时过期）；大文件走 WebRTC 直连。敏感内容优先同 WiFi 直连；有桥时暂存仅在本机，全员离开即清。
           需要加密房间互传请用 <a href="#lanshare">局域网互传</a>。
         </p>
       </div>

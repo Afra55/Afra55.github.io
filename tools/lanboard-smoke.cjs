@@ -76,13 +76,16 @@ function staticCheck() {
   assert(html.includes('id="lb-preview-dlg"'), "缺少媒体预览弹层");
   assert(js.includes("openPreview") && js.includes("closePreview"), "缺少预览打开/关闭逻辑");
   assert(html.includes('id="lb-feed-bar"') && html.includes('id="lb-sel-download"'), "缺少多选下载工具条");
+  assert(html.includes('id="lb-clear-feed"'), "缺少清空列表按钮");
   assert(js.includes("downloadSelectedItems") && js.includes("selectedDlIds"), "缺少多选下载逻辑");
-  assert(js.includes("ensureJsZip") && js.includes("打包下载"), "多选≥2须 ZIP 打包");
-  assert(js.includes("uniqueZipName"), "ZIP 内重名须去重");
+  assert(js.includes("逐个下载") && js.includes("BULK_DL_GAP_MS") && js.includes("uniqueDownloadName"), "多选≥2须串行逐个下载");
+  assert(!js.includes("ensureJsZip") && !js.includes("打包下载"), "多选不得再走 ZIP 打包主路径");
+  assert(js.includes("resolveLobbySlug") && js.includes("TEXT_ITEM_MAX_AGE_MS"), "须支持隔离房间与文字过期");
+  assert(js.includes("clearFeedNow") && js.includes("pruneStaleTextItems"), "须支持清空列表与过期文字清理");
   assert(js.includes("markDownloadUi") && js.includes("ownedUi"), "批量下载不得误清单条 dlUiState");
   assert(/let lastFeedSig[\s\S]*?selectedDlIds[\s\S]*?function paintFeed/.test(js), "selectedDlIds 须在 paintFeed 前初始化");
   {
-    function uniqueZipName(name, used) {
+    function uniqueDownloadName(name, used) {
       const raw = String(name || "download").replace(/[\\/:*?"<>|]+/g, "_").trim() || "download";
       if (!used.has(raw)) {
         used.add(raw);
@@ -101,9 +104,9 @@ function staticCheck() {
       return next;
     }
     const used = new Set();
-    assert(uniqueZipName("a.png", used) === "a.png", "首个文件名原样保留");
-    assert(uniqueZipName("a.png", used) === "a-2.png", "重名须加 -2");
-    assert(uniqueZipName("a/b:c?.png", used) === "a_b_c_.png", "非法文件名字符须替换");
+    assert(uniqueDownloadName("a.png", used) === "a.png", "首个文件名原样保留");
+    assert(uniqueDownloadName("a.png", used) === "a-2.png", "重名须加 -2");
+    assert(uniqueDownloadName("a/b:c?.png", used) === "a_b_c_.png", "非法文件名字符须替换");
   }
   const css = fs.readFileSync(path.join(toolsRoot, "styles/panels/lanboard.css"), "utf8");
   assert(css.includes(".lb-preview-dlg") && css.includes("object-fit: contain"), "预览弹层须 contain");
@@ -173,7 +176,9 @@ async function browserFlow() {
   try {
     const pageA = await browser.newPage();
     const pageB = await browser.newPage();
-    const url = BASE.replace(/\/?$/, "/") + "#lanboard";
+    // 隔离房间：禁止冒烟帖灌进公共大厅（真实用户会看到 smoke-…）
+    const room = `smoke-${Date.now().toString(36)}`;
+    const url = BASE.replace(/\/?$/, "/") + `#lanboard?room=${room}`;
 
     pageA.setDefaultTimeout(60000);
     pageB.setDefaultTimeout(60000);

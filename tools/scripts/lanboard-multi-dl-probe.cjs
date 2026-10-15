@@ -105,7 +105,8 @@ async function main() {
   };
 
   try {
-    await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#lanboard`, {
+    const room = `probe-${Date.now().toString(36)}`;
+    await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#lanboard?room=${room}`, {
       waitUntil: "networkidle0",
       timeout: 120000,
     });
@@ -173,10 +174,10 @@ async function main() {
       dlDisabled: document.getElementById("lb-sel-download")?.disabled,
     }));
     check("select-all", afterAll.checked >= 3 && afterAll.dlDisabled === false, JSON.stringify(afterAll));
-    check("label-pack", /打包下载（\d+）/.test(afterAll.dlLabel), afterAll.dlLabel);
+    check("label-seq", /逐个下载（\d+）/.test(afterAll.dlLabel), afterAll.dlLabel);
 
-    // 拦截 <a download> 点击，捕获 zip blob
-    const zipMeta = await page.evaluate(async () => {
+    // 拦截 <a download>：应串行触发多个单文件，而非 zip
+    const dlMeta = await page.evaluate(async () => {
       const clicks = [];
       const origClick = HTMLAnchorElement.prototype.click;
       HTMLAnchorElement.prototype.click = function patched() {
@@ -185,25 +186,15 @@ async function main() {
           hrefType: String(this.href || "").slice(0, 12),
           hasBlob: String(this.href || "").startsWith("blob:"),
         });
-        // 不真正导航/下载
       };
       try {
         document.getElementById("lb-sel-download")?.click();
         const t0 = Date.now();
-        while (Date.now() - t0 < 45000) {
-          if (clicks.length) break;
-          await new Promise((r) => setTimeout(r, 100));
-        }
-        // 等按钮恢复
-        const t1 = Date.now();
-        while (Date.now() - t1 < 45000) {
+        while (Date.now() - t0 < 60000) {
+          const count = document.getElementById("lb-sel-count")?.textContent || "";
           const btn = document.getElementById("lb-sel-download");
-          if (btn && !btn.disabled && !/下载中/.test(document.getElementById("lb-sel-count")?.textContent || "")) {
-            // 可能已清空选择 → disabled
-            const count = document.getElementById("lb-sel-count")?.textContent || "";
-            if (/已选 0/.test(count) || btn.disabled) break;
-          }
-          if (clicks.length && /已选 0/.test(document.getElementById("lb-sel-count")?.textContent || "")) break;
+          if (clicks.length >= 3 && (/已选 0/.test(count) || btn?.disabled)) break;
+          if (/已选 0/.test(count) && clicks.length >= 1) break;
           await new Promise((r) => setTimeout(r, 120));
         }
         return {
@@ -215,12 +206,12 @@ async function main() {
         HTMLAnchorElement.prototype.click = origClick;
       }
     });
-    const zipClick = zipMeta.clicks.find((c) => /\.zip$/i.test(c.download) && c.hasBlob);
-    check("zip.download-triggered", Boolean(zipClick), JSON.stringify(zipMeta.clicks));
-    check("zip.name", Boolean(zipClick && /^lanboard-\d{8}-\d{4}\.zip$/.test(zipClick.download)), zipClick?.download || "");
-    check("selection.cleared", zipMeta.checked === 0 || /已选 0/.test(zipMeta.countText), JSON.stringify(zipMeta));
+    const fileClicks = dlMeta.clicks.filter((c) => c.hasBlob && !/\.zip$/i.test(c.download));
+    check("seq.download-count", fileClicks.length >= 3, JSON.stringify(dlMeta.clicks));
+    check("seq.no-zip", !dlMeta.clicks.some((c) => /\.zip$/i.test(c.download)), JSON.stringify(dlMeta.clicks));
+    check("selection.cleared", dlMeta.checked === 0 || /已选 0/.test(dlMeta.countText), JSON.stringify(dlMeta));
 
-    // 清空后再勾 1 个 → 文案应为「下载已选」非打包
+    // 再勾 1 个 → 文案应为「下载已选」
     await page.evaluate(() => {
       const box = document.querySelector("#lb-feed .lb-select");
       if (box && !box.checked) {
@@ -235,7 +226,7 @@ async function main() {
     check("single-label", one.label === "下载已选" && one.disabled === false, JSON.stringify(one));
 
     const failed = rows.filter((r) => !r.ok);
-    const out = { ok: failed.length === 0, failed: failed.map((f) => f.id), rows, zipMeta };
+    const out = { ok: failed.length === 0, failed: failed.map((f) => f.id), rows, dlMeta };
     fs.mkdirSync(path.dirname(OUT), { recursive: true });
     fs.writeFileSync(OUT, JSON.stringify(out, null, 2));
     console.log("\n==== LANBOARD MULTI-DL PROBE ====");
