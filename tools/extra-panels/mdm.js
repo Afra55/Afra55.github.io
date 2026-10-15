@@ -4038,10 +4038,10 @@
     }
 
     // ---- import ----
-    // 文档入库：md/txt 直读；其余优先本机桥 Docling（OCR），无桥回退浏览器
+    // 文档入库：md/txt 直读；其余优先 MinerU（质量），未装则 Docling，无桥浏览器回退
     const IMPORT_EXT_RE = /\.(md|markdown|txt|text|html?|docx|pdf|pptx|xlsx|png|jpe?g|webp|tiff?|bmp)$/i;
     const BRIDGE_CONVERT_RE = /\.(pdf|docx|pptx|xlsx|html?|png|jpe?g|webp|tiff?|bmp)$/i;
-    const IMPORT_HINT = ".md / .txt / .html / .docx / .pdf / .pptx / .xlsx（扫描 PDF/图片需本机桥 Docling OCR）";
+    const IMPORT_HINT = ".md / .txt / .html / .docx / .pdf / .pptx / .xlsx（扫描 PDF/图片需本机桥 MinerU 或 Docling OCR）";
 
     function isLegacyWordDoc(f) {
       const name = String(f?.name || "");
@@ -4114,25 +4114,38 @@
       return pdfjs;
     }
 
+    let mineruHealthCache = { t: 0, data: null };
     let doclingHealthCache = { t: 0, data: null };
+
+    async function probeEngineHealth(mount, key) {
+      try {
+        const res = await fetch(`${baseUrl()}/${mount}/health`, { method: "GET", cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        return {
+          bridge: true,
+          ready: !!(res.ok && data?.ok && data?.[key]?.ok),
+          error: data?.[key]?.error || data?.error || "",
+          mount,
+        };
+      } catch (_) {
+        return { bridge: false, ready: false, error: "本机桥未启动", mount };
+      }
+    }
+
+    async function probeMineruHealth() {
+      const now = Date.now();
+      if (mineruHealthCache.data && now - mineruHealthCache.t < 20000) return mineruHealthCache.data;
+      const out = await probeEngineHealth("mineru", "mineru");
+      mineruHealthCache = { t: now, data: out };
+      return out;
+    }
+
     async function probeDoclingHealth() {
       const now = Date.now();
       if (doclingHealthCache.data && now - doclingHealthCache.t < 20000) return doclingHealthCache.data;
-      try {
-        const res = await fetch(`${baseUrl()}/docling/health`, { method: "GET", cache: "no-store" });
-        const data = await res.json().catch(() => null);
-        const out = {
-          bridge: true,
-          ready: !!(res.ok && data?.ok && data?.docling?.ok),
-          error: data?.docling?.error || data?.error || "",
-        };
-        doclingHealthCache = { t: now, data: out };
-        return out;
-      } catch (_) {
-        const out = { bridge: false, ready: false, error: "本机桥未启动" };
-        doclingHealthCache = { t: now, data: out };
-        return out;
-      }
+      const out = await probeEngineHealth("docling", "docling");
+      doclingHealthCache = { t: now, data: out };
+      return out;
     }
 
     function fileToBase64(file) {
@@ -4148,12 +4161,16 @@
       });
     }
 
-    async function convertViaDocling(file, { forceOcr = false, signal, onStage } = {}) {
+    async function convertViaBridge(mount, label, file, { forceOcr = false, signal, onStage } = {}) {
       onStage?.("上传桥…");
       const dataBase64 = await fileToBase64(file);
       if (signal?.aborted) throw new Error("已取消");
-      onStage?.("Docling 转换中（含 OCR，大文件可能需数分钟）…");
-      const res = await fetch(`${baseUrl()}/docling/convert`, {
+      onStage?.(
+        mount === "mineru"
+          ? "MinerU 转换中（质量优先，大文件/首次下模型可能需数分钟）…"
+          : `${label} 转换中（含 OCR，大文件可能需数分钟）…`
+      );
+      const res = await fetch(`${baseUrl()}/${mount}/convert`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4173,17 +4190,35 @@
         throw new Error(msg);
       }
       const md = String(data.markdown || "").trim();
-      if (!md) throw new Error("Docling 输出为空");
-      return { text: md, via: "docling" };
+      if (!md) throw new Error(`${label} 输出为空`);
+      return { text: md, via: mount };
     }
 
-    async function runDoclingInstall(onProgress) {
+    async function convertViaMineru(file, opts) {
+      return convertViaBridge("mineru", "MinerU", file, opts);
+    }
+
+    async function convertViaDocling(file, opts) {
+      return convertViaBridge("docling", "Docling", file, opts);
+    }
+
+    async function runBridgeInstall(mount, label, onProgress) {
       const t0 = Date.now();
+      const tip =
+        mount === "mineru"
+          ? `正在安装 MinerU（建议 GPU；体积较大，已用时 ${Math.round((Date.now() - t0) / 1000)} 秒）…`
+          : `正在安装 Docling（约 1–2GB，已用时 ${Math.round((Date.now() - t0) / 1000)} 秒）…`;
       const tick = setInterval(() => {
-        onProgress?.(`正在安装 Docling（约 1–2GB，已用时 ${Math.round((Date.now() - t0) / 1000)} 秒）…`);
+        const sec = Math.round((Date.now() - t0) / 1000);
+        onProgress?.(
+          mount === "mineru"
+            ? `正在安装 MinerU（建议 GPU；体积较大，已用时 ${sec} 秒）…`
+            : `正在安装 Docling（约 1–2GB，已用时 ${sec} 秒）…`
+        );
       }, 1000);
+      onProgress?.(tip);
       try {
-        const res = await fetch(`${baseUrl()}/docling/install`, {
+        const res = await fetch(`${baseUrl()}/${mount}/install`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -4195,17 +4230,28 @@
         const data = await res.json().catch(() => null);
         if (!data?.ok) throw new Error(data?.error || "安装请求失败");
         if (data.installed) {
+          mineruHealthCache = { t: 0, data: null };
           doclingHealthCache = { t: 0, data: null };
           return true;
         }
-        if (data.needsManual) throw new Error(`请手动安装：${data.command || 'pip install "docling[rapidocr]"'}`);
+        const fallbackCmd =
+          mount === "mineru" ? 'pip install -U "mineru[full]"' : 'pip install "docling[rapidocr]"';
+        if (data.needsManual) throw new Error(`请手动安装：${data.command || fallbackCmd}`);
         throw new Error(data.message || data.output || "安装未完成");
       } finally {
         clearInterval(tick);
       }
     }
 
-    /** 浏览器路径（无桥 / Docling 未装 / 桥失败时的回退） */
+    async function runMineruInstall(onProgress) {
+      return runBridgeInstall("mineru", "MinerU", onProgress);
+    }
+
+    async function runDoclingInstall(onProgress) {
+      return runBridgeInstall("docling", "Docling", onProgress);
+    }
+
+    /** 浏览器路径（无桥 / 引擎未装 / 桥失败时的回退） */
     async function fileToMarkdownBrowser(file, { onStage } = {}) {
       const name = String(file.name || "");
       const type = String(file.type || "");
@@ -4256,22 +4302,31 @@
         const body = parts.join("\n\n").trim();
         if (!body) {
           throw new Error(
-            "PDF 无可提取文本（可能是扫描件）。请启动本机桥并安装 Docling 以启用 OCR：pip install \"docling[rapidocr]\""
+            'PDF 无可提取文本（可能是扫描件）。请启动本机桥并安装 MinerU（建议 GPU）：pip install -U "mineru[full]"；无 GPU 可装 Docling：pip install "docling[rapidocr]"'
           );
         }
         return body;
       }
       if (/\.(pptx|xlsx)$/i.test(name) || /officedocument\.(presentationml|spreadsheetml)/i.test(type)) {
-        throw new Error("PPTX/XLSX 需本机桥 Docling（启动桥后可一键安装）");
+        throw new Error("PPTX/XLSX 需本机桥 MinerU 或 Docling（启动桥后可一键安装）");
       }
       if (/\.(png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type)) {
-        throw new Error("图片 OCR 需本机桥 Docling（启动桥后可一键安装）");
+        throw new Error("图片 OCR 需本机桥 MinerU 或 Docling（启动桥后可一键安装）");
       }
       throw new Error("不支持的格式");
     }
 
+    function canBrowserFallback(name, type) {
+      return (
+        /\.(pdf|docx|html?)$/i.test(name) ||
+        type === "application/pdf" ||
+        type === "text/html" ||
+        /wordprocessingml/i.test(type)
+      );
+    }
+
     /**
-     * 转成 Markdown：可转换格式优先 Docling 桥；失败/未装则回退浏览器（并带提示）。
+     * 转成 Markdown：优先 MinerU → Docling → 浏览器。
      * opts.onStage(msg) / opts.signal / opts.allowInstall
      */
     async function fileToMarkdown(file, opts = {}) {
@@ -4292,50 +4347,91 @@
       }
 
       if (wantsBridgeConvert(file)) {
-        const health = await probeDoclingHealth();
-        if (health.ready) {
+        const forceOcr = /\.(pdf|png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type);
+        const [mineruH, doclingH] = await Promise.all([probeMineruHealth(), probeDoclingHealth()]);
+        const bridgeUp = !!(mineruH.bridge || doclingH.bridge);
+
+        async function tryEngine(convertFn, label) {
           try {
-            const forceOcr = /\.(pdf|png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type);
-            const r = await convertViaDocling(file, { forceOcr, signal, onStage });
+            const r = await convertFn(file, { forceOcr, signal, onStage });
             return r.text;
           } catch (err) {
             if (signal?.aborted || /已取消|AbortError/i.test(String(err?.message || err?.name || ""))) {
               throw new Error("已取消");
             }
+            throw err;
+          }
+        }
+
+        if (mineruH.ready) {
+          try {
+            return await tryEngine(convertViaMineru, "MinerU");
+          } catch (err) {
             const msg = String(err?.message || err);
-            // 未安装：可选一键装（仅当导入流程允许）
+            if (/已取消/i.test(msg)) throw err;
+            if (doclingH.ready) {
+              onStage?.(`MinerU 失败，改用 Docling：${msg.slice(0, 60)}`);
+              try {
+                return await tryEngine(convertViaDocling, "Docling");
+              } catch (err2) {
+                const msg2 = String(err2?.message || err2);
+                if (/已取消/i.test(msg2)) throw err2;
+                if (canBrowserFallback(name, type)) {
+                  onStage?.(`桥失败，浏览器回退：${msg2.slice(0, 80)}`);
+                  return await fileToMarkdownBrowser(file, { onStage });
+                }
+                throw err2;
+              }
+            }
             if (
               opts.allowInstall !== false &&
-              /未找到 Docling|未安装|No module named|pip install/i.test(msg)
+              /未找到 MinerU|未安装|No module named|pip install/i.test(msg)
             ) {
-              onStage?.("Docling 未安装，可一键安装…");
-              throw Object.assign(new Error(msg), { code: "DOCLING_MISSING" });
+              throw Object.assign(new Error(msg), { code: "MINERU_MISSING" });
             }
-            // PDF/DOCX/HTML 可回退；PPTX/XLSX/图片不能
-            if (
-              /\.(pdf|docx|html?)$/i.test(name) ||
-              type === "application/pdf" ||
-              type === "text/html" ||
-              /wordprocessingml/i.test(type)
-            ) {
-              onStage?.(`桥失败，浏览器回退：${msg.slice(0, 80)}`);
+            if (canBrowserFallback(name, type)) {
+              onStage?.(`MinerU 失败，浏览器回退：${msg.slice(0, 80)}`);
               return await fileToMarkdownBrowser(file, { onStage });
             }
             throw err;
           }
         }
-        if (health.bridge && !health.ready) {
-          // 桥在、Docling 未装
+
+        if (doclingH.ready) {
+          try {
+            onStage?.("MinerU 未就绪，使用 Docling 回退…");
+            return await tryEngine(convertViaDocling, "Docling");
+          } catch (err) {
+            const msg = String(err?.message || err);
+            if (/已取消/i.test(msg)) throw err;
+            if (
+              opts.allowInstall !== false &&
+              /未找到 Docling|未安装|No module named|pip install/i.test(msg)
+            ) {
+              throw Object.assign(new Error(msg), { code: "ENGINE_MISSING" });
+            }
+            if (canBrowserFallback(name, type)) {
+              onStage?.(`Docling 失败，浏览器回退：${msg.slice(0, 80)}`);
+              return await fileToMarkdownBrowser(file, { onStage });
+            }
+            throw err;
+          }
+        }
+
+        if (bridgeUp) {
+          // 桥在、两引擎都未装：优先引导装 MinerU
           if (
             opts.allowInstall !== false &&
             (/\.(pdf|pptx|xlsx|png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type))
           ) {
-            throw Object.assign(new Error(health.error || "未安装 Docling"), { code: "DOCLING_MISSING" });
+            throw Object.assign(new Error(mineruH.error || doclingH.error || "未安装文档转换引擎"), {
+              code: "MINERU_MISSING",
+            });
           }
-          onStage?.("Docling 未就绪，浏览器回退（扫描件无 OCR）…");
+          onStage?.("文档引擎未就绪，浏览器回退（扫描件无 OCR）…");
           return await fileToMarkdownBrowser(file, { onStage });
         }
-        // 无桥
+
         onStage?.("本机桥未启动，浏览器回退（扫描件无 OCR）…");
         return await fileToMarkdownBrowser(file, { onStage });
       }
@@ -4426,7 +4522,7 @@
       const failMsgs = [];
       for (const f of legacy) failMsgs.push(`${f.name}：不支持旧版 .doc`);
 
-      // 串行队列：Docling/OCR 吃内存与 CPU，并发易打爆；单文件失败不影响其它
+      // 串行队列：MinerU/Docling OCR 吃内存与 GPU/CPU，并发易打爆；单文件失败不影响其它
       let prog = openImportProgress(list.length);
       let offeredInstall = false;
 
@@ -4497,31 +4593,67 @@
           });
           await ingestMarkdownText(f, text);
         } catch (err) {
-          if (err?.code === "DOCLING_MISSING" && !offeredInstall) {
+          if (
+            (err?.code === "MINERU_MISSING" || err?.code === "ENGINE_MISSING" || err?.code === "DOCLING_MISSING") &&
+            !offeredInstall
+          ) {
             offeredInstall = true;
             prog?.close();
+            const preferMineru = err?.code !== "DOCLING_MISSING";
             const okInstall = await confirmModal({
-              title: "安装 Docling（OCR）",
-              body:
-                "扫描 PDF / 图片 OCR 需要本机 Docling（IBM 开源，约 1–2GB，含 RapidOCR，无 GPU 也可）。\n\n现在用本机桥自动 pip 安装？装完会继续导入。",
+              title: preferMineru ? "安装 MinerU（高质量 OCR）" : "安装 Docling（OCR）",
+              body: preferMineru
+                ? "扫描 PDF / 表 / 公式 / 中文建议用 MinerU（OpenDataLab，质量优先）。\n建议 NVIDIA GPU + CUDA；无 GPU 也能装但较慢。\n\n现在用本机桥自动 pip 安装 mineru[full]？装完会继续导入。\n（若只想 CPU 轻量方案，可取消后改装 Docling。）"
+                : "扫描 PDF / 图片 OCR 可用 Docling（IBM 开源，约 1–2GB，含 RapidOCR，无 GPU 也可）。\n\n现在用本机桥自动 pip 安装？装完会继续导入。",
               okText: "自动安装",
             });
             if (okInstall) {
               prog = openImportProgress(list.length);
               try {
-                await runDoclingInstall((s) =>
-                  prog.update({ index: i + 1, total: list.length, name: f.name, stage: s, pct: 5 })
-                );
-                toast("Docling 已安装，继续导入…");
+                if (preferMineru) {
+                  await runMineruInstall((s) =>
+                    prog.update({ index: i + 1, total: list.length, name: f.name, stage: s, pct: 5 })
+                  );
+                  toast("MinerU 已安装，继续导入…");
+                } else {
+                  await runDoclingInstall((s) =>
+                    prog.update({ index: i + 1, total: list.length, name: f.name, stage: s, pct: 5 })
+                  );
+                  toast("Docling 已安装，继续导入…");
+                }
                 i -= 1;
                 continue;
               } catch (instErr) {
-                failMsgs.push(`Docling 安装失败：${instErr.message || instErr}`);
-                prog.log(`Docling 安装失败，后续走浏览器回退`, "err");
+                const eng = preferMineru ? "MinerU" : "Docling";
+                failMsgs.push(`${eng} 安装失败：${instErr.message || instErr}`);
+                prog.log(`${eng} 安装失败，后续走浏览器回退`, "err");
+                // MinerU 装失败时再问一次 Docling
+                if (preferMineru) {
+                  prog?.close();
+                  const okDoc = await confirmModal({
+                    title: "改装 Docling（CPU 回退）？",
+                    body: "MinerU 安装未完成。是否改装 Docling（无 GPU 也可，质量略逊）？",
+                    okText: "安装 Docling",
+                  });
+                  prog = openImportProgress(list.length);
+                  if (okDoc) {
+                    try {
+                      await runDoclingInstall((s) =>
+                        prog.update({ index: i + 1, total: list.length, name: f.name, stage: s, pct: 5 })
+                      );
+                      toast("Docling 已安装，继续导入…");
+                      i -= 1;
+                      continue;
+                    } catch (instErr2) {
+                      failMsgs.push(`Docling 安装失败：${instErr2.message || instErr2}`);
+                      prog.log(`Docling 安装失败，后续走浏览器回退`, "err");
+                    }
+                  }
+                }
               }
             } else {
               prog = openImportProgress(list.length);
-              prog.log("未安装 Docling，扫描件将无 OCR", "warn");
+              prog.log("未安装文档引擎，扫描件将无 OCR", "warn");
             }
             // 当前文件：尽量浏览器回退
             try {

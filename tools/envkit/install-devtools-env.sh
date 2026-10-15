@@ -355,7 +355,7 @@ install_gifski_vendor() {
 sync_bridges() {
   say ""
   say "== 同步本机桥文件 → ${BRIDGE_DIR} =="
-  mkdir -p "$BRIDGE_DIR/adb-bridge" "$BRIDGE_DIR/ffmpeg-bridge" "$BRIDGE_DIR/git-bridge" "$BRIDGE_DIR/fileunlock-bridge" "$BRIDGE_DIR/pandoc-bridge" "$BRIDGE_DIR/docling-bridge" "$BRIDGE_DIR/lanboard-bridge"
+  mkdir -p "$BRIDGE_DIR/adb-bridge" "$BRIDGE_DIR/ffmpeg-bridge" "$BRIDGE_DIR/git-bridge" "$BRIDGE_DIR/fileunlock-bridge" "$BRIDGE_DIR/pandoc-bridge" "$BRIDGE_DIR/docling-bridge" "$BRIDGE_DIR/mineru-bridge" "$BRIDGE_DIR/lanboard-bridge"
 
   # ADB 统一桥核心文件
   local adb_files=(server.js resolve-port.js scrcpy-mirror.js scrcpy-ctrl.js device-inspect.js)
@@ -393,7 +393,13 @@ sync_bridges() {
     download_file "${BASE_URL}/pandoc-bridge/$f" "$BRIDGE_DIR/pandoc-bridge/$f" || warn "下载失败 $f"
   done
 
-  # Docling 高质量文档→MD + OCR（可选；需本机 pip install docling）
+  # MinerU 高质量文档→MD（质量主力；建议 GPU：pip install mineru[full]）
+  for f in server.js mineru-ops.js; do
+    info "mineru-bridge/$f"
+    download_file "${BASE_URL}/mineru-bridge/$f" "$BRIDGE_DIR/mineru-bridge/$f" || warn "下载失败 $f"
+  done
+
+  # Docling 文档→MD + OCR（无 GPU / 未装 MinerU 时回退）
   for f in server.js docling-ops.js; do
     info "docling-bridge/$f"
     download_file "${BASE_URL}/docling-bridge/$f" "$BRIDGE_DIR/docling-bridge/$f" || warn "下载失败 $f"
@@ -423,6 +429,8 @@ sync_bridges() {
     "$BRIDGE_DIR/fileunlock-bridge/lock-ops.js" \
     "$BRIDGE_DIR/pandoc-bridge/server.js" \
     "$BRIDGE_DIR/pandoc-bridge/pandoc-ops.js" \
+    "$BRIDGE_DIR/mineru-bridge/server.js" \
+    "$BRIDGE_DIR/mineru-bridge/mineru-ops.js" \
     "$BRIDGE_DIR/docling-bridge/server.js" \
     "$BRIDGE_DIR/docling-bridge/docling-ops.js" \
     "$BRIDGE_DIR/lanboard-bridge/server.js"
@@ -455,7 +463,7 @@ DevTools 桥目录：${BRIDGE_DIR}
 只需启动一座统一桥：
   运行 adb-bridge/start-*
   地址 http://127.0.0.1:17888  Token: devtools-bridge
-  API：/ff · /ytdlp · /git
+  API：/ff · /ytdlp · /git · /unlock · /pandoc · /mineru · /docling · /lanboard
 
 （ffmpeg-bridge / git-bridge 目录是统一桥的嵌套模块，请勿单独启动。）
 

@@ -223,6 +223,8 @@ async function main() {
     if (health2.json?.ffmpegMount !== "/ff") throw new Error("expected ffmpegMount /ff");
     if (health2.json?.gitMount !== "/git") throw new Error("expected gitMount /git");
     if (health2.json?.doclingMount !== "/docling") throw new Error("expected doclingMount /docling");
+    if (health2.json?.mineruMount !== "/mineru") throw new Error("expected mineruMount /mineru");
+    if (!features.includes("mineru-mount")) throw new Error("health missing feature: mineru-mount");
     if (!health2.json?.capabilities?.git) throw new Error("expected capabilities.git");
     if (health2.json?.capabilities?.everything || health2.json?.everythingMount) {
       throw new Error("everything capability/mount should be removed");

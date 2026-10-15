@@ -246,8 +246,14 @@ if not exist "%SCRIPT_DIR%pandoc-bridge\server.js" (
 
 if not exist "%SCRIPT_DIR%docling-bridge\server.js" (
   if not exist "%SCRIPT_DIR%..\docling-bridge\server.js" (
-    echo [WARN] docling-bridge/server.js not found - Docling OCR import disabled until full ZIP is used.
+    echo [WARN] docling-bridge/server.js not found - Docling OCR fallback disabled until full ZIP is used.
     echo [WARN] missing docling-bridge>> "%LOG_FILE%"
+  )
+)
+if not exist "%SCRIPT_DIR%mineru-bridge\server.js" (
+  if not exist "%SCRIPT_DIR%..\mineru-bridge\server.js" (
+    echo [WARN] mineru-bridge/server.js not found - MinerU OCR import disabled until full ZIP is used.
+    echo [WARN] missing mineru-bridge>> "%LOG_FILE%"
   )
 )
 

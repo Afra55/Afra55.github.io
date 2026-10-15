@@ -24,7 +24,9 @@
 | `tools/extra-panels/v2g-suite-src/` | 视频/黑盒源分片（改完跑 `build-v2g-suite.cjs`） |
 | `tools/vendor/` | 浏览器第三方库 |
 | `tools/lib/oss-deps.js` | 关于页 OSS 清单（升级 vendor 后同步） |
-| `tools/adb-bridge/` | **统一本机桥**（`17888`）：ADB / FFmpeg(`/ff`) / yt-dlp(`/ytdlp`) / Git(`/git`) |
+| `tools/adb-bridge/` | **统一本机桥**（`17888`）：ADB / FFmpeg(`/ff`) / yt-dlp(`/ytdlp`) / Git(`/git`) / MinerU(`/mineru`) / Docling(`/docling`) 等 |
+| `tools/mineru-bridge/` | MinerU 高质量文档→MD（挂 `/mineru`；建议 GPU） |
+| `tools/docling-bridge/` | Docling 文档→MD 回退（挂 `/docling`；无 GPU 可用） |
 | `tools/ffmpeg-bridge/` | FFmpeg / yt-dlp 模块（由统一桥挂载；也可独立 `17889`） |
 | `tools/git-bridge/` | Git 模块（由统一桥挂载 `/git`；也可独立 `17890`） |
 | `tools/envkit/` | 一键检测/安装/升级脚本 |
@@ -45,7 +47,7 @@
 ## 本机桥（强制 · 统一桥优先）
 
 - **唯一默认入口**：`http://127.0.0.1:17888`，Token `devtools-bridge`，协议 `devtools-bridge://start`
-- 能力挂载：FFmpeg `/ff` · yt-dlp `/ytdlp` · Git `/git`；**用户只需启动一次**
+- 能力挂载：FFmpeg `/ff` · yt-dlp `/ytdlp` · Git `/git` · MinerU `/mineru` · Docling `/docling`；**用户只需启动一次**
 - 独立端口仅兼容旧包：FFmpeg `17889`、Git `17890`；**新功能不要默认新端口**
 - 面板一律：`bindBridgeLaunchUI({ kind: "unified" })`（`tools/lib/bridge-token.js`）；共用「记住解压目录 / 自动启动」
 - **连接壳**：新桥面板用 `devtoolsBridgeShell.mount`（`tools/lib/bridge-shell.js`）生成状态条/下载/目录/Token，再 `shell.bind(...)`；禁止再手抄四套连接 HTML

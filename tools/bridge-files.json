@@ -34,6 +34,8 @@
     "pandoc-bridge/pandoc-ops.js",
     "docling-bridge/server.js",
     "docling-bridge/docling-ops.js",
+    "mineru-bridge/server.js",
+    "mineru-bridge/mineru-ops.js",
     "lanboard-bridge/server.js"
   ]
 }

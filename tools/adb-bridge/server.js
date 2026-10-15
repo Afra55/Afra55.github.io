@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.55";
+const BRIDGE_VERSION = "0.9.56";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -133,6 +133,24 @@ function loadDoclingBridge() {
 const doclingBridge = loadDoclingBridge();
 if (!doclingBridge) {
   console.warn("未找到 Docling 模块（可选）：完整 ZIP 请包含 docling-bridge/server.js + docling-ops.js");
+}
+function loadMineruBridge() {
+  const candidates = [
+    path.join(__dirname, "mineru-bridge", "server.js"),
+    path.join(__dirname, "..", "mineru-bridge", "server.js"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return require(candidate);
+    } catch (err) {
+      console.warn("加载 MinerU 模块失败:", candidate, err.message || err);
+    }
+  }
+  return null;
+}
+const mineruBridge = loadMineruBridge();
+if (!mineruBridge) {
+  console.warn("未找到 MinerU 模块（可选）：完整 ZIP 请包含 mineru-bridge/server.js + mineru-ops.js");
 }
 function loadLanboardBridge() {
   const candidates = [
@@ -5322,7 +5340,7 @@ async function handleApi(req, res, url) {
       return;
     }
 
-    // 统一桥：Docling 高质量文档→MD（含 OCR）挂在 /docling/*
+    // 统一桥：Docling 文档→MD（含 OCR，无 GPU / 未装 MinerU 时回退）挂在 /docling/*
     if (url.pathname === "/docling" || url.pathname.startsWith("/docling/")) {
       if (!doclingBridge?.handleRequest) {
         sendJson(res, 503, { ok: false, error: "未找到 Docling 模块（请用完整 ZIP，含 docling-bridge）" }, origin);
@@ -5336,6 +5354,25 @@ async function handleApi(req, res, url) {
       await doclingBridge.handleRequest(req, res, {
         pathname: stripped,
         alreadyAuthed: !isDoclingHealth,
+        embedded: true,
+      });
+      return;
+    }
+
+    // 统一桥：MinerU 高质量文档→MD（质量主力，建议 GPU）挂在 /mineru/*
+    if (url.pathname === "/mineru" || url.pathname.startsWith("/mineru/")) {
+      if (!mineruBridge?.handleRequest) {
+        sendJson(res, 503, { ok: false, error: "未找到 MinerU 模块（请用完整 ZIP，含 mineru-bridge）" }, origin);
+        return;
+      }
+      const stripped = url.pathname === "/mineru" ? "/" : url.pathname.slice(7) || "/";
+      const isMineruHealth =
+        (stripped === "/health" || stripped === "/") && req.method === "GET";
+      if (!isMineruHealth && req.method !== "OPTIONS") requireToken(req);
+      wrapResWithCors(res, origin);
+      await mineruBridge.handleRequest(req, res, {
+        pathname: stripped,
+        alreadyAuthed: !isMineruHealth,
         embedded: true,
       });
       return;
@@ -5480,6 +5517,7 @@ async function handleApi(req, res, url) {
             "unlock-mount",
             "pandoc-mount",
             "docling-mount",
+            "mineru-mount",
             "lanboard-mount",
             "device-perf",
             "device-processes",
@@ -5510,11 +5548,13 @@ async function handleApi(req, res, url) {
           unlockMount: "/unlock",
           pandocMount: "/pandoc",
           doclingMount: "/docling",
+          mineruMount: "/mineru",
           lanboardMount: "/lanboard",
           lanboard: !!lanboardBridge,
           docling: !!doclingBridge,
+          mineru: !!mineruBridge,
           note:
-            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock) + Pandoc(/pandoc) + Docling(/docling) + 看板(/lanboard)。Token 默认 devtools-bridge。只需启动一次。",
+            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock) + Pandoc(/pandoc) + MinerU(/mineru) + Docling(/docling 回退) + 看板(/lanboard)。Token 默认 devtools-bridge。只需启动一次。",
         },
         origin
       );
@@ -6299,7 +6339,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
-  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / Pandoc(/pandoc) / Docling(/docling) / 看板(/lanboard) / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / Pandoc(/pandoc) / MinerU(/mineru) / Docling(/docling) / 看板(/lanboard) / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);

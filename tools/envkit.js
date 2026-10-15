@@ -62,8 +62,17 @@
       kind: "pandoc",
     },
     {
+      id: "mineru-mount",
+      name: "⑦ MinerU · /mineru（高质量 PDF→MD，建议 GPU）",
+      url: "http://127.0.0.1:17888/mineru/health",
+      token: "devtools-bridge",
+      tokenHeader: "X-Adb-Token",
+      link: "#mdm",
+      kind: "mineru",
+    },
+    {
       id: "docling-mount",
-      name: "⑦ Docling · /docling（OCR 导入，可选）",
+      name: "⑧ Docling · /docling（无 GPU 回退 OCR，可选）",
       url: "http://127.0.0.1:17888/docling/health",
       token: "devtools-bridge",
       tokenHeader: "X-Adb-Token",
@@ -72,7 +81,7 @@
     },
     {
       id: "lanboard-mount",
-      name: "⑧ 局域网看板 · /lanboard（可选）",
+      name: "⑨ 局域网看板 · /lanboard（可选）",
       url: "http://127.0.0.1:17888/lanboard/health",
       token: "devtools-bridge",
       tokenHeader: "X-Adb-Token",

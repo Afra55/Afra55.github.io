@@ -221,6 +221,12 @@ function Sync-Bridges {
     try { Download-File "$BaseUrl/pandoc-bridge/$f" (Join-Path $BridgeDir "pandoc-bridge\$f") }
     catch { Write-Miss "下载失败 $f" }
   }
+  New-Item -ItemType Directory -Force -Path (Join-Path $BridgeDir "mineru-bridge") | Out-Null
+  foreach ($f in @("server.js", "mineru-ops.js")) {
+    Write-Info "mineru-bridge/$f"
+    try { Download-File "$BaseUrl/mineru-bridge/$f" (Join-Path $BridgeDir "mineru-bridge\$f") }
+    catch { Write-Miss "下载失败 $f" }
+  }
   New-Item -ItemType Directory -Force -Path (Join-Path $BridgeDir "docling-bridge") | Out-Null
   foreach ($f in @("server.js", "docling-ops.js")) {
     Write-Info "docling-bridge/$f"
@@ -238,7 +244,7 @@ function Sync-Bridges {
   }
 
   $bad = $false
-  foreach ($rel in @("adb-bridge\server.js", "ffmpeg-bridge\server.js", "ffmpeg-bridge\gifski-core.js", "git-bridge\server.js", "git-bridge\git-ops.js", "fileunlock-bridge\server.js", "fileunlock-bridge\lock-ops.js", "pandoc-bridge\server.js", "pandoc-bridge\pandoc-ops.js", "docling-bridge\server.js", "docling-bridge\docling-ops.js", "lanboard-bridge\server.js")) {
+  foreach ($rel in @("adb-bridge\server.js", "ffmpeg-bridge\server.js", "ffmpeg-bridge\gifski-core.js", "git-bridge\server.js", "git-bridge\git-ops.js", "fileunlock-bridge\server.js", "fileunlock-bridge\lock-ops.js", "pandoc-bridge\server.js", "pandoc-bridge\pandoc-ops.js", "mineru-bridge\server.js", "mineru-bridge\mineru-ops.js", "docling-bridge\server.js", "docling-bridge\docling-ops.js", "lanboard-bridge\server.js")) {
     $p = Join-Path $BridgeDir $rel
     if (-not (Test-Path $p) -or (Get-Item $p).Length -lt 10) {
       Write-Miss "缺失或空：$rel"
@@ -255,7 +261,7 @@ DevTools 桥目录：$BridgeDir
 只需启动一座统一桥：
   双击 adb-bridge\start-win.cmd
   地址 http://127.0.0.1:17888  Token: devtools-bridge
-  API: /ff · /ytdlp · /git · /unlock
+  API: /ff · /ytdlp · /git · /unlock · /pandoc · /mineru · /docling · /lanboard
 
 （ffmpeg-bridge / git-bridge 目录是统一桥的嵌套模块，请勿单独启动。）
 

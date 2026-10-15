@@ -7,9 +7,9 @@
           <button type="button" class="primary-btn" id="mdm-pick-dir" title="选择本机文件夹作为存储：文档以真实 .md 文件保存，可用 VS Code / Obsidian / Git 直接编辑">选择文件夹</button>
           <button type="button" class="secondary-btn" id="mdm-use-idb" title="改用浏览器本地存储（IndexedDB）：不需要文件夹权限，数据存在浏览器里；清除浏览器数据会丢失，建议配合「导出库」备份">本地存储模式</button>
           <button type="button" class="secondary-btn" id="mdm-new" disabled title="新建一篇空白文档（在标题框输入即可改名）">新建</button>
-          <label class="file-btn" id="mdm-import-label" for="mdm-import" title="导入本机文档（.md / .txt / .html / .docx / .pdf / .pptx / .xlsx / 图片），可多选；有本机桥时走 Docling（含 OCR）转 Markdown；无桥则浏览器回退；正文引用的图片会一并导入">导入</label>
+          <label class="file-btn" id="mdm-import-label" for="mdm-import" title="导入本机文档（.md / .txt / .html / .docx / .pdf / .pptx / .xlsx / 图片），可多选；有本机桥时优先 MinerU（建议 GPU）转 Markdown，未装则 Docling；无桥则浏览器回退；正文引用的图片会一并导入">导入</label>
           <input id="mdm-import" type="file" accept=".md,.markdown,.txt,.text,.html,.htm,.docx,.pdf,.pptx,.xlsx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.bmp,text/markdown,text/plain,text/html,application/pdf,image/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden />
-          <button type="button" class="secondary-btn mdm-wide-only" id="mdm-import-dir" disabled title="选择文件夹：.md/.txt/.html/.docx/.pdf/.pptx/.xlsx/图片 转 Markdown 导入（有桥走 Docling OCR；连同引用图片；仅文件夹模式）">导入文件夹</button>
+          <button type="button" class="secondary-btn mdm-wide-only" id="mdm-import-dir" disabled title="选择文件夹：.md/.txt/.html/.docx/.pdf/.pptx/.xlsx/图片 转 Markdown 导入（有桥优先 MinerU，回退 Docling；连同引用图片；仅文件夹模式）">导入文件夹</button>
           <input id="mdm-import-dir-input" type="file" webkitdirectory directory multiple hidden />
           <button type="button" class="secondary-btn mdm-wide-only" id="mdm-export-lib" disabled title="把整个库（索引 + 所有 .md + assets 资源）打包成一个 ZIP 下载，用于备份或迁移">导出库</button>
           <button type="button" class="secondary-btn mdm-wide-only" id="mdm-import-lib" disabled title="读取「导出库」生成的 ZIP，把文档、分类标签和资源合并进当前存储（同名文件跳过）">导入库</button>
