@@ -53,6 +53,11 @@
     emptySteps: $("#lb-empty-steps"),
     compose: panel.querySelector(".lb-compose"),
     feed: $("#lb-feed"),
+    feedBar: $("#lb-feed-bar"),
+    selCount: $("#lb-sel-count"),
+    selAll: $("#lb-sel-all"),
+    selClear: $("#lb-sel-clear"),
+    selDownload: $("#lb-sel-download"),
     members: $("#lb-members"),
     memberCount: $("#lb-member-count"),
     bridgeShell: $("#lb-bridge-shell"),
@@ -461,36 +466,46 @@
   }
 
   function feedSignature() {
+    pruneSelectedDownloads();
     const list = [...state.items.values()].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
-    return list
-      .map((it) => {
-        const thumb = String(it.thumb || "");
-        const thumbSig = thumb ? `${thumb.length}:${thumb.slice(0, 24)}:${thumb.slice(-12)}` : "";
-        return [
-          it.id,
-          it.kind,
-          it.kind === "text" ? it.text || "" : "",
-          it.name || "",
-          it.size || 0,
-          thumbSig,
-          mediaDownloadable(it) ? "1" : "0",
-          peerLabel(it.ownerId),
-          dlUiState.get(it.id) || "",
-        ].join("|");
-      })
-      .join(";");
+    const sel = [...selectedDlIds].sort().join(",");
+    return (
+      `b${bulkDownloading ? 1 : 0}|s${sel};` +
+      list
+        .map((it) => {
+          const thumb = String(it.thumb || "");
+          const thumbSig = thumb ? `${thumb.length}:${thumb.slice(0, 24)}:${thumb.slice(-12)}` : "";
+          return [
+            it.id,
+            it.kind,
+            it.kind === "text" ? it.text || "" : "",
+            it.name || "",
+            it.size || 0,
+            thumbSig,
+            mediaDownloadable(it) ? "1" : "0",
+            selectedDlIds.has(it.id) ? "1" : "0",
+            peerLabel(it.ownerId),
+            dlUiState.get(it.id) || "",
+          ].join("|");
+        })
+        .join(";")
+    );
   }
 
   function paintFeed() {
     if (!els.feed) return;
     const sig = feedSignature();
-    if (sig === lastFeedSig) return;
+    if (sig === lastFeedSig) {
+      paintFeedBar();
+      return;
+    }
     lastFeedSig = sig;
     const list = [...state.items.values()].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     if (els.emptySteps) els.emptySteps.hidden = list.length > 0;
     if (!list.length) {
       els.feed.innerHTML =
         '<p class="hint tight lb-empty">大厅还没有内容。发一条文字，或直接选文件（选完即发）。</p>';
+      paintFeedBar();
       return;
     }
     els.feed.innerHTML = list
@@ -507,6 +522,7 @@
           </div>`;
         }
         const canDl = mediaDownloadable(it);
+        const selected = canDl && selectedDlIds.has(it.id);
         const dlSt = dlUiState.get(it.id) || "";
         const dlLabel = dlSt === "queued" ? "排队中" : dlSt === "downloading" ? "下载中…" : "下载";
         const canPreview = it.kind === "image" || it.kind === "video";
@@ -527,7 +543,15 @@
         const previewHit = canPreview
           ? `<button type="button" class="lb-item-preview" data-id="${escapeHtml(it.id)}" aria-label="预览 ${escapeHtml(it.name || label)}">${preview}</button>`
           : `<div class="lb-item-preview" style="cursor:default">${preview}</div>`;
-        return `<div class="lb-item" data-id="${escapeHtml(it.id)}">
+        const check = canDl
+          ? `<label class="lb-item-check" title="多选下载">
+              <input type="checkbox" class="lb-select" data-id="${escapeHtml(it.id)}" ${
+                selected ? "checked" : ""
+              } ${bulkDownloading ? "disabled" : ""} aria-label="选择 ${escapeHtml(it.name || label)}" />
+            </label>`
+          : "";
+        return `<div class="lb-item${selected ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}">
+          ${check}
           ${previewHit}
           <div class="lb-item-main">
             <strong>${escapeHtml(it.name || label)}</strong>
@@ -536,7 +560,7 @@
           <div class="lb-item-actions">
             ${previewBtn}
             <button type="button" class="secondary-btn lb-download" data-id="${escapeHtml(it.id)}" ${
-              !canDl || dlSt ? 'aria-disabled="true"' : ""
+              !canDl || dlSt || bulkDownloading ? 'aria-disabled="true"' : ""
             }>${escapeHtml(dlLabel)}</button>
             ${hint}
           </div>
@@ -557,6 +581,13 @@
         }
       });
     });
+    els.feed.querySelectorAll(".lb-select").forEach((box) => {
+      box.addEventListener("change", () => {
+        const id = box.getAttribute("data-id");
+        toggleSelectDownload(id, box.checked);
+      });
+      box.addEventListener("click", (ev) => ev.stopPropagation());
+    });
     els.feed.querySelectorAll(".lb-download").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (btn.getAttribute("aria-disabled") === "true") return;
@@ -570,6 +601,7 @@
         openPreview(id).catch((e) => notifyToast(e?.message || "预览失败"));
       });
     });
+    paintFeedBar();
   }
 
   async function makeImageThumb(file) {
@@ -1237,10 +1269,210 @@
   const resolveInflight = new Map();
   /** @type {Map<string, "queued"|"downloading">} 下载按钮可见状态 */
   const dlUiState = new Map();
+  /** @type {Set<string>} 多选下载已勾选的媒体 id */
+  const selectedDlIds = new Set();
+  let bulkDownloading = false;
 
   function bumpFeedPaint() {
     lastFeedSig = "";
     paintFeed();
+  }
+
+  function downloadableMediaItems() {
+    return [...state.items.values()].filter((it) => mediaDownloadable(it));
+  }
+
+  function pruneSelectedDownloads() {
+    for (const id of [...selectedDlIds]) {
+      const it = state.items.get(id);
+      if (!it || !mediaDownloadable(it)) selectedDlIds.delete(id);
+    }
+  }
+
+  function paintFeedBar() {
+    if (!els.feedBar) return;
+    pruneSelectedDownloads();
+    const can = downloadableMediaItems();
+    els.feedBar.hidden = can.length < 1;
+    const n = selectedDlIds.size;
+    if (els.selCount) {
+      els.selCount.textContent = bulkDownloading
+        ? `下载中… 已选 ${n}`
+        : `已选 ${n}${can.length ? ` / 可下载 ${can.length}` : ""}`;
+    }
+    if (els.selAll) els.selAll.disabled = bulkDownloading || can.length < 1;
+    if (els.selClear) els.selClear.disabled = bulkDownloading || n < 1;
+    if (els.selDownload) {
+      els.selDownload.disabled = bulkDownloading || n < 1;
+      els.selDownload.textContent =
+        n > 1 ? `打包下载（${n}）` : n === 1 ? "下载已选" : "下载已选";
+    }
+  }
+
+  function toggleSelectDownload(id, on) {
+    const it = state.items.get(id);
+    if (!it || !mediaDownloadable(it)) {
+      selectedDlIds.delete(id);
+      bumpFeedPaint();
+      return;
+    }
+    if (on) selectedDlIds.add(id);
+    else selectedDlIds.delete(id);
+    bumpFeedPaint();
+  }
+
+  function selectAllDownloadable() {
+    for (const it of downloadableMediaItems()) selectedDlIds.add(it.id);
+    bumpFeedPaint();
+  }
+
+  function clearSelectedDownloads() {
+    selectedDlIds.clear();
+    bumpFeedPaint();
+  }
+
+  function uniqueZipName(name, used) {
+    const raw = String(name || "download").replace(/[\\/:*?"<>|]+/g, "_").trim() || "download";
+    if (!used.has(raw)) {
+      used.add(raw);
+      return raw;
+    }
+    const dot = raw.lastIndexOf(".");
+    const base = dot > 0 ? raw.slice(0, dot) : raw;
+    const ext = dot > 0 ? raw.slice(dot) : "";
+    let i = 2;
+    let next = `${base}-${i}${ext}`;
+    while (used.has(next)) {
+      i += 1;
+      next = `${base}-${i}${ext}`;
+    }
+    used.add(next);
+    return next;
+  }
+
+  async function ensureJsZip() {
+    if (typeof globalThis.JSZip === "function") return globalThis.JSZip;
+    if (typeof window.DevToolsLazy?.loadVendor === "function") {
+      await window.DevToolsLazy.loadVendor("jszip");
+    } else {
+      await new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[src*="jszip"]');
+        if (existing) {
+          existing.addEventListener("load", () => resolve(), { once: true });
+          existing.addEventListener("error", () => reject(new Error("JSZip 加载失败")), { once: true });
+          if (typeof globalThis.JSZip === "function") resolve();
+          return;
+        }
+        const s = document.createElement("script");
+        const v = window.TOOLS_BUILD || window.TOOLS_VERSION || "";
+        s.src = `./vendor/jszip.min.js${v ? `?v=${v}` : ""}`;
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error("JSZip 加载失败"));
+        document.head.appendChild(s);
+      });
+    }
+    if (typeof globalThis.JSZip !== "function") throw new Error("JSZip 未加载");
+    return globalThis.JSZip;
+  }
+
+  function triggerBlobDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "download";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+
+  async function downloadSelectedItems() {
+    if (bulkDownloading) {
+      notifyToast("正在批量下载");
+      return;
+    }
+    pruneSelectedDownloads();
+    const ids = [...selectedDlIds].filter((id) => {
+      const it = state.items.get(id);
+      return it && mediaDownloadable(it);
+    });
+    if (!ids.length) {
+      notifyToast("请先勾选可下载的文件");
+      return;
+    }
+    if (ids.length === 1) {
+      await downloadItem(ids[0]);
+      return;
+    }
+
+    bulkDownloading = true;
+    paintFeedBar();
+    const entries = [];
+    const usedNames = new Set();
+    let fail = 0;
+    try {
+      notifyToast(`开始打包 ${ids.length} 个文件…`);
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        const it = state.items.get(id);
+        if (!it || !mediaDownloadable(it)) {
+          fail += 1;
+          selectedDlIds.delete(id);
+          continue;
+        }
+        if (els.selCount) {
+          els.selCount.textContent = `打包中 ${i + 1}/${ids.length} · ${it.name || "文件"}`;
+        }
+        if (dlUiState.has(id)) {
+          // 已在单条下载：等同一 inflight
+        } else {
+          dlUiState.set(id, "downloading");
+          bumpFeedPaint();
+        }
+        try {
+          const blob = await resolveMediaBlob(id, {
+            onStart: () => {
+              if (dlUiState.get(id) === "queued") {
+                dlUiState.set(id, "downloading");
+                bumpFeedPaint();
+              }
+            },
+          });
+          if (!blob) {
+            fail += 1;
+            continue;
+          }
+          entries.push({ name: uniqueZipName(it.name || `file-${id}`, usedNames), blob });
+        } catch {
+          fail += 1;
+        } finally {
+          dlUiState.delete(id);
+          bumpFeedPaint();
+        }
+      }
+      if (!entries.length) throw new Error(fail ? "所选文件均无法下载" : "没有可打包的文件");
+      await ensureJsZip();
+      const zip = new globalThis.JSZip();
+      for (const e of entries) zip.file(e.name, e.blob);
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const stamp = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const zipName = `lanboard-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.zip`;
+      triggerBlobDownload(zipBlob, zipName);
+      selectedDlIds.clear();
+      notifyToast(
+        fail
+          ? `已打包 ${entries.length} 个（${fail} 个失败）`
+          : `已打包下载 ${entries.length} 个文件`
+      );
+    } catch (e) {
+      notifyToast(e?.message || "批量下载失败");
+      setError(e?.message || "批量下载失败");
+    } finally {
+      bulkDownloading = false;
+      bumpFeedPaint();
+    }
   }
 
   function enqueuePeerJob(map, peerId, job) {
@@ -1633,14 +1865,7 @@
         notifyToast(SOURCE_GONE);
         return;
       }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = it.name || "download";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 15000);
+      triggerBlobDownload(blob, it.name || "download");
       notifyToast("开始下载");
     } catch (e) {
       notifyToast(e?.message || SOURCE_GONE);
@@ -2041,6 +2266,14 @@
     });
     els.previewDlg?.addEventListener("click", (ev) => {
       if (ev.target === els.previewDlg) closePreview();
+    });
+    els.selAll?.addEventListener("click", () => selectAllDownloadable());
+    els.selClear?.addEventListener("click", () => clearSelectedDownloads());
+    els.selDownload?.addEventListener("click", () => {
+      downloadSelectedItems().catch((e) => {
+        notifyToast(e?.message || "批量下载失败");
+        setError(e?.message || "批量下载失败");
+      });
     });
   }
 
