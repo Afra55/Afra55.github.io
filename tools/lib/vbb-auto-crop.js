@@ -2,7 +2,8 @@
  * 黑盒「自动裁剪纯色边框」纯函数（与 v2g-suite-src/40-vbb.js 对齐）。
  * Node 单测 / 离线回归用；浏览器套件内另有同名实现，改一处必须两边一起改。
  *
- * v8：暗边按占比吃边；映射多吃约 1 缩略像素；四边对称。
+ * v10：暗边按占比吃边；映射多吃约 1 缩略像素；起/中/末三取样；
+ * 各边独立、多帧中位数合并（片头有边后半无边 → 不误裁；仅左右/仅上下/三边/四边均可）。
  */
 "use strict";
 
@@ -173,7 +174,51 @@ function mapThumbCropToSource(acc, vw, vh) {
   return null;
 }
 
-/** 内容并集：各边取最浅裁 */
+/** 无边框时的「整幅」样本（参与多帧合并，避免只剩有边帧） */
+function fullFrameContentRect(w, h) {
+  return {
+    left: 0,
+    top: 0,
+    right: Math.max(0, w - 1),
+    bottom: Math.max(0, h - 1),
+    w,
+    h,
+    darkLeft: false,
+    darkRight: false,
+    darkTop: false,
+    darkBottom: false,
+  };
+}
+
+/** @param {number[]} arr */
+function medianInt(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+}
+
+/**
+ * 起/中/末采样时刻（秒）。短片去重；跳过纯 0 以免未解码黑帧，但仍贴近片头/片尾。
+ * @param {number} dur
+ * @returns {number[]}
+ */
+function cropSampleMarks(dur) {
+  const d = Number(dur) || 0;
+  if (!(d > 0.2)) return [0];
+  const start = Math.min(0.08, Math.max(0, d * 0.02));
+  const mid = d * 0.5;
+  const end = Math.max(start + 0.05, d - Math.min(0.12, Math.max(0.04, d * 0.04)));
+  const marks = [start, mid, end];
+  const out = [];
+  for (const t of marks) {
+    const clamped = Math.min(Math.max(0, t), Math.max(0, d - 0.02));
+    if (!out.length || Math.abs(out[out.length - 1] - clamped) >= 0.04) out.push(clamped);
+  }
+  return out.length ? out : [0];
+}
+
+/** 内容并集：各边取最浅裁（兼容旧调用） */
 function unionContentRects(a, b) {
   if (!a) return b;
   if (!b) return a;
@@ -188,6 +233,45 @@ function unionContentRects(a, b) {
     darkRight: a.darkRight || b.darkRight,
     darkTop: a.darkTop || b.darkTop,
     darkBottom: a.darkBottom || b.darkBottom,
+  };
+}
+
+/**
+ * 多帧合并：各边独立取中位数裁量。
+ * 例：片头有左右黑边、中/末无边 → 左裁中位数偏 0，不误裁后半内容；
+ * 三帧都有左右、上下没有 → 只裁左右。
+ * @param {Array<ReturnType<typeof detectFrameContentRect>|ReturnType<typeof fullFrameContentRect>>} rects
+ */
+function mergeContentRects(rects) {
+  const list = (rects || []).filter((r) => r && r.w > 0 && r.h > 0);
+  if (!list.length) return null;
+  const w = list[0].w;
+  const h = list[0].h;
+  const lefts = list.map((r) => Math.max(0, r.left | 0));
+  const tops = list.map((r) => Math.max(0, r.top | 0));
+  const rightTrims = list.map((r) => Math.max(0, r.w - 1 - (r.right | 0)));
+  const bottomTrims = list.map((r) => Math.max(0, r.h - 1 - (r.bottom | 0)));
+  const L = medianInt(lefts);
+  const T = medianInt(tops);
+  const Rt = medianInt(rightTrims);
+  const Bt = medianInt(bottomTrims);
+  if (L === 0 && T === 0 && Rt === 0 && Bt === 0) return null;
+  const right = w - 1 - Rt;
+  const bottom = h - 1 - Bt;
+  if (right <= L || bottom <= T) return null;
+  const majorityDark = (flag, trim) =>
+    trim > 0 && list.filter((r) => r[flag]).length * 2 >= list.length;
+  return {
+    left: L,
+    top: T,
+    right,
+    bottom,
+    w,
+    h,
+    darkLeft: majorityDark("darkLeft", L),
+    darkRight: majorityDark("darkRight", Rt),
+    darkTop: majorityDark("darkTop", T),
+    darkBottom: majorityDark("darkBottom", Bt),
   };
 }
 
@@ -296,7 +380,11 @@ module.exports = {
   DARK_EDGE_AVG,
   detectFrameContentRect,
   mapThumbCropToSource,
+  fullFrameContentRect,
+  cropSampleMarks,
   unionContentRects,
+  mergeContentRects,
+  medianInt,
   makeBorderedRgba,
   measureDarkBars,
   cropRgba,

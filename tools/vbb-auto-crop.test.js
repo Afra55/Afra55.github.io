@@ -15,6 +15,9 @@ const {
   makeBorderedRgba,
   measureDarkBars,
   cropRgba,
+  cropSampleMarks,
+  fullFrameContentRect,
+  mergeContentRects,
 } = require("./lib/vbb-auto-crop.js");
 
 function assert(cond, msg) {
@@ -46,6 +49,10 @@ function nearestResize(img, cw, ch) {
     { name: "R-only", L: 0, R: 30, T: 0, B: 0 },
     { name: "T-only", L: 0, R: 0, T: 18, B: 0 },
     { name: "B-only", L: 0, R: 0, T: 0, B: 22 },
+    { name: "LR-only", L: 20, R: 24, T: 0, B: 0 },
+    { name: "TB-only", L: 0, R: 0, T: 16, B: 18 },
+    { name: "three-LRT", L: 14, R: 18, T: 12, B: 0 },
+    { name: "three-LRB", L: 14, R: 18, T: 0, B: 12 },
     { name: "all-four", L: 16, R: 28, T: 12, B: 10 },
     { name: "fine-LR", L: 6, R: 8, T: 0, B: 0 },
   ];
@@ -97,9 +104,11 @@ function nearestResize(img, cw, ch) {
   const panel = fs.readFileSync(path.join(__dirname, "panels/vbb.html"), "utf8");
   assert(/devtools-vbb-auto-crop[\s\S]{0,120}!==\s*"0"/.test(vbb), "默认开：localStorage !== \"0\"");
   assert(/stored\s*==\s*null[\s\S]{0,80}setItem\([\s\S]{0,40}"1"/.test(vbb), "首次写入默认 1");
-  assert(/cacheKey\s*=\s*`v9\|/.test(vbb), "crop 缓存键须为 v9");
+  assert(/cacheKey\s*=\s*`v10\|/.test(vbb), "crop 缓存键须为 v10");
   assert(/detectVideoCropViaFfmpeg/.test(vbb), "须有 ffmpeg 抽帧回退（手机 HTML5 seek 失败）");
   assert(/frameLooksDecoded/.test(vbb), "须过滤未解码近黑帧");
+  assert(/mergeCropRects/.test(vbb) && /fullFrameContentRect/.test(vbb), "须多帧中位数合并且无边记整幅");
+  assert(/d \* 0\.5/.test(vbb) && /start \+ 0\.05/.test(vbb), "取样须含起/中/末");
   assert(/去色边未生效/.test(vbb), "开关开着但无 crop 须 toast 提示");
   assert(/devtools-vbb-auto-crop"\)\s*!==\s*"0"/.test(vbb), "DOM 缺失时仍认 localStorage");
   assert(!/编辑只裁了时长[\s\S]{0,40}禁止再叠/.test(vbb), "不得再因只裁时长跳过自动去色边");
@@ -113,6 +122,28 @@ function nearestResize(img, cw, ch) {
   const enc = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/10-shared-encode.js"), "utf8");
   assert(/cropFilter\s*=\s*crop\s*\?\s*`crop=/.test(enc), "encode 须真用 crop=w:h:x:y");
   assert(/q\.set\("crop"/.test(enc), "原生 gifski 须传 crop 查询参数");
+}
+
+// ---- 起/中/末取样 + 片头有边后半无边不误裁 ----
+{
+  const marks = cropSampleMarks(10);
+  assert(marks.length === 3, `10s 应 3 点，得 ${marks}`);
+  assert(marks[0] <= 0.12, `起点应靠近片头，得 ${marks[0]}`);
+  assert(Math.abs(marks[1] - 5) < 0.01, `中点应≈5，得 ${marks[1]}`);
+  assert(marks[2] >= 9.5, `终点应靠近片尾，得 ${marks[2]}`);
+  const bordered = makeBorderedRgba(320, 240, { L: 24, R: 28, T: 0, B: 0 });
+  const rBorder = detectFrameContentRect(bordered, 14);
+  assert(rBorder, "有边帧应检出");
+  const full = fullFrameContentRect(320, 240);
+  const transient = mergeContentRects([rBorder, full, full]);
+  assert(!transient, "仅 1/3 帧有边 → 中位数应为 0，不裁");
+  const stable = mergeContentRects([rBorder, rBorder, rBorder]);
+  assert(stable && stable.left >= 20 && stable.w - 1 - stable.right >= 24, "三帧都有左右边 → 应裁左右");
+  assert(stable.top === 0 && stable.bottom === stable.h - 1, "稳定左右边不得误裁上下");
+  const lrOnly = detectFrameContentRect(makeBorderedRgba(320, 240, { L: 20, R: 22 }), 14);
+  const tbOnly = detectFrameContentRect(makeBorderedRgba(320, 240, { T: 16, B: 18 }), 14);
+  assert(lrOnly && lrOnly.top === 0 && lrOnly.bottom === lrOnly.h - 1, "仅左右");
+  assert(tbOnly && tbOnly.left === 0 && tbOnly.right === tbOnly.w - 1, "仅上下");
 }
 
 // ---- 可选：本机 Download 样本离线回归 ----
@@ -165,31 +196,16 @@ function verifyDownloadSample(ff, fp, name) {
   const dur = Number(String(durR.stdout).trim()) || 1;
   const tmp = path.join(__dirname, ".tmp-vbb-border");
   fs.mkdirSync(tmp, { recursive: true });
-  let acc = null;
-  for (const ratio of [0.15, 0.4, 0.65]) {
-    const t = Math.min(dur * ratio, Math.max(0, dur - 0.05));
-    const raw = path.join(tmp, `reg-${name}-${ratio}.rgba`);
+  const samples = [];
+  for (const t of cropSampleMarks(dur)) {
+    const raw = path.join(tmp, `reg-${name}-${String(t).replace(".", "_")}.rgba`);
     const full = loadFrameRgba(ff, video, t, vw, vh, raw);
     const cw = Math.min(DETECT_MAX_W, vw);
     const ch = Math.max(1, Math.round(vh * (cw / vw)));
     const thumb = nearestResize(full, cw, ch);
-    const rect = detectFrameContentRect(thumb, 14);
-    if (!rect) continue;
-    acc = acc
-      ? {
-          left: Math.min(acc.left, rect.left),
-          top: Math.min(acc.top, rect.top),
-          right: Math.max(acc.right, rect.right),
-          bottom: Math.max(acc.bottom, rect.bottom),
-          w: rect.w,
-          h: rect.h,
-          darkLeft: acc.darkLeft || rect.darkLeft,
-          darkRight: acc.darkRight || rect.darkRight,
-          darkTop: acc.darkTop || rect.darkTop,
-          darkBottom: acc.darkBottom || rect.darkBottom,
-        }
-      : rect;
+    samples.push(detectFrameContentRect(thumb, 14) || fullFrameContentRect(cw, ch));
   }
+  const acc = mergeContentRects(samples);
   assert(acc, `${name}: 应检出边框`);
   const crop = mapThumbCropToSource(acc, vw, vh);
   assert(crop, `${name}: 应映射 crop`);

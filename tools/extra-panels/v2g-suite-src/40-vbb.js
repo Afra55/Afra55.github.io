@@ -3429,7 +3429,8 @@
        *     （旧「纯度」在过渡暗列/最外列噪点上会提前停，缩成 GIF 后左右仍留黑条）
        *  2) 非暗纯色边（白/灰/绿…）：仍用严纯度，防雾气误裁
        *  单边 ≤18%；暗边在 detectVideoCrop 映射时多吃约 1 缩略像素，非暗边才做 1px 回退。
-       *  与 tools/lib/vbb-auto-crop.js 同步（v8）。 */
+       *  各边独立（仅左右 / 仅上下 / 三边 / 四边均可）。
+       *  与 tools/lib/vbb-auto-crop.js 同步（v10）。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -3589,20 +3590,55 @@
         return null;
       }
 
-      function unionCropRects(a, b) {
-        if (!a) return b;
-        if (!b) return a;
+      function fullFrameContentRect(w, h) {
         return {
-          left: Math.min(a.left, b.left),
-          top: Math.min(a.top, b.top),
-          right: Math.max(a.right, b.right),
-          bottom: Math.max(a.bottom, b.bottom),
-          w: b.w,
-          h: b.h,
-          darkLeft: a.darkLeft || b.darkLeft,
-          darkRight: a.darkRight || b.darkRight,
-          darkTop: a.darkTop || b.darkTop,
-          darkBottom: a.darkBottom || b.darkBottom,
+          left: 0,
+          top: 0,
+          right: Math.max(0, w - 1),
+          bottom: Math.max(0, h - 1),
+          w,
+          h,
+          darkLeft: false,
+          darkRight: false,
+          darkTop: false,
+          darkBottom: false,
+        };
+      }
+
+      function medianInt(arr) {
+        if (!arr.length) return 0;
+        const s = [...arr].sort((a, b) => a - b);
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+      }
+
+      /** 多帧各边中位数合并（与 lib/vbb-auto-crop.mergeContentRects 对齐） */
+      function mergeCropRects(rects) {
+        const list = (rects || []).filter((r) => r && r.w > 0 && r.h > 0);
+        if (!list.length) return null;
+        const w = list[0].w;
+        const h = list[0].h;
+        const L = medianInt(list.map((r) => Math.max(0, r.left | 0)));
+        const T = medianInt(list.map((r) => Math.max(0, r.top | 0)));
+        const Rt = medianInt(list.map((r) => Math.max(0, r.w - 1 - (r.right | 0))));
+        const Bt = medianInt(list.map((r) => Math.max(0, r.h - 1 - (r.bottom | 0))));
+        if (L === 0 && T === 0 && Rt === 0 && Bt === 0) return null;
+        const right = w - 1 - Rt;
+        const bottom = h - 1 - Bt;
+        if (right <= L || bottom <= T) return null;
+        const majorityDark = (flag, trim) =>
+          trim > 0 && list.filter((r) => r[flag]).length * 2 >= list.length;
+        return {
+          left: L,
+          top: T,
+          right,
+          bottom,
+          w,
+          h,
+          darkLeft: majorityDark("darkLeft", L),
+          darkRight: majorityDark("darkRight", Rt),
+          darkTop: majorityDark("darkTop", T),
+          darkBottom: majorityDark("darkBottom", Bt),
         };
       }
 
@@ -3628,10 +3664,20 @@
         return true;
       }
 
+      /** 起 / 中 / 末三取样（与 lib/vbb-auto-crop.cropSampleMarks 对齐） */
       function cropSampleMarks(dur) {
         const d = Number(dur) || 0;
-        if (d > 0.6) return [0.15, 0.4, 0.65].map((r) => Math.min(d * r, Math.max(0, d - 0.05)));
-        return [0];
+        if (!(d > 0.2)) return [0];
+        const start = Math.min(0.08, Math.max(0, d * 0.02));
+        const mid = d * 0.5;
+        const end = Math.max(start + 0.05, d - Math.min(0.12, Math.max(0.04, d * 0.04)));
+        const marks = [start, mid, end];
+        const out = [];
+        for (const t of marks) {
+          const clamped = Math.min(Math.max(0, t), Math.max(0, d - 0.02));
+          if (!out.length || Math.abs(out[out.length - 1] - clamped) >= 0.04) out.push(clamped);
+        }
+        return out.length ? out : [0];
       }
 
       async function unlockVideoForSeek(v) {
@@ -3682,8 +3728,7 @@
         if (!ctx) return null;
         ctx.imageSmoothingEnabled = false;
         const dur = Number.isFinite(v.duration) ? v.duration : 0;
-        let acc = null;
-        let hits = 0;
+        const samples = [];
         let decoded = 0;
         for (const t of cropSampleMarks(dur)) {
           await seekVideoEl(v, t);
@@ -3695,13 +3740,12 @@
           const img = ctx.getImageData(0, 0, cw, ch);
           if (!frameLooksDecoded(img)) continue;
           decoded += 1;
-          const rect = detectFrameContentRect(img, 14);
-          if (!rect) continue;
-          hits += 1;
-          acc = unionCropRects(acc, rect);
+          // 无边也记整幅样本，避免「仅片头有边」被当成全程边框
+          samples.push(detectFrameContentRect(img, 14) || fullFrameContentRect(cw, ch));
         }
         if (!(decoded > 0)) return { crop: null, reason: "html5-blank" };
-        if (!(acc && hits > 0)) return { crop: null, reason: "html5-no-border" };
+        const acc = mergeCropRects(samples);
+        if (!acc) return { crop: null, reason: "html5-no-border" };
         const crop = mapAccToSourceCrop(acc, vw, vh);
         return { crop, reason: crop ? "" : "html5-map-empty", acc };
       }
@@ -3718,8 +3762,7 @@
         // 偶数尺寸，避免部分 wasm scale 异常
         const outW = Math.max(2, cw - (cw % 2));
         const outH = Math.max(2, ch - (ch % 2));
-        let acc = null;
-        let hits = 0;
+        const samples = [];
         for (const t of cropSampleMarks(dur)) {
           const rawName = `vbb-crop-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}.rgba`;
           const args = [
@@ -3764,22 +3807,20 @@
             data: new Uint8ClampedArray(u8.buffer, u8.byteOffset, need),
           };
           if (!frameLooksDecoded(img)) continue;
-          const rect = detectFrameContentRect(img, 14);
-          if (!rect) continue;
-          hits += 1;
-          acc = unionCropRects(acc, rect);
+          samples.push(detectFrameContentRect(img, 14) || fullFrameContentRect(outW, outH));
         }
-        if (!(acc && hits > 0)) return null;
+        const acc = mergeCropRects(samples);
+        if (!acc) return null;
         return mapAccToSourceCrop(acc, vw, vh);
       }
 
       /**
-       * 采样多帧取「内容并集」；手机优先预览 video + ffmpeg 回退。
-       * v9：HTML5 失败不再静默吞掉；开关开着时编码前必尽量出 crop。
+       * 起/中/末三取样，各边中位数合并；手机优先预览 video + ffmpeg 回退。
+       * v10：无边帧记整幅，避免片头色边误裁全程；单边～四边独立。
        */
       async function detectVideoCrop(file, hintW, hintH, hintDur) {
         if (!file) return null;
-        const cacheKey = `v9|${file.name}|${file.size}|${file.lastModified || 0}`;
+        const cacheKey = `v10|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         let failReason = "";
