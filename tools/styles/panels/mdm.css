@@ -164,9 +164,16 @@
 .mdm-insert-menu { position: relative; display: inline-flex; }
 .mdm-insert-dropdown {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
-  display: flex; flex-direction: column; min-width: 11.5rem;
+  display: flex; flex-direction: column;
+  /* 按最长菜单项撑开，保证一行完整显示（避免 11.5rem + overflow 裁字） */
+  width: max-content;
+  min-width: 12.5rem;
+  max-width: min(94vw, 22rem);
   background: var(--panel-strong, var(--bg-0)); border: 1px solid var(--line); border-radius: 10px;
   padding: 0.25rem; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  max-height: min(70vh, 30rem);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .mdm-insert-dropdown[hidden] { display: none !important; }
 .mdm-insert-dropdown button {
@@ -180,9 +187,14 @@
   opacity: 0.45; cursor: not-allowed;
 }
 .mdm-insert-dropdown button:disabled:hover { background: transparent; }
-.mdm-insert-dropdown { max-height: min(70vh, 30rem); overflow-y: auto; }
-.mdm-menu-flag { padding: 0.35rem 0.55rem; white-space: nowrap; }
+.mdm-menu-flag { padding: 0.35rem 0.55rem; white-space: nowrap; display: block; }
 .mdm-insert-dropdown .mdm-menu-label { white-space: nowrap; }
+/* 工具菜单位于工具栏右侧：向左展开，避免贴边裁切长文案 */
+#mdm-tools-dropdown,
+#mdm-more-dropdown {
+  left: auto;
+  right: 0;
+}
 
 /* 专注：隐藏左侧列表 / 顶部按钮 */
 #mdm { position: relative; }
