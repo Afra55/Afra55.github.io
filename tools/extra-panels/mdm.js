@@ -4236,7 +4236,11 @@
         }
         const fallbackCmd =
           mount === "mineru" ? 'pip install -U "mineru[full]"' : 'pip install "docling[rapidocr]"';
-        if (data.needsManual) throw new Error(`请手动安装：${data.command || fallbackCmd}`);
+        if (data.needsManual) {
+          const detail = String(data.message || "").trim();
+          if (detail) throw new Error(detail);
+          throw new Error(`请手动安装：${data.command || fallbackCmd}`);
+        }
         throw new Error(data.message || data.output || "安装未完成");
       } finally {
         clearInterval(tick);

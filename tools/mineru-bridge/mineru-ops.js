@@ -137,6 +137,97 @@ async function resolvePython({ refresh = false } = {}) {
   return null;
 }
 
+function pythonInstallGuide() {
+  if (process.platform === "win32") {
+    return {
+      command: "winget install Python.Python.3.12",
+      message:
+        "未找到 Python 3。请先安装 Python 3.10–3.14（自带 pip），再点「一键安装 MinerU」：\n" +
+        "1) 终端执行：winget install Python.Python.3.12\n" +
+        "2) 或官网 https://www.python.org/downloads/ （勾选 Add python.exe to PATH）\n" +
+        "装完请重启本机桥，再点自动安装。",
+    };
+  }
+  if (process.platform === "darwin") {
+    return {
+      command: "brew install python",
+      message:
+        "未找到 Python 3。请先执行：brew install python（自带 pip）；无 Homebrew 可打开 https://www.python.org/downloads/\n" +
+        "装完请重启本机桥，再点「一键安装 MinerU」。",
+    };
+  }
+  return {
+    command: "sudo apt install python3 python3-pip python3-venv",
+    message:
+      "未找到 Python 3。请先安装 python3 与 pip（如：sudo apt install python3 python3-pip python3-venv 或等价包），装完重启本机桥后再点自动安装。",
+  };
+}
+
+function pyLabel(py) {
+  return `${py.file} ${py.argsPrefix.join(" ")}`.replace(/\s+/g, " ").trim();
+}
+
+function pipMissingGuide(py) {
+  const ensureCmd = `${pyLabel(py)} -m ensurepip --upgrade`;
+  if (process.platform === "win32") {
+    return {
+      command: ensureCmd,
+      message:
+        `已找到 Python（${pyLabel(py)}），但缺少 pip。请先装好 pip 再点自动安装：\n` +
+        `1) 终端执行：${ensureCmd}\n` +
+        `2) 仍失败：winget install Python.Python.3.12（官方包自带 pip）\n` +
+        `3) 或官网重装并勾选 pip / Add to PATH\n` +
+        `装好后重启本机桥，再点「一键安装 MinerU」。`,
+    };
+  }
+  if (process.platform === "darwin") {
+    return {
+      command: ensureCmd,
+      message:
+        `已找到 Python（${pyLabel(py)}），但缺少 pip。请先执行：${ensureCmd}\n` +
+        `仍失败可：brew install python 或 brew reinstall python\n` +
+        `装好后重启本机桥，再点「一键安装 MinerU」。`,
+    };
+  }
+  return {
+    command: ensureCmd,
+    message:
+      `已找到 Python（${pyLabel(py)}），但缺少 pip。请先执行：${ensureCmd}\n` +
+      `或：sudo apt install python3-pip python3-venv\n` +
+      `装好后重启本机桥，再点「一键安装 MinerU」。`,
+  };
+}
+
+function isPipMissingError(text) {
+  return /No module named ['"]?pip['"]?|pip is not available|ensurepip is not available|No module named ensurepip/i.test(
+    String(text || "")
+  );
+}
+
+async function hasPipModule(py) {
+  try {
+    await runCmd(py.file, [...py.argsPrefix, "-m", "pip", "--version"], { timeout: 20000 });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/** 探测 pip；缺失时尝试 python -m ensurepip（安全、官方内置）。 */
+async function ensurePipReady(py) {
+  if (await hasPipModule(py)) return { ok: true };
+  for (const args of [
+    ["-m", "ensurepip", "--upgrade"],
+    ["-m", "ensurepip", "--default-pip"],
+  ]) {
+    try {
+      await runSpawn(py.file, [...py.argsPrefix, ...args], { timeout: 180000 });
+    } catch (_) {}
+    if (await hasPipModule(py)) return { ok: true, repaired: true };
+  }
+  return { ok: false, ...pipMissingGuide(py) };
+}
+
 function winScriptDirs() {
   const dirs = [];
   const la = process.env.LOCALAPPDATA || "";
@@ -441,17 +532,27 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
 async function installMinerU() {
   const py = await resolvePython({ refresh: true });
   if (!py) {
+    const guide = pythonInstallGuide();
     return {
       installed: false,
       needsManual: true,
-      command: process.platform === "win32" ? "winget install Python.Python.3.12" : "brew install python",
-      message:
-        '未找到 Python 3，请先安装 Python 3.10–3.14，再执行：pip install -U "mineru[full]"（建议 NVIDIA GPU + CUDA）',
+      command: guide.command,
+      message: guide.message,
       gpuRecommended: true,
     };
   }
-  const cmdFull = `${py.file} ${py.argsPrefix.join(" ")} -m pip install -U "mineru[full]"`.replace(/\s+/g, " ").trim();
-  const cmdBase = `${py.file} ${py.argsPrefix.join(" ")} -m pip install -U "mineru>=4.0,<5"`.replace(/\s+/g, " ").trim();
+  const pipReady = await ensurePipReady(py);
+  if (!pipReady.ok) {
+    return {
+      installed: false,
+      needsManual: true,
+      command: pipReady.command,
+      message: pipReady.message,
+      gpuRecommended: true,
+    };
+  }
+  const cmdFull = `${pyLabel(py)} -m pip install -U "mineru[full]"`;
+  const cmdBase = `${pyLabel(py)} -m pip install -U "mineru>=4.0,<5"`;
   try {
     const { stdout, stderr } = await runSpawn(
       py.file,
@@ -484,6 +585,17 @@ async function installMinerU() {
     };
   } catch (err) {
     const out = `${err?.stdout || ""}\n${err?.stderr || err?.message || ""}`.trim().slice(-2500);
+    if (isPipMissingError(out)) {
+      const guide = pipMissingGuide(py);
+      return {
+        installed: false,
+        needsManual: true,
+        command: guide.command,
+        message: guide.message,
+        output: out,
+        gpuRecommended: true,
+      };
+    }
     // full 失败再试 base
     try {
       await runSpawn(
@@ -491,7 +603,20 @@ async function installMinerU() {
         [...py.argsPrefix, "-m", "pip", "install", "-U", "mineru>=4.0,<5"],
         { timeout: 1800000, env: mineruEnv() }
       );
-    } catch (_) {}
+    } catch (err2) {
+      const out2 = `${err2?.stdout || ""}\n${err2?.stderr || err2?.message || ""}`.trim();
+      if (isPipMissingError(out2)) {
+        const guide = pipMissingGuide(py);
+        return {
+          installed: false,
+          needsManual: true,
+          command: guide.command,
+          message: guide.message,
+          output: (out + "\n" + out2).trim().slice(-2500),
+          gpuRecommended: true,
+        };
+      }
+    }
     cachedMinerU = null;
     const p = await checkMinerU();
     return {
