@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.59";
+const BRIDGE_VERSION = "0.9.60";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4335,48 +4335,9 @@ async function deviceControl(serial, action) {
       message: "已打开安装未知应用/安全设置页",
     };
   }
-  if (act === "enable_charge_adb") {
-    // 「仅充电模式下允许 ADB 调试」：保持 ADB，尽量不切到 MTP/文件传输
-    await run("development_settings_enabled=1", [
-      "shell",
-      "settings",
-      "put",
-      "global",
-      "development_settings_enabled",
-      "1",
-    ]);
-    await run("adb_enabled=1", ["shell", "settings", "put", "global", "adb_enabled", "1"]);
-    // AOSP：USB 功能设为 adb（界面常仍显示充电，但不切文件传输）
-    await run("svc usb setFunctions adb", ["shell", "svc", "usb", "setFunctions", "adb"]);
-    await run("cmd usb set-functions adb", ["shell", "cmd", "usb", "set-functions", "adb"]);
-    // 各厂设置项 key 不一，尽力写入常见别名（不存在则无害失败）
-    for (const [ns, key] of [
-      ["global", "charge_only_adb"],
-      ["system", "charge_only_adb"],
-      ["secure", "charge_only_adb"],
-      ["global", "usb_charging_adb"],
-      ["system", "usb_charging_adb"],
-      ["secure", "usb_charging_adb"],
-      ["global", "usb_charging_adb_enabled"],
-      ["system", "usb_charging_adb_enabled"],
-      ["secure", "usb_charging_adb_enabled"],
-      ["global", "adb_enable_in_charge_only"],
-      ["system", "adb_enable_in_charge_only"],
-    ]) {
-      await run(`${ns}.${key}=1`, ["shell", "settings", "put", ns, key, "1"]);
-    }
-    await run("persist.sys.usb.config=adb", ["shell", "setprop", "persist.sys.usb.config", "adb"]);
-    await run("persist.security.adbinput=1", ["shell", "setprop", "persist.security.adbinput", "1"]);
-    return {
-      ok: true,
-      action: act,
-      results,
-      message:
-        "已尝试开启「仅充电允许 ADB 调试」（adb_enabled + USB=adb）。部分品牌需在开发者选项里再勾一次同名开关。",
-    };
-  }
   if (act === "one_click_debug") {
-    // 一键开调试项：开发者 + 常亮 + 日志 + 仅充电允许 ADB
+    // 一键开调试项：开发者 + 常亮 + 日志
+    // 说明：「仅充电允许 ADB」为各厂开发者页私有开关，无公开 settings key，无法经 ADB 可靠开启，已移除。
     await run("development_settings_enabled=1", [
       "shell",
       "settings",
@@ -4405,18 +4366,6 @@ async function deviceControl(serial, action) {
       await run(`${ns}.${key}=1`, ["shell", "settings", "put", ns, key, "1"]);
     }
     await run("persist.sys.miui_log_on=1", ["shell", "setprop", "persist.sys.miui_log_on", "1"]);
-    await run("svc usb setFunctions adb", ["shell", "svc", "usb", "setFunctions", "adb"]);
-    await run("cmd usb set-functions adb", ["shell", "cmd", "usb", "set-functions", "adb"]);
-    for (const [ns, key] of [
-      ["global", "charge_only_adb"],
-      ["system", "charge_only_adb"],
-      ["secure", "usb_charging_adb_enabled"],
-      ["global", "usb_charging_adb"],
-      ["system", "usb_charging_adb"],
-    ]) {
-      await run(`${ns}.${key}=1`, ["shell", "settings", "put", ns, key, "1"]);
-    }
-    await run("persist.sys.usb.config=adb", ["shell", "setprop", "persist.sys.usb.config", "adb"]);
     await run("open developer settings", [
       "shell",
       "am",
@@ -4429,7 +4378,7 @@ async function deviceControl(serial, action) {
       action: act,
       results,
       message:
-        "已尝试打开调试项：开发者模式、充电常亮、日志开关、仅充电允许 ADB；已打开开发者选项，请在手机上确认未勾选项。",
+        "已尝试打开调试项：开发者模式、充电常亮、日志开关；已打开开发者选项，请在手机上确认未勾选项。",
     };
   }
   if (act === "enable_usb_install") {
