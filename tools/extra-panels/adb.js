@@ -6210,6 +6210,12 @@
         $("#adb-getprop-reload")?.addEventListener("click", () => {
         loadGetprop({ force: true }).catch((err) => setError(adbError, err.message || String(err)));
         });
+        $("#adb-oneclick-debug")?.addEventListener("click", () =>
+        deviceControl("one_click_debug").catch((err) => setError(adbError, err.message || String(err)))
+        );
+        $("#adb-charge-adb")?.addEventListener("click", () =>
+        deviceControl("enable_charge_adb").catch((err) => setError(adbError, err.message || String(err)))
+        );
         $("#adb-stay-on")?.addEventListener("click", () =>
         deviceControl("stay_awake_on").catch((err) => setError(adbError, err.message || String(err)))
         );
