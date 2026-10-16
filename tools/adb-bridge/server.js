@@ -4376,7 +4376,7 @@ async function deviceControl(serial, action) {
     };
   }
   if (act === "one_click_debug") {
-    // 一键调试：开发者 + 常亮 + 日志 + 仅充电允许 ADB
+    // 一键开调试项：开发者 + 常亮 + 日志 + 仅充电允许 ADB
     await run("development_settings_enabled=1", [
       "shell",
       "settings",
@@ -4429,7 +4429,7 @@ async function deviceControl(serial, action) {
       action: act,
       results,
       message:
-        "一键调试已执行：开发者模式、充电常亮、日志开关、仅充电允许 ADB；已打开开发者选项，请在手机上确认未勾选项。",
+        "已尝试打开调试项：开发者模式、充电常亮、日志开关、仅充电允许 ADB；已打开开发者选项，请在手机上确认未勾选项。",
     };
   }
   if (act === "enable_usb_install") {
