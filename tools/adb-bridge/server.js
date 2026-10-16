@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.60";
+const BRIDGE_VERSION = "0.9.61";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4336,7 +4336,7 @@ async function deviceControl(serial, action) {
     };
   }
   if (act === "one_click_debug") {
-    // 一键开调试项：开发者 + 常亮 + 日志
+    // 一键开调试项：开发者 + 常亮 + 日志 + USB 安装
     // 说明：「仅充电允许 ADB」为各厂开发者页私有开关，无公开 settings key，无法经 ADB 可靠开启，已移除。
     await run("development_settings_enabled=1", [
       "shell",
@@ -4366,6 +4366,64 @@ async function deviceControl(serial, action) {
       await run(`${ns}.${key}=1`, ["shell", "settings", "put", ns, key, "1"]);
     }
     await run("persist.sys.miui_log_on=1", ["shell", "setprop", "persist.sys.miui_log_on", "1"]);
+    // USB 安装（与 enable_usb_install 同套尽力而为写入）
+    await run("adb_install_enabled system=1", [
+      "shell",
+      "settings",
+      "put",
+      "system",
+      "adb_install_enabled",
+      "1",
+    ]);
+    await run("adb_install_enabled global=1", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "adb_install_enabled",
+      "1",
+    ]);
+    await run("adb_install_enabled secure=1", [
+      "shell",
+      "settings",
+      "put",
+      "secure",
+      "adb_install_enabled",
+      "1",
+    ]);
+    await run("install_non_market_apps global", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "install_non_market_apps",
+      "1",
+    ]);
+    await run("install_non_market_apps secure", [
+      "shell",
+      "settings",
+      "put",
+      "secure",
+      "install_non_market_apps",
+      "1",
+    ]);
+    await run("verifier_verify_adb_installs=0", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "verifier_verify_adb_installs",
+      "0",
+    ]);
+    await run("package_verifier_enable=0", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "package_verifier_enable",
+      "0",
+    ]);
+    await run("persist.security.adbinput=1", ["shell", "setprop", "persist.security.adbinput", "1"]);
     await run("open developer settings", [
       "shell",
       "am",
@@ -4378,7 +4436,7 @@ async function deviceControl(serial, action) {
       action: act,
       results,
       message:
-        "已尝试打开调试项：开发者模式、充电常亮、日志开关；已打开开发者选项，请在手机上确认未勾选项。",
+        "已尝试打开调试项：开发者模式、充电常亮、日志开关、USB 安装；已打开开发者选项，请在手机上确认未勾选项。",
     };
   }
   if (act === "enable_usb_install") {
