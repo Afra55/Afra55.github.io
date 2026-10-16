@@ -25,6 +25,8 @@
   const LAST_EXPORT_KEY = "devtools-memo-last-export-v1";
   const MD_PREVIEW_KEY = "devtools-memo-md-preview-v1";
   const GROUP_BY_DAY_KEY = "devtools-memo-group-by-day-v1";
+  /** 备份与存储：仅首次进入默认展开，之后默认折叠 */
+  const BACKUP_FOLD_SEEN_KEY = "devtools-memo-backup-fold-seen-v1";
   const BACKUP_NUDGE_DAYS = 7;
   const BACKUP_NUDGE_MIN_ITEMS = 3;
   const LARGE_WARN_BYTES = 25 * 1024 * 1024;
@@ -1405,7 +1407,6 @@
 
   function updateStorageTip() {
     const tip = $("#memo-storage-tip");
-    const fold = $("#memo-backup-fold");
     if (!tip) return;
     const show =
       canDirPicker() &&
@@ -1413,7 +1414,29 @@
       !state.dirPending &&
       (state.index.items?.length || 0) >= 1;
     tip.hidden = !show;
-    if (show && fold && !fold.open) fold.open = true;
+    // 不再因提示强制展开：仅首次进页展开，之后保持用户默认折叠
+  }
+
+  /** 第一次进备忘录展开「备份与存储」；之后默认折叠 */
+  function initBackupFoldDefault() {
+    const fold = $("#memo-backup-fold");
+    if (!fold) return;
+    let seen = false;
+    try {
+      seen = localStorage.getItem(BACKUP_FOLD_SEEN_KEY) === "1";
+    } catch (_) {
+      seen = false;
+    }
+    if (!seen) {
+      fold.open = true;
+      try {
+        localStorage.setItem(BACKUP_FOLD_SEEN_KEY, "1");
+      } catch (_) {
+        /* ignore */
+      }
+      return;
+    }
+    fold.open = false;
   }
 
   function isTempItem(item) {
@@ -4413,6 +4436,7 @@
   async function boot() {
     // 打开面板后立刻离开「正在检测…」；任何后续 await 都不得永久挡住文案/列表
     paintStoreMetaFallback();
+    initBackupFoldDefault();
     const bootWatchdog = setTimeout(() => {
       finishBootUi();
     }, 1600);
