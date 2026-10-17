@@ -134,6 +134,23 @@
     bc: null,
   };
 
+  /**
+   * 收端会话：key = `${from}:${fileId}`。
+   * 同一 DataChannel 上二进制无 fileId 标记，故同 peer 只允许一条活跃接收；多文件靠 recvTailByPeer 排队。
+   * @type {Map<string, { chunks: ArrayBuffer[], meta: object|null, resolve: Function, reject: Function, timer: any }>}
+   */
+  const recvSessions = new Map();
+  /** @type {Map<string, string>} peerId → 当前活跃接收的 fileId */
+  const activeRecvByPeer = new Map();
+  /** @type {Map<string, Promise<void>>} 同 peer 发送排队（多端不同 peer 仍并行） */
+  const serveTailByPeer = new Map();
+  /** @type {Map<string, Promise<unknown>>} 同 owner 接收排队 */
+  const recvTailByPeer = new Map();
+  /** @type {Map<string, Promise<Blob|null>>} 同文件去重 inflight */
+  const resolveInflight = new Map();
+  /** @type {Map<string, "queued"|"downloading">} 下载按钮可见状态 */
+  const dlUiState = new Map();
+
   function uid(n = 10) {
     const a = new Uint8Array(n);
     crypto.getRandomValues(a);
@@ -1063,18 +1080,62 @@
     }
   }
 
-  function dropPeer(id) {
-    if (!id) return;
-    state.peers.delete(id);
-    const link = state.links.get(id);
-    if (link) {
+  function linkDcOpen(link) {
+    return link?.dc?.readyState === "open";
+  }
+
+  /** 灭屏/后台后常见：PC 仍挂在 map 里但已不可用，会挡住 maybeConnect 重建 */
+  function linkIsDead(link) {
+    if (!link?.pc) return true;
+    const st = link.pc.connectionState;
+    if (st === "failed" || st === "closed") return true;
+    const dc = link.dc?.readyState;
+    if (st === "disconnected" && dc !== "open" && dc !== "connecting") return true;
+    if (dc === "closed" || dc === "closing") return true;
+    return false;
+  }
+
+  function clearPeerTransferState(peerId) {
+    if (!peerId) return;
+    for (const key of [...recvSessions.keys()]) {
+      if (!key.startsWith(`${peerId}:`)) continue;
+      const sess = recvSessions.get(key);
+      recvSessions.delete(key);
       try {
-        link.pc.close();
+        clearTimeout(sess?.timer);
+        sess?.reject?.(new Error("连接已断开"));
       } catch {
         /* ignore */
       }
-      state.links.delete(id);
     }
+    if (activeRecvByPeer.get(peerId)) activeRecvByPeer.delete(peerId);
+    serveTailByPeer.delete(peerId);
+    recvTailByPeer.delete(peerId);
+  }
+
+  /** 只拆 WebRTC，保留 MQTT 在场（灭屏重连用） */
+  function dropLink(id) {
+    if (!id) return;
+    const link = state.links.get(id);
+    if (!link) return;
+    if (link.discTimer) {
+      clearTimeout(link.discTimer);
+      link.discTimer = null;
+    }
+    try {
+      link.pc?.close?.();
+    } catch {
+      /* ignore */
+    }
+    state.links.delete(id);
+    clearPeerTransferState(id);
+    paintStatus();
+  }
+
+  function dropPeer(id) {
+    if (!id) return;
+    state.peers.delete(id);
+    dropLink(id);
     paintStatus();
     paintFeed();
   }
@@ -1084,6 +1145,49 @@
     for (const [id, p] of state.peers) {
       if (now - (p.lastSeen || 0) > PEER_STALE_MS) dropPeer(id);
     }
+  }
+
+  /** 丢掉死链并对仍在场的同伴重新协商 */
+  function healLinks() {
+    for (const [id, link] of [...state.links]) {
+      if (linkIsDead(link)) dropLink(id);
+    }
+    for (const [id, p] of state.peers) {
+      if (Date.now() - (p.lastSeen || 0) < PEER_STALE_MS) {
+        maybeConnect(id).catch(() => {});
+      }
+    }
+  }
+
+  function waitMs(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  async function waitDcOpen(peerId, ms = 10000) {
+    const start = Date.now();
+    while (Date.now() - start < ms) {
+      if (linkDcOpen(state.links.get(peerId))) return true;
+      await waitMs(120);
+    }
+    return linkDcOpen(state.links.get(peerId));
+  }
+
+  /** 下载/发送前确保 DC 可用：死链先拆再重建 */
+  async function ensureDcReady(peerId) {
+    if (!peerId || peerId === state.peerId) return false;
+    let link = state.links.get(peerId);
+    if (link && linkIsDead(link)) {
+      dropLink(peerId);
+      link = null;
+    }
+    if (linkDcOpen(link)) return true;
+    const asOfferer = state.peerId < peerId;
+    await ensureLink(peerId, asOfferer);
+    if (await waitDcOpen(peerId, 10000)) return true;
+    // 仍未通：拆掉再试一次（对方可能刚回前台）
+    dropLink(peerId);
+    await ensureLink(peerId, asOfferer);
+    return waitDcOpen(peerId, 8000);
   }
 
   function sendSnapshotTo(to, via) {
@@ -1196,16 +1300,32 @@
 
   async function maybeConnect(remoteId) {
     if (!remoteId || remoteId === state.peerId || !webrtcSupported()) return;
-    if (state.links.has(remoteId)) return;
+    const existing = state.links.get(remoteId);
+    if (existing) {
+      if (linkDcOpen(existing)) return;
+      // 协商中：别拆
+      if (!linkIsDead(existing) && (existing.makingOffer || existing.dc?.readyState === "connecting")) {
+        return;
+      }
+      // 死链占坑会永久挡住重连（灭屏后常见）
+      dropLink(remoteId);
+    }
     // 较小 id 发起，避免双开
     if (state.peerId > remoteId) return;
     await ensureLink(remoteId, true);
   }
 
   async function ensureLink(remoteId, asOfferer) {
-    if (state.links.has(remoteId)) return state.links.get(remoteId);
+    const existing = state.links.get(remoteId);
+    if (existing) {
+      if (linkDcOpen(existing)) return existing;
+      if (!linkIsDead(existing) && (existing.makingOffer || existing.dc?.readyState === "connecting")) {
+        return existing;
+      }
+      dropLink(remoteId);
+    }
     const pc = createPeer();
-    const link = { pc, dc: null, polite: state.peerId > remoteId, makingOffer: false };
+    const link = { pc, dc: null, polite: state.peerId > remoteId, makingOffer: false, discTimer: null };
     state.links.set(remoteId, link);
 
     pc.onicecandidate = (ev) => {
@@ -1218,14 +1338,33 @@
       });
     };
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed" || pc.connectionState === "closed") {
-        try {
-          pc.close();
-        } catch {
-          /* ignore */
+      const cur = state.links.get(remoteId);
+      if (!cur || cur.pc !== pc) return;
+      const st = pc.connectionState;
+      if (st === "connected" || st === "connecting") {
+        if (cur.discTimer) {
+          clearTimeout(cur.discTimer);
+          cur.discTimer = null;
         }
-        state.links.delete(remoteId);
         paintStatus();
+        return;
+      }
+      if (st === "failed" || st === "closed") {
+        dropLink(remoteId);
+        if (isOwnerOnline(remoteId)) maybeConnect(remoteId).catch(() => {});
+        return;
+      }
+      if (st === "disconnected") {
+        // 短暂断连可能自愈；超时仍断则拆链重谈
+        if (cur.discTimer) clearTimeout(cur.discTimer);
+        cur.discTimer = setTimeout(() => {
+          const again = state.links.get(remoteId);
+          if (!again || again.pc !== pc) return;
+          if (pc.connectionState === "disconnected" || linkIsDead(again)) {
+            dropLink(remoteId);
+            if (isOwnerOnline(remoteId)) maybeConnect(remoteId).catch(() => {});
+          }
+        }, 2800);
       }
     };
     pc.ondatachannel = (ev) => {
@@ -1315,23 +1454,6 @@
       }
     };
   }
-
-  /**
-   * 收端会话：key = `${from}:${fileId}`。
-   * 同一 DataChannel 上二进制无 fileId 标记，故同 peer 只允许一条活跃接收；多文件靠 recvTailByPeer 排队。
-   * @type {Map<string, { chunks: ArrayBuffer[], meta: object|null, resolve: Function, reject: Function, timer: any }>}
-   */
-  const recvSessions = new Map();
-  /** @type {Map<string, string>} peerId → 当前活跃接收的 fileId */
-  const activeRecvByPeer = new Map();
-  /** @type {Map<string, Promise<void>>} 同 peer 发送排队（多端不同 peer 仍并行） */
-  const serveTailByPeer = new Map();
-  /** @type {Map<string, Promise<unknown>>} 同 owner 接收排队 */
-  const recvTailByPeer = new Map();
-  /** @type {Map<string, Promise<Blob|null>>} 同文件去重 inflight */
-  const resolveInflight = new Map();
-  /** @type {Map<string, "queued"|"downloading">} 下载按钮可见状态 */
-  const dlUiState = new Map();
 
   function bumpFeedPaint() {
     lastFeedSig = "";
@@ -1628,6 +1750,11 @@
     notePeer(from, state.peers.get(from)?.name || "");
 
     let link = state.links.get(from);
+    // 死链上无法 setRemoteDescription；先拆再按 answerer 建新 PC
+    if (link && linkIsDead(link)) {
+      dropLink(from);
+      link = null;
+    }
     if (!link) {
       await ensureLink(from, false);
       link = state.links.get(from);
@@ -1638,21 +1765,30 @@
     if (msg.signalType === "offer" && msg.sdp) {
       const offerCollision = link.makingOffer || pc.signalingState !== "stable";
       if (offerCollision && !link.polite) return;
-      await pc.setRemoteDescription({ type: "offer", sdp: msg.sdp });
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      await waitIce(pc);
-      publishMqtt({
-        type: "signal",
-        signalType: "answer",
-        to: from,
-        sdp: pc.localDescription?.sdp,
-      });
+      try {
+        await pc.setRemoteDescription({ type: "offer", sdp: msg.sdp });
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await waitIce(pc);
+        publishMqtt({
+          type: "signal",
+          signalType: "answer",
+          to: from,
+          sdp: pc.localDescription?.sdp,
+        });
+      } catch {
+        // PC 状态异常：拆链等下一轮 offer / presence
+        dropLink(from);
+      }
       return;
     }
     if (msg.signalType === "answer" && msg.sdp) {
       if (pc.signalingState === "have-local-offer") {
-        await pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+        try {
+          await pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+        } catch {
+          dropLink(from);
+        }
       }
       return;
     }
@@ -1680,10 +1816,8 @@
         dcSend(to, { type: "file-error", fileId, message: "源文件不在本机" });
         return;
       }
-      const link = state.links.get(to);
-      if (!link?.dc || link.dc.readyState !== "open") {
-        await ensureLink(to, state.peerId < to);
-        await new Promise((r) => setTimeout(r, 600));
+      if (!(await ensureDcReady(to))) {
+        return;
       }
       const dc = state.links.get(to)?.dc;
       if (!dc || dc.readyState !== "open") {
@@ -1744,10 +1878,6 @@
         });
         return;
       }
-      if (!state.links.has(ownerId)) {
-        await ensureLink(ownerId, state.peerId < ownerId);
-        await new Promise((r) => setTimeout(r, 800));
-      }
       const key = `${ownerId}:${fileId}`;
       if (recvSessions.has(key)) {
         reject(new Error("该文件已在传输"));
@@ -1760,30 +1890,49 @@
       }
       holdingWake = true;
       wakeAcquire();
-      const timer = setTimeout(() => {
-        recvSessions.delete(key);
-        if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
-        finish(reject, new Error("下载超时"));
-      }, 120000);
-      activeRecvByPeer.set(ownerId, fileId);
-      recvSessions.set(key, {
-        chunks: [],
-        meta: null,
-        resolve: (v) => {
+
+      const armSession = () => {
+        const timer = setTimeout(() => {
+          recvSessions.delete(key);
           if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
-          finish(resolve, v);
-        },
-        reject: (e) => {
-          if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
-          finish(reject, e);
-        },
-        timer,
-      });
-      const ok = dcSend(ownerId, { type: "file-req", fileId, from: state.peerId });
-      if (!ok) {
+          finish(reject, new Error("下载超时"));
+        }, 120000);
+        activeRecvByPeer.set(ownerId, fileId);
+        recvSessions.set(key, {
+          chunks: [],
+          meta: null,
+          resolve: (v) => {
+            if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
+            finish(resolve, v);
+          },
+          reject: (e) => {
+            if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
+            finish(reject, e);
+          },
+          timer,
+        });
+        return timer;
+      };
+
+      const disarmSession = (timer) => {
         clearTimeout(timer);
         recvSessions.delete(key);
         if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
+      };
+
+      let ready = await ensureDcReady(ownerId);
+      let timer = armSession();
+      let ok = ready && dcSend(ownerId, { type: "file-req", fileId, from: state.peerId });
+      if (!ok) {
+        // 死链/半开链：拆掉再谈一次，避免误报「源设备已离开」
+        disarmSession(timer);
+        dropLink(ownerId);
+        ready = await ensureDcReady(ownerId);
+        timer = armSession();
+        ok = ready && dcSend(ownerId, { type: "file-req", fileId, from: state.peerId });
+      }
+      if (!ok) {
+        disarmSession(timer);
         finish(reject, new Error(SOURCE_GONE));
       }
     });
@@ -2438,6 +2587,8 @@
     state.presenceTimer = setInterval(() => {
       publishPresence();
       prunePeers();
+      // 对方灭屏重连后，本机若仍占着死链也会下不了；心跳里顺带愈合
+      healLinks();
       paintStatus();
       // 不在心跳里强制 paintFeed：整表 innerHTML 会让视频缩略图反复闪
       paintFeed();
@@ -2449,6 +2600,8 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
         publishPresence();
+        // 灭屏后 WebRTC 常变尸链：回前台立刻拆死链并重谈
+        healLinks();
         if (state.persistGate === "live") {
           requestSnapshots();
           pullBridgeSnapshot().catch(() => {});

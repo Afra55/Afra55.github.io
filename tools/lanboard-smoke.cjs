@@ -81,6 +81,9 @@ function staticCheck() {
   assert(js.includes("逐个下载") && js.includes("uniqueDownloadName"), "多选≥2须串行逐个下载");
   assert(!/\bBULK_DL_GAP_MS\b/.test(js), "逐个下载不得人为间隔，应直接接下一个");
   assert(js.includes("wakeAcquire") && js.includes("wakeRelease"), "数据传递期间须防息屏");
+  assert(js.includes("linkIsDead") && js.includes("dropLink") && js.includes("healLinks"), "灭屏后须识别死链并重建");
+  assert(js.includes("ensureDcReady") && js.includes("waitDcOpen"), "下载前须确保 DataChannel 可用");
+  assert(/visibilitychange[\s\S]*healLinks/.test(js), "回前台须 healLinks 重连");
   assert(!js.includes("ensureJsZip") && !js.includes("打包下载"), "多选不得再走 ZIP 打包主路径");
   assert(js.includes("resolveLobbySlug") && js.includes("TEXT_ITEM_MAX_AGE_MS"), "须支持隔离房间与文字过期");
   assert(js.includes("clearFeedNow") && js.includes("pruneStaleTextItems"), "须支持清空列表与过期文字清理");
