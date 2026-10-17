@@ -37,8 +37,6 @@
   const TEXT_MQTT_MAX = 1800;
   const THUMB_TIMEOUT_MS = 2500;
   const MQTT_THUMB_MAX = 12000;
-  /** 多选逐个下载间隔（手机浏览器常拦连点） */
-  const BULK_DL_GAP_MS = 550;
   const SOURCE_GONE = "源设备已离开，仅可预览";
 
   /** #lanboard?room=xxx 或 ?lbRoom=xxx → 隔离冒烟/私房，默认公共大厅 */
@@ -1423,8 +1421,65 @@
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
 
-  function sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
+  /** 传文件期间防息屏（优先共用 DevToolsDeviceNotify，否则本机 Wake Lock） */
+  let wakeHolders = 0;
+  let wakeSentinel = null;
+
+  async function requestWakeNative() {
+    if (wakeSentinel || typeof navigator === "undefined" || !navigator.wakeLock) return;
+    if (document.visibilityState !== "visible") return;
+    try {
+      wakeSentinel = await navigator.wakeLock.request("screen");
+      wakeSentinel.addEventListener("release", () => {
+        wakeSentinel = null;
+      });
+    } catch {
+      wakeSentinel = null;
+    }
+  }
+
+  function wakeAcquire() {
+    const dn = window.DevToolsDeviceNotify;
+    if (dn?.acquire) {
+      try {
+        dn.acquire();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    wakeHolders += 1;
+    if (wakeHolders === 1) requestWakeNative();
+  }
+
+  function wakeRelease() {
+    const dn = window.DevToolsDeviceNotify;
+    if (dn?.release) {
+      try {
+        dn.release();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    wakeHolders = Math.max(0, wakeHolders - 1);
+    if (wakeHolders === 0 && wakeSentinel) {
+      const s = wakeSentinel;
+      wakeSentinel = null;
+      try {
+        s.release?.();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && wakeHolders > 0 && !window.DevToolsDeviceNotify) {
+        requestWakeNative();
+      }
+    });
   }
 
   function markDownloadUi(id, it) {
@@ -1471,6 +1526,7 @@
     const usedNames = new Set();
     let ok = 0;
     let fail = 0;
+    wakeAcquire();
     try {
       notifyToast(`开始逐个下载 ${ids.length} 个文件…`);
       for (let i = 0; i < ids.length; i++) {
@@ -1502,7 +1558,6 @@
           triggerBlobDownload(blob, uniqueDownloadName(it.name || `file-${id}`, usedNames));
           ok += 1;
           selectedDlIds.delete(id);
-          if (i < ids.length - 1) await sleep(BULK_DL_GAP_MS);
         } catch {
           fail += 1;
         } finally {
@@ -1519,6 +1574,7 @@
       notifyToast(e?.message || "批量下载失败");
       setError(e?.message || "批量下载失败");
     } finally {
+      wakeRelease();
       bulkDownloading = false;
       bumpFeedPaint();
     }
@@ -1616,34 +1672,39 @@
   }
 
   async function serveFileBody(to, fileId) {
-    const blob = state.localBlobs.get(fileId);
-    const meta = state.items.get(fileId);
-    if (!blob || !meta) {
-      dcSend(to, { type: "file-error", fileId, message: "源文件不在本机" });
-      return;
+    wakeAcquire();
+    try {
+      const blob = state.localBlobs.get(fileId);
+      const meta = state.items.get(fileId);
+      if (!blob || !meta) {
+        dcSend(to, { type: "file-error", fileId, message: "源文件不在本机" });
+        return;
+      }
+      const link = state.links.get(to);
+      if (!link?.dc || link.dc.readyState !== "open") {
+        await ensureLink(to, state.peerId < to);
+        await new Promise((r) => setTimeout(r, 600));
+      }
+      const dc = state.links.get(to)?.dc;
+      if (!dc || dc.readyState !== "open") {
+        return;
+      }
+      dcSend(to, {
+        type: "file-meta",
+        fileId,
+        name: meta.name,
+        mime: meta.mime,
+        size: blob.size,
+      });
+      const buf = await blob.arrayBuffer();
+      for (let i = 0; i < buf.byteLength; i += CHUNK_SIZE) {
+        await waitDcBuffer(dc);
+        dc.send(buf.slice(i, i + CHUNK_SIZE));
+      }
+      dcSend(to, { type: "file-done", fileId });
+    } finally {
+      wakeRelease();
     }
-    const link = state.links.get(to);
-    if (!link?.dc || link.dc.readyState !== "open") {
-      await ensureLink(to, state.peerId < to);
-      await new Promise((r) => setTimeout(r, 600));
-    }
-    const dc = state.links.get(to)?.dc;
-    if (!dc || dc.readyState !== "open") {
-      return;
-    }
-    dcSend(to, {
-      type: "file-meta",
-      fileId,
-      name: meta.name,
-      mime: meta.mime,
-      size: blob.size,
-    });
-    const buf = await blob.arrayBuffer();
-    for (let i = 0; i < buf.byteLength; i += CHUNK_SIZE) {
-      await waitDcBuffer(dc);
-      dc.send(buf.slice(i, i + CHUNK_SIZE));
-    }
-    dcSend(to, { type: "file-done", fileId });
   }
 
   /** 多设备各走独立 DC → 可并行；同一设备多文件 → 同 DC 串行，避免分片交叉。 */
@@ -1653,6 +1714,14 @@
 
   function requestFileFromPeerNow(ownerId, fileId, onStart) {
     return new Promise(async (resolve, reject) => {
+      let holdingWake = false;
+      const finish = (fn, arg) => {
+        if (holdingWake) {
+          holdingWake = false;
+          wakeRelease();
+        }
+        fn(arg);
+      };
       if (!ownerId || ownerId === state.peerId) {
         reject(new Error("无源设备"));
         return;
@@ -1689,10 +1758,12 @@
       } catch {
         /* ignore */
       }
+      holdingWake = true;
+      wakeAcquire();
       const timer = setTimeout(() => {
         recvSessions.delete(key);
         if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
-        reject(new Error("下载超时"));
+        finish(reject, new Error("下载超时"));
       }, 120000);
       activeRecvByPeer.set(ownerId, fileId);
       recvSessions.set(key, {
@@ -1700,11 +1771,11 @@
         meta: null,
         resolve: (v) => {
           if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
-          resolve(v);
+          finish(resolve, v);
         },
         reject: (e) => {
           if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
-          reject(e);
+          finish(reject, e);
         },
         timer,
       });
@@ -1713,7 +1784,7 @@
         clearTimeout(timer);
         recvSessions.delete(key);
         if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
-        reject(new Error(SOURCE_GONE));
+        finish(reject, new Error(SOURCE_GONE));
       }
     });
   }
@@ -1897,6 +1968,7 @@
       return;
     }
     bumpFeedPaint();
+    wakeAcquire();
     try {
       if (dlUiState.get(id) === "queued") notifyToast("已排队，等同设备当前文件传完");
       const blob = await resolveMediaBlob(id, {
@@ -1917,6 +1989,7 @@
       notifyToast(e?.message || SOURCE_GONE);
       setError(e?.message || SOURCE_GONE);
     } finally {
+      wakeRelease();
       if (ownedUi) dlUiState.delete(id);
       bumpFeedPaint();
     }
@@ -2065,6 +2138,7 @@
     const files = pendingFiles.slice();
     clearPendingFiles();
     const fails = [];
+    if (files.length) wakeAcquire();
     try {
       if (text) {
         const item = {
@@ -2104,6 +2178,7 @@
         if (els.fileHint) els.fileHint.textContent = "";
       }
     } finally {
+      if (files.length) wakeRelease();
       setSendingUi(false);
       // 发送中又选了文件：pending 已更新但被 sending 早退挡住，收尾后自动续发
       if (pendingFiles.length) {
