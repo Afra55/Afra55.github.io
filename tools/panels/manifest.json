@@ -33,6 +33,11 @@
       "bytes": 4563
     },
     {
+      "id": "apidebug",
+      "file": "./panels/apidebug.html",
+      "bytes": 6817
+    },
+    {
       "id": "audio",
       "file": "./panels/audio.html",
       "bytes": 5089

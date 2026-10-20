@@ -70,7 +70,8 @@ FFmpeg 接口前缀：`/ff/*`（例如 `GET /ff/ops`、`POST /ff/jobs/run`）
 | POST | `/apps/permission` | 授予 / 撤销权限 |
 | POST | `/apk/info` | 分析已上传 APK（aapt/aapt2 解析包信息；keytool/openssl/apksigner 解析签名：别名/CN/SHA1/SHA256 等） |
 | POST | `/apps/backup` | 备份 APK（可 `async` 任务） |
-| GET/POST | `/network/proxy` | HTTP 代理查询/设置/清除 |
+| POST | `/http/proxy` | 本机代发 HTTP(S)（API 调试面板；绕过浏览器 CORS；body≤5MB） |
+| GET/POST | `/network/proxy` | 设备 HTTP 代理查询/设置/清除 |
 | GET/POST | `/network/forward` | forward/reverse 端口转发 |
 | GET/POST | `/developer` | 开发者选项（含 stay_on / show_touches / force_rtl 等） |
 | POST | `/media/screenshot` | 多设备截图任务 |

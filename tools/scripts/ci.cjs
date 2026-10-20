@@ -22,6 +22,7 @@ const STEPS = [
   { name: "markdown smoke", cmd: "node", args: ["markdown-smoke.cjs"] },
   { name: "registry verify", cmd: "node", args: ["scripts/verify-registry.cjs"] },
   { name: "pure tests", cmd: "node", args: ["test/pure.test.js"] },
+  { name: "apidebug pure tests", cmd: "node", args: ["test/apidebug-pure.test.js"] },
   { name: "vbb plan tests", cmd: "node", args: ["vbb-plan.test.js"] },
   { name: "vbb blackbox fps", cmd: "node", args: ["vbb-blackbox-fps.test.js"] },
   { name: "vbb auto crop", cmd: "node", args: ["vbb-auto-crop.test.js"] },

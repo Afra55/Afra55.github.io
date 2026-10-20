@@ -9,6 +9,7 @@
  */
 
 const http = require("http");
+const https = require("https");
 const { URL } = require("url");
 const { execFile, spawn } = require("child_process");
 const fs = require("fs");
@@ -38,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.63";
+const BRIDGE_VERSION = "0.9.64";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -440,6 +441,102 @@ function requireToken(req) {
     err.status = 401;
     throw err;
   }
+}
+
+/** 本机代发 HTTP(S)：供 API 调试面板绕过浏览器 CORS / Cookie 限制（仅 127.0.0.1 + Token） */
+function proxyHttpRequest({ url: targetUrl, method, headers, body, timeoutMs } = {}) {
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(String(targetUrl || "").trim());
+    } catch {
+      const err = new Error("无效的 URL");
+      err.status = 400;
+      reject(err);
+      return;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      const err = new Error("仅支持 http/https");
+      err.status = 400;
+      reject(err);
+      return;
+    }
+    const lib = parsed.protocol === "https:" ? https : http;
+    const timeout = Math.min(Math.max(Number(timeoutMs) || 60000, 1000), 120000);
+    const maxBody = 5 * 1024 * 1024;
+    const hdrs = {};
+    for (const [k, v] of Object.entries(headers && typeof headers === "object" ? headers : {})) {
+      if (v == null) continue;
+      const key = String(k);
+      const lower = key.toLowerCase();
+      if (lower === "host" || lower === "content-length" || lower === "transfer-encoding") continue;
+      hdrs[key] = String(v);
+    }
+    const methodUp = String(method || "GET").toUpperCase() || "GET";
+    const bodyBuf =
+      body != null && body !== "" && methodUp !== "GET" && methodUp !== "HEAD"
+        ? Buffer.from(String(body), "utf8")
+        : null;
+    if (bodyBuf) hdrs["Content-Length"] = String(bodyBuf.length);
+
+    const req = lib.request(
+      {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === "https:" ? 443 : 80),
+        path: `${parsed.pathname || "/"}${parsed.search || ""}`,
+        method: methodUp,
+        headers: hdrs,
+        timeout,
+      },
+      (proxyRes) => {
+        const chunks = [];
+        let size = 0;
+        let aborted = false;
+        proxyRes.on("data", (c) => {
+          if (aborted) return;
+          size += c.length;
+          if (size > maxBody) {
+            aborted = true;
+            req.destroy();
+            const err = new Error("响应体过大（上限 5MB）");
+            err.status = 413;
+            reject(err);
+            return;
+          }
+          chunks.push(c);
+        });
+        proxyRes.on("end", () => {
+          if (aborted) return;
+          const buf = Buffer.concat(chunks);
+          const outHeaders = {};
+          for (const [k, v] of Object.entries(proxyRes.headers || {})) {
+            outHeaders[k] = Array.isArray(v) ? v.join(", ") : String(v ?? "");
+          }
+          resolve({
+            ok: true,
+            status: proxyRes.statusCode || 0,
+            statusText: proxyRes.statusMessage || "",
+            headers: outHeaders,
+            bodyText: buf.toString("utf8"),
+            bodyBytes: buf.length,
+          });
+        });
+        proxyRes.on("error", (err) => {
+          if (!aborted) reject(err);
+        });
+      }
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      const err = new Error("请求超时");
+      err.status = 504;
+      reject(err);
+    });
+    req.on("error", reject);
+    if (bodyBuf) req.write(bodyBuf);
+    req.end();
+  });
 }
 
 function createJob(type, meta = {}) {
@@ -5571,6 +5668,7 @@ async function handleApi(req, res, url) {
             ytdlp: Boolean(ffmpegBridge?.checkYtdlp),
             git: Boolean(gitBridge),
             mirror: true,
+            httpProxy: true,
           },
           features: [
             "unified-bridge",
@@ -5603,6 +5701,7 @@ async function handleApi(req, res, url) {
             "app-labels-device",
             "app-labels-stream",
             "proxy",
+            "http-proxy",
             "forward",
             "developer",
             "local-fs",
@@ -5658,7 +5757,7 @@ async function handleApi(req, res, url) {
           docling: !!doclingBridge,
           mineru: !!mineruBridge,
           note:
-            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock) + Pandoc(/pandoc) + MinerU(/mineru) + Docling(/docling 回退) + 看板(/lanboard)。Token 默认 devtools-bridge。只需启动一次。",
+            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock) + Pandoc(/pandoc) + MinerU(/mineru) + Docling(/docling 回退) + 看板(/lanboard) + HTTP代发(/http/proxy)。Token 默认 devtools-bridge。只需启动一次。",
         },
         origin
       );
@@ -5666,6 +5765,13 @@ async function handleApi(req, res, url) {
     }
 
     requireToken(req);
+
+    if (url.pathname === "/http/proxy" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 6 * 1024 * 1024));
+      const result = await proxyHttpRequest(body);
+      sendJson(res, 200, result, origin);
+      return;
+    }
 
     if (url.pathname === "/devices" && req.method === "GET") {
       const adbInfo = await checkAdb();
@@ -6443,7 +6549,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
-  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / Pandoc(/pandoc) / MinerU(/mineru) / Docling(/docling) / 看板(/lanboard) / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / Pandoc(/pandoc) / MinerU(/mineru) / Docling(/docling) / 看板(/lanboard) / HTTP代发(/http/proxy) / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);

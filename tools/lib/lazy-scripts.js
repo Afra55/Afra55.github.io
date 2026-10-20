@@ -95,6 +95,7 @@
     ytdlp: "./ytdlp.js",
     gitbridge: "./gitbridge.js",
     passvault: "./passvault.js",
+    apidebug: "./apidebug.js",
     lanshare: "./lanshare.js",
     lanboard: "./lanboard.js",
     setup: "./setup.js",
@@ -255,13 +256,14 @@
     "ytdlp",
     "gitbridge",
     "passvault",
+    "apidebug",
     "phlogo",
     "nokiasms",
   ]);
 
   const NO_PURE = new Set([
     "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "lanboard", "ffbridge", "ytdlp",
-    "gitbridge", "passvault", "envkit", "feedbackhub",
+    "gitbridge", "passvault", "apidebug", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",
     "insectearn", "plantearn", "colorearn", "numearn", "shapeearn", "vehicleearn", "fruitearn", "homeearn", "sportsearn", "foodearn", "thingearn", "jobearn", "weatherearn", "bodyearn", "vegearn", "ipgeo",
@@ -679,6 +681,12 @@
       report(0.94, `加载${id} 模块…`);
       if (id === "qrcode") {
         await loadScript("./lib/code-scan.js");
+      }
+      if (id === "apidebug") {
+        await loadScript("./lib/apidebug-pure.js");
+        try {
+          await window.DevToolsPanels?.ensure?.(id);
+        } catch (_) {}
       }
       // 备忘录 / 局域网看板：必须先有面板节点，否则脚本会空跑且不再初始化
       if (id === "memo" || id === "lanboard") {

@@ -1,0 +1,121 @@
+<section id="apidebug" class="panel tool-panel" data-reveal>
+  <div class="panel-head">
+    <h1>API 调试</h1>
+    <p>本地 REST 调试：GET/POST、Header/Cookie、收藏与导入导出；支持请求 ↔ cURL 互转。跨域可经统一本机桥代发。</p>
+  </div>
+  <div class="panel-body apid-body">
+    <p class="error" id="apid-error" hidden role="alert"></p>
+
+    <div class="apid-layout">
+      <aside class="apid-side panel-card">
+        <div class="apid-side-bar">
+          <strong>收藏</strong>
+          <span class="hint tight" id="apid-count">0</span>
+        </div>
+        <div class="btn-row tool-actions apid-side-actions">
+          <button type="button" class="secondary-btn" id="apid-new" title="新建空白请求">新建</button>
+          <button type="button" class="ghost-btn" id="apid-import" title="导入 JSON（单条或全部）">导入</button>
+          <button type="button" class="ghost-btn" id="apid-export-all" title="导出全部收藏">导出全部</button>
+        </div>
+        <input id="apid-import-file" type="file" accept=".json,application/json" hidden />
+        <ul class="apid-list" id="apid-list" aria-label="收藏列表"></ul>
+        <p class="hint tight apid-side-hint">右键条目：发送 / 复制 cURL / 导出 / 删除</p>
+      </aside>
+
+      <div class="apid-main">
+        <div class="apid-req-bar panel-card">
+          <div class="apid-url-row">
+            <select id="apid-method" class="select-input apid-method" title="方法" aria-label="HTTP 方法">
+              <option>GET</option>
+              <option>POST</option>
+              <option>PUT</option>
+              <option>PATCH</option>
+              <option>DELETE</option>
+              <option>HEAD</option>
+              <option>OPTIONS</option>
+            </select>
+            <input id="apid-url" class="mono apid-url" type="url" placeholder="https://httpbin.org/get" spellcheck="false" autocomplete="off" />
+            <button type="button" class="primary-btn" id="apid-send">发送</button>
+          </div>
+          <div class="apid-name-row">
+            <label class="hint tight" for="apid-name">名称</label>
+            <input id="apid-name" type="text" maxlength="80" placeholder="收藏名称" autocomplete="off" />
+            <button type="button" class="secondary-btn" id="apid-save">保存</button>
+            <button type="button" class="ghost-btn" id="apid-save-as">另存为</button>
+            <label class="flag apid-bridge-flag" title="打开后经本机桥代发，可带自定义 Cookie/绕过 CORS">
+              <input type="checkbox" id="apid-use-bridge" /> 经本机桥发送
+            </label>
+          </div>
+          <div class="btn-row tool-actions apid-toolbar">
+            <button type="button" class="ghost-btn" id="apid-to-curl">复制为 cURL</button>
+            <button type="button" class="ghost-btn" id="apid-from-curl">从 cURL 导入</button>
+            <button type="button" class="ghost-btn" id="apid-export-one">导出当前</button>
+            <button type="button" class="ghost-btn" id="apid-clear">清空编辑器</button>
+          </div>
+        </div>
+
+        <div class="apid-tabs panel-card" id="apid-tabs">
+          <div class="apid-tab-bar" role="tablist">
+            <button type="button" class="apid-tab is-on" data-apid-tab="query" role="tab">Query</button>
+            <button type="button" class="apid-tab" data-apid-tab="headers" role="tab">Headers</button>
+            <button type="button" class="apid-tab" data-apid-tab="cookies" role="tab">Cookies</button>
+            <button type="button" class="apid-tab" data-apid-tab="body" role="tab">Body</button>
+          </div>
+          <div class="apid-tab-panel" data-apid-panel="query">
+            <div class="apid-kv" id="apid-query"></div>
+            <button type="button" class="ghost-btn" data-apid-add="query">+ 添加参数</button>
+          </div>
+          <div class="apid-tab-panel" data-apid-panel="headers" hidden>
+            <div class="apid-kv" id="apid-headers"></div>
+            <button type="button" class="ghost-btn" data-apid-add="headers">+ 添加 Header</button>
+          </div>
+          <div class="apid-tab-panel" data-apid-panel="cookies" hidden>
+            <p class="hint tight">Cookie 会合并进请求的 Cookie 头；浏览器直连受站点限制，经桥发送更完整。</p>
+            <div class="apid-kv" id="apid-cookies"></div>
+            <button type="button" class="ghost-btn" data-apid-add="cookies">+ 添加 Cookie</button>
+          </div>
+          <div class="apid-tab-panel" data-apid-panel="body" hidden>
+            <div class="field-row" style="flex-wrap:wrap;gap:0.5rem 1rem;align-items:center">
+              <label class="flag"><input type="radio" name="apid-body-type" value="none" checked /> none</label>
+              <label class="flag"><input type="radio" name="apid-body-type" value="json" /> JSON</label>
+              <label class="flag"><input type="radio" name="apid-body-type" value="raw" /> raw</label>
+              <label class="flag"><input type="radio" name="apid-body-type" value="form" /> x-www-form-urlencoded</label>
+            </div>
+            <textarea id="apid-body" class="mono area" rows="8" placeholder="请求体…" spellcheck="false"></textarea>
+          </div>
+        </div>
+
+        <div class="apid-resp panel-card">
+          <div class="apid-resp-bar">
+            <strong>响应</strong>
+            <span class="hint tight mono" id="apid-resp-meta">尚未发送</span>
+          </div>
+          <details class="apid-resp-headers">
+            <summary class="hint tight">响应头</summary>
+            <pre class="mono apid-pre" id="apid-resp-headers">—</pre>
+          </details>
+          <pre class="mono apid-pre apid-resp-body" id="apid-resp-body" tabindex="0">—</pre>
+        </div>
+
+        <details class="hint tight apid-bridge-details panel-card" id="apid-bridge-details">
+          <summary>本机桥（跨域 / 自定义 Cookie 时用 · 统一桥 17888）</summary>
+          <div id="apid-bridge-shell"></div>
+          <p class="hint tight" id="apid-bridge-note" style="margin-top:0.4rem"></p>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="apid-curl-dlg" class="apid-dlg">
+    <form method="dialog" class="apid-dlg-inner">
+      <div class="apid-dlg-head">
+        <strong>从 cURL 导入</strong>
+        <button type="submit" class="ghost-btn" value="cancel">关闭</button>
+      </div>
+      <textarea id="apid-curl-input" class="mono area" rows="10" placeholder="粘贴 curl …" spellcheck="false"></textarea>
+      <div class="btn-row tool-actions">
+        <button type="button" class="primary-btn" id="apid-curl-apply">解析并填入</button>
+      </div>
+    </form>
+  </dialog>
+</section>
