@@ -322,6 +322,104 @@
     });
   }
 
+  /**
+   * 多行 key:value / key=value / 制表符 解析成 KV 行。
+   * @param {string} text
+   * @param {{ style?: "auto"|"colon"|"equal"|"cookie" }} [opts]
+   */
+  function parseKvBulk(text, { style = "auto" } = {}) {
+    const raw = String(text || "").replace(/\r\n/g, "\n").trim();
+    if (!raw) return [];
+
+    if (style === "cookie" || (style === "auto" && !raw.includes("\n") && /[=;]/.test(raw) && !raw.includes(":"))) {
+      return parseCookieLine(raw);
+    }
+
+    const rows = [];
+    for (let line of raw.split("\n")) {
+      line = String(line || "").trim();
+      if (!line || line.startsWith("#") || line.startsWith("//")) continue;
+
+      const curlH = line.match(/^(-H|--header)\s+(.+)$/i);
+      if (curlH) {
+        let v = curlH[2].trim();
+        if (
+          (v.startsWith("'") && v.endsWith("'")) ||
+          (v.startsWith('"') && v.endsWith('"'))
+        ) {
+          v = v.slice(1, -1);
+        }
+        line = v;
+      }
+
+      if (style === "cookie") {
+        rows.push(...parseCookieLine(line));
+        continue;
+      }
+
+      const pair = splitKvLine(line, style);
+      if (pair) rows.push({ id: uid(4), enabled: true, key: pair.key, value: pair.value });
+    }
+    return rows;
+  }
+
+  function stripOuterQuotes(s) {
+    const v = String(s ?? "").trim();
+    if (
+      (v.startsWith('"') && v.endsWith('"') && v.length >= 2) ||
+      (v.startsWith("'") && v.endsWith("'") && v.length >= 2)
+    ) {
+      return v.slice(1, -1);
+    }
+    return v;
+  }
+
+  function splitKvLine(line, style = "auto") {
+    const s = String(line || "").trim();
+    if (!s) return null;
+    if (s.includes("\t")) {
+      const parts = s.split("\t");
+      const key = parts[0].trim();
+      if (!key) return null;
+      return { key, value: stripOuterQuotes(parts.slice(1).join("\t")) };
+    }
+    const colon = s.indexOf(":");
+    const eq = s.indexOf("=");
+    let useColon = style === "colon";
+    let useEqual = style === "equal";
+    if (style === "auto") {
+      if (colon >= 0 && (eq < 0 || colon <= eq)) useColon = true;
+      else if (eq >= 0) useEqual = true;
+    }
+    if (useColon && colon >= 0) {
+      const key = s.slice(0, colon).trim();
+      if (!key) return null;
+      return { key, value: stripOuterQuotes(s.slice(colon + 1)) };
+    }
+    if ((useEqual || style === "auto") && eq >= 0) {
+      const key = s.slice(0, eq).trim();
+      if (!key) return null;
+      return { key, value: stripOuterQuotes(s.slice(eq + 1)) };
+    }
+    return null;
+  }
+
+  function parseCookieLine(text) {
+    const rows = [];
+    for (const part of String(text || "").split(";")) {
+      const bit = part.trim();
+      if (!bit) continue;
+      const eq = bit.indexOf("=");
+      rows.push({
+        id: uid(4),
+        enabled: true,
+        key: eq >= 0 ? bit.slice(0, eq).trim() : bit,
+        value: eq >= 0 ? bit.slice(eq + 1) : "",
+      });
+    }
+    return rows.filter((r) => r.key);
+  }
+
   function packExport(items, { all = false } = {}) {
     return {
       kind: EXPORT_KIND,
@@ -363,6 +461,9 @@
     buildFetchInit,
     requestToCurl,
     curlToRequest,
+    parseKvBulk,
+    splitKvLine,
+    parseCookieLine,
     packExport,
     unpackImport,
   };

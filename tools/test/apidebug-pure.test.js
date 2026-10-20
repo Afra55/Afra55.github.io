@@ -74,6 +74,34 @@ test("curl parse common flags", () => {
   assert.strictEqual(r.cookies.length, 2);
 });
 
+test("parseKvBulk headers colon lines", () => {
+  const rows = P.parseKvBulk(
+    "Content-Type: application/json\nAuthorization: Bearer abc\n# skip\nX-Id: 1",
+    { style: "colon" }
+  );
+  assert.strictEqual(rows.length, 3);
+  assert.strictEqual(rows[0].key, "Content-Type");
+  assert.strictEqual(rows[0].value, "application/json");
+  assert.strictEqual(rows[1].key, "Authorization");
+  assert.strictEqual(rows[1].value, "Bearer abc");
+});
+
+test("parseKvBulk curl -H lines", () => {
+  const rows = P.parseKvBulk(`-H 'Accept: application/json'\n-H "X-Token: t1"`, { style: "colon" });
+  assert.strictEqual(rows.length, 2);
+  assert.strictEqual(rows[0].key, "Accept");
+  assert.strictEqual(rows[1].value, "t1");
+});
+
+test("parseKvBulk query equal + cookie semicolon", () => {
+  const q = P.parseKvBulk("page=1\nlimit=20", { style: "auto" });
+  assert.strictEqual(q.length, 2);
+  assert.strictEqual(q[0].key, "page");
+  const c = P.parseKvBulk("sid=abc; token=xyz", { style: "cookie" });
+  assert.strictEqual(c.length, 2);
+  assert.strictEqual(c[1].key, "token");
+});
+
 test("packExport / unpackImport", () => {
   const item = P.emptyRequest({ name: "one", url: "https://x.test/" });
   const pack = P.packExport([item], { all: false });

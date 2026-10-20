@@ -1,7 +1,7 @@
 <section id="apidebug" class="panel tool-panel" data-reveal>
   <div class="panel-head">
     <h1>API 调试</h1>
-    <p>本地 REST 调试：GET/POST、Header/Cookie、收藏与导入导出；支持请求 ↔ cURL 互转。跨域可经统一本机桥代发。</p>
+    <p>本地 REST：方法 / Header / Cookie / Body · 收藏导入导出 · 请求 ↔ cURL。跨域可勾选经统一本机桥代发。</p>
   </div>
   <div class="panel-body apid-body">
     <p class="error" id="apid-error" hidden role="alert"></p>
@@ -10,7 +10,7 @@
       <aside class="apid-side panel-card">
         <div class="apid-side-bar">
           <strong>收藏</strong>
-          <span class="hint tight" id="apid-count">0</span>
+          <span class="apid-count-pill" id="apid-count">0</span>
         </div>
         <div class="btn-row tool-actions apid-side-actions">
           <button type="button" class="secondary-btn" id="apid-new" title="新建空白请求">新建</button>
@@ -19,13 +19,13 @@
         </div>
         <input id="apid-import-file" type="file" accept=".json,application/json" hidden />
         <ul class="apid-list" id="apid-list" aria-label="收藏列表"></ul>
-        <p class="hint tight apid-side-hint">右键条目：发送 / 复制 cURL / 导出 / 删除</p>
+        <p class="hint tight apid-side-hint">右键：发送 / cURL / 导出 / 删除</p>
       </aside>
 
       <div class="apid-main">
         <div class="apid-req-bar panel-card">
           <div class="apid-url-row">
-            <select id="apid-method" class="select-input apid-method" title="方法" aria-label="HTTP 方法">
+            <select id="apid-method" class="select-input apid-method" title="方法" aria-label="HTTP 方法" data-method="GET">
               <option>GET</option>
               <option>POST</option>
               <option>PUT</option>
@@ -35,22 +35,21 @@
               <option>OPTIONS</option>
             </select>
             <input id="apid-url" class="mono apid-url" type="url" placeholder="https://httpbin.org/get" spellcheck="false" autocomplete="off" />
-            <button type="button" class="primary-btn" id="apid-send">发送</button>
+            <button type="button" class="primary-btn apid-send" id="apid-send">发送</button>
           </div>
           <div class="apid-name-row">
-            <label class="hint tight" for="apid-name">名称</label>
-            <input id="apid-name" type="text" maxlength="80" placeholder="收藏名称" autocomplete="off" />
+            <input id="apid-name" type="text" maxlength="80" placeholder="收藏名称（可选）" autocomplete="off" aria-label="收藏名称" />
             <button type="button" class="secondary-btn" id="apid-save">保存</button>
-            <button type="button" class="ghost-btn" id="apid-save-as">另存为</button>
-            <label class="flag apid-bridge-flag" title="打开后经本机桥代发，可带自定义 Cookie/绕过 CORS">
-              <input type="checkbox" id="apid-use-bridge" /> 经本机桥发送
+            <button type="button" class="ghost-btn" id="apid-save-as">另存</button>
+            <label class="flag apid-bridge-flag" title="打开后经本机桥代发，可带自定义 Cookie / 绕过 CORS">
+              <input type="checkbox" id="apid-use-bridge" /> 经本机桥
             </label>
           </div>
           <div class="btn-row tool-actions apid-toolbar">
-            <button type="button" class="ghost-btn" id="apid-to-curl">复制为 cURL</button>
-            <button type="button" class="ghost-btn" id="apid-from-curl">从 cURL 导入</button>
+            <button type="button" class="ghost-btn" id="apid-to-curl">复制 cURL</button>
+            <button type="button" class="ghost-btn" id="apid-from-curl">从 cURL</button>
             <button type="button" class="ghost-btn" id="apid-export-one">导出当前</button>
-            <button type="button" class="ghost-btn" id="apid-clear">清空编辑器</button>
+            <button type="button" class="ghost-btn" id="apid-clear">清空</button>
           </div>
         </div>
 
@@ -61,46 +60,86 @@
             <button type="button" class="apid-tab" data-apid-tab="cookies" role="tab">Cookies</button>
             <button type="button" class="apid-tab" data-apid-tab="body" role="tab">Body</button>
           </div>
+
           <div class="apid-tab-panel" data-apid-panel="query">
-            <div class="apid-kv" id="apid-query"></div>
-            <button type="button" class="ghost-btn" data-apid-add="query">+ 添加参数</button>
+            <div class="apid-kv-head" aria-hidden="true"><span></span><span>参数名</span><span>值</span><span></span></div>
+            <div class="apid-kv" id="apid-query" data-apid-kv="query"></div>
+            <div class="apid-kv-actions">
+              <button type="button" class="ghost-btn" data-apid-add="query">+ 添加</button>
+              <button type="button" class="ghost-btn" data-apid-bulk-toggle="query">粘贴填充</button>
+            </div>
+            <div class="apid-bulk" data-apid-bulk="query" hidden>
+              <textarea class="mono apid-bulk-ta" rows="5" placeholder="一行一个，例如：&#10;page=1&#10;limit=20&#10;或 q: hello" spellcheck="false"></textarea>
+              <div class="apid-bulk-bar">
+                <button type="button" class="secondary-btn" data-apid-bulk-apply="query">识别并填入</button>
+                <button type="button" class="ghost-btn" data-apid-bulk-append="query">追加</button>
+                <span class="hint tight">支持 key=value / key: value，也可直接在表格里粘贴多行</span>
+              </div>
+            </div>
           </div>
+
           <div class="apid-tab-panel" data-apid-panel="headers" hidden>
-            <div class="apid-kv" id="apid-headers"></div>
-            <button type="button" class="ghost-btn" data-apid-add="headers">+ 添加 Header</button>
+            <div class="apid-kv-head" aria-hidden="true"><span></span><span>Header</span><span>值</span><span></span></div>
+            <div class="apid-kv" id="apid-headers" data-apid-kv="headers"></div>
+            <div class="apid-kv-actions">
+              <button type="button" class="ghost-btn" data-apid-add="headers">+ 添加</button>
+              <button type="button" class="ghost-btn" data-apid-bulk-toggle="headers">粘贴填充</button>
+            </div>
+            <div class="apid-bulk" data-apid-bulk="headers" hidden>
+              <textarea class="mono apid-bulk-ta" rows="6" placeholder="一行一个，例如：&#10;Content-Type: application/json&#10;Authorization: Bearer xxx&#10;X-Request-Id: abc" spellcheck="false"></textarea>
+              <div class="apid-bulk-bar">
+                <button type="button" class="secondary-btn" data-apid-bulk-apply="headers">识别并填入</button>
+                <button type="button" class="ghost-btn" data-apid-bulk-append="headers">追加</button>
+                <span class="hint tight">支持 Key: Value / -H '…'，也可直接在表格里粘贴多行</span>
+              </div>
+            </div>
           </div>
+
           <div class="apid-tab-panel" data-apid-panel="cookies" hidden>
-            <p class="hint tight">Cookie 会合并进请求的 Cookie 头；浏览器直连受站点限制，经桥发送更完整。</p>
-            <div class="apid-kv" id="apid-cookies"></div>
-            <button type="button" class="ghost-btn" data-apid-add="cookies">+ 添加 Cookie</button>
+            <p class="hint tight apid-tab-hint">会合并进 Cookie 头；浏览器直连受限，经桥发送更完整。</p>
+            <div class="apid-kv-head" aria-hidden="true"><span></span><span>名称</span><span>值</span><span></span></div>
+            <div class="apid-kv" id="apid-cookies" data-apid-kv="cookies"></div>
+            <div class="apid-kv-actions">
+              <button type="button" class="ghost-btn" data-apid-add="cookies">+ 添加</button>
+              <button type="button" class="ghost-btn" data-apid-bulk-toggle="cookies">粘贴填充</button>
+            </div>
+            <div class="apid-bulk" data-apid-bulk="cookies" hidden>
+              <textarea class="mono apid-bulk-ta" rows="4" placeholder="一行一个，或单行用分号：&#10;sid=abc&#10;token=xyz&#10;也可：sid=abc; token=xyz" spellcheck="false"></textarea>
+              <div class="apid-bulk-bar">
+                <button type="button" class="secondary-btn" data-apid-bulk-apply="cookies">识别并填入</button>
+                <button type="button" class="ghost-btn" data-apid-bulk-append="cookies">追加</button>
+                <span class="hint tight">支持 a=b; c=d 或一行一对</span>
+              </div>
+            </div>
           </div>
+
           <div class="apid-tab-panel" data-apid-panel="body" hidden>
-            <div class="field-row" style="flex-wrap:wrap;gap:0.5rem 1rem;align-items:center">
+            <div class="apid-body-types">
               <label class="flag"><input type="radio" name="apid-body-type" value="none" checked /> none</label>
               <label class="flag"><input type="radio" name="apid-body-type" value="json" /> JSON</label>
               <label class="flag"><input type="radio" name="apid-body-type" value="raw" /> raw</label>
-              <label class="flag"><input type="radio" name="apid-body-type" value="form" /> x-www-form-urlencoded</label>
+              <label class="flag"><input type="radio" name="apid-body-type" value="form" /> form</label>
             </div>
-            <textarea id="apid-body" class="mono area" rows="8" placeholder="请求体…" spellcheck="false"></textarea>
+            <textarea id="apid-body" class="mono area apid-body-ta" rows="9" placeholder="请求体…" spellcheck="false"></textarea>
           </div>
         </div>
 
         <div class="apid-resp panel-card">
           <div class="apid-resp-bar">
             <strong>响应</strong>
-            <span class="hint tight mono" id="apid-resp-meta">尚未发送</span>
+            <span class="apid-resp-meta mono" id="apid-resp-meta" data-status="">尚未发送</span>
           </div>
           <details class="apid-resp-headers">
-            <summary class="hint tight">响应头</summary>
+            <summary>响应头</summary>
             <pre class="mono apid-pre" id="apid-resp-headers">—</pre>
           </details>
           <pre class="mono apid-pre apid-resp-body" id="apid-resp-body" tabindex="0">—</pre>
         </div>
 
-        <details class="hint tight apid-bridge-details panel-card" id="apid-bridge-details">
-          <summary>本机桥（跨域 / 自定义 Cookie 时用 · 统一桥 17888）</summary>
+        <details class="apid-bridge-details panel-card" id="apid-bridge-details">
+          <summary>本机桥（跨域 / 自定义 Cookie · 17888）</summary>
           <div id="apid-bridge-shell"></div>
-          <p class="hint tight" id="apid-bridge-note" style="margin-top:0.4rem"></p>
+          <p class="hint tight" id="apid-bridge-note"></p>
         </details>
       </div>
     </div>

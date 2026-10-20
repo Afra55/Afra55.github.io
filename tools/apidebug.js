@@ -135,10 +135,16 @@
     });
   }
 
+  function syncMethodTone() {
+    if (!els.method) return;
+    els.method.dataset.method = String(els.method.value || "GET").toUpperCase();
+  }
+
   function writeEditor(req) {
     const r = P.emptyRequest(req);
     state.currentId = r.id;
     if (els.method) els.method.value = r.method;
+    syncMethodTone();
     if (els.url) els.url.value = r.url;
     if (els.name) els.name.value = r.name;
     if (els.body) els.body.value = r.bodyText || "";
@@ -161,16 +167,49 @@
     }));
   }
 
+  function kvHost(kind) {
+    if (kind === "query") return els.query;
+    if (kind === "headers") return els.headers;
+    if (kind === "cookies") return els.cookies;
+    return null;
+  }
+
+  function kvStyle(kind) {
+    if (kind === "headers") return "colon";
+    if (kind === "cookies") return "cookie";
+    return "auto";
+  }
+
+  function applyKvRows(kind, rows, { append = false } = {}) {
+    const host = kvHost(kind);
+    if (!host) return 0;
+    const next = Array.isArray(rows)
+      ? rows.map((r) => ({ ...P.emptyKv(), ...r, id: r.id || P.uid(4) }))
+      : [];
+    if (!next.length) {
+      toast("没有识别到有效的键值对");
+      return 0;
+    }
+    const merged = append
+      ? [...readKv(host).filter((r) => String(r.key || "").trim() || String(r.value || "").trim()), ...next]
+      : next;
+    renderKv(host, merged);
+    markDirty();
+    return next.length;
+  }
+
   function renderKv(host, rows) {
     if (!host) return;
+    const kind = host.dataset.apidKv || "";
+    const keyPh = kind === "headers" ? "Header" : kind === "cookies" ? "名称" : "参数名";
     const list = rows?.length ? rows : [P.emptyKv()];
     host.innerHTML = list
       .map(
         (r) =>
           `<div class="apid-kv-row" data-id="${escapeAttr(r.id)}">` +
           `<input type="checkbox" data-k="on" ${r.enabled !== false ? "checked" : ""} title="启用" />` +
-          `<input type="text" data-k="key" placeholder="名称" value="${escapeAttr(r.key)}" spellcheck="false" />` +
-          `<input type="text" data-k="val" placeholder="值" value="${escapeAttr(r.value)}" spellcheck="false" />` +
+          `<input type="text" data-k="key" placeholder="${keyPh}" value="${escapeAttr(r.key)}" spellcheck="false" autocomplete="off" />` +
+          `<input type="text" data-k="val" placeholder="值" value="${escapeAttr(r.value)}" spellcheck="false" autocomplete="off" />` +
           `<button type="button" class="ghost-btn" data-k="del" title="删除">×</button>` +
           `</div>`
       )
@@ -195,7 +234,7 @@
     if (!els.list) return;
     if (els.count) els.count.textContent = String(state.items.length);
     if (!state.items.length) {
-      els.list.innerHTML = `<li class="hint tight" style="padding:0.35rem">暂无收藏。编辑后点「保存」，或导入 JSON / cURL。</li>`;
+      els.list.innerHTML = `<li class="hint tight" style="padding:0.4rem 0.2rem">暂无收藏。编辑后点「保存」，或导入 JSON / cURL。</li>`;
       return;
     }
     els.list.innerHTML = state.items
@@ -206,7 +245,7 @@
           `<li><button type="button" class="apid-item${it.id === state.currentId ? " is-active" : ""}" data-id="${escapeAttr(
             it.id
           )}" title="${escapeAttr(it.url)}">` +
-          `<span class="apid-item-method mono">${escapeHtml(it.method)}</span>` +
+          `<span class="apid-item-method mono" data-m="${escapeAttr(it.method)}">${escapeHtml(it.method)}</span>` +
           `<span class="apid-item-name">${escapeHtml(it.name)}</span>` +
           `<span class="apid-item-url mono">${escapeHtml(it.url || "（无 URL）")}</span>` +
           `</button></li>`
@@ -305,7 +344,10 @@
       paintResponse(result, ms);
     } catch (err) {
       const ms = Math.round(performance.now() - t0);
-      if (els.respMeta) els.respMeta.textContent = `失败 · ${ms} ms`;
+      if (els.respMeta) {
+        els.respMeta.dataset.status = "5";
+        els.respMeta.textContent = `失败 · ${ms} ms`;
+      }
       if (els.respHeaders) els.respHeaders.textContent = "—";
       if (els.respBody) els.respBody.textContent = err?.message || String(err);
       setError(err?.message || "请求失败");
@@ -362,10 +404,18 @@
     };
   }
 
+  function formatBytes(n) {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
   function paintResponse(result, ms) {
     const size = new TextEncoder().encode(result.bodyText || "").length;
+    const status = Number(result.status) || 0;
     if (els.respMeta) {
-      els.respMeta.textContent = `${result.status} ${result.statusText || ""} · ${ms} ms · ${size} B`;
+      els.respMeta.dataset.status = status ? String(Math.floor(status / 100)) : "0";
+      els.respMeta.textContent = `${status} ${result.statusText || ""} · ${ms} ms · ${formatBytes(size)}`;
     }
     if (els.respHeaders) {
       const lines = Object.entries(result.headers || {}).map(([k, v]) => `${k}: ${v}`);
@@ -547,10 +597,14 @@
     $("#apid-send")?.addEventListener("click", () => sendRequest());
     $("#apid-clear")?.addEventListener("click", () => {
       writeEditor(P.emptyRequest({ name: "未命名请求", method: "GET" }));
-      if (els.respMeta) els.respMeta.textContent = "尚未发送";
+      if (els.respMeta) {
+        els.respMeta.textContent = "尚未发送";
+        els.respMeta.dataset.status = "";
+      }
       if (els.respHeaders) els.respHeaders.textContent = "—";
       if (els.respBody) els.respBody.textContent = "—";
     });
+    els.method?.addEventListener("change", syncMethodTone);
     $("#apid-to-curl")?.addEventListener("click", async () => {
       const ok = await copyText(P.requestToCurl(readEditor()));
       toast(ok ? "已复制 cURL" : "复制失败");
@@ -615,19 +669,40 @@
     panel.querySelectorAll("[data-apid-add]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const kind = btn.dataset.apidAdd;
-        const host = kind === "query" ? els.query : kind === "headers" ? els.headers : els.cookies;
+        const host = kvHost(kind);
         const rows = readKv(host);
         rows.push(P.emptyKv());
         renderKv(host, rows);
         markDirty();
+        const last = host?.querySelector(".apid-kv-row:last-child [data-k='key']");
+        last?.focus?.();
+      });
+    });
+    panel.querySelectorAll("[data-apid-bulk-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const kind = btn.dataset.apidBulkToggle;
+        const box = panel.querySelector(`[data-apid-bulk="${kind}"]`);
+        if (!box) return;
+        box.hidden = !box.hidden;
+        if (!box.hidden) box.querySelector("textarea")?.focus?.();
+      });
+    });
+    panel.querySelectorAll("[data-apid-bulk-apply], [data-apid-bulk-append]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const kind = btn.dataset.apidBulkApply || btn.dataset.apidBulkAppend;
+        const append = Boolean(btn.dataset.apidBulkAppend);
+        const box = panel.querySelector(`[data-apid-bulk="${kind}"]`);
+        const text = box?.querySelector("textarea")?.value || "";
+        const n = applyKvRows(kind, P.parseKvBulk(text, { style: kvStyle(kind) }), { append });
+        if (n) {
+          toast(append ? `已追加 ${n} 行` : `已填入 ${n} 行`);
+          if (!append && box?.querySelector("textarea")) box.querySelector("textarea").value = "";
+        }
       });
     });
 
     panel.addEventListener("input", (e) => {
       if (e.target?.closest?.(".apid-kv, #apid-url, #apid-name, #apid-body, #apid-method")) markDirty();
-      if (e.target?.id === "apid-url") {
-        // sync query table from URL when typing finishes is noisy; only on blur
-      }
     });
     els.url?.addEventListener("change", () => {
       const q = P.parseQueryFromUrl(els.url.value);
@@ -637,9 +712,29 @@
       const del = e.target.closest?.("[data-k='del']");
       if (del) {
         const row = del.closest(".apid-kv-row");
+        const host = row?.closest?.(".apid-kv");
         row?.remove();
+        if (host && !host.querySelector(".apid-kv-row")) renderKv(host, [P.emptyKv()]);
         markDirty();
       }
+    });
+    panel.addEventListener("paste", (e) => {
+      const input = e.target?.closest?.(".apid-kv-row input[type='text']");
+      if (!input) return;
+      const host = input.closest(".apid-kv");
+      const kind = host?.dataset?.apidKv;
+      if (!kind) return;
+      const text = e.clipboardData?.getData("text") || "";
+      const looksBulk =
+        text.includes("\n") ||
+        (kind === "cookies" && text.includes(";")) ||
+        (kind === "headers" && /:\s*.+/.test(text) && text.length > 24);
+      if (!looksBulk) return;
+      const rows = P.parseKvBulk(text, { style: kvStyle(kind) });
+      if (rows.length < 2 && !(kind === "cookies" && rows.length >= 1 && text.includes(";"))) return;
+      e.preventDefault();
+      const n = applyKvRows(kind, rows, { append: false });
+      if (n) toast(`已从粘贴识别 ${n} 行`);
     });
 
     els.list?.addEventListener("click", (e) => {
