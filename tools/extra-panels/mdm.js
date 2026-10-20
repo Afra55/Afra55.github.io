@@ -918,20 +918,6 @@
         rescan.disabled = !dirOnly;
         rescan.title = dirOnly ? "" : "仅「文件夹」模式可用";
       }
-      const toolsImport = els.toolsDropdown?.querySelector('[data-insert="import"]');
-      if (toolsImport) {
-        toolsImport.disabled = !hasMode;
-        toolsImport.title = hasMode
-          ? "导入本机文档（.md / .txt / .html / .docx / .pdf 等），可多选；有桥优先 MinerU"
-          : "请先选择存储位置再导入";
-      }
-      const toolsImportDir = els.toolsDropdown?.querySelector('[data-insert="import-dir"]');
-      if (toolsImportDir) {
-        toolsImportDir.disabled = !dirOnly;
-        toolsImportDir.title = dirOnly
-          ? "选择文件夹批量导入（连同引用图片）"
-          : "仅「文件夹」模式可用";
-      }
       const moreImport = els.moreDropdown?.querySelector('[data-more="import"]');
       if (moreImport) moreImport.disabled = !hasMode;
       const moreImportDir = els.moreDropdown?.querySelector('[data-more="import-dir"]');
@@ -954,6 +940,7 @@
       setDisabled('[data-insert="duplicate"]', !has);
       setDisabled('[data-insert="rename"]', !has);
       setDisabled('[data-insert="reveal-current"]', !has);
+      setDisabled('[data-insert="copy-path"]', !has || state.mode !== "dir");
       setDisabled('[data-insert="delete"]', !has);
       setDisabled('[data-insert="history"]', !has);
       const pinBtn = els.toolsDropdown?.querySelector('[data-insert="pin"]');
@@ -1605,7 +1592,7 @@
         ["Ctrl/⌘ + F", "文档内查找 / 替换"],
         ["Ctrl/⌘ + Z", "撤销（焦点在列表时 = 撤销删除）"],
         ["双击列表项", "重命名"],
-        ["右键列表项", "更多：置顶 / 复制 / 导出 / 删除"],
+        ["右键列表项", "更多：打开位置 / 复制路径 / 置顶 / 导出 / 删除"],
         ["Ctrl/⌘ + 单击", "多选（批量操作）"],
         ["↑ / ↓", "列表导航"],
       ];
@@ -3786,6 +3773,43 @@
       throw new Error("当前浏览器不支持文件夹定位");
     }
 
+    /** 拼出可复制的本机路径：已记住文件夹路径则用绝对路径，否则退回相对文件名 */
+    function itemFilePath(item) {
+      if (!item?.fileName) return "";
+      if (state.mode === "dir" && state.dirHandle) {
+        let saved = "";
+        try {
+          saved = localStorage.getItem(dirPathKey(state.dirHandle.name)) || "";
+        } catch (_) {}
+        if (saved && MP.joinDocPath) {
+          const abs = MP.joinDocPath(saved, item.fileName);
+          if (abs) return abs;
+        }
+      }
+      return String(item.fileName);
+    }
+
+    async function copyItemPath(item) {
+      if (!item) return;
+      if (state.mode !== "dir" || !state.dirHandle) {
+        setErr("仅「文件夹」模式有本机文件路径");
+        return;
+      }
+      const path = itemFilePath(item);
+      if (!path) {
+        setErr("当前文档没有文件名");
+        return;
+      }
+      const ok = await copyText(path);
+      if (!ok) {
+        setErr("复制失败");
+        return;
+      }
+      setErr("");
+      const abs = path !== item.fileName;
+      toast(abs ? `已复制路径：${path}` : `已复制文件名：${path}（可先「打开文件位置」记住文件夹路径）`);
+    }
+
     async function revealItemLocation(item) {
       if (!item) return;
       if (state.mode !== "dir" || !state.dirHandle) {
@@ -3982,6 +4006,7 @@
       el.innerHTML =
         `<button type="button" data-ctx="open">打开</button>` +
         `<button type="button" data-ctx="reveal">打开文件位置</button>` +
+        `<button type="button" data-ctx="copy-path">复制文件路径</button>` +
         `<button type="button" data-ctx="pin">${item.pinned ? "取消置顶" : "置顶"}</button>` +
         `<button type="button" data-ctx="duplicate">复制</button>` +
         `<button type="button" data-ctx="rename">重命名</button>` +
@@ -4053,6 +4078,7 @@
         closeListCtx();
         if (act === "open") void openDoc(item.id);
         else if (act === "reveal") void revealItemLocation(item);
+        else if (act === "copy-path") void copyItemPath(item);
         else if (act === "pin") void togglePin(item);
         else if (act === "duplicate") void duplicateItem(item);
         else if (act === "rename") startInlineRename(item.id);
@@ -6161,6 +6187,15 @@ a{color:${v.accent}}
           return;
         }
         void revealItemLocation(cur);
+        return;
+      }
+      if (kind === "copy-path") {
+        const cur = findItem(state.currentId);
+        if (!cur) {
+          setErr("请先打开一篇文档");
+          return;
+        }
+        void copyItemPath(cur);
         return;
       }
       if (kind === "trash") {
