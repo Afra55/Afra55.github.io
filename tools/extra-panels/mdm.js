@@ -3714,14 +3714,14 @@
       return new Promise((resolve) => {
         const box = els.modalBox;
         box.innerHTML =
-          `<div class="mdm-modal-head"><strong>打开文件位置</strong></div>` +
-          `<p class="mdm-modal-body">浏览器出于安全不会把所选文件夹的完整路径交给网页，所以没法自动定位。\n\n请粘贴${
+          `<div class="mdm-modal-head"><strong>填写文件夹路径</strong></div>` +
+          `<p class="mdm-modal-body">浏览器出于安全不会把所选文件夹的完整路径交给网页。\n\n请粘贴${
             folderName ? `「${escapeHtml(folderName)}」` : "当前文档所在"
-          }文件夹的完整路径（例如 D:\\notes）。会记住它，之后可直接打开。</p>` +
+          }文件夹的完整路径（例如 D:\\notes）。会记住它，之后复制路径 / 打开位置可直接用。</p>` +
           `<input class="mdm-path-input mono" id="mdm-dirpath-input" placeholder="D:\\notes" spellcheck="false" />` +
           `<div class="mdm-modal-foot">` +
           `<button type="button" class="ghost-btn" data-dp="cancel">取消</button>` +
-          `<button type="button" class="primary-btn" data-dp="ok">打开并记住</button>` +
+          `<button type="button" class="primary-btn" data-dp="ok">记住并继续</button>` +
           `</div>`;
         els.modal.hidden = false;
         const input = box.querySelector("#mdm-dirpath-input");
@@ -3773,20 +3773,63 @@
       throw new Error("当前浏览器不支持文件夹定位");
     }
 
-    /** 拼出可复制的本机路径：已记住文件夹路径则用绝对路径，否则退回相对文件名 */
-    function itemFilePath(item) {
-      if (!item?.fileName) return "";
-      if (state.mode === "dir" && state.dirHandle) {
-        let saved = "";
+    function rememberFolderPath(folderName, dirAbs) {
+      const dir = String(dirAbs || "").trim().replace(/[\\/]+$/, "");
+      if (!folderName || !dir) return;
+      try {
+        localStorage.setItem(dirPathKey(folderName), dir);
+      } catch (_) {}
+    }
+
+    function readRememberedFolderPath(folderName) {
+      try {
+        return localStorage.getItem(dirPathKey(folderName)) || "";
+      } catch (_) {
+        return "";
+      }
+    }
+
+    /** 从桥返回的文件绝对路径推出文件夹路径并记住 */
+    function rememberFromResolvedFile(folderName, fileAbs, dirAbs) {
+      if (dirAbs) {
+        rememberFolderPath(folderName, dirAbs);
+        return;
+      }
+      const p = String(fileAbs || "").trim();
+      if (!p) return;
+      const sep = p.includes("\\") ? "\\" : "/";
+      const i = p.lastIndexOf(sep);
+      if (i > 0) rememberFolderPath(folderName, p.slice(0, i));
+    }
+
+    /** 解析完整本机路径：记住的目录 → 桥反查 → 弹窗填写（不再只回退文件名） */
+    async function resolveItemAbsPath(item, { askIfNeeded = true } = {}) {
+      if (!item?.fileName || state.mode !== "dir" || !state.dirHandle) return "";
+      const folderName = state.dirHandle.name;
+      const saved = readRememberedFolderPath(folderName);
+      if (saved && MP.joinDocPath) {
+        const abs = MP.joinDocPath(saved, item.fileName);
+        if (abs) return abs;
+      }
+      const api = window.devtoolsBridgeToken;
+      if (api?.resolveMdmDoc) {
         try {
-          saved = localStorage.getItem(dirPathKey(state.dirHandle.name)) || "";
-        } catch (_) {}
-        if (saved && MP.joinDocPath) {
-          const abs = MP.joinDocPath(saved, item.fileName);
-          if (abs) return abs;
+          const res = await api.resolveMdmDoc({ folderName, fileName: item.fileName });
+          const abs = String(res?.path || "").trim();
+          if (abs) {
+            rememberFromResolvedFile(folderName, abs, res?.dirAbsPath);
+            return abs;
+          }
+        } catch (_) {
+          /* 桥未连或未找到：继续弹窗 */
         }
       }
-      return String(item.fileName);
+      if (!askIfNeeded) return "";
+      const manual = await askDirPathModal(folderName);
+      if (!manual) return "";
+      const abs = MP.joinDocPath ? MP.joinDocPath(manual, item.fileName) : "";
+      if (abs) rememberFolderPath(folderName, manual);
+      return abs || "";
     }
 
     async function copyItemPath(item) {
@@ -3795,9 +3838,21 @@
         setErr("仅「文件夹」模式有本机文件路径");
         return;
       }
-      const path = itemFilePath(item);
-      if (!path) {
+      if (!item.fileName) {
         setErr("当前文档没有文件名");
+        return;
+      }
+      setSaveStatus("正在解析完整路径…");
+      let path = "";
+      try {
+        path = await resolveItemAbsPath(item, { askIfNeeded: true });
+      } finally {
+        setSaveStatus("");
+      }
+      if (!path) return;
+      // 必须是带目录分隔符的完整路径，禁止只复制文件名
+      if (path === item.fileName || !/[\\/]/.test(path)) {
+        setErr("未能得到完整路径，请填写文件夹路径后再试");
         return;
       }
       const ok = await copyText(path);
@@ -3806,8 +3861,7 @@
         return;
       }
       setErr("");
-      const abs = path !== item.fileName;
-      toast(abs ? `已复制路径：${path}` : `已复制文件名：${path}（可先「打开文件位置」记住文件夹路径）`);
+      toast(`已复制路径：${path}`);
     }
 
     async function revealItemLocation(item) {
@@ -3825,18 +3879,13 @@
       };
       const revealByPath = async (dir) => {
         const res = await api.revealLocalPath({ path: joinPath(dir) });
-        try {
-          localStorage.setItem(dirPathKey(folderName), String(dir).trim());
-        } catch (_) {}
+        rememberFolderPath(folderName, dir);
         setErr("");
         const shown = res?.path || joinPath(dir);
         toast(`已在本机打开：${shown}`);
       };
       // 1) 之前记住过文件夹路径 → 直接精确定位（最快最稳）
-      let saved = "";
-      try {
-        saved = localStorage.getItem(dirPathKey(folderName)) || "";
-      } catch (_) {}
+      const saved = readRememberedFolderPath(folderName);
       if (saved && api?.revealLocalPath) {
         setSaveStatus("正在本机定位…");
         try {
@@ -3865,6 +3914,7 @@
         try {
           const res = await api.revealMdmDoc({ folderName, fileName: item.fileName });
           setSaveStatus("");
+          rememberFromResolvedFile(folderName, res?.path, res?.dirAbsPath);
           toast(`已在本机打开：${res?.path || item.fileName}`);
           return;
         } catch (err) {
@@ -3876,7 +3926,7 @@
           }
         }
       }
-      // 3) 兜底：让用户填一次文件夹路径并记住
+      // 4) 兜底：让用户填一次文件夹路径并记住
       const manual = await askDirPathModal(folderName);
       if (!manual) return;
       try {

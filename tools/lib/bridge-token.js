@@ -438,11 +438,7 @@
     return data;
   }
 
-  /**
-   * 按「文件夹名 + 文件名」在本机定位 Markdown 文档并打开所在位置（POST /local/reveal-doc）。
-   * 浏览器拿不到 FSA 的绝对路径，所以交给桥按名字反查。
-   */
-  async function revealMdmDoc({ folderName, fileName, preferredBase, token, kind = "unified" } = {}) {
+  async function postMdmDocLookup(pathname, { folderName, fileName, preferredBase, token, kind = "unified" } = {}, failHint) {
     const dirName = String(folderName || "").trim();
     const fName = String(fileName || "").trim();
     if (!dirName || !fName) throw new Error("缺少文件夹名或文件名");
@@ -458,13 +454,13 @@
       }
     }
     if (!health) {
-      throw new Error("本机桥未连接。请先启动并连接桥，再点「打开文件位置」。");
+      throw new Error(failHint || "本机桥未连接。请先启动并连接桥。");
     }
     const ac = typeof AbortController === "function" ? new AbortController() : null;
     const timer = ac ? setTimeout(() => ac.abort(), 30000) : null;
     let res;
     try {
-      res = await fetch(`${base}/local/reveal-doc`, {
+      res = await fetch(`${base}${pathname}`, {
         method: "POST",
         signal: ac ? ac.signal : undefined,
         headers: {
@@ -482,9 +478,24 @@
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data?.ok === false) {
-      throw new Error(data?.error || `打开文件位置失败（HTTP ${res.status}）`);
+      throw new Error(data?.error || `操作失败（HTTP ${res.status}）`);
     }
     return data;
+  }
+
+  /**
+   * 按「文件夹名 + 文件名」在本机定位 Markdown 文档并打开所在位置（POST /local/reveal-doc）。
+   * 浏览器拿不到 FSA 的绝对路径，所以交给桥按名字反查。
+   */
+  async function revealMdmDoc(opts = {}) {
+    return postMdmDocLookup("/local/reveal-doc", opts, "本机桥未连接。请先启动并连接桥，再点「打开文件位置」。");
+  }
+
+  /**
+   * 只解析文档完整路径，不打开资源管理器（POST /local/resolve-doc）。
+   */
+  async function resolveMdmDoc(opts = {}) {
+    return postMdmDocLookup("/local/resolve-doc", opts, "本机桥未连接。请先启动并连接桥，再复制文件路径。");
   }
 
   /**
@@ -692,6 +703,7 @@
     writeInstallDir,
     revealLocalPath,
     revealMdmDoc,
+    resolveMdmDoc,
     readAutoStart,
     writeAutoStart,
     rememberFromHealth,
