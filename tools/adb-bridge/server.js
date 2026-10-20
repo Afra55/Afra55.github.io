@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.62";
+const BRIDGE_VERSION = "0.9.63";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5774,21 +5774,6 @@ async function handleApi(req, res, url) {
       } catch (err) {
         sendJson(res, 500, { ok: false, error: err?.message || String(err) }, origin);
       }
-      return;
-    }
-
-    if (url.pathname === "/local/resolve-doc" && req.method === "POST") {
-      // 只解析完整路径，不打开资源管理器（给「复制文件路径」用）
-      if (!ffmpegBridge?.findMdmDocFile) {
-        sendJson(res, 503, { ok: false, error: "未找到本机 resolve 模块" }, origin);
-        return;
-      }
-      const body = parseJsonBody(await readBody(req, 1024 * 1024));
-      const found = await ffmpegBridge.findMdmDocFile({
-        folderName: body.folderName,
-        fileName: body.fileName || body.name,
-      });
-      sendJson(res, 200, { ok: true, path: found, dirAbsPath: path.dirname(found) }, origin);
       return;
     }
 

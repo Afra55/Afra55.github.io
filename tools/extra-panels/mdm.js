@@ -3789,7 +3789,7 @@
       }
     }
 
-    /** 从桥返回的文件绝对路径推出文件夹路径并记住 */
+    /** 「打开文件位置」经桥找到绝对路径时顺带记住目录，供复制路径复用 */
     function rememberFromResolvedFile(folderName, fileAbs, dirAbs) {
       if (dirAbs) {
         rememberFolderPath(folderName, dirAbs);
@@ -3802,36 +3802,7 @@
       if (i > 0) rememberFolderPath(folderName, p.slice(0, i));
     }
 
-    /** 解析完整本机路径：记住的目录 → 桥反查 → 弹窗填写（不再只回退文件名） */
-    async function resolveItemAbsPath(item, { askIfNeeded = true } = {}) {
-      if (!item?.fileName || state.mode !== "dir" || !state.dirHandle) return "";
-      const folderName = state.dirHandle.name;
-      const saved = readRememberedFolderPath(folderName);
-      if (saved && MP.joinDocPath) {
-        const abs = MP.joinDocPath(saved, item.fileName);
-        if (abs) return abs;
-      }
-      const api = window.devtoolsBridgeToken;
-      if (api?.resolveMdmDoc) {
-        try {
-          const res = await api.resolveMdmDoc({ folderName, fileName: item.fileName });
-          const abs = String(res?.path || "").trim();
-          if (abs) {
-            rememberFromResolvedFile(folderName, abs, res?.dirAbsPath);
-            return abs;
-          }
-        } catch (_) {
-          /* 桥未连或未找到：继续弹窗 */
-        }
-      }
-      if (!askIfNeeded) return "";
-      const manual = await askDirPathModal(folderName);
-      if (!manual) return "";
-      const abs = MP.joinDocPath ? MP.joinDocPath(manual, item.fileName) : "";
-      if (abs) rememberFolderPath(folderName, manual);
-      return abs || "";
-    }
-
+    /** 复制完整路径 = 记住的文件夹 + 文件名；没有记住就填一次 */
     async function copyItemPath(item) {
       if (!item) return;
       if (state.mode !== "dir" || !state.dirHandle) {
@@ -3842,17 +3813,16 @@
         setErr("当前文档没有文件名");
         return;
       }
-      setSaveStatus("正在解析完整路径…");
-      let path = "";
-      try {
-        path = await resolveItemAbsPath(item, { askIfNeeded: true });
-      } finally {
-        setSaveStatus("");
+      const folderName = state.dirHandle.name;
+      let dir = readRememberedFolderPath(folderName);
+      if (!dir) {
+        dir = await askDirPathModal(folderName);
+        if (!dir) return;
+        rememberFolderPath(folderName, dir);
       }
-      if (!path) return;
-      // 必须是带目录分隔符的完整路径，禁止只复制文件名
-      if (path === item.fileName || !/[\\/]/.test(path)) {
-        setErr("未能得到完整路径，请填写文件夹路径后再试");
+      const path = MP.joinDocPath ? MP.joinDocPath(dir, item.fileName) : "";
+      if (!path || !/[\\/]/.test(path)) {
+        setErr("路径无效，请重新填写文件夹路径");
         return;
       }
       const ok = await copyText(path);

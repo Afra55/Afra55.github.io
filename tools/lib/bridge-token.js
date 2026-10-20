@@ -492,13 +492,6 @@
   }
 
   /**
-   * 只解析文档完整路径，不打开资源管理器（POST /local/resolve-doc）。
-   */
-  async function resolveMdmDoc(opts = {}) {
-    return postMdmDocLookup("/local/resolve-doc", opts, "本机桥未连接。请先启动并连接桥，再复制文件路径。");
-  }
-
-  /**
    * 绑定「桥解压目录 / 打开目录 / 启动 / 自动启动」控件（ADB 同款）。
    * 填写目录时会自动记住并跨工具同步；按钮用于在本机打开该文件夹。
    * @returns {{ autoEnsure: Function }}
@@ -703,7 +696,6 @@
     writeInstallDir,
     revealLocalPath,
     revealMdmDoc,
-    resolveMdmDoc,
     readAutoStart,
     writeAutoStart,
     rememberFromHealth,
