@@ -560,16 +560,29 @@
     };
   }
 
+  /** 「默认（未分类）」固定紧挨「全部」下方，其它标签跟在后面；不可被拖走 */
+  function pinDefaultTagFirst(tags) {
+    const list = Array.isArray(tags) ? tags.slice() : [];
+    const def =
+      list.find((t) => t && t.id === DEFAULT_TAG_ID) || {
+        id: DEFAULT_TAG_ID,
+        name: "默认",
+        order: 0,
+      };
+    if (!def.name) def.name = "默认";
+    const rest = list.filter((t) => t && t.id !== DEFAULT_TAG_ID);
+    return [def, ...rest];
+  }
+
   function normalizeIndex(raw) {
     const base = emptyIndex();
     if (!raw || typeof raw !== "object") return base;
     const tags = Array.isArray(raw.tags) ? raw.tags : base.tags;
     const hasDefault = tags.some((t) => t.id === DEFAULT_TAG_ID);
-    const nextTags = hasDefault ? tags : [base.tags[0], ...tags];
+    const nextTags = pinDefaultTagFirst(hasDefault ? tags : [base.tags[0], ...tags]);
     nextTags.forEach((t, i) => {
-      if (t.order == null) t.order = i;
+      t.order = i;
     });
-    nextTags.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const items = Array.isArray(raw.items) ? raw.items : [];
     items.forEach((it, i) => {
       if (!Array.isArray(it.tagIds)) it.tagIds = [];
@@ -2495,7 +2508,9 @@
   function renderTags() {
     if (!tagList) return;
     const cache = ensureCountCache();
-    const tags = state.index.tags || [];
+    // 渲染前再钉一次，避免历史数据 / 误操作把「未分类」挤到中间
+    state.index.tags = pinDefaultTagFirst(state.index.tags || []);
+    const tags = state.index.tags;
     const bits = [
       `<div class="memo-tag-row"><button type="button" class="memo-tag-item${state.activeTagId === "all" ? " is-active" : ""}" data-memo-tag="all" draggable="false">全部<span class="mono memo-tag-count">${cache.total}</span></button></div>`,
     ];
@@ -2509,7 +2524,9 @@
         : "";
       bits.push(
         `<div class="memo-tag-row${state.activeTagId === t.id ? " is-active-row" : ""}">
-          <button type="button" class="memo-tag-item${state.activeTagId === t.id ? " is-active" : ""}" data-memo-tag="${escapeHtml(t.id)}" draggable="${canDel ? "true" : "false"}">${escapeHtml(label)}<span class="mono memo-tag-count">${count}</span></button>
+          <button type="button" class="memo-tag-item${state.activeTagId === t.id ? " is-active" : ""}" data-memo-tag="${escapeHtml(t.id)}" draggable="${canDel ? "true" : "false"}" title="${
+            t.id === DEFAULT_TAG_ID ? "未分类（固定在全部下方，不可拖动）" : escapeHtml(label)
+          }">${escapeHtml(label)}<span class="mono memo-tag-count">${count}</span></button>
           ${delBtn}
         </div>`
       );
@@ -3304,6 +3321,7 @@
     state.index.items.forEach((it, i) => {
       it.order = i;
     });
+    state.index.tags = pinDefaultTagFirst(state.index.tags);
     state.index.tags.forEach((t, i) => {
       t.order = i;
     });
@@ -3450,7 +3468,7 @@
       let tag = state.index.tags.find((t) => t.id !== DEFAULT_TAG_ID && String(t.name).toLowerCase() === name.toLowerCase());
       if (!tag) {
         tag = { id: uid(), name, order: -1 };
-        state.index.tags.unshift(tag);
+        state.index.tags.push(tag);
         changed = true;
       }
       if (!item.tagIds.includes(tag.id)) {
@@ -6154,7 +6172,7 @@
         imported.tags.forEach((t) => {
           if (t.id === DEFAULT_TAG_ID) return;
           if (!tagMap.has(t.id)) {
-            state.index.tags.unshift({ ...t, order: -1 });
+            state.index.tags.push({ ...t, order: -1 });
             tagMap.set(t.id, t);
           }
         });
@@ -6229,7 +6247,7 @@
       imported.tags.forEach((t) => {
         if (t.id === DEFAULT_TAG_ID) return;
         if (!tagMap.has(t.id)) {
-          state.index.tags.unshift({ ...t, order: -1 });
+          state.index.tags.push({ ...t, order: -1 });
           tagMap.set(t.id, t);
         }
       });
@@ -6343,7 +6361,7 @@
     let tag = state.index.tags.find((x) => x.name === name);
     if (!tag) {
       tag = { id: uid(), name, order: -1 };
-      state.index.tags.unshift(tag);
+      state.index.tags.push(tag);
       reindexOrders();
       rebuildTagMap();
       await persistIndex({ immediate: true });
@@ -6653,15 +6671,15 @@
     if (!dragTagId || !btn) return;
     e.preventDefault();
     const toId = btn.dataset.memoTag;
-    if (!toId || toId === "all" || toId === dragTagId) return;
+    // 「全部 / 未分类」不可作为落点，未分类位置始终固定
+    if (!toId || toId === "all" || toId === DEFAULT_TAG_ID || toId === dragTagId) return;
     const tags = state.index.tags.filter((t) => t.id !== DEFAULT_TAG_ID);
-    const def = state.index.tags.find((t) => t.id === DEFAULT_TAG_ID);
     const from = tags.findIndex((t) => t.id === dragTagId);
     const to = tags.findIndex((t) => t.id === toId);
     if (from < 0 || to < 0) return;
     const [row] = tags.splice(from, 1);
     tags.splice(to, 0, row);
-    state.index.tags = def ? [def, ...tags] : tags;
+    state.index.tags = pinDefaultTagFirst(tags);
     reindexOrders();
     rebuildTagMap();
     dragTagId = null;
