@@ -7,7 +7,7 @@
 
 const { checkMinerU, convert, installMinerU } = require("./mineru-ops");
 
-const BRIDGE_VERSION = "0.1.0";
+const BRIDGE_VERSION = "0.1.1";
 const FEATURES = { mineru: true, ocr: true, gpuRecommended: true };
 
 function readBody(req, limit = 96 * 1024 * 1024) {
@@ -58,9 +58,18 @@ async function handleRequest(req, res, opts = {}) {
       return;
     }
     if (pathname === "/convert" && req.method === "POST") {
-      const body = parseJsonBody(await readBody(req));
-      const data = await convert(body);
-      sendJson(res, 200, { ok: true, ...data });
+      const raw = await readBody(req);
+      console.log(`[mineru] 收到 /convert · 请求体 ${Math.round(raw.length / 1024)} KB`);
+      const body = parseJsonBody(raw);
+      const t0 = Date.now();
+      try {
+        const data = await convert(body);
+        console.log(`[mineru] /convert 成功 · ${Math.round((Date.now() - t0) / 1000)}s`);
+        sendJson(res, 200, { ok: true, ...data });
+      } catch (err) {
+        console.log(`[mineru] /convert 失败 · ${Math.round((Date.now() - t0) / 1000)}s · ${err?.message || err}`);
+        throw err;
+      }
       return;
     }
     if (pathname === "/install" && req.method === "POST") {

@@ -56,7 +56,24 @@ function runCmd(file, args, { timeout = 120000, cwd, env } = {}) {
   });
 }
 
-function runSpawn(file, args, { timeout = 1200000, cwd, env } = {}) {
+function teeSpawnLines(state, chunk, prefix) {
+  const text = String(chunk || "");
+  state.carry = (state.carry || "") + text;
+  const parts = state.carry.split(/\r?\n/);
+  state.carry = parts.pop() || "";
+  for (const line of parts) {
+    const s = String(line || "").replace(/\s+$/g, "");
+    if (!s) continue;
+    // 控制台别被进度条刷爆：同前缀短时重复只打一次
+    const now = Date.now();
+    if (state.lastLine === s && now - (state.lastAt || 0) < 1500) continue;
+    state.lastLine = s;
+    state.lastAt = now;
+    console.log(`${prefix}${s}`);
+  }
+}
+
+function runSpawn(file, args, { timeout = 1200000, cwd, env, logPrefix = "[mineru] " } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
       cwd,
@@ -66,7 +83,19 @@ function runSpawn(file, args, { timeout = 1200000, cwd, env } = {}) {
     });
     let stdout = "";
     let stderr = "";
+    const outTee = { carry: "", lastLine: "", lastAt: 0 };
+    const errTee = { carry: "", lastLine: "", lastAt: 0 };
+    const started = Date.now();
+    let heartbeat = null;
+    if (logPrefix) {
+      console.log(`${logPrefix}执行: ${file} ${args.join(" ")}`);
+      heartbeat = setInterval(() => {
+        const sec = Math.round((Date.now() - started) / 1000);
+        console.log(`${logPrefix}仍在运行… 已 ${sec}s（首次下模型 / 无 GPU 可能较久，请耐心等待）`);
+      }, 15000);
+    }
     const timer = setTimeout(() => {
+      if (heartbeat) clearInterval(heartbeat);
       try {
         child.kill();
       } catch (_) {}
@@ -78,19 +107,25 @@ function runSpawn(file, args, { timeout = 1200000, cwd, env } = {}) {
     child.stdout.on("data", (d) => {
       stdout += String(d);
       if (stdout.length > 8 * 1024 * 1024) stdout = stdout.slice(-4 * 1024 * 1024);
+      if (logPrefix) teeSpawnLines(outTee, d, logPrefix);
     });
     child.stderr.on("data", (d) => {
       stderr += String(d);
       if (stderr.length > 8 * 1024 * 1024) stderr = stderr.slice(-4 * 1024 * 1024);
+      if (logPrefix) teeSpawnLines(errTee, d, logPrefix);
     });
     child.on("error", (err) => {
       clearTimeout(timer);
+      if (heartbeat) clearInterval(heartbeat);
       err.stdout = stdout;
       err.stderr = stderr;
       reject(err);
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      if (heartbeat) clearInterval(heartbeat);
+      if (logPrefix && outTee.carry.trim()) console.log(`${logPrefix}${outTee.carry.trim()}`);
+      if (logPrefix && errTee.carry.trim()) console.log(`${logPrefix}${errTee.carry.trim()}`);
       if (code === 0) resolve({ stdout, stderr, code });
       else {
         const err = new Error(`exit ${code}`);
@@ -441,6 +476,9 @@ function mineruEnv() {
   const env = { ...process.env };
   // 国内模型源更稳；可用环境变量覆盖
   if (!env.MINERU_MODEL_SOURCE) env.MINERU_MODEL_SOURCE = "modelscope";
+  // 管道捕获时默认块缓冲，黑窗口会像死机；强制行缓冲
+  env.PYTHONUNBUFFERED = "1";
+  env.PYTHONIOENCODING = env.PYTHONIOENCODING || "utf-8";
   return env;
 }
 
@@ -469,6 +507,11 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
   const stem = path.basename(name, path.extname(name)) || "out";
   const env = mineruEnv();
   const errors = [];
+  const t0 = Date.now();
+  const sizeKb = Math.max(1, Math.round(buf.length / 1024));
+  console.log(
+    `[mineru] 开始转换「${name}」· ${sizeKb} KB · forceOcr=${!!forceOcr} · style=${bin.style} · bin=${bin.kind === "bin" ? bin.file : `${bin.file} ${bin.argsPrefix.join(" ")}`.trim()}`
+  );
 
   const attempts = [];
   if (bin.style === "kit") {
@@ -497,11 +540,15 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
 
   try {
     let lastErr = null;
-    for (const att of attempts) {
+    for (let i = 0; i < attempts.length; i += 1) {
+      const att = attempts[i];
+      console.log(`[mineru] 尝试 ${i + 1}/${attempts.length}…`);
       try {
-        await runSpawn(att.file, att.args, { timeout: 1200000, cwd: tmp, env });
+        await runSpawn(att.file, att.args, { timeout: 1200000, cwd: tmp, env, logPrefix: "[mineru] " });
         const md = collectMarkdown(att.outHint, outDir, stem);
         if (md && String(md).trim()) {
+          const sec = Math.round((Date.now() - t0) / 1000);
+          console.log(`[mineru] 完成「${name}」· ${sec}s · Markdown ${String(md).length} 字符`);
           return {
             markdown: String(md),
             engine: "mineru",
@@ -512,9 +559,12 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
           };
         }
         lastErr = new Error("MinerU 输出为空");
+        console.log(`[mineru] 尝试 ${i + 1} 输出为空，换下一命令…`);
       } catch (err) {
         lastErr = err;
-        errors.push(String(err?.stderr || err?.message || err).slice(0, 200));
+        const detail = String(err?.stderr || err?.message || err).slice(0, 240);
+        errors.push(detail);
+        console.log(`[mineru] 尝试 ${i + 1} 失败：${detail}`);
       }
     }
     const msg = String(lastErr?.stderr || lastErr?.message || errors.join(" | ") || "MinerU 转换失败").trim();

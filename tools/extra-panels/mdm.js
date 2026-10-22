@@ -4300,28 +4300,40 @@
     }
 
     async function convertViaBridge(mount, label, file, { forceOcr = false, signal, onStage } = {}) {
-      onStage?.("上传桥…");
+      const sizeKb = Math.max(1, Math.round((file.size || 0) / 1024));
+      onStage?.(`上传桥…（${sizeKb} KB）`);
       const dataBase64 = await fileToBase64(file);
       if (signal?.aborted) throw new Error("已取消");
-      onStage?.(
+      const t0 = Date.now();
+      const stageBase =
         mount === "mineru"
-          ? "MinerU 转换中（质量优先，大文件/首次下模型可能需数分钟）…"
-          : `${label} 转换中（含 OCR，大文件可能需数分钟）…`
-      );
-      const res = await fetch(`${baseUrl()}/${mount}/convert`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Adb-Token": token(),
-          "X-Ffmpeg-Token": token(),
-        },
-        body: JSON.stringify({
-          filename: file.name || "document.bin",
-          dataBase64,
-          forceOcr: !!forceOcr,
-        }),
-        signal,
-      });
+          ? "MinerU 转换中（质量优先；首次下模型/无 GPU 可能需数分钟）"
+          : `${label} 转换中（含 OCR；大文件可能需数分钟）`;
+      const tickStage = () => {
+        const sec = Math.round((Date.now() - t0) / 1000);
+        onStage?.(`${stageBase} · 已 ${sec}s · 可看本机桥黑窗口日志`);
+      };
+      tickStage();
+      const tick = setInterval(tickStage, 1000);
+      let res;
+      try {
+        res = await fetch(`${baseUrl()}/${mount}/convert`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Adb-Token": token(),
+            "X-Ffmpeg-Token": token(),
+          },
+          body: JSON.stringify({
+            filename: file.name || "document.bin",
+            dataBase64,
+            forceOcr: !!forceOcr,
+          }),
+          signal,
+        });
+      } finally {
+        clearInterval(tick);
+      }
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
         const msg = data?.error || `桥转换失败（HTTP ${res.status}）`;
@@ -4329,6 +4341,7 @@
       }
       const md = String(data.markdown || "").trim();
       if (!md) throw new Error(`${label} 输出为空`);
+      onStage?.(`${label} 完成 · ${Math.round((Date.now() - t0) / 1000)}s`);
       return { text: md, via: mount };
     }
 
