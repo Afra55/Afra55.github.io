@@ -4341,8 +4341,16 @@
       }
       const md = String(data.markdown || "").trim();
       if (!md) throw new Error(`${label} 输出为空`);
-      onStage?.(`${label} 完成 · ${Math.round((Date.now() - t0) / 1000)}s`);
-      return { text: md, via: mount };
+      const sec = Math.round((Date.now() - t0) / 1000);
+      const imgN = Number(data.imagesEmbedded) || 0;
+      const tableHint = data.hasTable ? "含表格" : "未检出表格语法";
+      onStage?.(`${label} 完成 · ${sec}s · ${tableHint}${imgN ? ` · 内联图 ${imgN}` : ""}`);
+      return {
+        text: md,
+        via: mount,
+        imagesEmbedded: imgN,
+        hasTable: !!data.hasTable,
+      };
     }
 
     async function convertViaMineru(file, opts) {
@@ -4495,10 +4503,10 @@
       }
       // 纯文本 / md：不走桥，避免无谓开销
       if (/\.(md|markdown)$/i.test(name) || /markdown/i.test(type)) {
-        return await fileToMarkdownBrowser(file, { onStage });
+        return { text: await fileToMarkdownBrowser(file, { onStage }), via: "raw" };
       }
       if (/\.(txt|text)$/i.test(name) || type === "text/plain") {
-        return await fileToMarkdownBrowser(file, { onStage });
+        return { text: await fileToMarkdownBrowser(file, { onStage }), via: "raw" };
       }
 
       if (wantsBridgeConvert(file)) {
@@ -4509,7 +4517,12 @@
         async function tryEngine(convertFn, label) {
           try {
             const r = await convertFn(file, { forceOcr, signal, onStage });
-            return r.text;
+            return {
+              text: r.text,
+              via: r.via || label.toLowerCase(),
+              imagesEmbedded: r.imagesEmbedded || 0,
+              hasTable: !!r.hasTable,
+            };
           } catch (err) {
             if (signal?.aborted || /已取消|AbortError/i.test(String(err?.message || err?.name || ""))) {
               throw new Error("已取消");
@@ -4533,7 +4546,10 @@
                 if (/已取消/i.test(msg2)) throw err2;
                 if (canBrowserFallback(name, type)) {
                   onStage?.(`桥失败，浏览器回退：${msg2.slice(0, 80)}`);
-                  return await fileToMarkdownBrowser(file, { onStage });
+                  return {
+                    text: await fileToMarkdownBrowser(file, { onStage }),
+                    via: "browser",
+                  };
                 }
                 throw err2;
               }
@@ -4546,7 +4562,10 @@
             }
             if (canBrowserFallback(name, type)) {
               onStage?.(`MinerU 失败，浏览器回退：${msg.slice(0, 80)}`);
-              return await fileToMarkdownBrowser(file, { onStage });
+              return {
+                text: await fileToMarkdownBrowser(file, { onStage }),
+                via: "browser",
+              };
             }
             throw err;
           }
@@ -4567,7 +4586,10 @@
             }
             if (canBrowserFallback(name, type)) {
               onStage?.(`Docling 失败，浏览器回退：${msg.slice(0, 80)}`);
-              return await fileToMarkdownBrowser(file, { onStage });
+              return {
+                text: await fileToMarkdownBrowser(file, { onStage }),
+                via: "browser",
+              };
             }
             throw err;
           }
@@ -4584,14 +4606,23 @@
             });
           }
           onStage?.("文档引擎未就绪，浏览器回退（扫描件无 OCR）…");
-          return await fileToMarkdownBrowser(file, { onStage });
+          return {
+            text: await fileToMarkdownBrowser(file, { onStage }),
+            via: "browser",
+          };
         }
 
         onStage?.("本机桥未启动，浏览器回退（扫描件无 OCR）…");
-        return await fileToMarkdownBrowser(file, { onStage });
+        return {
+          text: await fileToMarkdownBrowser(file, { onStage }),
+          via: "browser",
+        };
       }
 
-      return await fileToMarkdownBrowser(file, { onStage });
+      return {
+        text: await fileToMarkdownBrowser(file, { onStage }),
+        via: "browser",
+      };
     }
 
     /** 导入进度弹层（串行队列；可取消） */
@@ -4727,7 +4758,7 @@
           pct: (i / list.length) * 100,
         });
         try {
-          const text = await fileToMarkdown(f, {
+          const converted = await fileToMarkdown(f, {
             signal: ac.signal,
             allowInstall: !offeredInstall,
             onStage: (s) =>
@@ -4739,6 +4770,18 @@
                 pct: ((i + 0.4) / list.length) * 100,
               }),
           });
+          const text = typeof converted === "string" ? converted : converted?.text;
+          const via = typeof converted === "string" ? "" : converted?.via || "";
+          const viaNote =
+            via === "mineru"
+              ? `MinerU${converted?.hasTable ? "·表" : ""}${converted?.imagesEmbedded ? `·图${converted.imagesEmbedded}` : ""}`
+              : via === "docling"
+                ? "Docling"
+                : via === "browser"
+                  ? "浏览器回退（无表/图）"
+                  : via === "raw"
+                    ? ""
+                    : via;
           prog?.update({
             index: i + 1,
             total: list.length,
@@ -4746,7 +4789,7 @@
             stage: "入库…",
             pct: ((i + 0.85) / list.length) * 100,
           });
-          await ingestMarkdownText(f, text);
+          await ingestMarkdownText(f, text, viaNote || undefined);
         } catch (err) {
           if (
             (err?.code === "MINERU_MISSING" || err?.code === "ENGINE_MISSING" || err?.code === "DOCLING_MISSING") &&

@@ -426,50 +426,182 @@ function extOf(name) {
   return m ? m[1] : "";
 }
 
-function collectMarkdown(outPath, outDir, stem) {
-  if (outPath && fs.existsSync(outPath)) {
-    const st = fs.statSync(outPath);
-    if (st.isFile()) return fs.readFileSync(outPath, "utf8");
+function listMarkdownFiles(root, depth = 0, acc = []) {
+  if (depth > 6) return acc;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch (_) {
+    return acc;
   }
-  const prefer = [
+  for (const ent of entries) {
+    const full = path.join(root, ent.name);
+    if (ent.isFile() && /\.(md|markdown)$/i.test(ent.name)) acc.push(full);
+    else if (ent.isDirectory() && !/^(node_modules|\.git)$/i.test(ent.name)) {
+      listMarkdownFiles(full, depth + 1, acc);
+    }
+  }
+  return acc;
+}
+
+/** 给候选 MD 打分：优先带表格/图片/HTML 表的完整稿，避开纯文本/中间产物 */
+function scoreMarkdownCandidate(filePath, stem) {
+  const base = path.basename(filePath);
+  let text = "";
+  try {
+    text = fs.readFileSync(filePath, "utf8");
+  } catch (_) {
+    return { score: -1, text: "", path: filePath };
+  }
+  if (!String(text).trim()) return { score: -1, text: "", path: filePath };
+
+  let score = Math.min(String(text).length, 200000) / 1000;
+  // GFM 表 / HTML 表
+  if (/^\s*\|.+\|\s*$/m.test(text) && /\|\s*:?-{3,}/.test(text)) score += 80;
+  if (/<table[\s>]/i.test(text)) score += 70;
+  // 图片引用
+  if (/!\[[^\]]*\]\([^)]+\)/i.test(text) || /<img\s[^>]*src=/i.test(text)) score += 50;
+  // 标题结构
+  if (/^#{1,6}\s+\S/m.test(text)) score += 20;
+  // 路径/文件名启发式
+  if (/(^|[\\/])auto([\\/]|$)/i.test(filePath)) score += 35;
+  if (/(^|[\\/])ocr([\\/]|$)/i.test(filePath)) score += 25;
+  if (new RegExp(`(^|[\\\\/])${stem}\\.(md|markdown)$`, "i").test(filePath)) score += 15;
+  if (/^(out|full|content)\.(md|markdown)$/i.test(base)) score += 10;
+  // 惩罚：纯文本/中间清单类
+  if (/(_txt|plain|content_list|middle|span|layout)\.(md|markdown)$/i.test(base)) score -= 60;
+  if (/txt/i.test(base) && !/markdown/i.test(base)) score -= 30;
+  return { score, text, path: filePath };
+}
+
+/**
+ * @returns {{ text: string, path: string } | null}
+ */
+function collectMarkdown(outPath, outDir, stem) {
+  const candidates = [];
+  if (outPath && fs.existsSync(outPath) && fs.statSync(outPath).isFile()) {
+    candidates.push(outPath);
+  }
+  for (const p of [
     path.join(outDir, `${stem}.md`),
     path.join(outDir, `${stem}.markdown`),
     path.join(outDir, "out.md"),
-  ];
-  for (const p of prefer) {
-    if (fs.existsSync(p) && fs.statSync(p).isFile()) return fs.readFileSync(p, "utf8");
+  ]) {
+    if (fs.existsSync(p) && fs.statSync(p).isFile()) candidates.push(p);
   }
-  const walk = (dir, depth = 0) => {
-    if (depth > 4) return null;
-    let entries = [];
+  listMarkdownFiles(outDir).forEach((p) => candidates.push(p));
+
+  const uniq = [...new Set(candidates.map((p) => path.resolve(p)))];
+  let best = null;
+  for (const p of uniq) {
+    const hit = scoreMarkdownCandidate(p, stem);
+    if (!best || hit.score > best.score) best = hit;
+  }
+  if (!best || best.score < 0 || !String(best.text || "").trim()) return null;
+  console.log(
+    `[mineru] 选用 MD：${path.relative(outDir, best.path) || path.basename(best.path)} · score=${Math.round(best.score)} · ${best.text.length} 字符`
+  );
+  return { text: best.text, path: best.path };
+}
+
+const IMAGE_EXT_MIME = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp",
+  ".svg": "image/svg+xml",
+  ".tif": "image/tiff",
+  ".tiff": "image/tiff",
+};
+
+function resolveImagePath(mdDir, ref, outDir) {
+  const clean = String(ref || "")
+    .trim()
+    .replace(/^<|>$/g, "")
+    .split(/[?#]/)[0]
+    .replace(/\\/g, "/");
+  if (!clean || /^(https?:|data:|file:)/i.test(clean)) return null;
+  const rel = clean.replace(/^\.\//, "");
+  const tried = [
+    path.resolve(mdDir, rel),
+    path.resolve(mdDir, path.basename(rel)),
+    path.resolve(outDir, rel),
+    path.resolve(outDir, "images", path.basename(rel)),
+    path.resolve(outDir, "image", path.basename(rel)),
+    path.resolve(mdDir, "images", path.basename(rel)),
+    path.resolve(mdDir, "image", path.basename(rel)),
+  ];
+  // MinerU 常见：md 同级 images/、上级 auto/images/
+  tried.push(path.resolve(mdDir, "..", "images", path.basename(rel)));
+  for (const p of tried) {
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch (_) {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
+    } catch (_) {}
+  }
+  return null;
+}
+
+/** 把相对路径图片嵌进 Markdown（data URI），避免删临时目录后裂图 */
+function embedLocalImages(markdown, mdPath, outDir) {
+  const mdDir = path.dirname(mdPath);
+  let text = String(markdown || "");
+  let embedded = 0;
+  let missing = 0;
+  const maxEach = 6 * 1024 * 1024;
+  const maxTotal = 48 * 1024 * 1024;
+  let total = 0;
+  const cache = new Map();
+
+  function toDataUri(abs) {
+    if (cache.has(abs)) return cache.get(abs);
+    const st = fs.statSync(abs);
+    if (st.size > maxEach || total + st.size > maxTotal) {
+      cache.set(abs, null);
       return null;
     }
-    // 优先常见 MinerU 输出名
-    for (const ent of entries) {
-      if (ent.isFile() && /\.md$/i.test(ent.name)) {
-        const full = path.join(dir, ent.name);
-        if (/auto|ocr|txt|content|full/i.test(ent.name) || ent.name === `${stem}.md`) {
-          return fs.readFileSync(full, "utf8");
-        }
-      }
+    const ext = path.extname(abs).toLowerCase();
+    const mime = IMAGE_EXT_MIME[ext] || "application/octet-stream";
+    const b64 = fs.readFileSync(abs).toString("base64");
+    total += st.size;
+    const uri = `data:${mime};base64,${b64}`;
+    cache.set(abs, uri);
+    return uri;
+  }
+
+  text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (full, alt, src) => {
+    const abs = resolveImagePath(mdDir, src, outDir);
+    if (!abs) {
+      missing += 1;
+      return full;
     }
-    for (const ent of entries) {
-      if (ent.isFile() && /\.md$/i.test(ent.name)) {
-        return fs.readFileSync(path.join(dir, ent.name), "utf8");
-      }
+    const uri = toDataUri(abs);
+    if (!uri) {
+      missing += 1;
+      return full;
     }
-    for (const ent of entries) {
-      if (ent.isDirectory()) {
-        const hit = walk(path.join(dir, ent.name), depth + 1);
-        if (hit) return hit;
-      }
+    embedded += 1;
+    return `![${alt}](${uri})`;
+  });
+
+  text = text.replace(/(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (full, pre, q, src) => {
+    const abs = resolveImagePath(mdDir, src, outDir);
+    if (!abs) {
+      missing += 1;
+      return full;
     }
-    return null;
-  };
-  return walk(outDir);
+    const uri = toDataUri(abs);
+    if (!uri) {
+      missing += 1;
+      return full;
+    }
+    embedded += 1;
+    return `${pre}${q}${uri}${q}`;
+  });
+
+  console.log(`[mineru] 图片内联：成功 ${embedded} · 未找到/过大 ${missing} · 约 ${Math.round(total / 1024)} KB`);
+  return { text, embedded, missing };
 }
 
 function mineruEnv() {
@@ -545,10 +677,16 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
       console.log(`[mineru] 尝试 ${i + 1}/${attempts.length}…`);
       try {
         await runSpawn(att.file, att.args, { timeout: 1200000, cwd: tmp, env, logPrefix: "[mineru] " });
-        const md = collectMarkdown(att.outHint, outDir, stem);
-        if (md && String(md).trim()) {
+        const picked = collectMarkdown(att.outHint, outDir, stem);
+        if (picked?.text && String(picked.text).trim()) {
+          const embedded = embedLocalImages(picked.text, picked.path, outDir);
+          const md = embedded.text;
+          const hasTable =
+            (/^\s*\|.+\|\s*$/m.test(md) && /\|\s*:?-{3,}/.test(md)) || /<table[\s>]/i.test(md);
           const sec = Math.round((Date.now() - t0) / 1000);
-          console.log(`[mineru] 完成「${name}」· ${sec}s · Markdown ${String(md).length} 字符`);
+          console.log(
+            `[mineru] 完成「${name}」· ${sec}s · Markdown ${String(md).length} 字符 · 表=${hasTable ? "有" : "无"} · 图=${embedded.embedded}`
+          );
           return {
             markdown: String(md),
             engine: "mineru",
@@ -556,6 +694,8 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
             forceOcr: !!forceOcr,
             filename: name,
             style: bin.style,
+            imagesEmbedded: embedded.embedded,
+            hasTable: !!hasTable,
           };
         }
         lastErr = new Error("MinerU 输出为空");
