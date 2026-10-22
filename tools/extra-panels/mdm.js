@@ -863,16 +863,12 @@
         const tagChips = tags
           .map((t) => {
             const locked = isDefaultTag(t);
-            const more = locked
-              ? ""
-              : `<button type="button" class="mdm-chip-more" data-tag-manage="${escapeHtml(
-                  t.id
-                )}" title="改名 / 删除标签" aria-label="管理标签">⋯</button>`;
+            const tip = locked
+              ? "未分类 / 默认标签（固定在全部下方）"
+              : `${escapeHtml(t.name)} · 右键改名/删除`;
             return `<span class="mdm-tag-item"><button type="button" class="mdm-chip${
               state.activeTag === t.id ? " is-active" : ""
-            }" data-tag="${escapeHtml(t.id)}" title="${
-              locked ? "未分类 / 默认标签（固定在全部下方）" : escapeHtml(t.name)
-            }">#${escapeHtml(t.name)}</button>${more}</span>`;
+            }" data-tag="${escapeHtml(t.id)}" title="${tip}">#${escapeHtml(t.name)}</button></span>`;
           })
           .join("");
         els.tags.innerHTML = `<div class="mdm-group-title">标签</div>` + allChip + tagChips;
@@ -2320,8 +2316,9 @@
             title,
             titleSaved: title,
             fileName: name,
-              fmHead: fm.head || "",
-              tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
+            fmHead: fm.head || "",
+            // 标签栏只展示用户自己建的标签；扫描入库不自动从 front-matter 建标签
+            tagIds: [],
             createdAt: Date.now(),
             updatedAt: Date.now(),
             size: new Blob([fm.body]).size,
@@ -4727,7 +4724,8 @@
           title,
           titleSaved: title,
           fileName: uniqueFileName(title, ""),
-          tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
+          // 导入不自动建标签；侧栏标签仅用户在文档上自行添加
+          tagIds: [],
           createdAt: Date.now(),
           updatedAt: Date.now(),
           size: new Blob([res.text]).size,
