@@ -103,13 +103,8 @@
   color: var(--muted); font-size: 0.78rem; cursor: pointer;
 }
 .mdm-chip:hover { color: var(--ink); border-color: var(--accent); }
-.mdm-tag-item { display: inline-flex; align-items: center; gap: 0.1rem; margin: 0 0.25rem 0.25rem 0; }
+.mdm-tag-item { display: inline-flex; align-items: center; margin: 0 0.25rem 0.25rem 0; }
 .mdm-tag-item .mdm-chip { margin: 0; }
-.mdm-chip-more {
-  border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted);
-  cursor: pointer; font-size: 0.78rem; line-height: 1; padding: 0.15rem 0.35rem;
-}
-.mdm-chip-more:hover { color: var(--accent); border-color: var(--accent); }
 .mdm-chip.is-active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); border-color: var(--accent); }
 .mdm-list { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.35rem; }
 .mdm-batchbar { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; padding: 0.3rem 0.4rem; border: 1px solid var(--accent); border-radius: 8px; margin-top: 0.35rem; }
