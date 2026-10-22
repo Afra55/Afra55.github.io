@@ -7,7 +7,7 @@
 
 const { checkMinerU, convert, installMinerU } = require("./mineru-ops");
 
-const BRIDGE_VERSION = "0.1.3";
+const BRIDGE_VERSION = "0.1.4";
 const FEATURES = { mineru: true, ocr: true, gpuRecommended: true };
 
 function readBody(req, limit = 96 * 1024 * 1024) {
@@ -53,7 +53,7 @@ async function handleRequest(req, res, opts = {}) {
         version: BRIDGE_VERSION,
         mineru,
         features: FEATURES,
-        note: "MinerU：PDF/Office/图片 → Markdown（最高质量 advanced/hybrid-high，建议 GPU；本机处理不上传）",
+        note: "MinerU：PDF/Office/图片 → Markdown（最高质量；模型默认落桥目录 mineru-data/models，建议 GPU）",
       });
       return;
     }

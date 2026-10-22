@@ -605,6 +605,22 @@ function embedLocalImages(markdown, mdPath, outDir) {
   return { text, embedded, missing };
 }
 
+/** 桥解压根目录：优先启动脚本写入的 ADB_BRIDGE_DIR，否则 mineru-bridge 的上一级 */
+function resolveBridgeRoot() {
+  const fromEnv = String(process.env.ADB_BRIDGE_DIR || process.env.DEVTOOLS_BRIDGE_DIR || "").trim();
+  if (fromEnv) {
+    try {
+      if (fs.existsSync(fromEnv)) return path.resolve(fromEnv);
+    } catch (_) {}
+  }
+  // ZIP：<bridgeRoot>/mineru-bridge/mineru-ops.js → 上一级即桥目录
+  return path.resolve(__dirname, "..");
+}
+
+/**
+ * MinerU 运行环境：模型默认落到桥目录 mineru-data/，避免占满 C: 用户目录。
+ * 可用环境变量覆盖：MINERU_HOME / MINERU_MODEL_BASE_DIR / MINERU_CONFIG
+ */
 function mineruEnv() {
   const env = { ...process.env };
   // 国内模型源更稳；可用环境变量覆盖
@@ -612,6 +628,24 @@ function mineruEnv() {
   // 管道捕获时默认块缓冲，黑窗口会像死机；强制行缓冲
   env.PYTHONUNBUFFERED = "1";
   env.PYTHONIOENCODING = env.PYTHONIOENCODING || "utf-8";
+
+  const bridgeRoot = resolveBridgeRoot();
+  const dataHome = path.join(bridgeRoot, "mineru-data");
+  const modelsDir = path.join(dataHome, "models");
+  try {
+    fs.mkdirSync(modelsDir, { recursive: true });
+  } catch (_) {}
+
+  // 未显式指定时：配置与模型都放桥目录（mmproj / GGUF / 小模型同此）
+  if (!env.MINERU_HOME) env.MINERU_HOME = dataHome;
+  if (!env.MINERU_MODEL_BASE_DIR) env.MINERU_MODEL_BASE_DIR = modelsDir;
+  if (!env.MINERU_CONFIG) env.MINERU_CONFIG = path.join(dataHome, "config.yaml");
+
+  if (!env.__MINERU_DATA_LOGGED) {
+    console.log(`[mineru] 模型目录：${env.MINERU_MODEL_BASE_DIR}`);
+    console.log(`[mineru] MINERU_HOME：${env.MINERU_HOME}`);
+    env.__MINERU_DATA_LOGGED = "1";
+  }
   return env;
 }
 
