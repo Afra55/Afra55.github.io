@@ -4304,7 +4304,7 @@
       const t0 = Date.now();
       const stageBase =
         mount === "mineru"
-          ? "MinerU 转换中（质量优先；首次下模型/无 GPU 可能需数分钟）"
+          ? "MinerU 最高质量转换中（advanced/hybrid-high；可很久，请看黑窗口）"
           : `${label} 转换中（含 OCR；大文件可能需数分钟）`;
       const tickStage = () => {
         const sec = Math.round((Date.now() - t0) / 1000);
@@ -4507,7 +4507,8 @@
       }
 
       if (wantsBridgeConvert(file)) {
-        const forceOcr = /\.(pdf|png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type);
+        // PDF 不强制 OCR（数字版用 auto/VLM 更保表格）；仅图片/扫描图强制 OCR
+        const forceOcr = /\.(png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type);
         const [mineruH, doclingH] = await Promise.all([probeMineruHealth(), probeDoclingHealth()]);
         const bridgeUp = !!(mineruH.bridge || doclingH.bridge);
 

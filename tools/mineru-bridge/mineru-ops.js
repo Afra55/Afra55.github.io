@@ -404,7 +404,7 @@ async function checkMinerU() {
       formats: [...SUPPORTED_EXT],
       ocr: true,
       gpuRecommended: true,
-      note: "MinerU：PDF/扫描/表/公式/中文质量优先；建议 GPU。无 GPU 可跑但较慢；也可回退 Docling。",
+      note: "MinerU：PDF 默认最高质量（advanced / hybrid-high）；时长可很长。建议 GPU。也可回退 Docling。",
     };
   } catch (err) {
     return {
@@ -549,8 +549,9 @@ function embedLocalImages(markdown, mdPath, outDir) {
   let text = String(markdown || "");
   let embedded = 0;
   let missing = 0;
-  const maxEach = 6 * 1024 * 1024;
-  const maxTotal = 48 * 1024 * 1024;
+  // 质量优先：尽量内联全部图（时长/体积可接受）
+  const maxEach = 16 * 1024 * 1024;
+  const maxTotal = 200 * 1024 * 1024;
   let total = 0;
   const cache = new Map();
 
@@ -614,6 +615,19 @@ function mineruEnv() {
   return env;
 }
 
+function isImageName(name) {
+  return /\.(png|jpe?g|webp|tiff?|bmp)$/i.test(String(name || ""));
+}
+
+function looksLikeWaitTimeout(err) {
+  const msg = `${err?.stderr || ""}\n${err?.stdout || ""}\n${err?.message || ""}`;
+  return /parse_wait_timeout|wait[_\s-]?timeout|client wait|仍在解析|继续等待/i.test(msg);
+}
+
+/**
+ * 质量优先转换：优先 advanced / hybrid-high；时长可很长。
+ * forceOcr 仅建议用于扫描图；数字 PDF 用 auto，避免 OCR 打乱表格。
+ */
 async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } = {}) {
   const name = safeName(filename);
   const ext = extOf(name);
@@ -641,70 +655,175 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
   const errors = [];
   const t0 = Date.now();
   const sizeKb = Math.max(1, Math.round(buf.length / 1024));
+  const wantOcr = !!(forceOcr || isImageName(name));
+  const lang = String(ocrLang || "").trim() || "ch";
+  // 质量优先：单次最长约 4 小时；library wait 2 小时一轮，可续等
+  const SPAWN_TIMEOUT_MS = 4 * 60 * 60 * 1000;
+  const LIBRARY_WAIT_SEC = 7200;
   console.log(
-    `[mineru] 开始转换「${name}」· ${sizeKb} KB · forceOcr=${!!forceOcr} · style=${bin.style} · bin=${bin.kind === "bin" ? bin.file : `${bin.file} ${bin.argsPrefix.join(" ")}`.trim()}`
+    `[mineru] 开始最高质量转换「${name}」· ${sizeKb} KB · ocr=${wantOcr ? "force" : "auto"} · style=${bin.style} · bin=${bin.kind === "bin" ? bin.file : `${bin.file} ${bin.argsPrefix.join(" ")}`.trim()}`
   );
 
+  /** @type {{ file: string, args: string[], outHint: string|null, label: string, retryWait?: boolean }[]} */
   const attempts = [];
+
+  // 1) mineru-kit：advanced → standard（kit 默认整篇）
   if (bin.style === "kit") {
-    const kitArgs = [...bin.argsPrefix, "parse", inPath, "-o", outFile, "--tier", "standard"];
-    if (forceOcr || /\.(png|jpe?g|webp|tiff?|bmp)$/i.test(name)) {
-      kitArgs.push("--ocr-mode", "ocr");
+    for (const tier of ["advanced", "standard"]) {
+      const kitArgs = [...bin.argsPrefix, "parse", inPath, "-o", outFile, "--tier", tier];
+      if (wantOcr) kitArgs.push("--ocr-mode", "ocr");
+      attempts.push({
+        file: bin.file,
+        args: kitArgs,
+        outHint: outFile,
+        label: `kit/${tier}`,
+      });
     }
-    attempts.push({ file: bin.file, args: kitArgs, outHint: outFile });
   }
-  // parse 风格（含把 kit 当 mineru 失败时的回退命令）
-  attempts.push({
-    file: bin.file,
-    args: [...bin.argsPrefix, "parse", inPath, "--pages", "all", "-o", outFile, "--wait", "900"],
-    outHint: outFile,
-  });
-  // 旧版 CLI：mineru -p in -o outDir
+
+  // 2) mineru parse（文档库）：整篇 + 超长 wait；超时续等而非立刻降级
+  if (bin.style === "parse" || bin.style === "kit") {
+    const baseParse = [
+      ...bin.argsPrefix,
+      "parse",
+      inPath,
+      "--pages",
+      "all",
+      "-o",
+      outFile,
+      "--wait",
+      String(LIBRARY_WAIT_SEC),
+    ];
+    // 新版可能支持 --tier；不支持时下一档无 tier 再试
+    if (bin.style === "parse") {
+      attempts.push({
+        file: bin.file,
+        args: [...baseParse, "--tier", "advanced"],
+        outHint: outFile,
+        label: "parse/advanced",
+        retryWait: true,
+      });
+      attempts.push({
+        file: bin.file,
+        args: [...baseParse, "--tier", "standard"],
+        outHint: outFile,
+        label: "parse/standard",
+        retryWait: true,
+      });
+    }
+    attempts.push({
+      file: bin.file,
+      args: baseParse,
+      outHint: outFile,
+      label: "parse/wait",
+      retryWait: true,
+    });
+  }
+
+  // 3) 旧版 mineru -p：hybrid high → vlm；开表/公式/图分析
   if (bin.style === "legacy" || bin.style === "parse") {
-    const legacyArgs = [...bin.argsPrefix, "-p", inPath, "-o", outDir];
-    if (forceOcr) legacyArgs.push("-m", "ocr");
-    else legacyArgs.push("-m", "auto");
-    const lang = String(ocrLang || "").trim();
-    if (lang) legacyArgs.push("-l", lang);
-    else legacyArgs.push("-l", "ch");
-    attempts.push({ file: bin.file, args: legacyArgs, outHint: null });
+    const method = wantOcr ? "ocr" : "auto";
+    for (const backend of ["hybrid-engine", "vlm-engine", "pipeline"]) {
+      const legacyArgs = [
+        ...bin.argsPrefix,
+        "-p",
+        inPath,
+        "-o",
+        outDir,
+        "-b",
+        backend,
+        "-m",
+        method,
+        "-l",
+        lang,
+        "-f",
+        "true",
+        "-t",
+        "true",
+      ];
+      if (backend === "hybrid-engine") {
+        legacyArgs.push("--effort", "high");
+        legacyArgs.push("--image-analysis", "true");
+      } else if (backend === "vlm-engine") {
+        legacyArgs.push("--image-analysis", "true");
+      }
+      attempts.push({
+        file: bin.file,
+        args: legacyArgs,
+        outHint: null,
+        label: `legacy/${backend}`,
+      });
+    }
+  }
+
+  function finishFromPicked(picked, label) {
+    const embedded = embedLocalImages(picked.text, picked.path, outDir);
+    const md = embedded.text;
+    const hasTable =
+      (/^\s*\|.+\|\s*$/m.test(md) && /\|\s*:?-{3,}/.test(md)) || /<table[\s>]/i.test(md);
+    const sec = Math.round((Date.now() - t0) / 1000);
+    console.log(
+      `[mineru] 完成「${name}」· ${label} · ${sec}s · Markdown ${String(md).length} 字符 · 表=${hasTable ? "有" : "无"} · 图=${embedded.embedded}`
+    );
+    return {
+      markdown: String(md),
+      engine: "mineru",
+      quality: "max",
+      ocr: wantOcr,
+      forceOcr: !!forceOcr,
+      filename: name,
+      style: bin.style,
+      attempt: label,
+      imagesEmbedded: embedded.embedded,
+      hasTable: !!hasTable,
+    };
   }
 
   try {
     let lastErr = null;
     for (let i = 0; i < attempts.length; i += 1) {
       const att = attempts[i];
-      console.log(`[mineru] 尝试 ${i + 1}/${attempts.length}…`);
-      try {
-        await runSpawn(att.file, att.args, { timeout: 1200000, cwd: tmp, env, logPrefix: "[mineru] " });
-        const picked = collectMarkdown(att.outHint, outDir, stem);
-        if (picked?.text && String(picked.text).trim()) {
-          const embedded = embedLocalImages(picked.text, picked.path, outDir);
-          const md = embedded.text;
-          const hasTable =
-            (/^\s*\|.+\|\s*$/m.test(md) && /\|\s*:?-{3,}/.test(md)) || /<table[\s>]/i.test(md);
-          const sec = Math.round((Date.now() - t0) / 1000);
-          console.log(
-            `[mineru] 完成「${name}」· ${sec}s · Markdown ${String(md).length} 字符 · 表=${hasTable ? "有" : "无"} · 图=${embedded.embedded}`
-          );
-          return {
-            markdown: String(md),
-            engine: "mineru",
-            ocr: true,
-            forceOcr: !!forceOcr,
-            filename: name,
-            style: bin.style,
-            imagesEmbedded: embedded.embedded,
-            hasTable: !!hasTable,
-          };
+      console.log(`[mineru] 尝试 ${i + 1}/${attempts.length} · ${att.label}`);
+      const maxRounds = att.retryWait ? 6 : 1;
+      let roundOk = false;
+      for (let round = 0; round < maxRounds; round += 1) {
+        if (round > 0) {
+          console.log(`[mineru] ${att.label} 续等第 ${round + 1}/${maxRounds} 轮（质量优先，可很久）…`);
         }
+        try {
+          await runSpawn(att.file, att.args, {
+            timeout: SPAWN_TIMEOUT_MS,
+            cwd: tmp,
+            env,
+            logPrefix: "[mineru] ",
+          });
+          roundOk = true;
+          break;
+        } catch (err) {
+          lastErr = err;
+          const pickedEarly = collectMarkdown(att.outHint, outDir, stem);
+          if (pickedEarly?.text && String(pickedEarly.text).trim()) {
+            console.log(`[mineru] ${att.label} 进程非 0 但已产出 MD，按成功处理`);
+            return finishFromPicked(pickedEarly, att.label);
+          }
+          if (att.retryWait && looksLikeWaitTimeout(err) && round < maxRounds - 1) {
+            console.log(`[mineru] ${att.label} 仅客户端等待超时，任务可能仍在跑，继续等…`);
+            continue;
+          }
+          const detail = String(err?.stderr || err?.message || err).slice(0, 240);
+          errors.push(`${att.label}: ${detail}`);
+          console.log(`[mineru] ${att.label} 失败：${detail}`);
+          break;
+        }
+      }
+      if (!roundOk && !att.retryWait) continue;
+      const picked = collectMarkdown(att.outHint, outDir, stem);
+      if (picked?.text && String(picked.text).trim()) {
+        return finishFromPicked(picked, att.label);
+      }
+      if (roundOk) {
         lastErr = new Error("MinerU 输出为空");
-        console.log(`[mineru] 尝试 ${i + 1} 输出为空，换下一命令…`);
-      } catch (err) {
-        lastErr = err;
-        const detail = String(err?.stderr || err?.message || err).slice(0, 240);
-        errors.push(detail);
-        console.log(`[mineru] 尝试 ${i + 1} 失败：${detail}`);
+        console.log(`[mineru] ${att.label} 输出为空，换下一命令…`);
       }
     }
     const msg = String(lastErr?.stderr || lastErr?.message || errors.join(" | ") || "MinerU 转换失败").trim();
