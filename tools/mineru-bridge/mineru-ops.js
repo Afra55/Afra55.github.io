@@ -617,6 +617,8 @@ function resolveBridgeRoot() {
   return path.resolve(__dirname, "..");
 }
 
+let loggedMineruDataDirs = false;
+
 /**
  * MinerU 运行环境：模型默认落到桥目录 mineru-data/，避免占满 C: 用户目录。
  * 可用环境变量覆盖：MINERU_HOME / MINERU_MODEL_BASE_DIR / MINERU_CONFIG
@@ -641,10 +643,10 @@ function mineruEnv() {
   if (!env.MINERU_MODEL_BASE_DIR) env.MINERU_MODEL_BASE_DIR = modelsDir;
   if (!env.MINERU_CONFIG) env.MINERU_CONFIG = path.join(dataHome, "config.yaml");
 
-  if (!env.__MINERU_DATA_LOGGED) {
+  if (!loggedMineruDataDirs) {
+    loggedMineruDataDirs = true;
     console.log(`[mineru] 模型目录：${env.MINERU_MODEL_BASE_DIR}`);
     console.log(`[mineru] MINERU_HOME：${env.MINERU_HOME}`);
-    env.__MINERU_DATA_LOGGED = "1";
   }
   return env;
 }
