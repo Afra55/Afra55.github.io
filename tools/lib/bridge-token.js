@@ -438,14 +438,7 @@
     return data;
   }
 
-  /**
-   * 按「文件夹名 + 文件名」在本机定位 Markdown 文档并打开所在位置（POST /local/reveal-doc）。
-   * 浏览器拿不到 FSA 的绝对路径，所以交给桥按名字反查。
-   */
-  async function revealMdmDoc({ folderName, fileName, preferredBase, token, kind = "unified" } = {}) {
-    const dirName = String(folderName || "").trim();
-    const fName = String(fileName || "").trim();
-    if (!dirName || !fName) throw new Error("缺少文件夹名或文件名");
+  async function ensureUnifiedBridgeBase({ preferredBase, token, kind = "unified" } = {}) {
     const cfg = kindConfig(kind);
     const tok = String(token || read()).trim() || DEFAULT;
     let base = normalizeBridgeBase(preferredBase || cfg.defaultBase);
@@ -457,6 +450,57 @@
         health = found.health;
       }
     }
+    return { base, health, token: tok };
+  }
+
+  /**
+   * 按「文件夹名 + 文件名」在本机反查绝对路径（POST /local/find-doc），不打开资源管理器。
+   * 浏览器 FSA 不暴露绝对路径，复制路径 / 记住目录依赖此接口。
+   */
+  async function findMdmDoc({ folderName, fileName, preferredBase, token, kind = "unified" } = {}) {
+    const dirName = String(folderName || "").trim();
+    const fName = String(fileName || "").trim();
+    if (!dirName || !fName) throw new Error("缺少文件夹名或文件名");
+    const { base, health, token: tok } = await ensureUnifiedBridgeBase({ preferredBase, token, kind });
+    if (!health) {
+      throw new Error("本机桥未连接。请先启动统一桥，再复制路径。");
+    }
+    const ac = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = ac ? setTimeout(() => ac.abort(), 30000) : null;
+    let res;
+    try {
+      res = await fetch(`${base}/local/find-doc`, {
+        method: "POST",
+        signal: ac ? ac.signal : undefined,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Adb-Token": tok,
+          "X-Ffmpeg-Token": tok,
+          "X-Git-Token": tok,
+        },
+        body: JSON.stringify({ folderName: dirName, fileName: fName }),
+      });
+    } catch (err) {
+      throw new Error(String(err?.name) === "AbortError" ? "本机搜索超时（可改用完整路径）" : err.message || String(err));
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.error || `定位文档失败（HTTP ${res.status}）`);
+    }
+    return data;
+  }
+
+  /**
+   * 按「文件夹名 + 文件名」在本机定位 Markdown 文档并打开所在位置（POST /local/reveal-doc）。
+   * 浏览器拿不到 FSA 的绝对路径，所以交给桥按名字反查。
+   */
+  async function revealMdmDoc({ folderName, fileName, preferredBase, token, kind = "unified" } = {}) {
+    const dirName = String(folderName || "").trim();
+    const fName = String(fileName || "").trim();
+    if (!dirName || !fName) throw new Error("缺少文件夹名或文件名");
+    const { base, health, token: tok } = await ensureUnifiedBridgeBase({ preferredBase, token, kind });
     if (!health) {
       throw new Error("本机桥未连接。请先启动并连接桥，再点「打开文件位置」。");
     }
@@ -691,6 +735,7 @@
     readInstallDir,
     writeInstallDir,
     revealLocalPath,
+    findMdmDoc,
     revealMdmDoc,
     readAutoStart,
     writeAutoStart,

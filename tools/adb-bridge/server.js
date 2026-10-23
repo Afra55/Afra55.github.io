@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.75";
+const BRIDGE_VERSION = "0.9.76";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5879,6 +5879,24 @@ async function handleApi(req, res, url) {
         setTimeout(() => relaunchBridge(), 600);
       } catch (err) {
         sendJson(res, 500, { ok: false, error: err?.message || String(err) }, origin);
+      }
+      return;
+    }
+
+    if (url.pathname === "/local/find-doc" && req.method === "POST") {
+      if (!ffmpegBridge?.findMdmDocFile) {
+        sendJson(res, 503, { ok: false, error: "未找到本机定位模块" }, origin);
+        return;
+      }
+      try {
+        const body = parseJsonBody(await readBody(req, 1024 * 1024));
+        const found = await ffmpegBridge.findMdmDocFile({
+          folderName: body.folderName,
+          fileName: body.fileName || body.name,
+        });
+        sendJson(res, 200, { ok: true, path: found, dirAbsPath: path.dirname(found) }, origin);
+      } catch (err) {
+        sendJson(res, 404, { ok: false, error: err?.message || String(err) }, origin);
       }
       return;
     }
