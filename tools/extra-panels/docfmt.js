@@ -11,6 +11,26 @@
   const BASE_KEY = "devtools-docfmt-base";
   const TOKEN_KEY = "devtools-docfmt-token";
 
+  /** Pandoc 可直接读的扩展名（与桥 FILE_FROM 对齐） */
+  const PANDOC_READ_EXT =
+    /\.(docx|odt|epub|html?|shtml|rtf|rst|tex|latex|pptx|xlsx|csv|tsv|md|markdown|org)$/i;
+
+  const OUT_EXT = {
+    docx: "docx",
+    pdf: "pdf",
+    odt: "odt",
+    html: "html",
+    epub: "epub",
+    rtf: "rtf",
+    pptx: "pptx",
+    latex: "tex",
+    gfm: "md",
+    markdown: "md",
+    rst: "rst",
+    org: "org",
+    mediawiki: "wiki",
+  };
+
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, "&amp;")
@@ -40,6 +60,17 @@
     });
   }
 
+  function b64ToBytes(b64) {
+    const bin = atob(String(b64 || ""));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function stemName(name) {
+    return String(name || "document").replace(/\.[^.]+$/, "") || "document";
+  }
+
   bindPanel("docfmt", () => {
     if (!window.devtoolsBridgeShell?.mount) return;
 
@@ -49,7 +80,7 @@
       kind: "unified",
       collapseAdvanced: true,
       refreshLabel: "刷新",
-      hintDisconnected: "请先下载完整 ZIP 并启动统一桥；文档互转需要 Pandoc / MinerU。",
+      hintDisconnected: "请先下载完整 ZIP 并启动统一桥；格式互转需要 Pandoc（PDF/扫描件另需 MinerU）。",
       connHint:
         '共用统一桥 <strong>17888</strong> · Token <span class="mono">devtools-bridge</span> · <span class="mono">/pandoc</span> · <span class="mono">/mineru</span> · <span class="mono">/docling</span>',
     });
@@ -78,7 +109,9 @@
       if (logEl) logEl.textContent = m || "";
     };
 
-    let tab = "to-md";
+    let tab = "any";
+    /** @type {File[]} */
+    let filesAny = [];
     /** @type {File[]} */
     let filesIn = [];
     /** @type {File|null} */
@@ -127,20 +160,25 @@
       });
     }
 
-    function renderInList() {
-      const ul = $("#docfmt-list-in");
-      if (!ul) return;
+    function routeLabel(file) {
       const R = QR();
-      ul.innerHTML = filesIn
-        .map((f) => {
-          const route = R.importRoute?.(f.name, f.type) || { primary: "?", chain: [] };
-          return `<li><span>${escapeHtml(f.name)} · ${Math.round(f.size / 1024)} KB</span><span class="hint tight">${escapeHtml(
-            (route.chain || []).join(" → ") || route.primary || ""
-          )}</span></li>`;
-        })
+      const route = R.importRoute?.(file.name, file.type) || { primary: "?", chain: [] };
+      return (route.chain || []).join(" → ") || route.primary || "";
+    }
+
+    function renderList(ulId, files, metaId) {
+      const ul = $(ulId);
+      if (!ul) return;
+      ul.innerHTML = files
+        .map(
+          (f) =>
+            `<li><span>${escapeHtml(f.name)} · ${Math.round(f.size / 1024)} KB</span><span class="hint tight">${escapeHtml(
+              routeLabel(f)
+            )}</span></li>`
+        )
         .join("");
-      const meta = $("#docfmt-meta-in");
-      if (meta) meta.textContent = filesIn.length ? `已选 ${filesIn.length} 个文件` : meta.dataset.def || meta.textContent;
+      const meta = $(metaId);
+      if (meta) meta.textContent = files.length ? `已选 ${files.length} 个文件` : meta.dataset.def || meta.textContent;
     }
 
     function bindDrop(el, onFiles) {
@@ -191,13 +229,181 @@
           });
           const md = String(data.markdown || "").trim();
           if (!md) throw new Error("输出为空");
-          return { md, via: eng, name: file.name.replace(/\.[^.]+$/, "") + ".md" };
+          return { md, via: eng, name: `${stemName(file.name)}.md` };
         } catch (err) {
           lastErr = err;
           log(`${file.name} · ${eng} 失败：${err.message || err}`);
         }
       }
       throw lastErr || new Error("转换失败");
+    }
+
+    async function pandocFileTo(file, toFmt) {
+      const dataBase64 = await fileToBase64(file);
+      async function once() {
+        return bridgeFetch("/pandoc/convert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            dataBase64,
+            to: toFmt,
+            quality: toFmt === "pdf" ? "print" : "max",
+          }),
+        });
+      }
+      try {
+        return await once();
+      } catch (err) {
+        const msg = String(err?.message || err);
+        if (toFmt === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX/i.test(msg)) {
+          log("未找到 Typst，尝试一键安装…");
+          await bridgeFetch("/pandoc/install", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ package: "typst" }),
+          });
+          return once();
+        }
+        throw err;
+      }
+    }
+
+    async function pandocMdTo(text, toFmt, title) {
+      const plan = QR().exportPandocPlan?.(toFmt) || { from: "gfm" };
+      async function once() {
+        return bridgeFetch("/pandoc/convert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            to: toFmt,
+            from: plan.from || "gfm",
+            title,
+            quality: toFmt === "pdf" ? "print" : "max",
+          }),
+        });
+      }
+      try {
+        return await once();
+      } catch (err) {
+        const msg = String(err?.message || err);
+        if (toFmt === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX/i.test(msg)) {
+          log("未找到 Typst，尝试一键安装…");
+          await bridgeFetch("/pandoc/install", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ package: "typst" }),
+          });
+          return once();
+        }
+        throw err;
+      }
+    }
+
+    /**
+     * 任意格式 → 目标：
+     * - Pandoc 可读源：直接文件转换（含 Word→PDF）
+     * - PDF/扫描/旧 .doc：质量路由 → MD → 再 Pandoc 转出
+     */
+    async function convertOneAny(file, toFmt) {
+      const to = String(toFmt || "docx").toLowerCase();
+      const outExt = OUT_EXT[to] || to;
+      const srcExt = (file.name.match(/\.[^.]+$/) || [""])[0].toLowerCase();
+      if (srcExt && `.${outExt}` === srcExt) {
+        throw new Error("源格式与目标相同，无需转换");
+      }
+
+      if (to === "gfm" || to === "markdown") {
+        const r = await convertOneToMd(file);
+        return {
+          bytes: new TextEncoder().encode(r.md),
+          name: r.name,
+          via: r.via,
+        };
+      }
+
+      // Markdown 源：走文本导出
+      if (/\.(md|markdown|txt)$/i.test(file.name) || /^text\/(markdown|plain)/i.test(file.type)) {
+        log(`${file.name} · Pandoc 文本导出 → ${to}…`);
+        const text = await file.text();
+        const data = await pandocMdTo(text, to, stemName(file.name));
+        return {
+          bytes: b64ToBytes(data.dataBase64),
+          name: data.filename || `${stemName(file.name)}.${outExt}`,
+          via: data.pdfEngine ? `pandoc·${data.pdfEngine}` : "pandoc",
+        };
+      }
+
+      // Pandoc 可直接读：docx→pdf / html→docx 等
+      if (PANDOC_READ_EXT.test(file.name)) {
+        log(`${file.name} · Pandoc 直接互转 → ${to}…`);
+        try {
+          const data = await pandocFileTo(file, to);
+          if (data.markdown && (to === "gfm" || to === "markdown")) {
+            return {
+              bytes: new TextEncoder().encode(data.markdown),
+              name: `${stemName(file.name)}.md`,
+              via: "pandoc",
+            };
+          }
+          if (!data.dataBase64) throw new Error("输出为空");
+          return {
+            bytes: b64ToBytes(data.dataBase64),
+            name: data.filename || `${stemName(file.name)}.${outExt}`,
+            via: data.pdfEngine ? `pandoc·${data.pdfEngine}` : "pandoc",
+          };
+        } catch (err) {
+          log(`${file.name} · Pandoc 直接转换失败：${err.message || err}；尝试经 Markdown 中转…`);
+        }
+      } else {
+        log(`${file.name} · 非 Pandoc 直读格式，经质量路由 → Markdown → ${to}…`);
+      }
+
+      // PDF / 图片 / 旧 doc / Pandoc 失败：先转 MD 再转出
+      const mid = await convertOneToMd(file);
+      log(`${file.name} · 已得 Markdown（via ${mid.via}），再导出 ${to}…`);
+      const data = await pandocMdTo(mid.md, to, stemName(file.name));
+      if (!data.dataBase64) throw new Error("导出为空");
+      return {
+        bytes: b64ToBytes(data.dataBase64),
+        name: data.filename || `${stemName(file.name)}.${outExt}`,
+        via: `${mid.via}→pandoc${data.pdfEngine ? "·" + data.pdfEngine : ""}`,
+      };
+    }
+
+    async function runAny() {
+      setError("");
+      outEl.hidden = true;
+      outEl.innerHTML = "";
+      if (!filesAny.length) {
+        setError("请先选择文档");
+        return;
+      }
+      const to = String($("#docfmt-any-to")?.value || "docx");
+      const links = [];
+      for (let i = 0; i < filesAny.length; i += 1) {
+        const f = filesAny[i];
+        log(`（${i + 1}/${filesAny.length}）${f.name} → ${to}`);
+        try {
+          const r = await convertOneAny(f, to);
+          const blob = new Blob([r.bytes]);
+          const url = URL.createObjectURL(blob);
+          links.push(
+            `<a download="${escapeHtml(r.name)}" href="${url}">下载 ${escapeHtml(r.name)}</a><span class="hint tight">via ${escapeHtml(
+              r.via
+            )}</span>`
+          );
+          downloadBlob(blob, r.name);
+        } catch (err) {
+          setError(`${f.name}：${err.message || err}`);
+          return;
+        }
+      }
+      outEl.hidden = false;
+      outEl.innerHTML = links.join("<br>");
+      log(`完成 ${filesAny.length} 个 → ${to}`);
+      toast("互转完成并开始下载");
     }
 
     async function runToMd() {
@@ -238,48 +444,18 @@
       let title = "document";
       if (fileOut) {
         text = await fileOut.text();
-        title = fileOut.name.replace(/\.[^.]+$/, "") || title;
+        title = stemName(fileOut.name) || title;
       }
       if (!text.trim()) {
         setError("请粘贴 Markdown 或选择 .md 文件");
         return;
       }
       const to = String($("#docfmt-to-fmt")?.value || "docx");
-      const plan = QR().exportPandocPlan?.(to) || { from: "gfm" };
       log(`Pandoc 导出 · gfm → ${to} · ${to === "pdf" ? "印刷级 PDF" : "quality=max"}…`);
-      async function doConvert() {
-        return bridgeFetch("/pandoc/convert", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text,
-            to,
-            from: plan.from || "gfm",
-            title,
-            quality: to === "pdf" ? "print" : "max",
-          }),
-        });
-      }
       try {
-        let data;
-        try {
-          data = await doConvert();
-        } catch (err) {
-          const msg = String(err?.message || err);
-          if (to === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX/i.test(msg)) {
-            log("未找到 Typst，尝试一键安装…");
-            await bridgeFetch("/pandoc/install", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ package: "typst" }),
-            });
-            data = await doConvert();
-          } else {
-            throw err;
-          }
-        }
-        const bytes = Uint8Array.from(atob(data.dataBase64 || ""), (c) => c.charCodeAt(0));
-        const name = data.filename || `${title}.${to}`;
+        const data = await pandocMdTo(text, to, title);
+        const bytes = b64ToBytes(data.dataBase64);
+        const name = data.filename || `${title}.${OUT_EXT[to] || to}`;
         downloadBlob(new Blob([bytes]), name);
         outEl.hidden = false;
         const via = data.pdfEngine ? `印刷级 · ${data.pdfEngine}` : "Pandoc 最高质量";
@@ -292,22 +468,38 @@
     }
 
     document.querySelectorAll("#docfmt .docfmt-tab").forEach((btn) => {
-      btn.addEventListener("click", () => setTab(btn.dataset.tab || "to-md"));
+      btn.addEventListener("click", () => setTab(btn.dataset.tab || "any"));
     });
+
+    $("#docfmt-file-any")?.addEventListener("change", (e) => {
+      filesAny = [...(e.target.files || [])];
+      renderList("#docfmt-list-any", filesAny, "#docfmt-meta-any");
+    });
+    $("#docfmt-clear-any")?.addEventListener("click", () => {
+      filesAny = [];
+      if ($("#docfmt-file-any")) $("#docfmt-file-any").value = "";
+      renderList("#docfmt-list-any", filesAny, "#docfmt-meta-any");
+      log("");
+    });
+    bindDrop($("#docfmt-drop-any"), (list) => {
+      filesAny = list.filter(Boolean);
+      renderList("#docfmt-list-any", filesAny, "#docfmt-meta-any");
+    });
+    $("#docfmt-run-any")?.addEventListener("click", () => void runAny());
 
     $("#docfmt-file-in")?.addEventListener("change", (e) => {
       filesIn = [...(e.target.files || [])];
-      renderInList();
+      renderList("#docfmt-list-in", filesIn, "#docfmt-meta-in");
     });
     $("#docfmt-clear-in")?.addEventListener("click", () => {
       filesIn = [];
       if ($("#docfmt-file-in")) $("#docfmt-file-in").value = "";
-      renderInList();
+      renderList("#docfmt-list-in", filesIn, "#docfmt-meta-in");
       log("");
     });
     bindDrop($("#docfmt-drop-in"), (list) => {
       filesIn = list.filter(Boolean);
-      renderInList();
+      renderList("#docfmt-list-in", filesIn, "#docfmt-meta-in");
     });
     $("#docfmt-run-in")?.addEventListener("click", () => void runToMd());
 
@@ -333,9 +525,12 @@
     });
     $("#docfmt-run-out")?.addEventListener("click", () => void runFromMd());
 
+    const metaAny = $("#docfmt-meta-any");
+    if (metaAny) metaAny.dataset.def = metaAny.textContent;
     const metaIn = $("#docfmt-meta-in");
     if (metaIn) metaIn.dataset.def = metaIn.textContent;
-    renderInList();
-    setTab("to-md");
+    renderList("#docfmt-list-any", filesAny, "#docfmt-meta-any");
+    renderList("#docfmt-list-in", filesIn, "#docfmt-meta-in");
+    setTab("any");
   });
 })();
