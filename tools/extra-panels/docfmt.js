@@ -525,6 +525,48 @@
     });
     $("#docfmt-run-out")?.addEventListener("click", () => void runFromMd());
 
+    async function connectBridge() {
+      persist();
+      shell.setStatus("is-warn", "正在连接本机桥…", baseUrl());
+      try {
+        const BT = window.devtoolsBridgeToken;
+        let base = baseUrl();
+        const found = await BT?.discoverBase?.(base, token(), { kind: "unified" });
+        if (found?.base) {
+          base = found.base;
+          if (baseInput) baseInput.value = base;
+        }
+        let health = found?.health || null;
+        if (!health?.ok) {
+          const res = await fetch(`${base}/health`, { cache: "no-store" });
+          health = await res.json().catch(() => null);
+          if (!res.ok || !health?.ok) throw new Error(health?.error || "本机桥无响应（请确认 17888 已启动）");
+        }
+        const ver = health.version || "?";
+        shell.setStatus(
+          "is-ok",
+          "已连接本机桥",
+          `统一桥 ${base} · v${ver} · /pandoc · /mineru · /docling`
+        );
+        if (shell.els.refresh) shell.els.refresh.disabled = false;
+      } catch (err) {
+        const msg = err?.message || String(err);
+        shell.setStatus("is-err", "未连接本机桥", msg);
+        if (shell.els.refresh) shell.els.refresh.disabled = false;
+      }
+    }
+
+    shell.bind({
+      onConnect: () => void connectBridge(),
+      onRefresh: () => void connectBridge(),
+      onConnected: async (found) => {
+        if (found?.base && baseInput) baseInput.value = found.base;
+        await connectBridge();
+      },
+      onPersist: persist,
+      toast,
+    });
+
     const metaAny = $("#docfmt-meta-any");
     if (metaAny) metaAny.dataset.def = metaAny.textContent;
     const metaIn = $("#docfmt-meta-in");
@@ -532,5 +574,6 @@
     renderList("#docfmt-list-any", filesAny, "#docfmt-meta-any");
     renderList("#docfmt-list-in", filesIn, "#docfmt-meta-in");
     setTab("any");
+    void connectBridge();
   });
 })();
