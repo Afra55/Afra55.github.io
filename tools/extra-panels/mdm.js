@@ -5251,29 +5251,8 @@ a{color:${v.accent}}
             target = tmp;
           }
           try {
-            // 始终导出单张长图：超长则降低 scale 以塞进浏览器画布上限（不分片）
-            const fullH = target.scrollHeight || target.clientHeight || 0;
-            const fullW = target.clientWidth || 820;
-            const MAX_CANVAS = 16384;
-            let scale = 2;
-            const limH = MAX_CANVAS / Math.max(1, fullH);
-            const limW = MAX_CANVAS / Math.max(1, fullW);
-            scale = Math.min(scale, limH, limW);
-            if (!Number.isFinite(scale) || scale <= 0) scale = 0.25;
-            if (scale < 2) {
-              // 保留两位小数，避免浮点噪声
-              scale = Math.max(0.1, Math.floor(scale * 100) / 100);
-            }
-            const canvas = await window.html2canvas(target, {
-              backgroundColor: "#ffffff",
-              scale,
-              width: fullW,
-              height: fullH,
-              windowWidth: fullW,
-              windowHeight: fullH,
-              scrollX: 0,
-              scrollY: 0,
-            });
+            // 单文件 + 尽量满清晰：在画布上限内取最高 scale；高清分块截取再拼成一张（不下载多文件）
+            const { canvas, scale, tiles } = await capturePreviewAsOnePng(target);
             await new Promise((res, rej) =>
               canvas.toBlob((b) => {
                 if (!b) {
@@ -5284,10 +5263,11 @@ a{color:${v.accent}}
                 res();
               }, "image/png")
             );
-            if (scale < 1.5) {
-              toast(`已导出单张长图（内容较长，清晰度约 ${Math.round(scale * 100)}%）`);
+            const pct = Math.round(scale * 100);
+            if (scale >= 2) {
+              toast(tiles > 1 ? `已导出单张高清长图（${pct}% · ${tiles} 段拼接）` : `已导出单张高清长图（${pct}%）`);
             } else {
-              toast("已导出单张长图 PNG");
+              toast(`已导出单张长图（尽量满清晰 · ${pct}%；受浏览器画布上限限制）`);
             }
           } finally {
             if (tmp) tmp.remove();

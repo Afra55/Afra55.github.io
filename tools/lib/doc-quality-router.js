@@ -87,7 +87,7 @@
     md: { engine: "local", note: "原文 + 资源 ZIP" },
     "html-standalone": { engine: "local", note: "预览渲染内联资源" },
     pdf: { engine: "bridge-pandoc", note: "印刷级 PDF（Typst/XeLaTeX）；失败再浏览器打印" },
-    png: { engine: "local", note: "html2canvas 单张长图" },
+    png: { engine: "local", note: "html2canvas 单文件；画布内最高 scale，分块拼接" },
   };
 
   function extOf(name) {
