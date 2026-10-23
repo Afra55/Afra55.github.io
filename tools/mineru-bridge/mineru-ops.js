@@ -634,21 +634,49 @@ function mineruEnv() {
   const bridgeRoot = resolveBridgeRoot();
   const dataHome = path.join(bridgeRoot, "mineru-data");
   const modelsDir = path.join(dataHome, "models");
+  const configPath = path.join(dataHome, "config.yaml");
   try {
     fs.mkdirSync(modelsDir, { recursive: true });
   } catch (_) {}
 
+  // MinerU 4.x：若设置了 MINERU_CONFIG，文件必须已存在，否则直接 FileNotFoundError
+  ensureMineruConfigYaml(configPath, modelsDir);
+
   // 未显式指定时：配置与模型都放桥目录（mmproj / GGUF / 小模型同此）
   if (!env.MINERU_HOME) env.MINERU_HOME = dataHome;
   if (!env.MINERU_MODEL_BASE_DIR) env.MINERU_MODEL_BASE_DIR = modelsDir;
-  if (!env.MINERU_CONFIG) env.MINERU_CONFIG = path.join(dataHome, "config.yaml");
+  if (!env.MINERU_CONFIG) env.MINERU_CONFIG = configPath;
 
   if (!loggedMineruDataDirs) {
     loggedMineruDataDirs = true;
     console.log(`[mineru] 模型目录：${env.MINERU_MODEL_BASE_DIR}`);
     console.log(`[mineru] MINERU_HOME：${env.MINERU_HOME}`);
+    console.log(`[mineru] 配置文件：${env.MINERU_CONFIG}`);
   }
   return env;
+}
+
+/**
+ * 写出一份可用的默认 config.yaml（不覆盖用户已有文件）。
+ * 路径用正斜杠，避免 Windows YAML 转义问题。
+ */
+function ensureMineruConfigYaml(configPath, modelsDir) {
+  try {
+    if (fs.existsSync(configPath)) return;
+    const base = String(modelsDir || "").replace(/\\/g, "/");
+    const yaml =
+      `# Auto-created by DevTools mineru-bridge — models live under the bridge folder.\n` +
+      `model:\n` +
+      `  source: modelscope\n` +
+      `  base_dir: ${JSON.stringify(base)}\n` +
+      `  small_backend: auto\n` +
+      `  vlm:\n` +
+      `    engine: auto\n`;
+    fs.writeFileSync(configPath, yaml, "utf8");
+    console.log(`[mineru] 已创建默认配置：${configPath}`);
+  } catch (err) {
+    console.log(`[mineru] 创建 config.yaml 失败：${err?.message || err}`);
+  }
 }
 
 function isImageName(name) {
