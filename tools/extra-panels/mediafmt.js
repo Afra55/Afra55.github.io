@@ -295,7 +295,63 @@
     });
     $("#mediafmt-run")?.addEventListener("click", () => void run());
 
+    async function connectBridge() {
+      persist();
+      shell.setStatus("is-warn", "正在连接本机桥…", baseUrl());
+      try {
+        const BT = window.devtoolsBridgeToken;
+        let base = baseUrl();
+        const found = await BT?.discoverBase?.(base, token(), { kind: "unified" });
+        if (found?.base) {
+          base = found.base;
+          if (baseInput) baseInput.value = base;
+        }
+        let health = found?.health || null;
+        if (!health?.ok) {
+          const res = await fetch(`${base}/health`, { cache: "no-store" });
+          health = await res.json().catch(() => null);
+          if (!res.ok || !health?.ok) throw new Error(health?.error || "本机桥无响应（请确认 17888 已启动）");
+        }
+        // 再确认 FFmpeg 挂载（媒体互转走 /ff）
+        let ffOk = true;
+        try {
+          const ffRes = await fetch(`${base}/ff/health`, { cache: "no-store" });
+          const ff = await ffRes.json().catch(() => null);
+          ffOk = !!(ffRes.ok && (ff?.ok || ff?.ffmpeg?.ok || ff?.service));
+        } catch (_) {
+          ffOk = false;
+        }
+        const ver = health.version || "?";
+        if (ffOk) {
+          shell.setStatus("is-ok", "已连接本机桥", `统一桥 ${base} · v${ver} · /ff`);
+        } else {
+          shell.setStatus(
+            "is-warn",
+            "桥已连接，FFmpeg 未就绪",
+            `统一桥 ${base} · v${ver}；请用完整包并确认挂载了 /ff`
+          );
+        }
+        if (shell.els.refresh) shell.els.refresh.disabled = false;
+      } catch (err) {
+        const msg = err?.message || String(err);
+        shell.setStatus("is-err", "未连接本机桥", msg);
+        if (shell.els.refresh) shell.els.refresh.disabled = false;
+      }
+    }
+
+    shell.bind({
+      onConnect: () => void connectBridge(),
+      onRefresh: () => void connectBridge(),
+      onConnected: async (found) => {
+        if (found?.base && baseInput) baseInput.value = found.base;
+        await connectBridge();
+      },
+      onPersist: persist,
+      toast,
+    });
+
     renderList();
     syncActions();
+    void connectBridge();
   });
 })();
