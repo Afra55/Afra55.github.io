@@ -5219,38 +5219,44 @@ a{color:${v.accent}}
             target = tmp;
           }
           try {
-            // 长文：按高度自适应缩放；超过单张画布上限则分片导出
+            // 始终导出单张长图：超长则降低 scale 以塞进浏览器画布上限（不分片）
             const fullH = target.scrollHeight || target.clientHeight || 0;
             const fullW = target.clientWidth || 820;
-            const MAX_CANVAS = 16000;
+            const MAX_CANVAS = 16384;
             let scale = 2;
-            if (fullH * scale > MAX_CANVAS) scale = Math.max(1, Math.floor((MAX_CANVAS / fullH) * 10) / 10);
-            const chunkH = Math.max(400, Math.floor(MAX_CANVAS / scale));
-            const chunks = Math.min(6, Math.max(1, Math.ceil(fullH / chunkH)));
-            const per = Math.ceil(fullH / chunks);
-            for (let k = 0; k < chunks; k += 1) {
-              let shot = target;
-              let holder = null;
-              if (chunks > 1) {
-                holder = document.createElement("div");
-                holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${fullW}px;height:${per}px;overflow:hidden;background:#fff;color:#111`;
-                const inner = target.cloneNode(true);
-                inner.style.width = `${fullW}px`;
-                inner.style.marginTop = `-${k * per}px`;
-                holder.appendChild(inner);
-                document.body.appendChild(holder);
-                shot = holder;
-              }
-              const canvas = await window.html2canvas(shot, { backgroundColor: "#ffffff", scale });
-              await new Promise((res) =>
-                canvas.toBlob((b) => {
-                  if (b) downloadBlob(b, chunks > 1 ? `${slugify(title)}-${k + 1}.png` : `${slugify(title)}.png`);
-                  res();
-                }, "image/png")
-              );
-              if (holder) holder.remove();
+            const limH = MAX_CANVAS / Math.max(1, fullH);
+            const limW = MAX_CANVAS / Math.max(1, fullW);
+            scale = Math.min(scale, limH, limW);
+            if (!Number.isFinite(scale) || scale <= 0) scale = 0.25;
+            if (scale < 2) {
+              // 保留两位小数，避免浮点噪声
+              scale = Math.max(0.1, Math.floor(scale * 100) / 100);
             }
-            if (chunks > 1) toast(`长文较长，已分成 ${chunks} 张 PNG 导出`);
+            const canvas = await window.html2canvas(target, {
+              backgroundColor: "#ffffff",
+              scale,
+              width: fullW,
+              height: fullH,
+              windowWidth: fullW,
+              windowHeight: fullH,
+              scrollX: 0,
+              scrollY: 0,
+            });
+            await new Promise((res, rej) =>
+              canvas.toBlob((b) => {
+                if (!b) {
+                  rej(new Error("生成 PNG 失败（画布可能过大）"));
+                  return;
+                }
+                downloadBlob(b, `${slugify(title)}.png`);
+                res();
+              }, "image/png")
+            );
+            if (scale < 1.5) {
+              toast(`已导出单张长图（内容较长，清晰度约 ${Math.round(scale * 100)}%）`);
+            } else {
+              toast("已导出单张长图 PNG");
+            }
           } finally {
             if (tmp) tmp.remove();
           }
