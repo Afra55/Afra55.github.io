@@ -19,6 +19,29 @@
   z-index: 5;
 }
 .mdm-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.mdm-path-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.55rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-strong, transparent));
+}
+.mdm-path-banner[hidden] { display: none !important; }
+.mdm-path-banner-text {
+  flex: 1 1 14rem;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.mdm-path-banner-x {
+  min-width: 2rem;
+  padding-inline: 0.45rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
 .mdm-export-group { display: inline-flex; align-items: center; gap: 0.35rem; }
 .mdm-export-group .select-input { min-height: var(--btn-min-h, 2.5rem); }
 .mdm-search { width: 100%; padding: 0.45rem 0.6rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-strong, transparent); color: var(--ink); }

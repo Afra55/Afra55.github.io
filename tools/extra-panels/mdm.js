@@ -271,6 +271,11 @@
       toggleSide: $("#mdm-toggle-side"),
       toggleTop: $("#mdm-toggle-top"),
       dirLabel: $("#mdm-dir-label"),
+      pathBanner: $("#mdm-path-banner"),
+      pathBannerText: $("#mdm-path-banner-text"),
+      pathPick: $("#mdm-path-pick"),
+      pathPaste: $("#mdm-path-paste"),
+      pathDismiss: $("#mdm-path-dismiss"),
       error: $("#mdm-error"),
       conflict: $("#mdm-conflict"),
       layout: $("#mdm-layout"),
@@ -3843,6 +3848,7 @@
       try {
         localStorage.setItem(dirPathKey(folderName), d);
       } catch (_) {}
+      updatePathBanner();
     }
 
     function readRememberedDir(folderName) {
@@ -3853,24 +3859,163 @@
       }
     }
 
-    /** 收集本机提示目录：当前库记住的 + 其它库路径 + 桥解压目录 */
-    function collectPathHints(folderName) {
-      const out = [];
-      const push = (v) => {
-        const s = String(v || "").trim();
-        if (s && !out.includes(s)) out.push(s);
-      };
-      push(readRememberedDir(folderName));
+    function pathBaseName(p) {
+      const s = String(p || "").replace(/[\\/]+$/, "");
+      const i = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
+      return i >= 0 ? s.slice(i + 1) : s;
+    }
+
+    function pathBannerDismissKey(folderName) {
+      return `devtools-mdm-path-banner-dismiss:${String(folderName || "").toLowerCase()}`;
+    }
+
+    function isPathBannerDismissed(folderName) {
       try {
-        for (let i = 0; i < localStorage.length; i += 1) {
-          const k = localStorage.key(i) || "";
-          if (k.startsWith("devtools-mdm-dirpath:")) push(localStorage.getItem(k));
+        return sessionStorage.getItem(pathBannerDismissKey(folderName)) === "1";
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function dismissPathBanner(folderName) {
+      try {
+        sessionStorage.setItem(pathBannerDismissKey(folderName), "1");
+      } catch (_) {}
+      updatePathBanner();
+    }
+
+    function updatePathBanner() {
+      const el = els.pathBanner;
+      if (!el) return;
+      if (state.mode !== "dir" || !state.dirHandle) {
+        el.hidden = true;
+        return;
+      }
+      const folderName = state.dirHandle.name;
+      const remembered = readRememberedDir(folderName);
+      if (remembered) {
+        el.hidden = true;
+        if (els.dirLabel && !els.dirLabel.dataset.pathHint) {
+          /* keep label; path shown via toast when remembered */
         }
-      } catch (_) {}
+        return;
+      }
+      if (isPathBannerDismissed(folderName)) {
+        el.hidden = true;
+        return;
+      }
+      if (els.pathBannerText) {
+        els.pathBannerText.textContent =
+          `尚未记住「${folderName}」的本机路径：复制文件路径前请确认一次（本机选同一文件夹或粘贴，无需全盘扫描）`;
+      }
+      el.hidden = false;
+    }
+
+    /** 经统一桥弹出系统选文件夹，记住绝对路径（需与当前库文件夹名一致或用户确认） */
+    async function pickAndRememberAbsDir(folderName) {
+      const api = window.devtoolsBridgeToken;
+      if (!api?.pickLocalDir) {
+        setErr("请硬刷新页面以加载桥接口，或改用「粘贴路径」");
+        return "";
+      }
+      setSaveStatus("等待本机选择文件夹…");
+      toast("请在本机对话框中选中与当前库相同的文件夹");
       try {
-        push(window.devtoolsBridgeToken?.readInstallDir?.("unified"));
-      } catch (_) {}
-      return out.slice(0, 40);
+        const res = await api.pickLocalDir({
+          title: `请选择「${folderName}」文件夹（与浏览器里选的是同一个）`,
+        });
+        const abs = String(res?.path || "").trim();
+        if (!abs) return "";
+        const base = res?.name || pathBaseName(abs);
+        if (base && folderName && base !== folderName) {
+          const ok = await confirmModal({
+            title: "文件夹名不一致",
+            body:
+              `浏览器连接的是「${folderName}」，本机选的是「${base}」。\n\n` +
+              `若确认是同一目录（或链接/别名），仍可记住并用于复制路径。`,
+            okText: "仍要记住",
+          });
+          if (!ok) return "";
+        }
+        rememberDirPath(folderName, abs);
+        setErr("");
+        toast(`已记住路径：${abs}`);
+        return abs;
+      } catch (err) {
+        if (err?.name === "AbortError" || /取消/.test(String(err?.message || err))) {
+          toast("已取消选择");
+          return "";
+        }
+        setErr(String(err?.message || err));
+        return "";
+      } finally {
+        setSaveStatus("");
+      }
+    }
+
+    /**
+     * 引导记住本机路径：连接新库时弹一次；老用户用顶栏条。
+     * @param {{ reason?: "connect"|"banner"|"manual" }} [opts]
+     */
+    async function ensureDirPathGuided({ reason = "banner" } = {}) {
+      if (state.mode !== "dir" || !state.dirHandle) return false;
+      const folderName = state.dirHandle.name;
+      if (readRememberedDir(folderName)) {
+        updatePathBanner();
+        return true;
+      }
+      updatePathBanner();
+
+      if (reason !== "connect" && reason !== "manual") return false;
+
+      return new Promise((resolve) => {
+        const box = els.modalBox;
+        const bridgeOk = Boolean(window.devtoolsBridgeToken?.pickLocalDir);
+        box.innerHTML =
+          `<div class="mdm-modal-head"><strong>记住本机路径（只需一次）</strong></div>` +
+          `<p class="mdm-modal-body">浏览器能管理「${escapeHtml(folderName)}」里的文档，但不会告诉网页它在磁盘上的完整路径。\n\n` +
+          `选一次同一文件夹或粘贴路径后，右键「复制文件路径」即可直接复制，无需全盘扫描。</p>` +
+          `<div class="mdm-modal-foot" style="flex-wrap:wrap;gap:0.4rem">` +
+          (bridgeOk
+            ? `<button type="button" class="primary-btn" data-rp="pick">本机选择同一文件夹</button>`
+            : "") +
+          `<button type="button" class="secondary-btn" data-rp="paste">粘贴路径</button>` +
+          `<button type="button" class="ghost-btn" data-rp="later">以后再说</button>` +
+          `</div>`;
+        els.modal.hidden = false;
+        const finish = async (act) => {
+          closeModal();
+          if (act === "pick") {
+            const abs = await pickAndRememberAbsDir(folderName);
+            resolve(Boolean(abs));
+            return;
+          }
+          if (act === "paste") {
+            const dir = await askDirPathModal(folderName, {
+              purpose: "copy",
+              hint: "粘贴当前库文件夹的完整路径（例如 D:\\notes）",
+            });
+            if (!dir) {
+              resolve(false);
+              return;
+            }
+            rememberDirPath(folderName, dir);
+            toast(`已记住路径：${dir}`);
+            resolve(true);
+            return;
+          }
+          dismissPathBanner(folderName);
+          resolve(false);
+        };
+        els.modal.onclick = (e) => {
+          if (e.target === els.modal) void finish("later");
+        };
+        box.onclick = (e) => {
+          const b = e.target.closest?.("[data-rp]");
+          if (!b) return;
+          void finish(b.dataset.rp);
+        };
+      });
     }
 
     function joinItemPath(dir, fileName) {
@@ -3912,67 +4057,6 @@
       return true;
     }
 
-    /** 进行中的反查：右键预热与点击复制共用，避免重复扫盘 */
-    let pathResolveInflight = null;
-
-    /**
-     * 经本机桥反查绝对路径，成功则记住目录。
-     * @returns {Promise<{ path: string, error: string }>}
-     */
-    async function resolveItemAbsPath(item, { quiet = false } = {}) {
-      if (!item?.fileName || state.mode !== "dir" || !state.dirHandle) {
-        return { path: "", error: "仅「文件夹」模式有本机文件路径" };
-      }
-      const folderName = state.dirHandle.name;
-      const cached = joinItemPath(readRememberedDir(folderName), item.fileName);
-      if (cached) return { path: cached, error: "" };
-
-      const api = window.devtoolsBridgeToken;
-      if (!api?.findMdmDoc) {
-        return { path: "", error: "页面未加载桥接口，请硬刷新后重试" };
-      }
-      if (!folderName) return { path: "", error: "缺少文件夹名" };
-
-      if (!quiet) {
-        setSaveStatus("正在识别本机路径…");
-        toast("正在识别本机路径…");
-      }
-      try {
-        const res = await api.findMdmDoc({
-          folderName,
-          fileName: item.fileName,
-          hintDirs: collectPathHints(folderName),
-        });
-        const path = String(res?.path || "").trim();
-        if (res?.dirAbsPath) rememberDirPath(folderName, res.dirAbsPath);
-        else if (path) {
-          const sep = path.includes("\\") ? "\\" : "/";
-          const i = path.lastIndexOf(sep);
-          if (i > 0) rememberDirPath(folderName, path.slice(0, i));
-        }
-        if (!path) return { path: "", error: "桥未返回路径" };
-        return { path, error: "" };
-      } catch (err) {
-        const msg = String(err?.message || err || "识别失败");
-        if (/未连接|未启动|Failed to fetch/i.test(msg)) {
-          return { path: "", error: "本机桥未连接，无法自动识别路径；请启动统一桥后重试，或粘贴一次文件夹路径" };
-        }
-        return { path: "", error: msg };
-      } finally {
-        if (!quiet) setSaveStatus("");
-      }
-    }
-
-    function resolveItemAbsPathCached(item, opts = {}) {
-      const key = `${state.dirHandle?.name || ""}::${item?.fileName || ""}`;
-      if (pathResolveInflight?.key === key) return pathResolveInflight.promise;
-      const promise = resolveItemAbsPath(item, opts).finally(() => {
-        if (pathResolveInflight?.key === key) pathResolveInflight = null;
-      });
-      pathResolveInflight = { key, promise };
-      return promise;
-    }
-
     async function finishCopyAbsPath(path) {
       const abs = String(path || "").trim();
       if (!abs) {
@@ -3994,8 +4078,8 @@
     /**
      * 复制完整路径：
      * 1) 已记住目录 → 同步直接复制
-     * 2) 桥反查 → 尝试复制；失败则弹「一键复制」
-     * 3) 找不到 → 弹窗粘贴文件夹路径（带失败原因）
+     * 2) 未记住 → 引导本机选同一文件夹 / 粘贴（不扫盘）
+     * 3) 剪贴板失败 → 弹「一键复制」
      */
     async function copyItemPath(item) {
       if (!item) return;
@@ -4012,25 +4096,16 @@
       if (tryCopyItemPathSync(item)) return;
 
       const folderName = state.dirHandle.name;
-      setSaveStatus("正在识别本机路径…");
-      toast("正在识别本机路径…");
-      const { path: found, error } = await resolveItemAbsPathCached(item, { quiet: true });
-      setSaveStatus("");
-
-      let path = found;
-      if (!path) {
-        const dir = await askDirPathModal(folderName, {
-          purpose: "copy",
-          hint: error || "未能自动识别本机路径",
-        });
-        if (!dir) {
-          setErr(error || "已取消复制路径");
+      if (!readRememberedDir(folderName)) {
+        updatePathBanner();
+        const ok = await ensureDirPathGuided({ reason: "manual" });
+        if (!ok) {
+          setErr("请先记住本机路径后再复制");
           return;
         }
-        rememberDirPath(folderName, dir);
-        path = joinItemPath(dir, item.fileName);
+        if (tryCopyItemPathSync(item)) return;
       }
-      await finishCopyAbsPath(path);
+      await finishCopyAbsPath(joinItemPath(readRememberedDir(folderName), item.fileName));
     }
 
     /** 右键菜单 / 工具栏统一入口 */
@@ -5787,6 +5862,10 @@ a{color:${v.accent}}
         state.mode = "dir";
         await idbSet("kv", DIR_KEY, handle);
         await initAfterStorage(handle.name);
+        // 新连接：立刻引导记住本机路径（系统选目录 / 粘贴），避免日后全盘反查
+        if (!readRememberedDir(handle.name)) {
+          void ensureDirPathGuided({ reason: "connect" });
+        }
       });
     }
 
@@ -5829,20 +5908,11 @@ a{color:${v.accent}}
       await loadSearchIdx();
       await openInitialDoc();
       warmBodyCache();
-      void warmDirPathCache();
+      updatePathBanner();
       void autoExpireTrash();
       watchExternalChanges();
       if (state.view && CMresize) CMresize();
       toast(`已连接：${label}`);
-    }
-
-    /** 连接库后后台反查一次绝对路径并记住，之后右键可同步直接复制 */
-    async function warmDirPathCache() {
-      if (state.mode !== "dir" || !state.dirHandle) return;
-      if (readRememberedDir(state.dirHandle.name)) return;
-      const sample = (state.index.items || []).find((it) => it?.fileName);
-      if (!sample) return;
-      await resolveItemAbsPathCached(sample, { quiet: true });
     }
 
     function CMresize() {
@@ -5851,6 +5921,25 @@ a{color:${v.accent}}
 
     // ---- events ----
     els.pickDir?.addEventListener("click", () => void pickDir());
+    els.pathPick?.addEventListener("click", () => {
+      if (state.mode !== "dir" || !state.dirHandle) return;
+      void pickAndRememberAbsDir(state.dirHandle.name);
+    });
+    els.pathPaste?.addEventListener("click", async () => {
+      if (state.mode !== "dir" || !state.dirHandle) return;
+      const folderName = state.dirHandle.name;
+      const dir = await askDirPathModal(folderName, {
+        purpose: "copy",
+        hint: "粘贴当前库文件夹的完整路径（例如 D:\\notes）",
+      });
+      if (!dir) return;
+      rememberDirPath(folderName, dir);
+      toast(`已记住路径：${dir}`);
+    });
+    els.pathDismiss?.addEventListener("click", () => {
+      if (state.mode === "dir" && state.dirHandle) dismissPathBanner(state.dirHandle.name);
+      else if (els.pathBanner) els.pathBanner.hidden = true;
+    });
     applyModeUI();
     els.useIdb?.addEventListener("click", async () => {
       if (state.mode === "idb") return;
@@ -6366,8 +6455,6 @@ a{color:${v.accent}}
       e.preventDefault();
       const item = findItem(b.dataset.id);
       if (item) {
-        // 弹出菜单的同时预取路径，点「复制文件路径」时多半已可同步复制
-        void resolveItemAbsPathCached(item, { quiet: true });
         showListCtx(e.clientX, e.clientY, item);
       }
     });

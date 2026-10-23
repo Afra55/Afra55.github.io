@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.78";
+const BRIDGE_VERSION = "0.9.79";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5706,6 +5706,7 @@ async function handleApi(req, res, url) {
             "forward",
             "developer",
             "local-fs",
+            "local-pick-dir",
             "local-push",
             "local-pull",
             "fs-zip",
@@ -5854,6 +5855,26 @@ async function handleApi(req, res, url) {
       const revealed = await ffmpegBridge.revealLocalPath(body.path || "");
       const dirAbsPath = revealed.isDir ? revealed.path : path.dirname(revealed.path);
       sendJson(res, 200, { ok: true, revealed: true, path: revealed.path, dirAbsPath }, origin);
+      return;
+    }
+
+    if (url.pathname === "/local/pick-dir" && req.method === "POST") {
+      if (!ffmpegBridge?.pickLocalDirectory) {
+        sendJson(res, 503, { ok: false, error: "未找到本机选目录模块（请升级统一桥）" }, origin);
+        return;
+      }
+      try {
+        const body = parseJsonBody(await readBody(req, 64 * 1024));
+        const picked = await ffmpegBridge.pickLocalDirectory({
+          title: body.title || "选择文件夹",
+          startDir: body.startDir || body.path || "",
+        });
+        sendJson(res, 200, { ok: true, ...picked }, origin);
+      } catch (err) {
+        const msg = String(err?.message || err);
+        const cancelled = /取消/.test(msg);
+        sendJson(res, cancelled ? 200 : 500, { ok: false, cancelled, error: msg }, origin);
+      }
       return;
     }
 

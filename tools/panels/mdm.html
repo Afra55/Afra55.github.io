@@ -34,6 +34,12 @@
           <button type="button" class="secondary-btn mdm-wide-only" id="mdm-copy" disabled title="复制预览内容到剪贴板（带格式；图片会内联，可直接粘到微信/Word）">复制</button>
           <span class="hint tight" id="mdm-dir-label"></span>
         </div>
+        <div class="mdm-path-banner" id="mdm-path-banner" hidden>
+          <span class="mdm-path-banner-text" id="mdm-path-banner-text">尚未记住本机路径：复制文件路径前请确认一次（本机选同一文件夹或粘贴路径，无需全盘扫描）</span>
+          <button type="button" class="secondary-btn" id="mdm-path-pick" title="通过统一桥弹出系统选文件夹对话框，选与当前库相同的目录">本机选择同一文件夹</button>
+          <button type="button" class="ghost-btn" id="mdm-path-paste" title="手动粘贴文件夹完整路径并记住">粘贴路径</button>
+          <button type="button" class="ghost-btn mdm-path-banner-x" id="mdm-path-dismiss" title="本次会话先隐藏">×</button>
+        </div>
         <p class="error" id="mdm-error" hidden></p>
 
         <div class="mdm-layout" id="mdm-layout" hidden>
@@ -103,7 +109,7 @@
                   <button type="button" data-insert="duplicate">复制</button>
                   <button type="button" data-insert="rename">重命名</button>
                   <button type="button" data-insert="reveal-current">打开文件位置…</button>
-                  <button type="button" data-insert="copy-path" title="复制本机文件路径：已记住目录则立刻复制；否则经本机桥识别后写入剪贴板（需统一桥）">复制文件路径</button>
+                  <button type="button" data-insert="copy-path" title="复制本机文件路径：需先记住文件夹路径（本机选同一文件夹或粘贴一次），之后直接复制">复制文件路径</button>
                   <button type="button" data-insert="delete" class="is-danger">删除</button>
                   <div class="mdm-menu-label">库与工具</div>
                   <button type="button" data-insert="trash">回收站…</button>
