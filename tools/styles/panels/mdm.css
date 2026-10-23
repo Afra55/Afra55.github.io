@@ -304,9 +304,6 @@
   gap: 0.45rem;
   flex-wrap: wrap;
 }
-#mdm .markdown-body img:not(.mdm-img-missing) {
-  cursor: zoom-in;
-}
 
 /* 沉浸（全屏）：隐藏站点外壳，让工具铺满屏幕；只有编辑器 / 预览自己滚 */
 .mdm-max-btn { padding: 0.15rem 0.5rem; line-height: 1.2; }
