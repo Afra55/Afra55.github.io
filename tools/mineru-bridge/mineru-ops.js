@@ -683,6 +683,15 @@ function isImageName(name) {
   return /\.(png|jpe?g|webp|tiff?|bmp)$/i.test(String(name || ""));
 }
 
+/** MinerU kit：advanced/standard 仅 PDF/图片；Office 等只能 flash */
+function kitTiersForExt(ext) {
+  const e = String(ext || "").toLowerCase();
+  if (e === ".pdf" || isImageName(`x${e}`)) {
+    return ["advanced", "standard", "flash"];
+  }
+  return ["flash"];
+}
+
 function looksLikeWaitTimeout(err) {
   const msg = `${err?.stderr || ""}\n${err?.stdout || ""}\n${err?.message || ""}`;
   return /parse_wait_timeout|wait[_\s-]?timeout|client wait|仍在解析|继续等待/i.test(msg);
@@ -725,15 +734,17 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
   const SPAWN_TIMEOUT_MS = 4 * 60 * 60 * 1000;
   const LIBRARY_WAIT_SEC = 7200;
   console.log(
-    `[mineru] 开始最高质量转换「${name}」· ${sizeKb} KB · ocr=${wantOcr ? "force" : "auto"} · style=${bin.style} · bin=${bin.kind === "bin" ? bin.file : `${bin.file} ${bin.argsPrefix.join(" ")}`.trim()}`
+    `[mineru] 开始转换「${name}」· ${sizeKb} KB · ocr=${wantOcr ? "force" : "auto"} · tiers=${kitTiersForExt(ext).join("|")} · style=${bin.style} · bin=${bin.kind === "bin" ? bin.file : `${bin.file} ${bin.argsPrefix.join(" ")}`.trim()}`
   );
 
   /** @type {{ file: string, args: string[], outHint: string|null, label: string, retryWait?: boolean }[]} */
   const attempts = [];
+  const kitTiers = kitTiersForExt(ext);
+  const highTierOk = kitTiers.includes("advanced");
 
-  // 1) mineru-kit：advanced → standard（kit 默认整篇）
+  // 1) mineru-kit：PDF/图 advanced→standard→flash；docx 等仅 flash（官方限制）
   if (bin.style === "kit") {
-    for (const tier of ["advanced", "standard"]) {
+    for (const tier of kitTiers) {
       const kitArgs = [...bin.argsPrefix, "parse", inPath, "-o", outFile, "--tier", tier];
       if (wantOcr) kitArgs.push("--ocr-mode", "ocr");
       attempts.push({
@@ -758,8 +769,8 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
       "--wait",
       String(LIBRARY_WAIT_SEC),
     ];
-    // 新版可能支持 --tier；不支持时下一档无 tier 再试
-    if (bin.style === "parse") {
+    // 新版可能支持 --tier；非 PDF/图不要传 advanced/standard（会秒拒）
+    if (bin.style === "parse" && highTierOk) {
       attempts.push({
         file: bin.file,
         args: [...baseParse, "--tier", "advanced"],
@@ -772,6 +783,15 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
         args: [...baseParse, "--tier", "standard"],
         outHint: outFile,
         label: "parse/standard",
+        retryWait: true,
+      });
+    }
+    if (bin.style === "parse" && !highTierOk) {
+      attempts.push({
+        file: bin.file,
+        args: [...baseParse, "--tier", "flash"],
+        outHint: outFile,
+        label: "parse/flash",
         retryWait: true,
       });
     }
