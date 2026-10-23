@@ -48,8 +48,32 @@
   }
 
   bindPanel("mediafmt", () => {
-    if (!window.devtoolsBridgeShell?.mount) return;
+    let booted = false;
+    const boot = () => {
+      if (booted) return true;
+      if (!window.devtoolsBridgeShell?.mount) return false;
+      booted = true;
+      bootMediafmt();
+      return true;
+    };
+    if (boot()) return;
+    let n = 0;
+    const t = setInterval(() => {
+      n += 1;
+      if (boot() || n > 100) {
+        clearInterval(t);
+        if (!booted) {
+          const host = document.querySelector("#mediafmt-bridge-shell");
+          if (host) {
+            host.innerHTML =
+              `<p class="error">连接壳未加载。请硬刷新页面（Ctrl+F5 / ⌘⇧R）后重试。</p>`;
+          }
+        }
+      }
+    }, 50);
+  });
 
+  function bootMediafmt() {
     const shell = window.devtoolsBridgeShell.mount({
       host: "#mediafmt-bridge-shell",
       prefix: "mediafmt",
@@ -301,34 +325,51 @@
       try {
         const BT = window.devtoolsBridgeToken;
         let base = baseUrl();
-        const found = await BT?.discoverBase?.(base, token(), { kind: "unified" });
-        if (found?.base) {
-          base = found.base;
-          if (baseInput) baseInput.value = base;
+        let health = null;
+        // 先打当前地址（快）；失败再扫端口
+        try {
+          const res = await fetch(`${base}/health`, { cache: "no-store", mode: "cors" });
+          const data = await res.json().catch(() => null);
+          if (res.ok && data?.ok) health = data;
+        } catch (_) {
+          /* discover */
         }
-        let health = found?.health || null;
         if (!health?.ok) {
-          const res = await fetch(`${base}/health`, { cache: "no-store" });
-          health = await res.json().catch(() => null);
-          if (!res.ok || !health?.ok) throw new Error(health?.error || "本机桥无响应（请确认 17888 已启动）");
+          const found = await BT?.discoverBase?.(base, token(), { kind: "unified" });
+          if (found?.base) {
+            base = found.base;
+            if (baseInput) baseInput.value = base;
+            health = found.health;
+          }
+        }
+        if (!health?.ok) {
+          throw new Error("本机桥无响应（请确认 17888 已启动，并硬刷新本页 Ctrl+F5）");
         }
         // 再确认 FFmpeg 挂载（媒体互转走 /ff）
-        let ffOk = true;
+        let ffOk = false;
+        let ffBinOk = false;
         try {
-          const ffRes = await fetch(`${base}/ff/health`, { cache: "no-store" });
+          const ffRes = await fetch(`${base}/ff/health`, { cache: "no-store", mode: "cors" });
           const ff = await ffRes.json().catch(() => null);
-          ffOk = !!(ffRes.ok && (ff?.ok || ff?.ffmpeg?.ok || ff?.service));
+          ffOk = !!(ffRes.ok && ff?.ok);
+          ffBinOk = !!(ff?.ffmpeg?.ok || ff?.tools?.ffmpeg?.ok);
         } catch (_) {
           ffOk = false;
         }
         const ver = health.version || "?";
-        if (ffOk) {
+        if (ffOk && ffBinOk) {
           shell.setStatus("is-ok", "已连接本机桥", `统一桥 ${base} · v${ver} · /ff`);
+        } else if (ffOk) {
+          shell.setStatus(
+            "is-warn",
+            "桥已连接，本机未找到 ffmpeg",
+            `统一桥 ${base} · v${ver}；请在环境管家安装 FFmpeg 后点刷新`
+          );
         } else {
           shell.setStatus(
             "is-warn",
-            "桥已连接，FFmpeg 未就绪",
-            `统一桥 ${base} · v${ver}；请用完整包并确认挂载了 /ff`
+            "桥已连接，FFmpeg 模块未挂载",
+            `统一桥 ${base} · v${ver}；请用统一完整包并更新桥 ≥0.9.75`
           );
         }
         if (shell.els.refresh) shell.els.refresh.disabled = false;
@@ -353,5 +394,5 @@
     renderList();
     syncActions();
     void connectBridge();
-  });
+  }
 })();
