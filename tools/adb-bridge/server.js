@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.77";
+const BRIDGE_VERSION = "0.9.78";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5655,6 +5655,7 @@ async function handleApi(req, res, url) {
           tokenRequired: true,
           defaultTokenHint: "devtools-bridge",
           unified: true,
+          updatePending: updateStateSummary(await readUpdateState()),
           installDir: process.env.ADB_BRIDGE_DIR || __dirname,
           startScripts: {
             win: "start-adb-bridge.cmd",
@@ -5861,7 +5862,13 @@ async function handleApi(req, res, url) {
         const info = await checkBridgeUpdate();
         sendJson(res, 200, { ok: true, ...info, base: SELF_BASE }, origin);
       } catch (err) {
-        sendJson(res, 200, { ok: false, current: BRIDGE_VERSION, error: err?.message || String(err) }, origin);
+        const pending = updateStateSummary(await readUpdateState());
+        sendJson(
+          res,
+          200,
+          { ok: false, current: BRIDGE_VERSION, error: err?.message || String(err), pending },
+          origin
+        );
       }
       return;
     }
@@ -5874,11 +5881,23 @@ async function handleApi(req, res, url) {
         return;
       }
       try {
-        const r = await selfUpdateBridge((f) => console.log("[bridge]   +", f));
-        sendJson(res, 200, { ok: true, ...r }, origin);
+        const pending = updateStateSummary(await readUpdateState());
+        const r = await selfUpdateBridge((f) => console.log("[bridge]   +", f), {
+          resume: Boolean(pending?.resume),
+          targetVersion: pending?.targetVersion || "",
+        });
+        sendJson(res, 200, { ok: true, ...r, pending: updateStateSummary(await readUpdateState()) }, origin);
         setTimeout(() => relaunchBridge(), 600);
       } catch (err) {
-        sendJson(res, 500, { ok: false, error: err?.message || String(err) }, origin);
+        const cur = (await readUpdateState()) || {};
+        try {
+          await writeUpdateState({
+            ...cur,
+            status: "in_progress",
+            lastError: String(err?.message || err),
+          });
+        } catch (_) {}
+        sendJson(res, 500, { ok: false, error: err.message || String(err), pending: updateStateSummary(await readUpdateState()) }, origin);
       }
       return;
     }
@@ -6642,10 +6661,14 @@ async function probeOurBridgeRetry(port, tries = 3) {
   return false;
 }
 
-// ---- 桥自动更新（从站点拉取最新桥文件；仅当远端 BRIDGE_VERSION 更高） ----
+// ---- 桥自动更新（从站点拉取最新桥文件；支持中断后续传） ----
 const SELF_BASE = String(process.env.DEVTOOLS_BRIDGE_BASE_URL || "https://afra55.github.io/tools").replace(/\/+$/, "");
 const AUTO_UPDATE_OFF = String(process.env.DEVTOOLS_BRIDGE_NO_AUTO_UPDATE || "") === "1";
+/** 完成后仍同版本时的防重启风暴（目录可能不可写） */
 const UPDATE_ATTEMPT_FILE = path.join(__dirname, ".bridge-update-attempt.json");
+/** 进行中的更新进度：退出半截后下次启动据此继续 */
+const UPDATE_STATE_FILE = path.join(__dirname, ".bridge-update-state.json");
+const CRITICAL_BRIDGE_FILE = "adb-bridge/server.js";
 
 function cmpVersion(a, b) {
   const pa = String(a || "").split(".").map((n) => Number(n) || 0);
@@ -6678,9 +6701,52 @@ async function fetchRemoteBridgeVersion() {
   return m[1];
 }
 
+async function readUpdateState() {
+  try {
+    const raw = JSON.parse(await fs.promises.readFile(UPDATE_STATE_FILE, "utf8"));
+    if (!raw || typeof raw !== "object") return null;
+    return raw;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function writeUpdateState(state) {
+  const next = { ...state, updatedAt: Date.now() };
+  await fs.promises.writeFile(UPDATE_STATE_FILE, JSON.stringify(next, null, 2));
+  return next;
+}
+
+async function clearUpdateState() {
+  try {
+    await fs.promises.unlink(UPDATE_STATE_FILE);
+  } catch (_) {}
+}
+
+function updateStateSummary(state) {
+  if (!state) return null;
+  const done = Array.isArray(state.done) ? state.done.length : 0;
+  const total = Number(state.total) || 0;
+  return {
+    status: state.status || "",
+    targetVersion: state.targetVersion || "",
+    fromVersion: state.fromVersion || "",
+    done,
+    total,
+    resume: state.status === "in_progress" || state.status === "ready_to_relaunch",
+    lastError: state.lastError || "",
+  };
+}
+
 async function checkBridgeUpdate() {
   const latest = await fetchRemoteBridgeVersion();
-  return { current: BRIDGE_VERSION, latest, updateAvailable: cmpVersion(latest, BRIDGE_VERSION) > 0 };
+  const pending = updateStateSummary(await readUpdateState());
+  return {
+    current: BRIDGE_VERSION,
+    latest,
+    updateAvailable: cmpVersion(latest, BRIDGE_VERSION) > 0,
+    pending,
+  };
 }
 
 /** 仓库相对路径 → 本机实际路径（兼容 ZIP 扁平布局与 EnvKit 嵌套布局） */
@@ -6690,38 +6756,103 @@ function localPathForRepoPath(repoPath) {
   return path.join(path.dirname(__dirname), rel);
 }
 
-async function selfUpdateBridge(onLog = () => {}) {
+/** server.js 必须最后写：中途退出时本地版本号仍旧，下次还能发现并续传 */
+function orderBridgeFiles(files) {
+  const list = (Array.isArray(files) ? files : []).map((x) => String(x || "").replace(/^\.\//, "")).filter(Boolean);
+  const rest = list.filter((f) => f !== CRITICAL_BRIDGE_FILE);
+  if (list.includes(CRITICAL_BRIDGE_FILE)) rest.push(CRITICAL_BRIDGE_FILE);
+  return rest;
+}
+
+async function writeFileAtomic(dest, buf) {
+  await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+  const tmp = `${dest}.updating`;
+  await fs.promises.writeFile(tmp, buf);
+  try {
+    await fs.promises.rename(tmp, dest);
+  } catch (_) {
+    // Windows 上目标存在时 rename 可能失败：覆盖写后再删临时文件
+    await fs.promises.writeFile(dest, buf);
+    try {
+      await fs.promises.unlink(tmp);
+    } catch (_) {}
+  }
+}
+
+/**
+ * 按清单拉取桥文件。会先落盘 .bridge-update-state.json，退出半截后下次启动可续传。
+ * 已与远端一致的文件会跳过（续传时只补缺）。
+ */
+async function selfUpdateBridge(onLog = () => {}, { targetVersion = "", resume = false } = {}) {
   const manifest = JSON.parse(await fetchRemote(`${SELF_BASE}/bridge-files.json`));
-  const files = Array.isArray(manifest.files) ? manifest.files : [];
+  const files = orderBridgeFiles(manifest.files);
   const skipIfPresent = new Set(Array.isArray(manifest.skipIfPresent) ? manifest.skipIfPresent : []);
   if (!files.length) throw new Error("远端清单为空");
+
+  let target = String(targetVersion || "").trim();
+  if (!target) {
+    try {
+      target = await fetchRemoteBridgeVersion();
+    } catch (_) {
+      target = BRIDGE_VERSION;
+    }
+  }
+
+  const prev = (await readUpdateState()) || {};
+  const doneSet = new Set(Array.isArray(prev.done) ? prev.done : []);
+  let state = await writeUpdateState({
+    status: "in_progress",
+    targetVersion: target,
+    fromVersion: prev.fromVersion || BRIDGE_VERSION,
+    startedAt: prev.startedAt || Date.now(),
+    done: [...doneSet],
+    total: files.length,
+    lastError: "",
+    resume: Boolean(resume || prev.status === "in_progress"),
+  });
+
   let written = 0;
   let skipped = 0;
+  let idx = 0;
   for (const rel of files) {
+    idx += 1;
     const dest = localPathForRepoPath(rel);
     if (skipIfPresent.has(rel)) {
       try {
         await fs.promises.access(dest);
         skipped += 1;
+        doneSet.add(rel);
+        state = await writeUpdateState({ ...state, done: [...doneSet], total: files.length });
         continue;
       } catch (_) {
         /* 缺失则下载 */
       }
     }
     const buf = await fetchRemote(`${SELF_BASE}/${rel}`, { binary: true, timeoutMs: 120000 });
-    await fs.promises.mkdir(path.dirname(dest), { recursive: true });
     try {
       const cur = await fs.promises.readFile(dest);
       if (cur.length === buf.length && cur.equals(buf)) {
         skipped += 1;
+        doneSet.add(rel);
+        state = await writeUpdateState({ ...state, done: [...doneSet], total: files.length });
         continue;
       }
     } catch (_) {}
-    await fs.promises.writeFile(dest, buf);
+    await writeFileAtomic(dest, buf);
     written += 1;
-    onLog(rel);
+    doneSet.add(rel);
+    state = await writeUpdateState({ ...state, done: [...doneSet], total: files.length });
+    onLog(`${rel} (${idx}/${files.length})`);
   }
-  return { written, skipped, total: files.length };
+
+  await writeUpdateState({
+    ...state,
+    status: "ready_to_relaunch",
+    done: [...doneSet],
+    total: files.length,
+    lastError: "",
+  });
+  return { written, skipped, total: files.length, targetVersion: target, resumed: Boolean(resume) };
 }
 
 /** 找到平台启动脚本（它内部会跑 resolve-port：检测已运行并给出复用/重启/取消选项） */
@@ -6797,26 +6928,103 @@ function relaunchBridge() {
 async function autoUpdateOnBoot() {
   if (AUTO_UPDATE_OFF) return;
   try {
-    const info = await checkBridgeUpdate();
-    if (!info.updateAvailable) return;
-    // 防重启风暴：同一版本 10 分钟内只尝试一次
-    let last = {};
+    let info = null;
     try {
-      last = JSON.parse(await fs.promises.readFile(UPDATE_ATTEMPT_FILE, "utf8"));
-    } catch (_) {}
-    if (last.version === info.latest && Date.now() - (Number(last.at) || 0) < 10 * 60 * 1000) {
-      console.warn(`[bridge] 新版本 ${info.latest} 上次更新未生效（目录可能不可写），本次跳过自动更新`);
+      info = await checkBridgeUpdate();
+    } catch (err) {
+      // 离线时若有未完成进度，仍尽量用本地状态续传（需能拉清单）；否则只提示
+      const pendingOnly = updateStateSummary(await readUpdateState());
+      if (!pendingOnly?.resume) throw err;
+      console.warn("[bridge] 远端版本检查失败，将尝试按本地未完成进度续传：", err?.message || err);
+      info = {
+        current: BRIDGE_VERSION,
+        latest: pendingOnly.targetVersion || BRIDGE_VERSION,
+        updateAvailable: false,
+        pending: pendingOnly,
+      };
+    }
+
+    const pending = info.pending || updateStateSummary(await readUpdateState());
+    const incomplete = Boolean(pending?.resume);
+
+    // 上次已写完并重启成功：清进度文件
+    if (
+      pending?.status === "ready_to_relaunch" &&
+      !info.updateAvailable &&
+      cmpVersion(BRIDGE_VERSION, pending.targetVersion || "") >= 0
+    ) {
+      // 再扫一遍清单，补上退出前漏写的非 server 文件（若已齐全则几乎全 skip）
+      console.log("");
+      console.log(
+        `[bridge] 检测到上次更新未收尾（目标 ${pending.targetVersion}，已完成 ${pending.done}/${pending.total}），正在核对并补全…`
+      );
+      const r = await selfUpdateBridge((f) => console.log("[bridge]   +", f), {
+        targetVersion: pending.targetVersion || info.latest,
+        resume: true,
+      });
+      await clearUpdateState();
+      console.log(`[bridge] 收尾完成（写入 ${r.written} 个，跳过 ${r.skipped} 个）`);
+      if (r.written > 0) {
+        console.log("[bridge] 有文件刚补全，正在重启…");
+        console.log("");
+        relaunchBridge();
+      } else {
+        console.log("");
+      }
       return;
     }
+
+    if (!info.updateAvailable && !incomplete) return;
+
+    const target = info.latest || pending?.targetVersion || "";
+    // 防重启风暴：仅针对「已完整跑完仍升不了版」；未完成续传不受 10 分钟限制
+    if (!incomplete && info.updateAvailable) {
+      let last = {};
+      try {
+        last = JSON.parse(await fs.promises.readFile(UPDATE_ATTEMPT_FILE, "utf8"));
+      } catch (_) {}
+      if (last.version === target && Date.now() - (Number(last.at) || 0) < 10 * 60 * 1000) {
+        console.warn(`[bridge] 新版本 ${target} 上次更新未生效（目录可能不可写），本次跳过自动更新`);
+        return;
+      }
+    }
+
     console.log("");
-    console.log(`[bridge] 发现新版本 ${info.latest}（当前 ${info.current}），正在自动更新…`);
-    const r = await selfUpdateBridge((f) => console.log("[bridge]   +", f));
+    if (incomplete) {
+      console.log(
+        `[bridge] 继续上次未完成的更新 → ${target || pending.targetVersion}（已完成 ${pending.done}/${pending.total || "?"}，当前运行 ${BRIDGE_VERSION}）…`
+      );
+    } else {
+      console.log(`[bridge] 发现新版本 ${target}（当前 ${BRIDGE_VERSION}），正在自动更新…`);
+    }
+
     try {
-      await fs.promises.writeFile(UPDATE_ATTEMPT_FILE, JSON.stringify({ version: info.latest, at: Date.now() }));
-    } catch (_) {}
-    console.log(`[bridge] 更新完成（写入 ${r.written} 个，跳过 ${r.skipped} 个），正在重启…`);
-    console.log("");
-    relaunchBridge();
+      const r = await selfUpdateBridge((f) => console.log("[bridge]   +", f), {
+        targetVersion: target,
+        resume: incomplete,
+      });
+      try {
+        await fs.promises.writeFile(
+          UPDATE_ATTEMPT_FILE,
+          JSON.stringify({ version: r.targetVersion || target, at: Date.now(), written: r.written })
+        );
+      } catch (_) {}
+      console.log(
+        `[bridge] 更新完成（写入 ${r.written} 个，跳过 ${r.skipped} 个${r.resumed ? "，续传" : ""}），正在重启…`
+      );
+      console.log("");
+      relaunchBridge();
+    } catch (err) {
+      const cur = (await readUpdateState()) || {};
+      try {
+        await writeUpdateState({
+          ...cur,
+          status: "in_progress",
+          lastError: String(err?.message || err),
+        });
+      } catch (_) {}
+      console.warn("[bridge] 自动更新中断（下次启动将继续）：", err?.message || err);
+    }
   } catch (err) {
     console.warn("[bridge] 自动更新检查失败：", err?.message || err);
   }

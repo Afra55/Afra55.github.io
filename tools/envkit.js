@@ -204,12 +204,17 @@
           const ver = data.version || "?";
           const adbVer = data.adb?.version || data.adb?.path || "";
           const adbOk = data.adb?.ok === true;
+          const pending = data.updatePending;
+          const resumeHint =
+            pending?.resume
+              ? ` · 正在续传更新 ${pending.done || 0}/${pending.total || "?"}→v${pending.targetVersion || "?"}`
+              : "";
           return {
             ok: adbOk,
-            warn: data.ok && !adbOk,
+            warn: (data.ok && !adbOk) || Boolean(pending?.resume),
             title: b.name,
             text: adbOk
-              ? `统一桥在线 · v${ver}${adbVer ? " · " + String(adbVer).slice(0, 48) : ""}`
+              ? `统一桥在线 · v${ver}${adbVer ? " · " + String(adbVer).slice(0, 48) : ""}${resumeHint}`
               : data.adb?.error || data.adb?.setup || `桥在线 · v${ver}，但本机未找到 adb`,
             link: b.link,
           };
