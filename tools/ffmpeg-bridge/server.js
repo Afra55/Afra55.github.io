@@ -621,6 +621,88 @@ async function revealLocalPath(inputPath) {
   return { path: real, isDir: st.isDirectory() };
 }
 
+/**
+ * 弹出本机系统「选择文件夹」对话框，返回绝对路径。
+ * 供 MDM 等在连接库后记住路径，避免全盘反查。
+ */
+async function pickLocalDirectory({ title = "选择文件夹", startDir = "" } = {}) {
+  const prompt = String(title || "选择文件夹").replace(/[\r\n\u0000]/g, " ").slice(0, 160);
+  let start = "";
+  try {
+    const raw = String(startDir || "").trim();
+    if (raw) {
+      const st = await fs.promises.stat(raw);
+      if (st.isDirectory()) start = path.resolve(raw);
+    }
+  } catch (_) {}
+
+  let picked = "";
+  if (process.platform === "win32") {
+    const ps = [
+      "Add-Type -AssemblyName System.Windows.Forms",
+      "$f = New-Object System.Windows.Forms.FolderBrowserDialog",
+      `$f.Description = ${JSON.stringify(prompt)}`,
+      "$f.ShowNewFolderButton = $true",
+      start ? `$f.SelectedPath = ${JSON.stringify(start)}` : "",
+      "$r = $f.ShowDialog()",
+      'if ($r -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::Out.Write($f.SelectedPath) }',
+    ]
+      .filter(Boolean)
+      .join("; ");
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-STA", "-Command", ps], {
+      timeout: 300000,
+      windowsHide: false,
+      encoding: "utf8",
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    picked = String(stdout || "").trim();
+  } else if (process.platform === "darwin") {
+    const lines = start
+      ? [
+          "try",
+          `POSIX path of (choose folder with prompt ${JSON.stringify(prompt)} default location POSIX file ${JSON.stringify(start)})`,
+          "on error",
+          'return ""',
+          "end try",
+        ]
+      : [
+          "try",
+          `POSIX path of (choose folder with prompt ${JSON.stringify(prompt)})`,
+          "on error",
+          'return ""',
+          "end try",
+        ];
+    const { stdout } = await execFileAsync("osascript", ["-e", lines.join("\n")], {
+      timeout: 300000,
+      encoding: "utf8",
+    });
+    picked = String(stdout || "").trim().replace(/\/+$/, "");
+  } else {
+    const tryCmd = async (bin, args) => {
+      try {
+        const { stdout } = await execFileAsync(bin, args, { timeout: 300000, encoding: "utf8" });
+        return String(stdout || "").trim();
+      } catch (err) {
+        if (err && (err.code === 1 || err.code === "1")) return ""; // 用户取消
+        throw err;
+      }
+    };
+    picked = await tryCmd("zenity", ["--file-selection", "--directory", `--title=${prompt}`]).catch(() => "");
+    if (!picked) {
+      picked = await tryCmd("kdialog", ["--getexistingdirectory", start || os.homedir(), prompt]).catch(() => "");
+    }
+    if (!picked) {
+      throw new Error("本机未找到 zenity/kdialog，无法弹出选文件夹对话框；请改用粘贴路径");
+    }
+  }
+
+  if (!picked) throw new Error("已取消选择文件夹");
+  const real = path.resolve(picked);
+  const st = await fs.promises.stat(real);
+  if (!st.isDirectory()) throw new Error("所选路径不是文件夹");
+  return { path: real, name: path.basename(real) };
+}
+
 async function findMemoStorageFile({ folderName, folderId, fileName }) {
   const name = String(fileName || "").trim();
   if (!name || name.includes("/") || name.includes("\\") || name.includes("\0")) {
@@ -4140,6 +4222,22 @@ async function handleRequest(req, res, opts = {}) {
       return;
     }
 
+    if (req.method === "POST" && pathname === "/local/pick-dir") {
+      const body = parseJsonBody(await readBody(req));
+      try {
+        const picked = await pickLocalDirectory({
+          title: body.title || "选择文件夹",
+          startDir: body.startDir || body.path || "",
+        });
+        sendJson(res, 200, { ok: true, ...picked }, origin);
+      } catch (err) {
+        const msg = String(err?.message || err);
+        const cancelled = /取消/.test(msg);
+        sendJson(res, cancelled ? 200 : 500, { ok: false, cancelled, error: msg }, origin);
+      }
+      return;
+    }
+
     if (req.method === "POST" && pathname === "/local/reveal-memo") {
       const body = parseJsonBody(await readBody(req));
       const found = await findMemoStorageFile({
@@ -4531,6 +4629,7 @@ module.exports = {
   FEATURES,
   checkBinary,
   revealLocalPath,
+  pickLocalDirectory,
   findMemoStorageFile,
   findMdmDocFile,
   checkYtdlp: (...args) => (ytdlpApi ? ytdlpApi.checkYtdlp(...args) : Promise.resolve({ ok: false, error: "模块未加载" })),

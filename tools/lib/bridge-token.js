@@ -454,6 +454,52 @@
   }
 
   /**
+   * 弹出本机系统「选择文件夹」对话框（POST /local/pick-dir），返回绝对路径。
+   * 用于 MDM 连接库后记住路径，避免全盘反查。
+   */
+  async function pickLocalDir({ title, startDir, preferredBase, token, kind = "unified" } = {}) {
+    const { base, health, token: tok } = await ensureUnifiedBridgeBase({ preferredBase, token, kind });
+    if (!health) {
+      throw new Error("本机桥未连接。请先启动统一桥，再选择文件夹。");
+    }
+    const ac = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = ac ? setTimeout(() => ac.abort(), 300000) : null;
+    let res;
+    try {
+      res = await fetch(`${base}/local/pick-dir`, {
+        method: "POST",
+        signal: ac ? ac.signal : undefined,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Adb-Token": tok,
+          "X-Ffmpeg-Token": tok,
+          "X-Git-Token": tok,
+        },
+        body: JSON.stringify({
+          title: String(title || "选择文件夹"),
+          startDir: String(startDir || "").trim(),
+        }),
+      });
+    } catch (err) {
+      throw new Error(String(err?.name) === "AbortError" ? "选择文件夹超时" : err.message || String(err));
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    const data = await res.json().catch(() => ({}));
+    if (data?.cancelled || /取消/.test(String(data?.error || ""))) {
+      const err = new Error(data?.error || "已取消选择文件夹");
+      err.name = "AbortError";
+      throw err;
+    }
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.error || `选择文件夹失败（HTTP ${res.status}）`);
+    }
+    const abs = String(data?.path || "").trim();
+    if (!abs) throw new Error("未返回文件夹路径");
+    return { path: abs, name: String(data?.name || "").trim(), ...data };
+  }
+
+  /**
    * 按「文件夹名 + 文件名」在本机反查绝对路径（POST /local/find-doc），不打开资源管理器。
    * 浏览器 FSA 不暴露绝对路径，复制路径 / 记住目录依赖此接口。
    */
@@ -738,6 +784,7 @@
     readInstallDir,
     writeInstallDir,
     revealLocalPath,
+    pickLocalDir,
     findMdmDoc,
     revealMdmDoc,
     readAutoStart,
