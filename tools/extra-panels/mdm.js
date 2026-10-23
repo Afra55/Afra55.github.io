@@ -6189,6 +6189,8 @@ a{color:${v.accent}}
       const img = e.target.closest?.("img[data-mdm-asset]");
       if (img) {
         e.preventDefault();
+        // detail>1：双击过程中的第 2 次 click，跳过以免尺寸条闪一下再被 lightbox 关掉
+        if (e.detail > 1) return;
         openImageTools(img);
         return;
       }
