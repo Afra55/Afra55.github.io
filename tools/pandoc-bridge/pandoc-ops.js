@@ -238,14 +238,25 @@ function isMarkdownTarget(toFmt) {
   return /^(gfm|markdown|commonmark|commonmark_x|markdown_strict|plain)$/i.test(String(toFmt || ""));
 }
 
-/** Markdown 文本 → 其它格式（导出） */
-async function convertFromText({ text, to, from = "markdown", title, images } = {}) {
+/** MD→目标：最高质量附加参数（与 tools/lib/doc-quality-router.js 对齐） */
+const EXPORT_QUALITY_ARGS = {
+  html: ["--standalone", "--embed-resources"],
+  epub: ["--standalone"],
+  latex: ["--standalone"],
+  gfm: ["--wrap=none"],
+  markdown: ["--wrap=none"],
+  commonmark: ["--wrap=none"],
+};
+
+/** Markdown 文本 → 其它格式（导出，默认最高质量） */
+async function convertFromTextOnce({ text, to, from = "gfm", title, images, quality = "max" } = {}) {
   const toFmt = String(to || "").trim().toLowerCase();
   if (!toFmt) throw new Error("缺少目标格式");
   if (toFmt === "pdf") throw new Error("PDF 请用前端打印（Pandoc 出 PDF 需额外 LaTeX 引擎）");
   const ext = EXT[toFmt] || toFmt;
   const tmp = makeBridgeTemp("mdm-pandoc-");
   const outPath = path.join(tmp, `out.${ext}`);
+  const fromFmt = String(from || "gfm").trim() || "gfm";
   try {
     if (Array.isArray(images)) {
       for (const im of images.slice(0, 200)) {
@@ -257,22 +268,53 @@ async function convertFromText({ text, to, from = "markdown", title, images } = 
         fs.writeFileSync(dest, Buffer.from(String(im.dataBase64), "base64"));
       }
     }
-    await runCmd(resolvePandocBin(), ["-f", String(from || "markdown"), "-t", toFmt, "-o", outPath], {
+    const args = ["-f", fromFmt, "-t", toFmt];
+    if (quality !== "fast") {
+      const extras = EXPORT_QUALITY_ARGS[toFmt] || [];
+      for (const a of extras) args.push(a);
+    }
+    args.push("-o", outPath);
+    console.log(`[pandoc] 文本导出 · ${fromFmt} → ${toFmt} · quality=${quality || "max"} · args=${args.join(" ")}`);
+    await runCmd(resolvePandocBin(), args, {
       input: Buffer.from(String(text || ""), "utf8"),
       cwd: tmp,
+      timeout: 600000,
     });
     const buf = fs.readFileSync(outPath);
-    return { dataBase64: buf.toString("base64"), filename: `${safeBase(title)}.${ext}`, engine: "pandoc" };
+    return {
+      dataBase64: buf.toString("base64"),
+      filename: `${safeBase(title)}.${ext}`,
+      engine: "pandoc",
+      quality: quality || "max",
+      from: fromFmt,
+      to: toFmt,
+    };
   } catch (err) {
     const msg = String(err?.stderr || err?.message || err).trim();
     if (/ENOENT|not recognized|not found/i.test(msg)) {
       throw new Error("未找到 pandoc：可点「一键安装 pandoc」");
     }
-    throw new Error(msg.slice(0, 400) || "pandoc 转换失败");
+    const e = new Error(msg.slice(0, 400) || "pandoc 转换失败");
+    e.causeMsg = msg;
+    throw e;
   } finally {
     try {
       fs.rmSync(tmp, { recursive: true, force: true });
     } catch (_) {}
+  }
+}
+
+async function convertFromText(opts = {}) {
+  try {
+    return await convertFromTextOnce({ ...opts, quality: opts.quality || "max" });
+  } catch (err) {
+    const msg = String(err?.causeMsg || err?.message || err);
+    // 旧版 pandoc 可能无 --embed-resources：降级重试一次
+    if (/embed-resources|Unrecognized option/i.test(msg) && opts.quality !== "fast") {
+      console.log("[pandoc] 导出降级重试（去掉不受支持的质量参数）…");
+      return convertFromTextOnce({ ...opts, quality: "fast" });
+    }
+    throw err;
   }
 }
 

@@ -23,6 +23,8 @@ function assert(cond, msg) {
 function staticChecks() {
   execSync("node --check tools/extra-panels/mdm.js", { cwd: ROOT, stdio: "inherit" });
   execSync("node --check tools/lib/mdm-pure.js", { cwd: ROOT, stdio: "inherit" });
+  execSync("node --check tools/lib/doc-quality-router.js", { cwd: ROOT, stdio: "inherit" });
+  execSync("node tools/test/doc-quality-router.test.js", { cwd: ROOT, stdio: "inherit" });
   const html = fs.readFileSync(path.join(TOOLS, "panels/mdm.html"), "utf8");
   const js = fs.readFileSync(path.join(TOOLS, "extra-panels/mdm.js"), "utf8");
   const registry = fs.readFileSync(path.join(TOOLS, "registry/tools.json"), "utf8");
@@ -36,6 +38,8 @@ function staticChecks() {
   assert(html.includes('id="mdm-modal"'), "modal host");
   assert(html.includes('role="listbox"'), "list aria role");
   assert(js.includes("DevToolsMdmPure") && js.includes("buildLibraryZip"), "js core");
+  assert(js.includes("DevToolsDocQualityRouter") || lazy.includes("docquality"), "quality router wired");
+  assert(lazy.includes("doc-quality-router.js"), "lazy docquality");
   assert(registry.includes('"Markdown 文档管理"'), "registry meta");
   assert(/mdm:\s*"\.\/extra-panels\/mdm\.js"/.test(lazy), "TOOL_FILES");
   assert(lazy.includes('"mdmpure"'), "mdmpure vendor");
