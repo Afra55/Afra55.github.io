@@ -72,8 +72,32 @@
   }
 
   bindPanel("docfmt", () => {
-    if (!window.devtoolsBridgeShell?.mount) return;
+    let booted = false;
+    const boot = () => {
+      if (booted) return true;
+      if (!window.devtoolsBridgeShell?.mount) return false;
+      booted = true;
+      bootDocfmt();
+      return true;
+    };
+    if (boot()) return;
+    let n = 0;
+    const t = setInterval(() => {
+      n += 1;
+      if (boot() || n > 100) {
+        clearInterval(t);
+        if (!booted) {
+          const host = document.querySelector("#docfmt-bridge-shell");
+          if (host) {
+            host.innerHTML =
+              `<p class="error">连接壳未加载。请硬刷新页面（Ctrl+F5 / ⌘⇧R）后重试。</p>`;
+          }
+        }
+      }
+    }, 50);
+  });
 
+  function bootDocfmt() {
     const shell = window.devtoolsBridgeShell.mount({
       host: "#docfmt-bridge-shell",
       prefix: "docfmt",
@@ -531,16 +555,24 @@
       try {
         const BT = window.devtoolsBridgeToken;
         let base = baseUrl();
-        const found = await BT?.discoverBase?.(base, token(), { kind: "unified" });
-        if (found?.base) {
-          base = found.base;
-          if (baseInput) baseInput.value = base;
+        let health = null;
+        try {
+          const res = await fetch(`${base}/health`, { cache: "no-store", mode: "cors" });
+          const data = await res.json().catch(() => null);
+          if (res.ok && data?.ok) health = data;
+        } catch (_) {
+          /* discover */
         }
-        let health = found?.health || null;
         if (!health?.ok) {
-          const res = await fetch(`${base}/health`, { cache: "no-store" });
-          health = await res.json().catch(() => null);
-          if (!res.ok || !health?.ok) throw new Error(health?.error || "本机桥无响应（请确认 17888 已启动）");
+          const found = await BT?.discoverBase?.(base, token(), { kind: "unified" });
+          if (found?.base) {
+            base = found.base;
+            if (baseInput) baseInput.value = base;
+            health = found.health;
+          }
+        }
+        if (!health?.ok) {
+          throw new Error("本机桥无响应（请确认 17888 已启动，并硬刷新本页 Ctrl+F5）");
         }
         const ver = health.version || "?";
         shell.setStatus(
@@ -575,5 +607,5 @@
     renderList("#docfmt-list-in", filesIn, "#docfmt-meta-in");
     setTab("any");
     void connectBridge();
-  });
+  }
 })();
