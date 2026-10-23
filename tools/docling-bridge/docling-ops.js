@@ -374,7 +374,26 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
   const bin = await resolveDoclingBin();
   if (!bin) throw new Error("未找到 Docling：可点「一键安装 Docling」或 pip install \"docling[rapidocr]\"");
 
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mdm-docling-"));
+  // 临时文件放桥目录，避免占满系统 C:\%TEMP%
+  const bridgeRoot = (() => {
+    const fromEnv = String(process.env.ADB_BRIDGE_DIR || process.env.DEVTOOLS_BRIDGE_DIR || "").trim();
+    if (fromEnv) {
+      try {
+        if (fs.existsSync(fromEnv)) return path.resolve(fromEnv);
+      } catch (_) {}
+    }
+    return path.resolve(__dirname, "..");
+  })();
+  const tmpBase = path.join(bridgeRoot, "mineru-data", "tmp");
+  try {
+    fs.mkdirSync(tmpBase, { recursive: true });
+  } catch (_) {}
+  let tmp;
+  try {
+    tmp = fs.mkdtempSync(path.join(tmpBase, "mdm-docling-"));
+  } catch (_) {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mdm-docling-"));
+  }
   const inPath = path.join(tmp, name);
   const outDir = path.join(tmp, "out");
   const outFile = path.join(outDir, "out.md");

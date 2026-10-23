@@ -53,7 +53,7 @@ async function handleRequest(req, res, opts = {}) {
         version: BRIDGE_VERSION,
         mineru,
         features: FEATURES,
-        note: "MinerU：PDF/Office/图片 → Markdown（最高质量；模型默认落桥目录 mineru-data/models，建议 GPU）",
+        note: "MinerU：PDF/图 advanced；Office/HTML/EPUB 等 flash。模型与临时文件均在桥目录 mineru-data/（建议 GPU）",
       });
       return;
     }

@@ -884,7 +884,7 @@
       if (els.importDirBtn) {
         els.importDirBtn.disabled = !dirOnly;
         els.importDirBtn.title = dirOnly
-          ? "选择一个文件夹，把里面的 .md / .txt / .html / .docx / .pdf 转成 Markdown 导入（连同引用图片）"
+          ? "选择文件夹：.md/.txt 直读；PDF/Office/HTML/图片等经本机桥转 Markdown（连同引用图片）"
           : "仅「文件夹」模式可用";
       }
       const hasMode = Boolean(state.mode);
@@ -903,7 +903,7 @@
       if (els.importLabel) {
         els.importLabel.classList.toggle("is-disabled", !hasMode);
         els.importLabel.title = hasMode
-          ? "导入本机文档（.md / .txt / .html / .docx / .pdf），可多选；其它格式会自动转成 Markdown 再入库；正文里引用的图片会一并导入"
+          ? "导入本机文档（可多选）：.md/.txt 直读；PDF/Office/HTML/EPUB/图片等经 MinerU 转 Markdown 再入库"
           : "请先选择存储位置再导入";
       }
       const inMenus = (sel) => els.toolsDropdown?.querySelector(sel) || els.insertDropdown?.querySelector(sel) || els.moreDropdown?.querySelector(sel);
@@ -4174,9 +4174,13 @@
 
     // ---- import ----
     // 文档入库：md/txt 直读；其余优先 MinerU（质量），未装则 Docling，无桥浏览器回退
-    const IMPORT_EXT_RE = /\.(md|markdown|txt|text|html?|docx|pdf|pptx|xlsx|png|jpe?g|webp|tiff?|bmp)$/i;
-    const BRIDGE_CONVERT_RE = /\.(pdf|docx|pptx|xlsx|html?|png|jpe?g|webp|tiff?|bmp)$/i;
-    const IMPORT_HINT = ".md / .txt / .html / .docx / .pdf / .pptx / .xlsx（扫描 PDF/图片需本机桥 MinerU 或 Docling OCR）";
+    // 与 MinerU 4 Supported Inputs 对齐；md/txt 前端直读，其余优先桥
+    const IMPORT_EXT_RE =
+      /\.(md|markdown|txt|text|html?|shtml|mhtml|mht|docx?|pdf|pptx?|xlsx?|rtf|odt|ods|odp|epub|ofd|csv|tsv|png|jpe?g|webp|gif|tiff?|bmp|jp2)$/i;
+    const BRIDGE_CONVERT_RE =
+      /\.(pdf|ofd|epub|html?|shtml|mhtml|mht|csv|tsv|rtf|docx?|pptx?|xlsx?|odt|ods|odp|png|jpe?g|webp|gif|tiff?|bmp|jp2)$/i;
+    const IMPORT_HINT =
+      ".md/.txt + PDF/图片(高级档) + Office/HTML/EPUB/OFD/CSV 等（MinerU；Office 等仅 flash）";
 
     function isLegacyWordDoc(f) {
       const name = String(f?.name || "");
@@ -4190,8 +4194,8 @@
       if (IMPORT_EXT_RE.test(name)) return true;
       if (/markdown/i.test(type)) return true;
       if (type === "text/plain" || type === "text/html" || type === "application/pdf") return true;
-      if (/officedocument\.(wordprocessingml|presentationml|spreadsheetml)/i.test(type)) return true;
-      if (/^image\/(png|jpeg|webp|tiff|bmp)$/i.test(type)) return true;
+      if (/msword|officedocument\.(wordprocessingml|presentationml|spreadsheetml)/i.test(type)) return true;
+      if (/^image\/(png|jpeg|webp|gif|tiff|bmp)$/i.test(type)) return true;
       return false;
     }
 
@@ -4200,7 +4204,7 @@
       const type = String(file?.type || "");
       if (BRIDGE_CONVERT_RE.test(name)) return true;
       if (type === "application/pdf" || type === "text/html") return true;
-      if (/officedocument\.(wordprocessingml|presentationml|spreadsheetml)/i.test(type)) return true;
+      if (/msword|officedocument\.(wordprocessingml|presentationml|spreadsheetml)/i.test(type)) return true;
       if (/^image\//i.test(type)) return true;
       return false;
     }
@@ -4416,7 +4420,7 @@
       const name = String(file.name || "");
       const type = String(file.type || "");
       if (isLegacyWordDoc(file)) {
-        throw new Error("不支持旧版 .doc，请另存为 .docx 后再导入");
+        throw new Error("旧版 .doc 需本机桥 MinerU（flash）；无桥请另存为 .docx");
       }
       if (/\.(md|markdown)$/i.test(name) || /markdown/i.test(type)) {
         onStage?.("读取 Markdown…");
@@ -4495,10 +4499,7 @@
       const name = String(file.name || "");
       const type = String(file.type || "");
 
-      if (isLegacyWordDoc(file)) {
-        throw new Error("不支持旧版 .doc，请另存为 .docx 后再导入");
-      }
-      // 纯文本 / md：不走桥，避免无谓开销
+      // 纯文本 / md：不走桥，避免无谓开销（MinerU 也不 parse 纯文本）
       if (/\.(md|markdown)$/i.test(name) || /markdown/i.test(type)) {
         return { text: await fileToMarkdownBrowser(file, { onStage }), via: "raw" };
       }
@@ -4508,7 +4509,7 @@
 
       if (wantsBridgeConvert(file)) {
         // PDF 不强制 OCR（数字版用 auto/VLM 更保表格）；仅图片/扫描图强制 OCR
-        const forceOcr = /\.(png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type);
+        const forceOcr = /\.(png|jpe?g|webp|gif|tiff?|bmp|jp2)$/i.test(name) || /^image\//i.test(type);
         const [mineruH, doclingH] = await Promise.all([probeMineruHealth(), probeDoclingHealth()]);
         const bridgeUp = !!(mineruH.bridge || doclingH.bridge);
 
@@ -4679,15 +4680,8 @@
       }
       const all = [...(files || [])];
       const list = all.filter(isImportableDoc);
-      const legacy = all.filter(isLegacyWordDoc);
       if (!list.length) {
-        if (legacy.length) {
-          const tip = `不支持旧版 .doc（${legacy[0].name}），请另存为 .docx`;
-          setErr(tip);
-          if (!quiet) toast(tip);
-        } else if (!quiet) {
-          toast(`没有可导入的文档（支持 ${IMPORT_HINT}）`);
-        }
+        if (!quiet) toast(`没有可导入的文档（支持 ${IMPORT_HINT}）`);
         return { ok: 0, fail: 0, lastImported: "" };
       }
 
@@ -4704,7 +4698,6 @@
       let imgN = 0;
       let lastImported = "";
       const failMsgs = [];
-      for (const f of legacy) failMsgs.push(`${f.name}：不支持旧版 .doc`);
 
       // 串行队列：MinerU/Docling OCR 吃内存与 GPU/CPU，并发易打爆；单文件失败不影响其它
       let prog = openImportProgress(list.length);
