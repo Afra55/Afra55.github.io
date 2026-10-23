@@ -11,23 +11,56 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+/**
+ * 与 MinerU 4.x 官方 Supported Inputs 对齐：
+ * https://opendatalab.github.io/MinerU/ · PyPI mineru
+ * PDF/图片可用 flash|basic|standard|advanced；其余原生格式仅 flash 整篇解析。
+ * 纯文本 .txt/.md 不走 parse（文档库可索引，但本桥导入侧由前端直读）。
+ */
 const SUPPORTED_EXT = new Set([
   ".pdf",
-  ".docx",
-  ".pptx",
-  ".xlsx",
+  ".ofd",
+  ".epub",
   ".html",
   ".htm",
+  ".shtml",
+  ".mhtml",
+  ".mht",
+  ".csv",
+  ".tsv",
+  ".rtf",
+  ".doc",
+  ".docx",
+  ".ppt",
+  ".pptx",
+  ".xls",
+  ".xlsx",
+  ".odt",
+  ".ods",
+  ".odp",
   ".png",
   ".jpg",
   ".jpeg",
   ".webp",
+  ".gif",
+  ".bmp",
   ".tif",
   ".tiff",
+  ".jp2",
+]);
+
+/** 仅这些扩展可用 advanced/standard/basic（官方：PDF + images） */
+const HIGH_TIER_EXT = new Set([
+  ".pdf",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
   ".bmp",
-  ".epub",
-  ".md",
-  ".txt",
+  ".tif",
+  ".tiff",
+  ".jp2",
 ]);
 
 function runCmd(file, args, { timeout = 120000, cwd, env } = {}) {
@@ -652,6 +685,7 @@ function mineruEnv() {
     console.log(`[mineru] 模型目录：${env.MINERU_MODEL_BASE_DIR}`);
     console.log(`[mineru] MINERU_HOME：${env.MINERU_HOME}`);
     console.log(`[mineru] 配置文件：${env.MINERU_CONFIG}`);
+    console.log(`[mineru] 临时目录：${path.join(dataHome, "tmp")}`);
   }
   return env;
 }
@@ -680,16 +714,31 @@ function ensureMineruConfigYaml(configPath, modelsDir) {
 }
 
 function isImageName(name) {
-  return /\.(png|jpe?g|webp|tiff?|bmp)$/i.test(String(name || ""));
+  return /\.(png|jpe?g|webp|gif|tiff?|bmp|jp2)$/i.test(String(name || ""));
 }
 
-/** MinerU kit：advanced/standard 仅 PDF/图片；Office 等只能 flash */
+/** MinerU kit：PDF/图 advanced→standard→basic→flash；Office/HTML/… 仅 flash */
 function kitTiersForExt(ext) {
   const e = String(ext || "").toLowerCase();
-  if (e === ".pdf" || isImageName(`x${e}`)) {
-    return ["advanced", "standard", "flash"];
+  if (HIGH_TIER_EXT.has(e)) {
+    return ["advanced", "standard", "basic", "flash"];
   }
   return ["flash"];
+}
+
+/** 转换工作区：桥目录 mineru-data/tmp，避免落到系统 C:\%TEMP% */
+function makeConvertTempDir(prefix) {
+  const bridgeRoot = resolveBridgeRoot();
+  const base = path.join(bridgeRoot, "mineru-data", "tmp");
+  try {
+    fs.mkdirSync(base, { recursive: true });
+  } catch (_) {}
+  try {
+    return fs.mkdtempSync(path.join(base, prefix));
+  } catch (err) {
+    console.log(`[mineru] 桥目录临时区不可用，回退系统 TEMP：${err?.message || err}`);
+    return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  }
 }
 
 function looksLikeWaitTimeout(err) {
@@ -717,7 +766,7 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
     throw new Error('未找到 MinerU：可点「一键安装 MinerU」或 pip install -U "mineru[full]"');
   }
 
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mdm-mineru-"));
+  const tmp = makeConvertTempDir("mdm-mineru-");
   const inPath = path.join(tmp, name);
   const outDir = path.join(tmp, "out");
   const outFile = path.join(outDir, "out.md");
@@ -730,11 +779,12 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
   const sizeKb = Math.max(1, Math.round(buf.length / 1024));
   const wantOcr = !!(forceOcr || isImageName(name));
   const lang = String(ocrLang || "").trim() || "ch";
+  const isPdf = ext === ".pdf";
   // 质量优先：单次最长约 4 小时；library wait 2 小时一轮，可续等
   const SPAWN_TIMEOUT_MS = 4 * 60 * 60 * 1000;
   const LIBRARY_WAIT_SEC = 7200;
   console.log(
-    `[mineru] 开始转换「${name}」· ${sizeKb} KB · ocr=${wantOcr ? "force" : "auto"} · tiers=${kitTiersForExt(ext).join("|")} · style=${bin.style} · bin=${bin.kind === "bin" ? bin.file : `${bin.file} ${bin.argsPrefix.join(" ")}`.trim()}`
+    `[mineru] 开始转换「${name}」· ${sizeKb} KB · ocr=${wantOcr ? "force" : "auto"} · tiers=${kitTiersForExt(ext).join("|")} · tmp=${tmp} · style=${bin.style} · bin=${bin.kind === "bin" ? bin.file : `${bin.file} ${bin.argsPrefix.join(" ")}`.trim()}`
   );
 
   /** @type {{ file: string, args: string[], outHint: string|null, label: string, retryWait?: boolean }[]} */
@@ -742,7 +792,7 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
   const kitTiers = kitTiersForExt(ext);
   const highTierOk = kitTiers.includes("advanced");
 
-  // 1) mineru-kit：PDF/图 advanced→standard→flash；docx 等仅 flash（官方限制）
+  // 1) mineru-kit：PDF/图 advanced→…→flash；Office/HTML/… 仅 flash（官方限制）
   if (bin.style === "kit") {
     for (const tier of kitTiers) {
       const kitArgs = [...bin.argsPrefix, "parse", inPath, "-o", outFile, "--tier", tier];
@@ -757,18 +807,11 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
   }
 
   // 2) mineru parse（文档库）：整篇 + 超长 wait；超时续等而非立刻降级
+  // 官方：仅 PDF 接受 --pages；非 PDF 整篇解析，传 --pages 会失败
   if (bin.style === "parse" || bin.style === "kit") {
-    const baseParse = [
-      ...bin.argsPrefix,
-      "parse",
-      inPath,
-      "--pages",
-      "all",
-      "-o",
-      outFile,
-      "--wait",
-      String(LIBRARY_WAIT_SEC),
-    ];
+    const baseParse = [...bin.argsPrefix, "parse", inPath];
+    if (isPdf) baseParse.push("--pages", "all");
+    baseParse.push("-o", outFile, "--wait", String(LIBRARY_WAIT_SEC));
     // 新版可能支持 --tier；非 PDF/图不要传 advanced/standard（会秒拒）
     if (bin.style === "parse" && highTierOk) {
       attempts.push({
