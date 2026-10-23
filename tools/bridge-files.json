@@ -2,7 +2,6 @@
   "note": "统一本机桥的文件清单。桥启动时会比对远端 server.js 的 BRIDGE_VERSION，更高则按此清单自动更新并重启。新增桥文件时请同步这里（以及 EnvKit 的 sync_bridges）。",
   "skipIfPresent": ["adb-bridge/vendor/scrcpy-server-v3.1"],
   "files": [
-    "adb-bridge/server.js",
     "adb-bridge/resolve-port.js",
     "adb-bridge/scrcpy-mirror.js",
     "adb-bridge/scrcpy-ctrl.js",
@@ -36,6 +35,7 @@
     "docling-bridge/docling-ops.js",
     "mineru-bridge/server.js",
     "mineru-bridge/mineru-ops.js",
-    "lanboard-bridge/server.js"
+    "lanboard-bridge/server.js",
+    "adb-bridge/server.js"
   ]
 }
