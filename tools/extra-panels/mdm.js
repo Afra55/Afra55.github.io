@@ -3816,39 +3816,134 @@
       return out.slice(0, 40);
     }
 
+    function joinItemPath(dir, fileName) {
+      if (!dir || !fileName) return "";
+      return MP.joinDocPath ? MP.joinDocPath(dir, fileName) : "";
+    }
+
+    function copyTextSync(text) {
+      const s = String(text ?? "");
+      if (!s) return false;
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = s;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.top = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, s.length);
+        const ok = document.execCommand("copy");
+        ta.remove();
+        return ok;
+      } catch (_) {
+        return false;
+      }
+    }
+
     /** 同步快路径：已记住目录时立刻复制（仍在点击手势内，剪贴板最稳） */
     function tryCopyItemPathSync(item) {
       if (!item?.fileName || state.mode !== "dir" || !state.dirHandle) return false;
       const folderName = state.dirHandle.name;
-      const dir = readRememberedDir(folderName);
-      if (!dir) return false;
-      const path = MP.joinDocPath ? MP.joinDocPath(dir, item.fileName) : "";
+      const path = joinItemPath(readRememberedDir(folderName), item.fileName);
       if (!path) return false;
-      // 同步 execCommand，不 await
+      if (!copyTextSync(path)) return false;
+      setErr("");
+      toast(`已复制路径：${path}`);
+      return true;
+    }
+
+    /** 经本机桥反查绝对路径，成功则记住目录。返回 path 或 "" */
+    async function resolveItemAbsPath(item, { quiet = false } = {}) {
+      if (!item?.fileName || state.mode !== "dir" || !state.dirHandle) return "";
+      const folderName = state.dirHandle.name;
+      const cached = joinItemPath(readRememberedDir(folderName), item.fileName);
+      if (cached) return cached;
+
+      const api = window.devtoolsBridgeToken;
+      if (!api?.findMdmDoc || !folderName) return "";
+      if (!quiet) {
+        setSaveStatus("正在识别本机路径…");
+        toast("正在识别本机路径…");
+      }
       try {
-        const ta = document.createElement("textarea");
-        ta.value = path;
-        ta.setAttribute("readonly", "");
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand("copy");
-        ta.remove();
-        if (ok) {
-          setErr("");
-          toast(`已复制路径：${path}`);
-          return true;
+        const res = await api.findMdmDoc({
+          folderName,
+          fileName: item.fileName,
+          hintDirs: collectPathHints(folderName),
+        });
+        const path = String(res?.path || "").trim();
+        if (res?.dirAbsPath) rememberDirPath(folderName, res.dirAbsPath);
+        else if (path) {
+          const sep = path.includes("\\") ? "\\" : "/";
+          const i = path.lastIndexOf(sep);
+          if (i > 0) rememberDirPath(folderName, path.slice(0, i));
         }
-      } catch (_) {}
-      return false;
+        return path;
+      } catch (err) {
+        if (!quiet) {
+          const msg = String(err?.message || err);
+          if (/未连接|未启动|Failed to fetch/.test(msg)) {
+            setErr("本机桥未连接，无法自动识别路径；请启动桥后重试，或粘贴一次文件夹路径");
+          }
+        }
+        return "";
+      } finally {
+        if (!quiet) setSaveStatus("");
+      }
+    }
+
+    /**
+     * 在用户点击手势内启动剪贴板写入：数据用 Promise 稍后填入（Chromium ClipboardItem）。
+     * 这样右键「复制文件路径」第一次也能直接进剪贴板，不必先记住目录。
+     * @returns {boolean} 是否已接手势写入（调用方勿再同步 await）
+     */
+    function beginDeferredPathCopy(item) {
+      if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) return false;
+      const pathPromise = resolveItemAbsPath(item);
+      let resolved = "";
+      const blobPromise = pathPromise.then((p) => {
+        resolved = String(p || "").trim();
+        if (!resolved) throw new Error("no path");
+        return new Blob([resolved], { type: "text/plain" });
+      });
+      // 必须在本同步栈内调用 write，才能保住点击手势
+      let writeP;
+      try {
+        writeP = navigator.clipboard.write([new ClipboardItem({ "text/plain": blobPromise })]);
+      } catch (_) {
+        return false;
+      }
+      void writeP
+        .then(() => {
+          setErr("");
+          toast(`已复制路径：${resolved}`);
+        })
+        .catch(async () => {
+          const path = resolved || (await pathPromise.catch(() => ""));
+          if (path) {
+            const ok = (await copyText(path, { preferExec: true })) || copyTextSync(path);
+            if (ok) {
+              setErr("");
+              toast(`已复制路径：${path}`);
+              return;
+            }
+            setErr(`复制失败，请手动复制：${path}`);
+            return;
+          }
+          void copyItemPath(item);
+        });
+      return true;
     }
 
     /**
      * 复制完整路径：
      * 1) 已记住的目录 → 同步直接复制
-     * 2) 本机桥按「已连接文件夹名 + 文件名」反查（带 hintDirs）→ 异步复制
-     * 3) 仍找不到再弹窗粘贴一次
+     * 2) 点击手势内 ClipboardItem 延迟写入（桥反查）
+     * 3) 普通异步反查 + 复制
+     * 4) 仍找不到再弹窗粘贴一次
      */
     async function copyItemPath(item) {
       if (!item) return;
@@ -3863,52 +3958,33 @@
       if (tryCopyItemPathSync(item)) return;
 
       const folderName = state.dirHandle.name;
-      const join = (dir) => (MP.joinDocPath ? MP.joinDocPath(dir, item.fileName) : "");
-      let path = "";
-
-      const api = window.devtoolsBridgeToken;
-      if (api?.findMdmDoc && folderName) {
-        setSaveStatus("正在识别本机路径…");
-        toast("正在识别本机路径…");
-        try {
-          const res = await api.findMdmDoc({
-            folderName,
-            fileName: item.fileName,
-            hintDirs: collectPathHints(folderName),
-          });
-          path = String(res?.path || "").trim();
-          if (res?.dirAbsPath) rememberDirPath(folderName, res.dirAbsPath);
-          else if (path) {
-            const sep = path.includes("\\") ? "\\" : "/";
-            const i = path.lastIndexOf(sep);
-            if (i > 0) rememberDirPath(folderName, path.slice(0, i));
-          }
-        } catch (err) {
-          const msg = String(err?.message || err);
-          if (/未连接|未启动|Failed to fetch/.test(msg)) {
-            setErr("本机桥未连接，无法自动识别路径；请启动桥后重试，或粘贴一次文件夹路径");
-          }
-        }
-        setSaveStatus("");
-      }
+      let path = await resolveItemAbsPath(item);
 
       if (!path) {
         const dir = await askDirPathModal(folderName);
         if (!dir) return;
         rememberDirPath(folderName, dir);
-        path = join(dir);
+        path = joinItemPath(dir, item.fileName);
       }
       if (!path) {
         setErr("路径无效");
         return;
       }
-      const ok = await copyText(path, { preferExec: true });
+      const ok = (await copyText(path, { preferExec: true })) || copyTextSync(path);
       if (!ok) {
         setErr(`复制失败，请手动复制：${path}`);
         return;
       }
       setErr("");
       toast(`已复制路径：${path}`);
+    }
+
+    /** 右键菜单 / 工具栏统一入口：优先同步，其次手势延迟写入，最后异步 */
+    function copyItemPathFromUi(item) {
+      if (!item) return;
+      if (tryCopyItemPathSync(item)) return;
+      if (beginDeferredPathCopy(item)) return;
+      void copyItemPath(item);
     }
 
     async function revealItemLocation(item) {
@@ -4181,8 +4257,8 @@
         if (act === "open") void openDoc(item.id);
         else if (act === "reveal") void revealItemLocation(item);
         else if (act === "copy-path") {
-          // 已记住目录：同步复制（不丢点击手势）；否则走桥反查
-          if (!tryCopyItemPathSync(item)) void copyItemPath(item);
+          // 同步 / ClipboardItem 手势写入 / 异步反查
+          copyItemPathFromUi(item);
         }
         else if (act === "pin") void togglePin(item);
         else if (act === "duplicate") void duplicateItem(item);
@@ -5700,10 +5776,20 @@ a{color:${v.accent}}
       await loadSearchIdx();
       await openInitialDoc();
       warmBodyCache();
+      void warmDirPathCache();
       void autoExpireTrash();
       watchExternalChanges();
       if (state.view && CMresize) CMresize();
       toast(`已连接：${label}`);
+    }
+
+    /** 连接库后后台反查一次绝对路径并记住，之后右键可同步直接复制 */
+    async function warmDirPathCache() {
+      if (state.mode !== "dir" || !state.dirHandle) return;
+      if (readRememberedDir(state.dirHandle.name)) return;
+      const sample = (state.index.items || []).find((it) => it?.fileName);
+      if (!sample) return;
+      await resolveItemAbsPath(sample, { quiet: true });
     }
 
     function CMresize() {
@@ -6226,7 +6312,11 @@ a{color:${v.accent}}
       if (!b) return;
       e.preventDefault();
       const item = findItem(b.dataset.id);
-      if (item) showListCtx(e.clientX, e.clientY, item);
+      if (item) {
+        // 弹出菜单的同时预取路径，点「复制文件路径」时多半已可同步复制
+        void resolveItemAbsPath(item, { quiet: true });
+        showListCtx(e.clientX, e.clientY, item);
+      }
     });
     document.addEventListener("click", (e) => {
       // 点右键菜单内部（含「导出」子菜单）不关闭菜单
@@ -6568,7 +6658,7 @@ a{color:${v.accent}}
           setErr("请先打开一篇文档");
           return;
         }
-        void copyItemPath(cur);
+        copyItemPathFromUi(cur);
         return;
       }
       if (kind === "trash") {
