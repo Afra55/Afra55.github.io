@@ -37,6 +37,9 @@ function staticChecks() {
   assert(html.includes('id="mdm-editor"') && html.includes('id="mdm-preview"'), "editor/preview");
   assert(html.includes('id="mdm-modal"'), "modal host");
   assert(html.includes('role="listbox"'), "list aria role");
+  // 路径引导：老用户未记住本机路径时的顶栏条 + 本机选目录
+  assert(html.includes('id="mdm-path-banner"') && html.includes('id="mdm-path-pick"'), "path banner");
+  assert(html.includes('id="mdm-path-paste"'), "path paste button");
   // 面板头不应再有「文档互转」引流句（只留标题）
   assert(!/批量任意格式[\s\S]*文档互转/.test(html), "mdm head should not link to docfmt");
   assert(js.includes("DevToolsMdmPure") && js.includes("buildLibraryZip"), "js core");
@@ -45,6 +48,9 @@ function staticChecks() {
   assert(js.includes("capturePreviewAsOnePng"), "png one-shot stitch");
   assert(js.includes("bindPreviewImgLightbox") && js.includes("mdm-lightbox"), "preview img lightbox");
   assert(js.includes("e.detail > 1"), "dblclick should not reopen img tools");
+  assert(js.includes("ensureDirPathGuided") && js.includes("pickAndRememberAbsDir"), "path remember guide");
+  assert(js.includes("pickLocalDir"), "bridge pickLocalDir wired");
+  assert(!js.includes("revealMdmDoc("), "mdm should not call disk-scan revealMdmDoc");
   assert(registry.includes('"Markdown 文档管理"'), "registry meta");
   assert(/mdm:\s*"\.\/extra-panels\/mdm\.js"/.test(lazy), "TOOL_FILES");
   assert(lazy.includes('"mdmpure"'), "mdmpure vendor");
@@ -52,7 +58,13 @@ function staticChecks() {
   assert(manifest.panels.some((p) => p.id === "mdm"), "manifest");
   const css = fs.readFileSync(path.join(TOOLS, "styles/panels/mdm.css"), "utf8");
   assert(css.includes(".mdm-lightbox"), "lightbox css");
+  assert(css.includes(".mdm-path-banner"), "path banner css");
   assert(!/#mdm \.markdown-body img:not\(\.mdm-img-missing\)\s*\{\s*cursor:\s*zoom-in/.test(css), "no zoom-in cursor");
+  const bridgeTok = fs.readFileSync(path.join(TOOLS, "lib/bridge-token.js"), "utf8");
+  assert(bridgeTok.includes("pickLocalDir") && bridgeTok.includes("/local/pick-dir"), "bridge-token pick-dir");
+  const adb = fs.readFileSync(path.join(TOOLS, "adb-bridge/server.js"), "utf8");
+  assert(/const BRIDGE_VERSION = "0\.9\.\d+"/.test(adb), "adb bridge version");
+  assert(adb.includes('"/local/pick-dir"') && adb.includes("local-pick-dir"), "unified pick-dir route");
 }
 
 const MIME = {
