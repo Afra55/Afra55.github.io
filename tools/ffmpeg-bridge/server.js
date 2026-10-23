@@ -429,11 +429,9 @@ const MEMO_INDEX_NAME = "memo-index.json";
 const MEMO_BLOBS_DIR = "blobs";
 const MEMO_FIND_SKIP = new Set(["node_modules", ".git", "Library", "AppData", "Application Data"]);
 
-const MDM_INDEX_NAME = "mdindex.json";
-
 /**
- * 按「文件夹名 + 文件名」在常见目录里定位 Markdown 文档管理(mdm)的 .md 文件。
- * 浏览器 FSA 不暴露绝对路径，只能靠名字反查；限定深度/扫描量避免卡死。
+ * 仅用客户端提供的 hintDirs 拼接探测文件是否存在（O(hints)，不扫盘）。
+ * 全盘/常见目录 walk 已移除：请先经 /local/pick-dir 或粘贴路径记住库目录。
  */
 async function findMdmDocFile({ folderName, fileName, hintDirs = [] } = {}) {
   const name = String(fileName || "").trim();
@@ -452,7 +450,6 @@ async function findMdmDocFile({ folderName, fileName, hintDirs = [] } = {}) {
     return null;
   }
 
-  // 1) 客户端提示的绝对目录（上次记住的 / 已连接库）——最快，直接拼路径
   const hints = Array.isArray(hintDirs) ? hintDirs : [];
   for (const raw of hints) {
     const hint = String(raw || "").trim();
@@ -471,131 +468,11 @@ async function findMdmDocFile({ folderName, fileName, hintDirs = [] } = {}) {
     }
   }
 
-  const seeds = new Set();
-  const addSeed = (p) => {
-    if (p) {
-      try {
-        seeds.add(path.resolve(p));
-      } catch {
-        /* ignore */
-      }
-    }
-  };
-  for (const raw of hints) addSeed(raw);
-  // 优先常见文档位置（home 里 AppData 等目录很大，容易把扫描预算耗尽）
-  addSeed(path.join(os.homedir(), "Desktop"));
-  addSeed(path.join(os.homedir(), "Documents"));
-  addSeed(path.join(os.homedir(), "Downloads"));
-  addSeed(path.join(os.homedir(), "OneDrive"));
-  addSeed(path.join(os.homedir(), "OneDrive", "Desktop"));
-  addSeed(path.join(os.homedir(), "OneDrive", "Documents"));
-  addSeed(os.homedir());
-  // 桥解压目录附近常放笔记库
-  try {
-    const bridgeRoot = String(process.env.ADB_BRIDGE_DIR || process.env.DEVTOOLS_BRIDGE_DIR || "").trim();
-    if (bridgeRoot) {
-      addSeed(bridgeRoot);
-      addSeed(path.dirname(bridgeRoot));
-    }
-  } catch {
-    /* ignore */
-  }
-  for (const r of localFsRoots()) addSeed(r.path);
-  // Windows：各盘符根下一层常见目录名
-  if (process.platform === "win32") {
-    for (const letter of "CDEFGHIJKLMNOPQRSTUVWXYZ") {
-      addSeed(`${letter}:\\`);
-      addSeed(`${letter}:\\${wantDir}`);
-      addSeed(`${letter}:\\Users`);
-      addSeed(`${letter}:\\notes`);
-      addSeed(`${letter}:\\Notes`);
-      addSeed(`${letter}:\\docs`);
-      addSeed(`${letter}:\\Docs`);
-    }
-  }
-
-  const maxDepth = 7;
-  const maxScan = 60000;
-  let scanned = 0;
-  const seen = new Set();
-  const SKIP_DIRS = new Set([
-    "node_modules",
-    "AppData",
-    "Application Data",
-    "Windows",
-    "Program Files",
-    "Program Files (x86)",
-    "ProgramData",
-    "$Recycle.Bin",
-    "$WinREAgent",
-    "System Volume Information",
-    "Library",
-    ".cache",
-    "vendor",
-    ".git",
-  ]);
-
-  async function acceptDir(real) {
-    if (path.basename(real) !== wantDir) return null;
-    try {
-      await fs.promises.access(path.join(real, MDM_INDEX_NAME));
-      const target = path.join(real, name);
-      await fs.promises.access(target);
-      return target;
-    } catch {
-      // 无索引时：只要目标文件在就认（兼容尚未写过索引的库）
-      try {
-        const target = path.join(real, name);
-        await fs.promises.access(target);
-        return target;
-      } catch {
-        return null;
-      }
-    }
-  }
-
-  async function walk(dir, depth) {
-    if (depth > maxDepth || scanned > maxScan) return null;
-    let real;
-    try {
-      real = await fs.promises.realpath(dir);
-    } catch {
-      return null;
-    }
-    if (seen.has(real)) return null;
-    seen.add(real);
-    scanned += 1;
-    const hitHere = await acceptDir(real);
-    if (hitHere) return hitHere;
-    let entries = [];
-    try {
-      entries = await fs.promises.readdir(real, { withFileTypes: true });
-    } catch {
-      return null;
-    }
-    // 同层优先：先看是否有同名子目录
-    for (const e of entries) {
-      if (!e.isDirectory()) continue;
-      if (e.name === wantDir) {
-        const hit = await acceptDir(path.join(real, e.name));
-        if (hit) return hit;
-      }
-    }
-    for (const e of entries) {
-      if (!e.isDirectory()) continue;
-      if (e.name.startsWith(".") || SKIP_DIRS.has(e.name)) continue;
-      if (e.name === wantDir) continue;
-      const hit = await walk(path.join(real, e.name), depth + 1);
-      if (hit) return hit;
-    }
-    return null;
-  }
-
-  for (const seed of seeds) {
-    const hit = await walk(seed, 0);
-    if (hit) return hit;
-  }
-  throw new Error("未在常见目录找到该文档文件夹（可粘贴一次完整路径，之后会自动记住）");
+  throw new Error(
+    hints.length
+      ? "提示目录下未找到该文档（请确认已记住的路径仍有效，或重新「本机选择同一文件夹」）"
+      : "未提供本机路径提示。请先「本机选择同一文件夹」或粘贴路径并记住，不再全盘扫描"
+  );
 }
 
 async function revealLocalPath(inputPath) {

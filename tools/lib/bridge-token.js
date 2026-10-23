@@ -500,8 +500,8 @@
   }
 
   /**
-   * 按「文件夹名 + 文件名」在本机反查绝对路径（POST /local/find-doc），不打开资源管理器。
-   * 浏览器 FSA 不暴露绝对路径，复制路径 / 记住目录依赖此接口。
+   * 按 hintDirs 拼接探测文档绝对路径（POST /local/find-doc），不扫盘。
+   * 无提示目录时会失败——请先 pickLocalDir / 粘贴路径记住库目录。
    */
   async function findMdmDoc({ folderName, fileName, hintDirs, preferredBase, token, kind = "unified" } = {}) {
     const dirName = String(folderName || "").trim();
@@ -530,7 +530,7 @@
         body: JSON.stringify({ folderName: dirName, fileName: fName, hintDirs: hints }),
       });
     } catch (err) {
-      throw new Error(String(err?.name) === "AbortError" ? "本机搜索超时（可改用完整路径）" : err.message || String(err));
+      throw new Error(String(err?.name) === "AbortError" ? "定位超时（请检查已记住的路径）" : err.message || String(err));
     } finally {
       if (timer) clearTimeout(timer);
     }
@@ -542,10 +542,9 @@
   }
 
   /**
-   * 按「文件夹名 + 文件名」在本机定位 Markdown 文档并打开所在位置（POST /local/reveal-doc）。
-   * 浏览器拿不到 FSA 的绝对路径，所以交给桥按名字反查。
+   * 用 hintDirs 定位文档并打开所在位置（POST /local/reveal-doc），不扫盘。
    */
-  async function revealMdmDoc({ folderName, fileName, preferredBase, token, kind = "unified" } = {}) {
+  async function revealMdmDoc({ folderName, fileName, hintDirs, preferredBase, token, kind = "unified" } = {}) {
     const dirName = String(folderName || "").trim();
     const fName = String(fileName || "").trim();
     if (!dirName || !fName) throw new Error("缺少文件夹名或文件名");
@@ -553,6 +552,9 @@
     if (!health) {
       throw new Error("本机桥未连接。请先启动并连接桥，再点「打开文件位置」。");
     }
+    const hints = Array.isArray(hintDirs)
+      ? hintDirs.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 40)
+      : [];
     const ac = typeof AbortController === "function" ? new AbortController() : null;
     const timer = ac ? setTimeout(() => ac.abort(), 30000) : null;
     let res;
@@ -566,10 +568,10 @@
           "X-Ffmpeg-Token": tok,
           "X-Git-Token": tok,
         },
-        body: JSON.stringify({ folderName: dirName, fileName: fName }),
+        body: JSON.stringify({ folderName: dirName, fileName: fName, hintDirs: hints }),
       });
     } catch (err) {
-      throw new Error(String(err?.name) === "AbortError" ? "本机搜索超时（可改用完整路径）" : err.message || String(err));
+      throw new Error(String(err?.name) === "AbortError" ? "定位超时（请先记住本机路径）" : err.message || String(err));
     } finally {
       if (timer) clearTimeout(timer);
     }
