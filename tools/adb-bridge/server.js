@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.80";
+const BRIDGE_VERSION = "0.9.81";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5532,6 +5532,10 @@ async function handleApi(req, res, url) {
       const stripped = url.pathname === "/pandoc" ? "/" : url.pathname.slice(7) || "/";
       const isPandocHealth = stripped === "/health" && req.method === "GET";
       if (!isPandocHealth && req.method !== "OPTIONS") requireToken(req);
+      if (stripped === "/convert" && req.method === "POST") {
+        console.log("");
+        console.log("[bridge] → Pandoc 文档转换 · 请看下方 [pandoc] 进度");
+      }
       wrapResWithCors(res, origin);
       await pandocBridge.handleRequest(req, res, {
         pathname: stripped,
@@ -5551,6 +5555,10 @@ async function handleApi(req, res, url) {
       const isDoclingHealth =
         (stripped === "/health" || stripped === "/") && req.method === "GET";
       if (!isDoclingHealth && req.method !== "OPTIONS") requireToken(req);
+      if (stripped === "/convert" && req.method === "POST") {
+        console.log("");
+        console.log("[bridge] → Docling 文档转换（MDM 导入 PDF 等）· 请看下方 [docling] 进度");
+      }
       wrapResWithCors(res, origin);
       await doclingBridge.handleRequest(req, res, {
         pathname: stripped,
@@ -5570,6 +5578,10 @@ async function handleApi(req, res, url) {
       const isMineruHealth =
         (stripped === "/health" || stripped === "/") && req.method === "GET";
       if (!isMineruHealth && req.method !== "OPTIONS") requireToken(req);
+      if (stripped === "/convert" && req.method === "POST") {
+        console.log("");
+        console.log("[bridge] → MinerU 文档转换（MDM 导入 PDF 等）· 请看下方 [mineru] 进度");
+      }
       wrapResWithCors(res, origin);
       await mineruBridge.handleRequest(req, res, {
         pathname: stripped,

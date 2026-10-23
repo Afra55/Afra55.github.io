@@ -13,13 +13,14 @@ const {
   probePdfEngines,
 } = require("./pandoc-ops");
 
-const BRIDGE_VERSION = "0.1.3";
+const BRIDGE_VERSION = "0.1.4";
 const FEATURES = { pandoc: true, importToMarkdown: true, printPdf: true };
 
-function readBody(req, limit = 96 * 1024 * 1024) {
+function readBody(req, limit = 96 * 1024 * 1024, { onProgress } = {}) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
+    let lastLog = 0;
     req.on("data", (chunk) => {
       size += chunk.length;
       if (size > limit) {
@@ -28,6 +29,11 @@ function readBody(req, limit = 96 * 1024 * 1024) {
         return;
       }
       chunks.push(chunk);
+      const now = Date.now();
+      if (typeof onProgress === "function" && now - lastLog >= 400) {
+        lastLog = now;
+        onProgress(size);
+      }
     });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
@@ -73,16 +79,26 @@ async function handleRequest(req, res, opts = {}) {
       return;
     }
     if (pathname === "/convert" && req.method === "POST") {
-      const raw = await readBody(req);
-      console.log(`[pandoc] 收到 /convert · 请求体 ${Math.round(raw.length / 1024)} KB`);
+      console.log("");
+      console.log("[pandoc] ════ 收到转换请求 · 正在接收上传…");
+      const raw = await readBody(req, 96 * 1024 * 1024, {
+        onProgress: (n) => {
+          console.log(`[pandoc] 上传中… ${Math.round(n / 1024)} KB`);
+        },
+      });
+      console.log(`[pandoc] 上传完成 · ${Math.round(raw.length / 1024)} KB`);
       const body = parseJsonBody(raw);
+      const name = String(body.filename || body.name || "(text)");
+      console.log(`[pandoc] 开始处理「${name}」…`);
       const t0 = Date.now();
       try {
         const data = await convert(body);
-        console.log(`[pandoc] /convert 成功 · ${Math.round((Date.now() - t0) / 1000)}s`);
+        console.log(`[pandoc] /convert 成功 · ${Math.round((Date.now() - t0) / 1000)}s · 「${name}」`);
+        console.log("");
         sendJson(res, 200, { ok: true, ...data });
       } catch (err) {
         console.log(`[pandoc] /convert 失败 · ${err?.message || err}`);
+        console.log("");
         throw err;
       }
       return;
