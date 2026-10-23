@@ -3771,7 +3771,20 @@
       throw new Error("当前浏览器不支持文件夹定位");
     }
 
-    /** 复制完整路径：复用「打开文件位置」已记住的目录；没有则弹窗填一次再拼接 */
+    function rememberDirPath(folderName, dirAbs) {
+      const d = String(dirAbs || "").trim();
+      if (!d || !folderName) return;
+      try {
+        localStorage.setItem(dirPathKey(folderName), d);
+      } catch (_) {}
+    }
+
+    /**
+     * 复制完整路径：
+     * 1) 已记住的目录（打开位置 / 上次反查）
+     * 2) 本机桥按「已连接文件夹名 + 文件名」自动反查（FSA 本身不给绝对路径）
+     * 3) 仍找不到再弹窗让用户粘贴一次
+     */
     async function copyItemPath(item) {
       if (!item) return;
       if (state.mode !== "dir" || !state.dirHandle) {
@@ -3783,18 +3796,47 @@
         return;
       }
       const folderName = state.dirHandle.name;
+      const join = (dir) => (MP.joinDocPath ? MP.joinDocPath(dir, item.fileName) : "");
+
+      let path = "";
       let dir = "";
       try {
         dir = localStorage.getItem(dirPathKey(folderName)) || "";
       } catch (_) {}
-      if (!dir) {
+      if (dir) path = join(dir);
+
+      if (!path) {
+        const api = window.devtoolsBridgeToken;
+        if (api?.findMdmDoc && folderName) {
+          setSaveStatus("正在识别本机路径…");
+          try {
+            const res = await api.findMdmDoc({ folderName, fileName: item.fileName });
+            path = String(res?.path || "").trim();
+            if (res?.dirAbsPath) rememberDirPath(folderName, res.dirAbsPath);
+            else if (path) {
+              const sep = path.includes("\\") ? "\\" : "/";
+              const i = path.lastIndexOf(sep);
+              if (i > 0) rememberDirPath(folderName, path.slice(0, i));
+            }
+          } catch (err) {
+            const msg = String(err?.message || err);
+            if (/未连接|未启动|Failed to fetch/.test(msg)) {
+              setSaveStatus("");
+              // 桥未开：仍可手工填
+            } else {
+              setSaveStatus("");
+            }
+          }
+          setSaveStatus("");
+        }
+      }
+
+      if (!path) {
         dir = await askDirPathModal(folderName);
         if (!dir) return;
-        try {
-          localStorage.setItem(dirPathKey(folderName), dir);
-        } catch (_) {}
+        rememberDirPath(folderName, dir);
+        path = join(dir);
       }
-      const path = MP.joinDocPath ? MP.joinDocPath(dir, item.fileName) : "";
       if (!path) {
         setErr("路径无效");
         return;
@@ -3862,6 +3904,7 @@
         setSaveStatus("正在本机定位…");
         try {
           const res = await api.revealMdmDoc({ folderName, fileName: item.fileName });
+          if (res?.dirAbsPath) rememberDirPath(folderName, res.dirAbsPath);
           setSaveStatus("");
           toast(`已在本机打开：${res?.path || item.fileName}`);
           return;
