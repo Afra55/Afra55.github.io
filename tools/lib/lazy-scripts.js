@@ -80,6 +80,10 @@
     },
     mdext: { src: "./vendor/mdext/mdext.js", probe: () => typeof globalThis.markdownItExtras === "object" },
     mdmpure: { src: "./lib/mdm-pure.js", probe: () => typeof globalThis.DevToolsMdmPure === "object" },
+    docquality: {
+      src: "./lib/doc-quality-router.js",
+      probe: () => typeof globalThis.DevToolsDocQualityRouter === "object",
+    },
   };
 
   const EXTERNAL_SITE_TOOLS = new Set([]);
@@ -210,7 +214,7 @@
     giftest: ["omggif"],
     dateremind: ["solarlunar"],
     ipgeo: ["leaflet"],
-    mdm: ["markdownit", "purify", "hljs", "cm6", "mdext", "mdmpure"],
+    mdm: ["markdownit", "purify", "hljs", "cm6", "mdext", "mdmpure", "docquality"],
   };
 
   /** 独立脚本，不走 extra 面板栈 */

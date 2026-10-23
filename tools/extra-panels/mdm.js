@@ -5,6 +5,7 @@
   if (!K) return;
   const { $, $$, setError, toast, bindPanel, escapeHtml } = K;
   const MP = window.DevToolsMdmPure || {};
+  const QR = window.DevToolsDocQualityRouter || {};
 
   const IDB_NAME = "devtools-mdm";
   const IDB_VER = 3;
@@ -4189,17 +4190,11 @@
       return /\.doc$/i.test(name) && !/\.docx$/i.test(name);
     }
 
-    /** 该格式是否应以 Pandoc 为第一引擎（结构化互转质量通常优于 MinerU flash） */
+    /** 该格式是否应以 Pandoc 为第一引擎（见 lib/doc-quality-router.js） */
     function prefersPandoc(name, type) {
+      if (typeof QR.prefersPandoc === "function") return QR.prefersPandoc(name, type);
       if (isLegacyWordDoc({ name })) return false;
-      if (
-        /\.(docx|odt|rtf|epub|html?|shtml|pptx|xlsx|csv|tsv|rst|tex|org)$/i.test(name) ||
-        type === "text/html" ||
-        /officedocument\.(wordprocessingml|presentationml|spreadsheetml)/i.test(type)
-      ) {
-        return true;
-      }
-      return false;
+      return /\.(docx|odt|rtf|epub|html?|shtml|pptx|xlsx|csv|tsv|rst|tex|org)$/i.test(name);
     }
 
     function isImportableDoc(f) {
@@ -4551,27 +4546,37 @@
       }
 
       const forceOcr = /\.(png|jpe?g|webp|gif|tiff?|bmp|jp2)$/i.test(name) || /^image\//i.test(type);
-      const wantPandoc = prefersPandoc(name, type);
+      const route =
+        typeof QR.importRoute === "function"
+          ? QR.importRoute(name, type)
+          : { primary: prefersPandoc(name, type) ? "pandoc" : "mineru", chain: null };
+      const wantPandoc = route.primary === "pandoc";
       const [pandocH, mineruH, doclingH] = await Promise.all([
         probePandocHealth(),
         probeMineruHealth(),
         probeDoclingHealth(),
       ]);
       const bridgeUp = !!(pandocH.bridge || mineruH.bridge || doclingH.bridge);
+      const readyMap = {
+        pandoc: pandocH.ready,
+        mineru: mineruH.ready,
+        docling: doclingH.ready,
+      };
+      const fnMap = {
+        pandoc: { fn: convertViaPandoc, label: "Pandoc", via: "pandoc" },
+        mineru: { fn: convertViaMineru, label: "MinerU", via: "mineru" },
+        docling: { fn: convertViaDocling, label: "Docling", via: "docling" },
+      };
 
       /** @type {{ fn: Function, label: string, via: string }[]} */
       const chain = [];
-      if (wantPandoc) {
-        if (pandocH.ready) chain.push({ fn: convertViaPandoc, label: "Pandoc", via: "pandoc" });
-        if (mineruH.ready) chain.push({ fn: convertViaMineru, label: "MinerU", via: "mineru" });
-        if (doclingH.ready) chain.push({ fn: convertViaDocling, label: "Docling", via: "docling" });
-      } else {
-        if (mineruH.ready) chain.push({ fn: convertViaMineru, label: "MinerU", via: "mineru" });
-        if (doclingH.ready) chain.push({ fn: convertViaDocling, label: "Docling", via: "docling" });
-        // 非结构化格式一般不优先 Pandoc；作末位兜底（如 csv 旧版 pandoc）
-        if (pandocH.ready && /\.(csv|tsv)$/i.test(name)) {
-          chain.push({ fn: convertViaPandoc, label: "Pandoc", via: "pandoc" });
-        }
+      const planned = Array.isArray(route.chain) && route.chain.length
+        ? route.chain.filter((e) => e !== "raw" && e !== "browser")
+        : wantPandoc
+          ? ["pandoc", "mineru", "docling"]
+          : ["mineru", "docling"];
+      for (const eng of planned) {
+        if (readyMap[eng] && fnMap[eng]) chain.push(fnMap[eng]);
       }
 
       async function tryOne(entry) {
@@ -5279,12 +5284,21 @@ a{color:${v.accent}}
 
     async function exportViaPandoc(text, to, title, retried = false) {
       const images = await collectReferencedAssetsWithData(text).catch(() => []);
+      const plan =
+        typeof QR.exportPandocPlan === "function" ? QR.exportPandocPlan(to) : { from: "gfm", args: [] };
       let res;
       try {
         res = await fetch(`${baseUrl()}/pandoc/convert`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
-          body: JSON.stringify({ text, to, title, images }),
+          body: JSON.stringify({
+            text,
+            to,
+            from: plan.from || "gfm",
+            title,
+            images,
+            quality: "max",
+          }),
         });
       } catch (_) {
         showBridgeHelpModal("导出为 Pandoc 格式");

@@ -8,7 +8,7 @@
 
 const { checkPandoc, convert, installPandoc } = require("./pandoc-ops");
 
-const BRIDGE_VERSION = "0.1.1";
+const BRIDGE_VERSION = "0.1.2";
 const FEATURES = { pandoc: true, importToMarkdown: true };
 
 function readBody(req, limit = 96 * 1024 * 1024) {
