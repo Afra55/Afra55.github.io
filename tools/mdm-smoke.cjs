@@ -37,14 +37,22 @@ function staticChecks() {
   assert(html.includes('id="mdm-editor"') && html.includes('id="mdm-preview"'), "editor/preview");
   assert(html.includes('id="mdm-modal"'), "modal host");
   assert(html.includes('role="listbox"'), "list aria role");
+  // 面板头不应再有「文档互转」引流句（只留标题）
+  assert(!/批量任意格式[\s\S]*文档互转/.test(html), "mdm head should not link to docfmt");
   assert(js.includes("DevToolsMdmPure") && js.includes("buildLibraryZip"), "js core");
   assert(js.includes("DevToolsDocQualityRouter") || lazy.includes("docquality"), "quality router wired");
   assert(lazy.includes("doc-quality-router.js"), "lazy docquality");
+  assert(js.includes("capturePreviewAsOnePng"), "png one-shot stitch");
+  assert(js.includes("bindPreviewImgLightbox") && js.includes("mdm-lightbox"), "preview img lightbox");
+  assert(js.includes("e.detail > 1"), "dblclick should not reopen img tools");
   assert(registry.includes('"Markdown 文档管理"'), "registry meta");
   assert(/mdm:\s*"\.\/extra-panels\/mdm\.js"/.test(lazy), "TOOL_FILES");
   assert(lazy.includes('"mdmpure"'), "mdmpure vendor");
   assert(oss.includes("CodeMirror 6") && oss.includes("Mermaid"), "oss-deps");
   assert(manifest.panels.some((p) => p.id === "mdm"), "manifest");
+  const css = fs.readFileSync(path.join(TOOLS, "styles/panels/mdm.css"), "utf8");
+  assert(css.includes(".mdm-lightbox"), "lightbox css");
+  assert(!/#mdm \.markdown-body img:not\(\.mdm-img-missing\)\s*\{\s*cursor:\s*zoom-in/.test(css), "no zoom-in cursor");
 }
 
 const MIME = {
@@ -306,6 +314,62 @@ async function browserChecks() {
     });
     console.log("STEP mermaid-ok");
 
+    // 7b) 预览图片：单击尺寸条；双击放大；Esc 关闭后单击仍可用（互不破坏）
+    // 注意：预览可能被 debounce 重绘清掉注入节点，故注入后立刻用 DOM 事件探测，不跨 await 再点。
+    const imgProbe = await page.evaluate(() => {
+      const pv = document.querySelector("#mdm-preview");
+      if (!pv) return { ok: false, reason: "no preview" };
+      if (pv.dataset.mdmLightboxBound !== "1") return { ok: false, reason: "lightbox not bound" };
+      document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
+      const dlg0 = document.getElementById("mdm-lightbox");
+      if (dlg0?.open) {
+        try { dlg0.close(); } catch (_) { dlg0.removeAttribute("open"); }
+      }
+      const old = document.getElementById("mdm-smoke-probe-img");
+      if (old) old.remove();
+      const img = document.createElement("img");
+      img.id = "mdm-smoke-probe-img";
+      img.alt = "smoke-probe";
+      img.setAttribute("data-mdm-asset", "assets/smoke-probe.png");
+      img.src =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+      img.style.cssText = "display:block;width:64px;height:64px;margin:12px 0";
+      pv.appendChild(img);
+      img.scrollIntoView({ block: "center", inline: "nearest" });
+
+      // 单击 → 尺寸条
+      img.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1, view: window }));
+      const tools1 = document.querySelector(".mdm-imgtools");
+      if (!tools1 || !/尺寸|对齐/.test(tools1.textContent || "")) {
+        return { ok: false, reason: "single-click tools missing", text: tools1?.textContent || "" };
+      }
+      tools1.remove();
+
+      // 模拟双击：第 2 次 click(detail=2) 不应再弹尺寸条，随后 dblclick 开 lightbox
+      img.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1, view: window }));
+      img.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 2, view: window }));
+      const toolsMid = !!document.querySelector(".mdm-imgtools");
+      img.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2, view: window }));
+      const dlg = document.getElementById("mdm-lightbox");
+      const lightboxOpen = Boolean(dlg && dlg.open);
+      const toolsDuring = !!document.querySelector(".mdm-imgtools");
+      if (!lightboxOpen) return { ok: false, reason: "lightbox not open after dblclick", toolsMid, toolsDuring };
+      if (toolsDuring) return { ok: false, reason: "img tools still open with lightbox" };
+
+      try { dlg.close(); } catch (_) { dlg.removeAttribute("open"); }
+      document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
+
+      // 关闭后再单击，尺寸条应仍可用
+      img.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1, view: window }));
+      const tools2 = document.querySelector(".mdm-imgtools");
+      if (!tools2) return { ok: false, reason: "tools missing after lightbox close" };
+      tools2.remove();
+      return { ok: true, toolsMid };
+    });
+    assert(imgProbe.ok, `img lightbox probe failed: ${imgProbe.reason || JSON.stringify(imgProbe)}`);
+    // detail=2 的 click 不应再打开尺寸条（允许第 1 次 click 打开过，但 dblclick 前应已被逻辑跳过重建）
+    console.log("STEP img-lightbox-ok");
+
     // 8) 工具菜单（已拆到「工具」下拉）：快捷键帮助弹窗 + 存储占用弹窗 + 回收站弹窗
     await page.click("#mdm-tools-toggle");
     await page.click('[data-insert="help"]');
@@ -508,7 +572,7 @@ async function browserChecks() {
     console.log("STEP focus-toggle-ok");
 
     assert(!errors.length, `pageerror: ${errors.join("; ")}`);
-    console.log("mdm-smoke ok (idb/new/save/list/search/preview/mermaid/table)");
+    console.log("mdm-smoke ok (idb/new/save/list/search/preview/mermaid/table/lightbox)");
   } finally {
     if (browser) await browser.close().catch(() => {});
     await new Promise((r) => server.close(r));
