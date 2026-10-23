@@ -457,7 +457,7 @@
    * 按「文件夹名 + 文件名」在本机反查绝对路径（POST /local/find-doc），不打开资源管理器。
    * 浏览器 FSA 不暴露绝对路径，复制路径 / 记住目录依赖此接口。
    */
-  async function findMdmDoc({ folderName, fileName, preferredBase, token, kind = "unified" } = {}) {
+  async function findMdmDoc({ folderName, fileName, hintDirs, preferredBase, token, kind = "unified" } = {}) {
     const dirName = String(folderName || "").trim();
     const fName = String(fileName || "").trim();
     if (!dirName || !fName) throw new Error("缺少文件夹名或文件名");
@@ -465,8 +465,11 @@
     if (!health) {
       throw new Error("本机桥未连接。请先启动统一桥，再复制路径。");
     }
+    const hints = Array.isArray(hintDirs)
+      ? hintDirs.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 40)
+      : [];
     const ac = typeof AbortController === "function" ? new AbortController() : null;
-    const timer = ac ? setTimeout(() => ac.abort(), 30000) : null;
+    const timer = ac ? setTimeout(() => ac.abort(), 45000) : null;
     let res;
     try {
       res = await fetch(`${base}/local/find-doc`, {
@@ -478,7 +481,7 @@
           "X-Ffmpeg-Token": tok,
           "X-Git-Token": tok,
         },
-        body: JSON.stringify({ folderName: dirName, fileName: fName }),
+        body: JSON.stringify({ folderName: dirName, fileName: fName, hintDirs: hints }),
       });
     } catch (err) {
       throw new Error(String(err?.name) === "AbortError" ? "本机搜索超时（可改用完整路径）" : err.message || String(err));

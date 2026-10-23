@@ -1310,25 +1310,34 @@
 
     // ---- preview + outline ----
     /** 复制纯文本到剪贴板（带回退） */
-    async function copyText(text) {
+    async function copyText(text, { preferExec = false } = {}) {
       const s = String(text ?? "");
+      const viaExec = () => {
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = s;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.left = "-9999px";
+          ta.style.top = "0";
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          ta.setSelectionRange(0, s.length);
+          const ok = document.execCommand("copy");
+          ta.remove();
+          return ok;
+        } catch (_) {
+          return false;
+        }
+      };
+      // 异步流程后优先 execCommand：clipboard API 常因失去用户手势而失败
+      if (preferExec && viaExec()) return true;
       try {
         await navigator.clipboard.writeText(s);
         return true;
       } catch (_) {}
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = s;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand("copy");
-        ta.remove();
-        return ok;
-      } catch (_) {
-        return false;
-      }
+      return viaExec();
     }
 
     /** 给预览里的每个代码块加「复制」按钮 */
@@ -3779,11 +3788,67 @@
       } catch (_) {}
     }
 
+    function readRememberedDir(folderName) {
+      try {
+        return localStorage.getItem(dirPathKey(folderName)) || "";
+      } catch (_) {
+        return "";
+      }
+    }
+
+    /** 收集本机提示目录：当前库记住的 + 其它库路径 + 桥解压目录 */
+    function collectPathHints(folderName) {
+      const out = [];
+      const push = (v) => {
+        const s = String(v || "").trim();
+        if (s && !out.includes(s)) out.push(s);
+      };
+      push(readRememberedDir(folderName));
+      try {
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const k = localStorage.key(i) || "";
+          if (k.startsWith("devtools-mdm-dirpath:")) push(localStorage.getItem(k));
+        }
+      } catch (_) {}
+      try {
+        push(window.devtoolsBridgeToken?.readInstallDir?.("unified"));
+      } catch (_) {}
+      return out.slice(0, 40);
+    }
+
+    /** 同步快路径：已记住目录时立刻复制（仍在点击手势内，剪贴板最稳） */
+    function tryCopyItemPathSync(item) {
+      if (!item?.fileName || state.mode !== "dir" || !state.dirHandle) return false;
+      const folderName = state.dirHandle.name;
+      const dir = readRememberedDir(folderName);
+      if (!dir) return false;
+      const path = MP.joinDocPath ? MP.joinDocPath(dir, item.fileName) : "";
+      if (!path) return false;
+      // 同步 execCommand，不 await
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = path;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        if (ok) {
+          setErr("");
+          toast(`已复制路径：${path}`);
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    }
+
     /**
      * 复制完整路径：
-     * 1) 已记住的目录（打开位置 / 上次反查）
-     * 2) 本机桥按「已连接文件夹名 + 文件名」自动反查（FSA 本身不给绝对路径）
-     * 3) 仍找不到再弹窗让用户粘贴一次
+     * 1) 已记住的目录 → 同步直接复制
+     * 2) 本机桥按「已连接文件夹名 + 文件名」反查（带 hintDirs）→ 异步复制
+     * 3) 仍找不到再弹窗粘贴一次
      */
     async function copyItemPath(item) {
       if (!item) return;
@@ -3795,44 +3860,40 @@
         setErr("当前文档没有文件名");
         return;
       }
+      if (tryCopyItemPathSync(item)) return;
+
       const folderName = state.dirHandle.name;
       const join = (dir) => (MP.joinDocPath ? MP.joinDocPath(dir, item.fileName) : "");
-
       let path = "";
-      let dir = "";
-      try {
-        dir = localStorage.getItem(dirPathKey(folderName)) || "";
-      } catch (_) {}
-      if (dir) path = join(dir);
 
-      if (!path) {
-        const api = window.devtoolsBridgeToken;
-        if (api?.findMdmDoc && folderName) {
-          setSaveStatus("正在识别本机路径…");
-          try {
-            const res = await api.findMdmDoc({ folderName, fileName: item.fileName });
-            path = String(res?.path || "").trim();
-            if (res?.dirAbsPath) rememberDirPath(folderName, res.dirAbsPath);
-            else if (path) {
-              const sep = path.includes("\\") ? "\\" : "/";
-              const i = path.lastIndexOf(sep);
-              if (i > 0) rememberDirPath(folderName, path.slice(0, i));
-            }
-          } catch (err) {
-            const msg = String(err?.message || err);
-            if (/未连接|未启动|Failed to fetch/.test(msg)) {
-              setSaveStatus("");
-              // 桥未开：仍可手工填
-            } else {
-              setSaveStatus("");
-            }
+      const api = window.devtoolsBridgeToken;
+      if (api?.findMdmDoc && folderName) {
+        setSaveStatus("正在识别本机路径…");
+        toast("正在识别本机路径…");
+        try {
+          const res = await api.findMdmDoc({
+            folderName,
+            fileName: item.fileName,
+            hintDirs: collectPathHints(folderName),
+          });
+          path = String(res?.path || "").trim();
+          if (res?.dirAbsPath) rememberDirPath(folderName, res.dirAbsPath);
+          else if (path) {
+            const sep = path.includes("\\") ? "\\" : "/";
+            const i = path.lastIndexOf(sep);
+            if (i > 0) rememberDirPath(folderName, path.slice(0, i));
           }
-          setSaveStatus("");
+        } catch (err) {
+          const msg = String(err?.message || err);
+          if (/未连接|未启动|Failed to fetch/.test(msg)) {
+            setErr("本机桥未连接，无法自动识别路径；请启动桥后重试，或粘贴一次文件夹路径");
+          }
         }
+        setSaveStatus("");
       }
 
       if (!path) {
-        dir = await askDirPathModal(folderName);
+        const dir = await askDirPathModal(folderName);
         if (!dir) return;
         rememberDirPath(folderName, dir);
         path = join(dir);
@@ -3841,9 +3902,9 @@
         setErr("路径无效");
         return;
       }
-      const ok = await copyText(path);
+      const ok = await copyText(path, { preferExec: true });
       if (!ok) {
-        setErr("复制失败");
+        setErr(`复制失败，请手动复制：${path}`);
         return;
       }
       setErr("");
@@ -4119,7 +4180,10 @@
         closeListCtx();
         if (act === "open") void openDoc(item.id);
         else if (act === "reveal") void revealItemLocation(item);
-        else if (act === "copy-path") void copyItemPath(item);
+        else if (act === "copy-path") {
+          // 已记住目录：同步复制（不丢点击手势）；否则走桥反查
+          if (!tryCopyItemPathSync(item)) void copyItemPath(item);
+        }
         else if (act === "pin") void togglePin(item);
         else if (act === "duplicate") void duplicateItem(item);
         else if (act === "rename") startInlineRename(item.id);

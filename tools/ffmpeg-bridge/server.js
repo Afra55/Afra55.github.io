@@ -435,16 +435,53 @@ const MDM_INDEX_NAME = "mdindex.json";
  * 按「文件夹名 + 文件名」在常见目录里定位 Markdown 文档管理(mdm)的 .md 文件。
  * 浏览器 FSA 不暴露绝对路径，只能靠名字反查；限定深度/扫描量避免卡死。
  */
-async function findMdmDocFile({ folderName, fileName }) {
+async function findMdmDocFile({ folderName, fileName, hintDirs = [] } = {}) {
   const name = String(fileName || "").trim();
   if (!name || /[\\/\0]/.test(name)) throw new Error("非法文件名");
   const wantDir = String(folderName || "").trim();
   if (!wantDir) throw new Error("缺少文件夹名");
 
+  async function tryFile(abs) {
+    try {
+      await fs.promises.access(abs);
+      const st = await fs.promises.stat(abs);
+      if (st.isFile()) return abs;
+    } catch {
+      /* miss */
+    }
+    return null;
+  }
+
+  // 1) 客户端提示的绝对目录（上次记住的 / 已连接库）——最快，直接拼路径
+  const hints = Array.isArray(hintDirs) ? hintDirs : [];
+  for (const raw of hints) {
+    const hint = String(raw || "").trim();
+    if (!hint || /[\0]/.test(hint)) continue;
+    let base;
+    try {
+      base = path.resolve(hint);
+    } catch {
+      continue;
+    }
+    const direct = await tryFile(path.join(base, name));
+    if (direct) return direct;
+    if (path.basename(base) !== wantDir) {
+      const nested = await tryFile(path.join(base, wantDir, name));
+      if (nested) return nested;
+    }
+  }
+
   const seeds = new Set();
   const addSeed = (p) => {
-    if (p) seeds.add(path.resolve(p));
+    if (p) {
+      try {
+        seeds.add(path.resolve(p));
+      } catch {
+        /* ignore */
+      }
+    }
   };
+  for (const raw of hints) addSeed(raw);
   // 优先常见文档位置（home 里 AppData 等目录很大，容易把扫描预算耗尽）
   addSeed(path.join(os.homedir(), "Desktop"));
   addSeed(path.join(os.homedir(), "Documents"));
@@ -453,10 +490,32 @@ async function findMdmDocFile({ folderName, fileName }) {
   addSeed(path.join(os.homedir(), "OneDrive", "Desktop"));
   addSeed(path.join(os.homedir(), "OneDrive", "Documents"));
   addSeed(os.homedir());
+  // 桥解压目录附近常放笔记库
+  try {
+    const bridgeRoot = String(process.env.ADB_BRIDGE_DIR || process.env.DEVTOOLS_BRIDGE_DIR || "").trim();
+    if (bridgeRoot) {
+      addSeed(bridgeRoot);
+      addSeed(path.dirname(bridgeRoot));
+    }
+  } catch {
+    /* ignore */
+  }
   for (const r of localFsRoots()) addSeed(r.path);
+  // Windows：各盘符根下一层常见目录名
+  if (process.platform === "win32") {
+    for (const letter of "CDEFGHIJKLMNOPQRSTUVWXYZ") {
+      addSeed(`${letter}:\\`);
+      addSeed(`${letter}:\\${wantDir}`);
+      addSeed(`${letter}:\\Users`);
+      addSeed(`${letter}:\\notes`);
+      addSeed(`${letter}:\\Notes`);
+      addSeed(`${letter}:\\docs`);
+      addSeed(`${letter}:\\Docs`);
+    }
+  }
 
-  const maxDepth = 6;
-  const maxScan = 40000;
+  const maxDepth = 7;
+  const maxScan = 60000;
   let scanned = 0;
   const seen = new Set();
   const SKIP_DIRS = new Set([
@@ -472,7 +531,28 @@ async function findMdmDocFile({ folderName, fileName }) {
     "System Volume Information",
     "Library",
     ".cache",
+    "vendor",
+    ".git",
   ]);
+
+  async function acceptDir(real) {
+    if (path.basename(real) !== wantDir) return null;
+    try {
+      await fs.promises.access(path.join(real, MDM_INDEX_NAME));
+      const target = path.join(real, name);
+      await fs.promises.access(target);
+      return target;
+    } catch {
+      // 无索引时：只要目标文件在就认（兼容尚未写过索引的库）
+      try {
+        const target = path.join(real, name);
+        await fs.promises.access(target);
+        return target;
+      } catch {
+        return null;
+      }
+    }
+  }
 
   async function walk(dir, depth) {
     if (depth > maxDepth || scanned > maxScan) return null;
@@ -485,25 +565,26 @@ async function findMdmDocFile({ folderName, fileName }) {
     if (seen.has(real)) return null;
     seen.add(real);
     scanned += 1;
-    if (path.basename(real) === wantDir) {
-      try {
-        await fs.promises.access(path.join(real, MDM_INDEX_NAME));
-        const target = path.join(real, name);
-        await fs.promises.access(target);
-        return target;
-      } catch {
-        /* 继续找 */
-      }
-    }
+    const hitHere = await acceptDir(real);
+    if (hitHere) return hitHere;
     let entries = [];
     try {
       entries = await fs.promises.readdir(real, { withFileTypes: true });
     } catch {
       return null;
     }
+    // 同层优先：先看是否有同名子目录
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      if (e.name === wantDir) {
+        const hit = await acceptDir(path.join(real, e.name));
+        if (hit) return hit;
+      }
+    }
     for (const e of entries) {
       if (!e.isDirectory()) continue;
       if (e.name.startsWith(".") || SKIP_DIRS.has(e.name)) continue;
+      if (e.name === wantDir) continue;
       const hit = await walk(path.join(real, e.name), depth + 1);
       if (hit) return hit;
     }
@@ -514,7 +595,7 @@ async function findMdmDocFile({ folderName, fileName }) {
     const hit = await walk(seed, 0);
     if (hit) return hit;
   }
-  throw new Error("未在常见目录找到该文档文件夹（可在桥的目录范围内手动打开）");
+  throw new Error("未在常见目录找到该文档文件夹（可粘贴一次完整路径，之后会自动记住）");
 }
 
 async function revealLocalPath(inputPath) {

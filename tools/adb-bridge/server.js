@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.76";
+const BRIDGE_VERSION = "0.9.77";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5890,9 +5890,11 @@ async function handleApi(req, res, url) {
       }
       try {
         const body = parseJsonBody(await readBody(req, 1024 * 1024));
+        const hints = Array.isArray(body.hintDirs) ? body.hintDirs.map((x) => String(x || "")).filter(Boolean) : [];
         const found = await ffmpegBridge.findMdmDocFile({
           folderName: body.folderName,
           fileName: body.fileName || body.name,
+          hintDirs: hints,
         });
         sendJson(res, 200, { ok: true, path: found, dirAbsPath: path.dirname(found) }, origin);
       } catch (err) {
