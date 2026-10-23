@@ -7,13 +7,14 @@
 
 const { checkMinerU, convert, installMinerU } = require("./mineru-ops");
 
-const BRIDGE_VERSION = "0.1.4";
+const BRIDGE_VERSION = "0.1.5";
 const FEATURES = { mineru: true, ocr: true, gpuRecommended: true };
 
-function readBody(req, limit = 96 * 1024 * 1024) {
+function readBody(req, limit = 96 * 1024 * 1024, { onProgress } = {}) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
+    let lastLog = 0;
     req.on("data", (chunk) => {
       size += chunk.length;
       if (size > limit) {
@@ -22,6 +23,11 @@ function readBody(req, limit = 96 * 1024 * 1024) {
         return;
       }
       chunks.push(chunk);
+      const now = Date.now();
+      if (typeof onProgress === "function" && now - lastLog >= 400) {
+        lastLog = now;
+        onProgress(size);
+      }
     });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
@@ -58,22 +64,34 @@ async function handleRequest(req, res, opts = {}) {
       return;
     }
     if (pathname === "/convert" && req.method === "POST") {
-      const raw = await readBody(req);
-      console.log(`[mineru] 收到 /convert · 请求体 ${Math.round(raw.length / 1024)} KB`);
+      console.log("");
+      console.log("[mineru] ════ 收到文档转换请求（MDM 导入等）· 正在接收上传…");
+      const raw = await readBody(req, 96 * 1024 * 1024, {
+        onProgress: (n) => {
+          console.log(`[mineru] 上传中… ${Math.round(n / 1024)} KB`);
+        },
+      });
+      console.log(`[mineru] 上传完成 · ${Math.round(raw.length / 1024)} KB · 开始解析请求…`);
       const body = parseJsonBody(raw);
+      const name = String(body.filename || body.name || "document.bin");
+      console.log(`[mineru] 文件「${name}」· 进入转换（进度见下方日志 / 黑窗口）`);
       const t0 = Date.now();
       try {
         const data = await convert(body);
-        console.log(`[mineru] /convert 成功 · ${Math.round((Date.now() - t0) / 1000)}s`);
+        console.log(`[mineru] /convert 成功 · ${Math.round((Date.now() - t0) / 1000)}s · 「${name}」`);
+        console.log("");
         sendJson(res, 200, { ok: true, ...data });
       } catch (err) {
         console.log(`[mineru] /convert 失败 · ${Math.round((Date.now() - t0) / 1000)}s · ${err?.message || err}`);
+        console.log("");
         throw err;
       }
       return;
     }
     if (pathname === "/install" && req.method === "POST") {
+      console.log("[mineru] 开始安装 MinerU…");
       const data = await installMinerU();
+      console.log(`[mineru] 安装结束 · installed=${!!data?.installed}`);
       sendJson(res, 200, { ok: true, ...data });
       return;
     }

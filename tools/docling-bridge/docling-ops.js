@@ -58,8 +58,33 @@ function runCmd(file, args, { timeout = 120000, cwd, env } = {}) {
   });
 }
 
-/** 长时间 pip / 转换：用 spawn 便于超时杀进程 */
-function runSpawn(file, args, { timeout = 900000, cwd, env } = {}) {
+function stripAnsi(s) {
+  return String(s || "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+}
+
+/** 子进程输出打到桥窗口；兼容 \\r 进度条 */
+function teeSpawnLines(state, chunk, prefix) {
+  const text = String(chunk || "");
+  state.carry = (state.carry || "") + text;
+  const parts = state.carry.split(/\r\n|\n|\r/);
+  state.carry = parts.pop() || "";
+  for (const line of parts) {
+    const s = stripAnsi(line).replace(/\s+$/g, "").trim();
+    if (!s) continue;
+    const now = Date.now();
+    const isProgress = /\d+\s*%|\d+\s*\/\s*\d+|it\/s|ETA|page\s*\d+|进度|Processing|OCR|Docling/i.test(s);
+    const gap = isProgress ? 700 : 1500;
+    if (state.lastLine === s && now - (state.lastAt || 0) < gap) continue;
+    if (isProgress && state.lastProgressAt && now - state.lastProgressAt < 700) continue;
+    state.lastLine = s;
+    state.lastAt = now;
+    if (isProgress) state.lastProgressAt = now;
+    console.log(`${prefix}${s.length > 240 ? `${s.slice(0, 240)}…` : s}`);
+  }
+}
+
+/** 长时间 pip / 转换：用 spawn 便于超时杀进程，并 tee 到桥黑窗口 */
+function runSpawn(file, args, { timeout = 900000, cwd, env, logPrefix = "[docling] " } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
       cwd,
@@ -69,7 +94,27 @@ function runSpawn(file, args, { timeout = 900000, cwd, env } = {}) {
     });
     let stdout = "";
     let stderr = "";
+    const outTee = { carry: "", lastLine: "", lastAt: 0, lastProgressAt: 0 };
+    const errTee = { carry: "", lastLine: "", lastAt: 0, lastProgressAt: 0 };
+    const started = Date.now();
+    let heartbeat = null;
+    if (logPrefix) {
+      console.log(`${logPrefix}执行: ${file} ${args.join(" ")}`);
+      heartbeat = setInterval(() => {
+        const sec = Math.round((Date.now() - started) / 1000);
+        for (const tee of [outTee, errTee]) {
+          const pending = stripAnsi(tee.carry || "").replace(/\s+/g, " ").trim();
+          if (pending && pending !== tee.lastLine) {
+            tee.lastLine = pending;
+            tee.lastAt = Date.now();
+            console.log(`${logPrefix}${pending.length > 240 ? `${pending.slice(0, 240)}…` : pending}`);
+          }
+        }
+        console.log(`${logPrefix}仍在运行… 已 ${sec}s`);
+      }, 5000);
+    }
     const timer = setTimeout(() => {
+      if (heartbeat) clearInterval(heartbeat);
       try {
         child.kill();
       } catch (_) {}
@@ -81,19 +126,25 @@ function runSpawn(file, args, { timeout = 900000, cwd, env } = {}) {
     child.stdout.on("data", (d) => {
       stdout += String(d);
       if (stdout.length > 8 * 1024 * 1024) stdout = stdout.slice(-4 * 1024 * 1024);
+      if (logPrefix) teeSpawnLines(outTee, d, logPrefix);
     });
     child.stderr.on("data", (d) => {
       stderr += String(d);
       if (stderr.length > 8 * 1024 * 1024) stderr = stderr.slice(-4 * 1024 * 1024);
+      if (logPrefix) teeSpawnLines(errTee, d, logPrefix);
     });
     child.on("error", (err) => {
       clearTimeout(timer);
+      if (heartbeat) clearInterval(heartbeat);
       err.stdout = stdout;
       err.stderr = stderr;
       reject(err);
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      if (heartbeat) clearInterval(heartbeat);
+      if (logPrefix && outTee.carry.trim()) console.log(`${logPrefix}${stripAnsi(outTee.carry).trim()}`);
+      if (logPrefix && errTee.carry.trim()) console.log(`${logPrefix}${stripAnsi(errTee.carry).trim()}`);
       if (code === 0) resolve({ stdout, stderr, code });
       else {
         const err = new Error(`exit ${code}`);
@@ -401,6 +452,12 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
   fs.writeFileSync(inPath, buf);
 
   const stem = path.basename(name, path.extname(name)) || "out";
+  const sizeKb = Math.max(1, Math.round(buf.length / 1024));
+  // 扫描件 / 图片：整页 OCR；数字 PDF 由客户端传 forceOcr 时再全页
+  const fullPage = !!(forceOcr || /\.(png|jpe?g|webp|tiff?|bmp)$/i.test(name));
+  console.log(
+    `[docling] 开始转换「${name}」· ${sizeKb} KB · ocr=${fullPage ? "full_page" : "auto"} · tmp=${tmp}`
+  );
   const args = [
     ...bin.argsPrefix,
     "convert",
@@ -416,10 +473,8 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
     "--ocr",
     "--device",
     "auto",
-    "--quiet",
+    // 不用 --quiet：桥黑窗口需要进度；静默会导致「像卡住」
   ];
-  // 扫描件 / 图片：整页 OCR；数字 PDF 由客户端传 forceOcr 时再全页
-  const fullPage = !!(forceOcr || /\.(png|jpe?g|webp|tiff?|bmp)$/i.test(name));
   if (fullPage) {
     args.push("--ocr-mode", "full_page");
   }
@@ -430,9 +485,10 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
 
   try {
     try {
-      await runSpawn(bin.file, args, { timeout: 900000, cwd: tmp });
+      await runSpawn(bin.file, args, { timeout: 900000, cwd: tmp, logPrefix: "[docling] " });
     } catch (err1) {
       // rapidocr 未装或 CLI 旧：去掉 engine / output-file 再试
+      console.log("[docling] 首次命令失败，降级重试（无 rapidocr / output-file）…");
       const soft = [
         ...bin.argsPrefix,
         "convert",
@@ -451,7 +507,7 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
         soft.push("--force-ocr");
       }
       try {
-        await runSpawn(bin.file, soft, { timeout: 900000, cwd: tmp });
+        await runSpawn(bin.file, soft, { timeout: 900000, cwd: tmp, logPrefix: "[docling] " });
       } catch (err2) {
         const msg = String(err2?.stderr || err1?.stderr || err2?.message || err1?.message || "").trim();
         if (/ENOENT|not recognized|not found/i.test(msg)) {
@@ -501,7 +557,7 @@ async function installDocling() {
     const { stdout, stderr } = await runSpawn(
       py.file,
       [...py.argsPrefix, "-m", "pip", "install", "-U", "docling[rapidocr]"],
-      { timeout: 1200000 }
+      { timeout: 1200000, logPrefix: "[docling] " }
     );
     cachedDocling = null;
     const p = await checkDocling();
@@ -511,7 +567,7 @@ async function installDocling() {
         await runSpawn(
           py.file,
           [...py.argsPrefix, "-m", "pip", "install", "-U", "docling", "rapidocr", "onnxruntime"],
-          { timeout: 1200000 }
+          { timeout: 1200000, logPrefix: "[docling] " }
         );
       } catch (_) {}
       cachedDocling = null;

@@ -89,20 +89,29 @@ function runCmd(file, args, { timeout = 120000, cwd, env } = {}) {
   });
 }
 
+function stripAnsi(s) {
+  return String(s || "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+}
+
+/** 子进程输出打到桥窗口；兼容 tqdm 等用 \\r 刷新的进度条 */
 function teeSpawnLines(state, chunk, prefix) {
   const text = String(chunk || "");
   state.carry = (state.carry || "") + text;
-  const parts = state.carry.split(/\r?\n/);
+  // \\r / \\n 都当成分隔，否则进度条长期停在 carry 里，黑窗口像没进度
+  const parts = state.carry.split(/\r\n|\n|\r/);
   state.carry = parts.pop() || "";
   for (const line of parts) {
-    const s = String(line || "").replace(/\s+$/g, "");
+    const s = stripAnsi(line).replace(/\s+$/g, "").trim();
     if (!s) continue;
-    // 控制台别被进度条刷爆：同前缀短时重复只打一次
     const now = Date.now();
-    if (state.lastLine === s && now - (state.lastAt || 0) < 1500) continue;
+    const isProgress = /\d+\s*%|\d+\s*\/\s*\d+|it\/s|ETA|page\s*\d+|第\s*\d+|进度|Processing|OCR|layout/i.test(s);
+    const gap = isProgress ? 700 : 1500;
+    if (state.lastLine === s && now - (state.lastAt || 0) < gap) continue;
+    if (isProgress && state.lastProgressAt && now - state.lastProgressAt < 700) continue;
     state.lastLine = s;
     state.lastAt = now;
-    console.log(`${prefix}${s}`);
+    if (isProgress) state.lastProgressAt = now;
+    console.log(`${prefix}${s.length > 240 ? `${s.slice(0, 240)}…` : s}`);
   }
 }
 
@@ -116,16 +125,25 @@ function runSpawn(file, args, { timeout = 1200000, cwd, env, logPrefix = "[miner
     });
     let stdout = "";
     let stderr = "";
-    const outTee = { carry: "", lastLine: "", lastAt: 0 };
-    const errTee = { carry: "", lastLine: "", lastAt: 0 };
+    const outTee = { carry: "", lastLine: "", lastAt: 0, lastProgressAt: 0 };
+    const errTee = { carry: "", lastLine: "", lastAt: 0, lastProgressAt: 0 };
     const started = Date.now();
     let heartbeat = null;
     if (logPrefix) {
       console.log(`${logPrefix}执行: ${file} ${args.join(" ")}`);
       heartbeat = setInterval(() => {
         const sec = Math.round((Date.now() - started) / 1000);
+        // 进度条若还停在 carry（只有 \\r 无换行），心跳时刷一行出来
+        for (const tee of [outTee, errTee]) {
+          const pending = stripAnsi(tee.carry || "").replace(/\s+/g, " ").trim();
+          if (pending && pending !== tee.lastLine) {
+            tee.lastLine = pending;
+            tee.lastAt = Date.now();
+            console.log(`${logPrefix}${pending.length > 240 ? `${pending.slice(0, 240)}…` : pending}`);
+          }
+        }
         console.log(`${logPrefix}仍在运行… 已 ${sec}s（首次下模型 / 无 GPU 可能较久，请耐心等待）`);
-      }, 15000);
+      }, 5000);
     }
     const timer = setTimeout(() => {
       if (heartbeat) clearInterval(heartbeat);
