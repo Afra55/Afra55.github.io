@@ -1311,7 +1311,7 @@
     "gitbridge": "今日交码看板 + 说明模板 + Gerrit 视角 + 历史/工作线右键；统一桥 /git。",
     "fileunlock": "找出 Windows 上占用某文件/文件夹的程序，并可一键关闭释放占用（Restart Manager 检测，仅 Windows）。",
     "mdm": "Markdown 文档管理：选本机文件夹存储、分类/标签/搜索、实时预览；导入按质量路由（结构化 Pandoc / PDF·图 MinerU），导出经 Pandoc 最高质量参数。专用互转见「文档互转」。",
-    "docfmt": "文档格式互转：任意格式→Markdown、Markdown→docx/epub/html 等，按格式走最高规格引擎（Pandoc / MinerU / Docling），经统一本机桥，不上传公网。",
+    "docfmt": "文档格式互转：Word↔PDF、Office↔HTML 等（不局限 Markdown）；结构化走 Pandoc，PDF/扫描件经 MinerU/Docling 中转；另附专用「转 MD / MD 转出」。统一本机桥，不上传公网。",
     "mediafmt": "媒体格式互转入口：视频/音频走本机 FFmpeg 最高质量档；图片导向图片工具（mozjpeg/AVIF）；并链到视频工具、音频处理、修剪、GIF、FFmpeg 桥等专用面板。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",

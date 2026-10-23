@@ -2,8 +2,8 @@
 
 /**
  * Pandoc 转换 + 一键安装（本机桥模块）。
- * - 文本模式：Markdown → docx/odt/epub/…（MDM 导出）
- * - 文件模式：docx/odt/epub/html/… → Markdown（MDM 高质量导入）
+ * - 文本模式：Markdown → docx/odt/epub/pdf/…（MDM / 文档互转导出）
+ * - 文件模式：docx/odt/epub/html/… → Markdown 或其它格式（文档互转：Word↔PDF 等）
  */
 
 const { execFile } = require("child_process");
@@ -467,12 +467,12 @@ async function convertFromText(opts = {}) {
 }
 
 /** 结构化文档文件 → Markdown（导入，质量优先于 MinerU flash） */
-async function convertFromFile({ filename, dataBase64, to = "gfm", from } = {}) {
+async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngine = "", quality = "max" } = {}) {
   const name = safeName(filename);
   const ext = path.extname(name).toLowerCase();
   const fromFmt = String(from || FILE_FROM[ext] || "").trim();
   if (!fromFmt) {
-    throw new Error(`Pandoc 不支持导入该扩展名：${ext || "(无)"}（可用：${Object.keys(FILE_FROM).join(" ")}）`);
+    throw new Error(`Pandoc 不支持直接导入该扩展名：${ext || "(无)"}（可用：${Object.keys(FILE_FROM).join(" ")}；PDF/扫描件请走 MinerU 路由）`);
   }
   if (!dataBase64) throw new Error("缺少文件数据");
   const buf = Buffer.from(String(dataBase64), "base64");
@@ -488,15 +488,37 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from } = {}) 
   const mediaDir = path.join(tmp, "media");
   fs.writeFileSync(inPath, buf);
 
-  const args = ["-f", fromFmt, "-t", toFmt];
-  if (outIsMd) args.push("--wrap=none");
-  args.push("--extract-media", mediaDir, "-o", outPath, inPath);
+  /** @type {string[]} */
+  let args;
+  let usedPdfEngine = "";
+  if (toFmt === "pdf") {
+    const pdfInfo = await probePdfEngines();
+    usedPdfEngine = String(pdfEngine || pdfInfo.preferred || "").trim();
+    if (!usedPdfEngine || !pdfInfo.engines[usedPdfEngine]?.ok) {
+      const hint =
+        process.platform === "win32"
+          ? '可点「一键安装 Typst」或 winget install --id Typst.Typst -e'
+          : process.platform === "darwin"
+            ? "可 brew install typst"
+            : "可安装 typst 或 texlive-xetex";
+      throw new Error(`未找到印刷级 PDF 引擎（Typst / XeLaTeX）。${hint}`);
+    }
+    args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${usedPdfEngine}`, "-o", outPath, inPath];
+  } else {
+    args = ["-f", fromFmt, "-t", toFmt];
+    if (outIsMd) args.push("--wrap=none");
+    if (quality !== "fast") {
+      const extras = EXPORT_QUALITY_ARGS[toFmt] || [];
+      for (const a of extras) args.push(a);
+    }
+    args.push("--extract-media", mediaDir, "-o", outPath, inPath);
+  }
 
-  console.log(`[pandoc] 文件转换「${name}」· ${fromFmt} → ${toFmt} · tmp=${tmp}`);
+  console.log(`[pandoc] 文件转换「${name}」· ${fromFmt} → ${toFmt}${usedPdfEngine ? ` · pdf-engine=${usedPdfEngine}` : ""} · tmp=${tmp}`);
   try {
     await runCmd(resolvePandocBin(), args, { cwd: tmp, timeout: 600000 });
     if (outIsMd) {
-      let md = fs.readFileSync(outPath, "utf8");
+      const md = fs.readFileSync(outPath, "utf8");
       const embedded = embedLocalImages(md, tmp);
       const hasTable =
         (/^\s*\|.+\|\s*$/m.test(embedded.text) && /\|\s*:?-{3,}/.test(embedded.text)) ||
@@ -512,12 +534,14 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from } = {}) 
       };
     }
     const outBuf = fs.readFileSync(outPath);
+    if (!outBuf.length) throw new Error("输出为空");
     return {
       dataBase64: outBuf.toString("base64"),
       filename: `${safeBase(path.basename(name, ext))}.${outExt}`,
       engine: "pandoc",
       from: fromFmt,
       to: toFmt,
+      ...(usedPdfEngine ? { pdfEngine: usedPdfEngine, quality: "print" } : { quality: quality || "max" }),
     };
   } catch (err) {
     const msg = String(err?.stderr || err?.message || err).trim();

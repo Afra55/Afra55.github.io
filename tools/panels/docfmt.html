@@ -2,8 +2,9 @@
       <div class="panel-head">
         <h1>文档互转</h1>
         <p>
-          任意文档 ↔ Markdown，按格式走最高规格引擎（Pandoc 结构化 / MinerU PDF·扫描）。
-          与 <a href="#mdm">Markdown 文档管理</a> 共用同一质量路由；数据仅经本机统一桥，不上传公网。
+          格式互转（Word ↔ PDF、Office ↔ HTML 等），不局限 Markdown。
+          结构化走 Pandoc；PDF/扫描件先 MinerU/Docling 再转出。数据仅经本机统一桥。
+          管理多篇 Markdown 请用 <a href="#mdm">Markdown 文档管理</a>。
         </p>
       </div>
       <div class="panel-body">
@@ -11,11 +12,44 @@
         <p class="error" id="docfmt-error" hidden></p>
 
         <div class="docfmt-tabs" role="tablist">
-          <button type="button" class="docfmt-tab is-on" data-tab="to-md" role="tab" aria-selected="true">转为 Markdown</button>
+          <button type="button" class="docfmt-tab is-on" data-tab="any" role="tab" aria-selected="true">格式互转</button>
+          <button type="button" class="docfmt-tab" data-tab="to-md" role="tab" aria-selected="false">转为 Markdown</button>
           <button type="button" class="docfmt-tab" data-tab="from-md" role="tab" aria-selected="false">Markdown 转出</button>
         </div>
 
-        <div class="docfmt-pane" data-pane="to-md">
+        <div class="docfmt-pane" data-pane="any">
+          <div class="docfmt-drop" id="docfmt-drop-any">
+            <div class="btn-row tool-actions">
+              <label class="file-btn" for="docfmt-file-any">选择文档</label>
+              <input id="docfmt-file-any" type="file" multiple hidden
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.odt,.ods,.odp,.rtf,.epub,.ofd,.html,.htm,.mhtml,.mht,.csv,.tsv,.md,.markdown,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.jp2,.rst,.tex,.org,application/pdf,image/*,text/markdown,text/plain,text/html" />
+              <button type="button" class="ghost-btn" id="docfmt-clear-any">清空</button>
+            </div>
+            <p class="hint tight" id="docfmt-meta-any">拖入 PDF / Word / HTML / 图片等，选下方目标格式。例：docx→pdf、pdf→docx、html→odt。</p>
+          </div>
+          <label class="flag" style="margin-top:0.55rem">目标格式
+            <select id="docfmt-any-to" class="mono">
+              <option value="docx">Word (.docx)</option>
+              <option value="pdf">PDF（印刷级 · Typst/XeLaTeX）</option>
+              <option value="odt">OpenDocument (.odt)</option>
+              <option value="html">HTML（内嵌资源）</option>
+              <option value="epub">EPUB</option>
+              <option value="rtf">RTF</option>
+              <option value="pptx">PowerPoint (.pptx)</option>
+              <option value="latex">LaTeX</option>
+              <option value="gfm">Markdown (GFM)</option>
+              <option value="rst">reStructuredText</option>
+              <option value="org">Org-mode</option>
+              <option value="mediawiki">MediaWiki</option>
+            </select>
+          </label>
+          <ul class="docfmt-list" id="docfmt-list-any"></ul>
+          <div class="btn-row tool-actions" style="margin-top:0.6rem">
+            <button type="button" class="primary-btn" id="docfmt-run-any">开始互转</button>
+          </div>
+        </div>
+
+        <div class="docfmt-pane" data-pane="to-md" hidden>
           <div class="docfmt-drop" id="docfmt-drop-in">
             <div class="btn-row tool-actions">
               <label class="file-btn" for="docfmt-file-in">选择文档</label>
