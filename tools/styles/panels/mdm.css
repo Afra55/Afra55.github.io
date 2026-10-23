@@ -237,6 +237,77 @@
 .mdm-imgtools button:hover { color: var(--accent); border-color: var(--accent); }
 .mdm-imgtools-label { margin: 0 0.15rem 0 0.35rem; color: var(--muted); font-size: 0.72rem; }
 
+/* 预览双击图片放大（挂 body；不改单击尺寸条） */
+.mdm-lightbox {
+  border: 0;
+  padding: 0;
+  max-width: min(94vw, 1400px);
+  width: min(94vw, 1400px);
+  height: min(92vh, 960px);
+  max-height: min(92vh, 960px);
+  background: var(--panel-strong, var(--bg-0));
+  color: var(--ink);
+  border-radius: 14px;
+  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.45);
+}
+.mdm-lightbox::backdrop {
+  background: color-mix(in srgb, var(--bg-0) 72%, transparent);
+}
+.mdm-lightbox-inner {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+.mdm-lightbox-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.mdm-lightbox-cap {
+  margin: 0;
+  flex: 1 1 auto;
+}
+.mdm-lightbox-stage {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  touch-action: none;
+  cursor: grab;
+}
+.mdm-lightbox-stage:active { cursor: grabbing; }
+.mdm-lightbox-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.mdm-lightbox-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+#mdm .markdown-body img:not(.mdm-img-missing) {
+  cursor: zoom-in;
+}
+
 /* 沉浸（全屏）：隐藏站点外壳，让工具铺满屏幕；只有编辑器 / 预览自己滚 */
 .mdm-max-btn { padding: 0.15rem 0.5rem; line-height: 1.2; }
 body.mdm-immersive .site-header,

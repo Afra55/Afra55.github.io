@@ -6876,7 +6876,7 @@ a{color:${v.accent}}
       return true;
     }
 
-    /** 点预览里的图片 → 小工具条改尺寸/对齐 */
+    /** 点预览里的图片 → 小工具条改尺寸/对齐（单击；双击放大见 bindPreviewImgLightbox） */
     function openImageTools(img) {
       const rel = img.getAttribute("data-mdm-asset") || "";
       const alt = img.getAttribute("alt") || "";
@@ -6925,6 +6925,198 @@ a{color:${v.accent}}
         document.addEventListener("mousedown", off, true);
       }, 0);
     }
+
+    /**
+     * 双击预览图片 → 全屏放大（与单击尺寸条互不干扰）。
+     * lightbox 挂 body + html2canvas-ignore，不影响导出 PNG / 复制预览。
+     */
+    function bindPreviewImgLightbox() {
+      if (!els.preview || els.preview.dataset.mdmLightboxBound === "1") return;
+      els.preview.dataset.mdmLightboxBound = "1";
+
+      let dlg = document.getElementById("mdm-lightbox");
+      if (!dlg) {
+        dlg = document.createElement("dialog");
+        dlg.id = "mdm-lightbox";
+        dlg.className = "mdm-lightbox";
+        dlg.setAttribute("data-html2canvas-ignore", "true");
+        dlg.setAttribute("aria-label", "图片放大预览");
+        dlg.innerHTML =
+          `<div class="mdm-lightbox-inner" data-html2canvas-ignore="true">` +
+          `<div class="mdm-lightbox-head">` +
+          `<p class="hint tight mdm-lightbox-cap" id="mdm-lightbox-cap"></p>` +
+          `<button type="button" class="ghost-btn" id="mdm-lightbox-close" aria-label="关闭预览">关闭</button>` +
+          `</div>` +
+          `<div class="mdm-lightbox-stage" id="mdm-lightbox-stage">` +
+          `<img id="mdm-lightbox-img" class="mdm-lightbox-img" alt="" draggable="false" />` +
+          `</div>` +
+          `<div class="mdm-lightbox-toolbar">` +
+          `<button type="button" class="ghost-btn" id="mdm-lightbox-zoom-out" aria-label="缩小">－</button>` +
+          `<span class="mono" id="mdm-lightbox-zoom-pct">100%</span>` +
+          `<button type="button" class="ghost-btn" id="mdm-lightbox-zoom-in" aria-label="放大">＋</button>` +
+          `<button type="button" class="ghost-btn" id="mdm-lightbox-zoom-reset">还原</button>` +
+          `</div></div>`;
+        document.body.appendChild(dlg);
+      }
+
+      const stage = dlg.querySelector("#mdm-lightbox-stage");
+      const imgEl = dlg.querySelector("#mdm-lightbox-img");
+      const cap = dlg.querySelector("#mdm-lightbox-cap");
+      const pctEl = dlg.querySelector("#mdm-lightbox-zoom-pct");
+      const closeBtn = dlg.querySelector("#mdm-lightbox-close");
+      const zoomInBtn = dlg.querySelector("#mdm-lightbox-zoom-in");
+      const zoomOutBtn = dlg.querySelector("#mdm-lightbox-zoom-out");
+      const zoomResetBtn = dlg.querySelector("#mdm-lightbox-zoom-reset");
+      if (!stage || !imgEl) return;
+
+      const view = { scale: 1, x: 0, y: 0, dragging: false, lastX: 0, lastY: 0 };
+
+      function syncTransform() {
+        imgEl.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
+        if (pctEl) pctEl.textContent = `${Math.round(view.scale * 100)}%`;
+      }
+
+      function fitImage() {
+        const sw = stage.clientWidth || 1;
+        const sh = stage.clientHeight || 1;
+        const nw = imgEl.naturalWidth || 1;
+        const nh = imgEl.naturalHeight || 1;
+        view.scale = Math.min(1, sw / nw, sh / nh);
+        view.x = 0;
+        view.y = 0;
+        syncTransform();
+      }
+
+      function clampScale(next) {
+        return Math.min(8, Math.max(0.2, next));
+      }
+
+      function zoomAt(clientX, clientY, nextScale) {
+        const rect = stage.getBoundingClientRect();
+        const cx = clientX - rect.left - rect.width / 2;
+        const cy = clientY - rect.top - rect.height / 2;
+        const ratio = nextScale / view.scale;
+        view.x = cx - (cx - view.x) * ratio;
+        view.y = cy - (cy - view.y) * ratio;
+        view.scale = nextScale;
+        syncTransform();
+      }
+
+      function closePreview() {
+        try {
+          if (dlg.open) dlg.close();
+          else dlg.removeAttribute("open");
+        } catch (_) {
+          dlg.removeAttribute("open");
+        }
+        imgEl.removeAttribute("src");
+        imgEl.alt = "";
+        if (cap) cap.textContent = "";
+        view.scale = 1;
+        view.x = 0;
+        view.y = 0;
+        view.dragging = false;
+        syncTransform();
+      }
+
+      function openPreview(src, alt) {
+        if (!src) return;
+        // 关掉尺寸条，避免叠在 lightbox 上
+        document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
+        view.scale = 1;
+        view.x = 0;
+        view.y = 0;
+        view.dragging = false;
+        imgEl.onload = () => fitImage();
+        imgEl.onerror = () => {
+          toast("图片无法放大预览");
+          closePreview();
+        };
+        imgEl.src = src;
+        imgEl.alt = alt || "";
+        if (cap) cap.textContent = alt || "图片预览 · 滚轮缩放 · 拖拽平移";
+        try {
+          if (typeof dlg.showModal === "function") dlg.showModal();
+          else dlg.setAttribute("open", "");
+        } catch (_) {
+          dlg.setAttribute("open", "");
+        }
+        if (imgEl.complete && imgEl.naturalWidth) fitImage();
+      }
+
+      els.preview.addEventListener("dblclick", (e) => {
+        const img = e.target.closest?.("img");
+        if (!img || !els.preview.contains(img)) return;
+        // 缺图占位 / 无可用 src 不打开
+        if (img.classList.contains("mdm-img-missing")) return;
+        const src = img.currentSrc || img.src || "";
+        if (!src || src === window.location.href) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openPreview(src, img.getAttribute("alt") || "");
+      });
+
+      closeBtn?.addEventListener("click", (e) => {
+        e.preventDefault();
+        closePreview();
+      });
+      dlg.addEventListener("click", (e) => {
+        if (e.target === dlg) closePreview();
+      });
+      dlg.addEventListener("cancel", (e) => {
+        e.preventDefault();
+        closePreview();
+      });
+
+      zoomInBtn?.addEventListener("click", () => {
+        const rect = stage.getBoundingClientRect();
+        zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, clampScale(view.scale * 1.2));
+      });
+      zoomOutBtn?.addEventListener("click", () => {
+        const rect = stage.getBoundingClientRect();
+        zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, clampScale(view.scale / 1.2));
+      });
+      zoomResetBtn?.addEventListener("click", fitImage);
+
+      stage.addEventListener(
+        "wheel",
+        (e) => {
+          if (!dlg.open) return;
+          e.preventDefault();
+          const factor = Math.exp(-e.deltaY * 0.0015);
+          zoomAt(e.clientX, e.clientY, clampScale(view.scale * factor));
+        },
+        { passive: false }
+      );
+
+      stage.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        view.dragging = true;
+        view.lastX = e.clientX;
+        view.lastY = e.clientY;
+        stage.setPointerCapture?.(e.pointerId);
+      });
+      stage.addEventListener("pointermove", (e) => {
+        if (!view.dragging) return;
+        view.x += e.clientX - view.lastX;
+        view.y += e.clientY - view.lastY;
+        view.lastX = e.clientX;
+        view.lastY = e.clientY;
+        syncTransform();
+      });
+      const endDrag = () => {
+        view.dragging = false;
+      };
+      stage.addEventListener("pointerup", endDrag);
+      stage.addEventListener("pointercancel", endDrag);
+      stage.addEventListener("dblclick", (e) => {
+        e.preventDefault();
+        if (view.scale > 1.05) fitImage();
+        else zoomAt(e.clientX, e.clientY, clampScale(Math.max(view.scale * 1.8, 1.5)));
+      });
+    }
+
+    bindPreviewImgLightbox();
 
     /** 复制预览到剪贴板：HTML（带格式，媒体内联为 data URL）+ 纯文本（Markdown 源码） */
     async function copyPreviewToClipboard() {
