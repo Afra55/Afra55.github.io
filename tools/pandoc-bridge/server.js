@@ -2,14 +2,19 @@
 
 /**
  * Pandoc 模块（挂到统一桥 /pandoc/*）。
- * - 文本：Markdown → docx/odt/epub/…（导出）
+ * - 文本：Markdown → docx/odt/epub/pdf(印刷级)…
  * - 文件：docx/odt/epub/html/… → Markdown（高质量导入）
  */
 
-const { checkPandoc, convert, installPandoc } = require("./pandoc-ops");
+const {
+  checkPandoc,
+  convert,
+  installPackage,
+  probePdfEngines,
+} = require("./pandoc-ops");
 
-const BRIDGE_VERSION = "0.1.2";
-const FEATURES = { pandoc: true, importToMarkdown: true };
+const BRIDGE_VERSION = "0.1.3";
+const FEATURES = { pandoc: true, importToMarkdown: true, printPdf: true };
 
 function readBody(req, limit = 96 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
@@ -53,9 +58,18 @@ async function handleRequest(req, res, opts = {}) {
         ok: true,
         version: BRIDGE_VERSION,
         pandoc,
-        features: FEATURES,
-        note: "Pandoc：结构化文档互转；文件→MD 用于 MDM 高质量导入",
+        features: {
+          ...FEATURES,
+          printPdf: !!pandoc?.pdf?.printReady,
+          preferredPdfEngine: pandoc?.pdf?.preferred || null,
+        },
+        note: "Pandoc：结构化互转；PDF 印刷级优先 Typst / XeLaTeX",
       });
+      return;
+    }
+    if (pathname === "/pdf-engines" && req.method === "GET") {
+      const pdf = await probePdfEngines();
+      sendJson(res, 200, { ok: true, ...pdf });
       return;
     }
     if (pathname === "/convert" && req.method === "POST") {
@@ -74,7 +88,8 @@ async function handleRequest(req, res, opts = {}) {
       return;
     }
     if (pathname === "/install" && req.method === "POST") {
-      const data = await installPandoc();
+      const body = parseJsonBody(await readBody(req));
+      const data = await installPackage(body);
       sendJson(res, 200, { ok: true, ...data });
       return;
     }

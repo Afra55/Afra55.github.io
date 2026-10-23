@@ -75,6 +75,7 @@
     org: { from: "gfm", args: [] },
     opml: { from: "gfm", args: [] },
     html: { from: "gfm", args: ["--standalone", "--embed-resources"] },
+    pdf: { from: "gfm", args: ["--pdf-engine=typst|xelatex"], note: "印刷级：Typst > XeLaTeX" },
     asciidoc: { from: "gfm", args: [] },
     plain: { from: "gfm", args: [] },
     gfm: { from: "gfm", args: ["--wrap=none"] },
@@ -85,8 +86,8 @@
   const EXPORT_LOCAL = {
     md: { engine: "local", note: "原文 + 资源 ZIP" },
     "html-standalone": { engine: "local", note: "预览渲染内联资源" },
-    pdf: { engine: "local", note: "浏览器打印（无 LaTeX 依赖）" },
-    png: { engine: "local", note: "html2canvas 长图" },
+    pdf: { engine: "bridge-pandoc", note: "印刷级 PDF（Typst/XeLaTeX）；失败再浏览器打印" },
+    png: { engine: "local", note: "html2canvas 单张长图" },
   };
 
   function extOf(name) {

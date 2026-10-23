@@ -21,6 +21,7 @@
   const DEFAULT_TAG_NAME = "默认";
 
   const PANDOC_FORMATS = [
+    ["pdf", "PDF（印刷级 · Typst/XeLaTeX）"],
     ["docx", "Word (.docx)"],
     ["odt", "OpenDocument (.odt)"],
     ["epub", "EPUB (.epub)"],
@@ -36,7 +37,6 @@
   const LOCAL_FORMATS = [
     ["md", "Markdown (.md)"],
     ["html-standalone", "HTML（单文件）"],
-    ["pdf", "PDF（打印）"],
     ["png", "长图 PNG"],
   ];
 
@@ -5195,6 +5195,38 @@ a{color:${v.accent}}
           return;
         }
         if (fmt === "pdf") {
+          // 印刷级：本机 Pandoc + Typst/XeLaTeX；失败再浏览器打印回退
+          try {
+            await exportViaPandoc(text, "pdf", title);
+            toast("已导出印刷级 PDF");
+            return;
+          } catch (err) {
+            const msg = String(err?.message || err);
+            if (/未找到印刷级 PDF 引擎|Typst|XeLaTeX|pdf-engine|未找到 pandoc/i.test(msg)) {
+              const okInstall = await confirmModal({
+                title: "安装 Typst（印刷级 PDF）",
+                body:
+                  "印刷级 PDF 需要 Typst（推荐，体积小）或 XeLaTeX。\n\n" +
+                  "现在用本机桥一键安装 Typst？安装后将重试导出。\n" +
+                  "取消则改用浏览器打印（非印刷级）。",
+                okText: "安装 Typst",
+              });
+              if (okInstall) {
+                await runTypstInstall();
+                await exportViaPandoc(text, "pdf", title);
+                toast("已导出印刷级 PDF");
+                return;
+              }
+              const okPrint = await confirmModal({
+                title: "改用浏览器打印？",
+                body: "将打开打印对话框，可「另存为 PDF」。质量低于 Typst/XeLaTeX 印刷级。",
+                okText: "浏览器打印",
+              });
+              if (!okPrint) throw err;
+            } else {
+              throw err;
+            }
+          }
           const w = window.open("", "_blank");
           if (!w) throw new Error("弹窗被拦截，无法打印");
           w.document.write(standaloneHtml(title, html));
@@ -5328,10 +5360,50 @@ a{color:${v.accent}}
             return await exportViaPandoc(text, to, title, true);
           }
         }
+        if (
+          !retried &&
+          to === "pdf" &&
+          /印刷级 PDF 引擎|Typst|XeLaTeX|pdf-engine/i.test(msg)
+        ) {
+          throw new Error(msg); // 交给 exportCurrent 弹 Typst 安装
+        }
         throw new Error(msg);
       }
       const bytes = Uint8Array.from(atob(data.dataBase64 || ""), (c) => c.charCodeAt(0));
       downloadBlob(new Blob([bytes]), data.filename || `${slugify(title)}.${to}`);
+    }
+
+    async function runTypstInstall() {
+      const box = els.modalBox;
+      const t0 = Date.now();
+      els.modal.hidden = false;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>正在安装 Typst</strong></div>` +
+        `<p class="mdm-modal-body">本机桥正在安装 Typst（印刷级 PDF 引擎，通常几十 MB）。请勿关闭本页。</p>` +
+        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-typst-install-progress">已用时 0 秒 · 安装中…</p></div>`;
+      els.modal.onclick = null;
+      const timer = setInterval(() => {
+        const el = document.getElementById("mdm-typst-install-progress");
+        if (el) el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒 · 安装中请稍候…`;
+      }, 1000);
+      try {
+        const res = await fetch(`${baseUrl()}/pandoc/install`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+          body: JSON.stringify({ package: "typst" }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!data?.ok) throw new Error(data?.error || "安装请求失败");
+        if (data.installed) {
+          toast("Typst 已安装，正在重试导出…");
+          return;
+        }
+        if (data.needsManual) throw new Error(`请手动安装：${data.command || "typst"}`);
+        throw new Error(data.message || data.output || "Typst 安装未完成");
+      } finally {
+        clearInterval(timer);
+        closeModal();
+      }
     }
 
     async function runPandocInstall() {
