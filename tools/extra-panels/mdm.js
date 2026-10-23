@@ -5165,6 +5165,85 @@ a{color:${v.accent}}
       toast(`已导出 ${n} 篇（含资源）`);
     }
 
+    /**
+     * 预览 → 单张 PNG：在浏览器画布上限内尽量提高 scale；
+     * 超高内容用高清分块 html2canvas，再 drawImage 拼成一张（只下载一个文件）。
+     */
+    async function capturePreviewAsOnePng(target) {
+      const fullH = Math.max(1, target.scrollHeight || target.clientHeight || 1);
+      const fullW = Math.max(1, target.clientWidth || 820);
+      const MAX_CANVAS = 16384;
+      // 短文可到 3×；长文降到刚好塞进单张画布
+      let scale = Math.min(3, MAX_CANVAS / fullH, MAX_CANVAS / fullW);
+      if (!Number.isFinite(scale) || scale <= 0) scale = 0.25;
+      scale = Math.max(0.1, Math.floor(scale * 1000) / 1000);
+      // ceil 后若越界，再收一档，保证整篇能落进单张画布
+      if (Math.ceil(fullW * scale) > MAX_CANVAS || Math.ceil(fullH * scale) > MAX_CANVAS) {
+        scale = Math.min(MAX_CANVAS / fullW, MAX_CANVAS / fullH);
+        scale = Math.max(0.1, Math.floor(scale * 1000) / 1000);
+      }
+
+      const out = document.createElement("canvas");
+      out.width = Math.max(1, Math.ceil(fullW * scale));
+      out.height = Math.max(1, Math.ceil(fullH * scale));
+      const ctx = out.getContext("2d");
+      if (!ctx) throw new Error("无法创建画布");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, out.width, out.height);
+
+      const h2cOpts = (w, h) => ({
+        backgroundColor: "#ffffff",
+        scale,
+        width: w,
+        height: h,
+        windowWidth: w,
+        windowHeight: h,
+        scrollX: 0,
+        scrollY: 0,
+        logging: false,
+      });
+
+      // 不太高：整页一次；失败或很高：分块再拼
+      const preferOnce = fullH * scale <= MAX_CANVAS * 0.85 && fullH < 6000;
+      if (preferOnce) {
+        try {
+          const once = await window.html2canvas(target, h2cOpts(fullW, fullH));
+          ctx.drawImage(once, 0, 0);
+          return { canvas: out.width === once.width && out.height === once.height ? once : out, scale, tiles: 1 };
+        } catch (_) {
+          /* 走分块 */
+        }
+      }
+
+      const tileCssH = Math.max(240, Math.floor((MAX_CANVAS / scale) * 0.9));
+      let y = 0;
+      let tiles = 0;
+      while (y < fullH) {
+        const h = Math.min(tileCssH, fullH - y);
+        const holder = document.createElement("div");
+        holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${fullW}px;height:${h}px;overflow:hidden;background:#fff;color:#111`;
+        const inner = target.cloneNode(true);
+        inner.style.boxSizing = "border-box";
+        inner.style.width = `${fullW}px`;
+        inner.style.marginTop = `-${y}px`;
+        // 避免克隆节点带固定定位干扰
+        if (inner.classList) inner.classList.add("markdown-body");
+        holder.appendChild(inner);
+        document.body.appendChild(holder);
+        try {
+          const tile = await window.html2canvas(holder, h2cOpts(fullW, h));
+          const destY = Math.min(out.height - 1, Math.round(y * scale));
+          ctx.drawImage(tile, 0, destY);
+          tiles += 1;
+        } finally {
+          holder.remove();
+        }
+        y += h;
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      return { canvas: out, scale, tiles: Math.max(1, tiles) };
+    }
+
     async function exportCurrent(fmt, target) {
       const item = target?.item || findItem(state.currentId);
       if (!item) return;
@@ -5251,29 +5330,8 @@ a{color:${v.accent}}
             target = tmp;
           }
           try {
-            // 始终导出单张长图：超长则降低 scale 以塞进浏览器画布上限（不分片）
-            const fullH = target.scrollHeight || target.clientHeight || 0;
-            const fullW = target.clientWidth || 820;
-            const MAX_CANVAS = 16384;
-            let scale = 2;
-            const limH = MAX_CANVAS / Math.max(1, fullH);
-            const limW = MAX_CANVAS / Math.max(1, fullW);
-            scale = Math.min(scale, limH, limW);
-            if (!Number.isFinite(scale) || scale <= 0) scale = 0.25;
-            if (scale < 2) {
-              // 保留两位小数，避免浮点噪声
-              scale = Math.max(0.1, Math.floor(scale * 100) / 100);
-            }
-            const canvas = await window.html2canvas(target, {
-              backgroundColor: "#ffffff",
-              scale,
-              width: fullW,
-              height: fullH,
-              windowWidth: fullW,
-              windowHeight: fullH,
-              scrollX: 0,
-              scrollY: 0,
-            });
+            // 单文件 + 尽量满清晰：在画布上限内取最高 scale；高清分块截取再拼成一张（不下载多文件）
+            const { canvas, scale, tiles } = await capturePreviewAsOnePng(target);
             await new Promise((res, rej) =>
               canvas.toBlob((b) => {
                 if (!b) {
@@ -5284,10 +5342,11 @@ a{color:${v.accent}}
                 res();
               }, "image/png")
             );
-            if (scale < 1.5) {
-              toast(`已导出单张长图（内容较长，清晰度约 ${Math.round(scale * 100)}%）`);
+            const pct = Math.round(scale * 100);
+            if (scale >= 2) {
+              toast(tiles > 1 ? `已导出单张高清长图（${pct}% · ${tiles} 段拼接）` : `已导出单张高清长图（${pct}%）`);
             } else {
-              toast("已导出单张长图 PNG");
+              toast(`已导出单张长图（尽量满清晰 · ${pct}%；受浏览器画布上限限制）`);
             }
           } finally {
             if (tmp) tmp.remove();
