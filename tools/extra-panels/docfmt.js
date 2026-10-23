@@ -246,9 +246,9 @@
       }
       const to = String($("#docfmt-to-fmt")?.value || "docx");
       const plan = QR().exportPandocPlan?.(to) || { from: "gfm" };
-      log(`Pandoc 导出 · gfm → ${to} · quality=max…`);
-      try {
-        const data = await bridgeFetch("/pandoc/convert", {
+      log(`Pandoc 导出 · gfm → ${to} · ${to === "pdf" ? "印刷级 PDF" : "quality=max"}…`);
+      async function doConvert() {
+        return bridgeFetch("/pandoc/convert", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -256,15 +256,35 @@
             to,
             from: plan.from || "gfm",
             title,
-            quality: "max",
+            quality: to === "pdf" ? "print" : "max",
           }),
         });
+      }
+      try {
+        let data;
+        try {
+          data = await doConvert();
+        } catch (err) {
+          const msg = String(err?.message || err);
+          if (to === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX/i.test(msg)) {
+            log("未找到 Typst，尝试一键安装…");
+            await bridgeFetch("/pandoc/install", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ package: "typst" }),
+            });
+            data = await doConvert();
+          } else {
+            throw err;
+          }
+        }
         const bytes = Uint8Array.from(atob(data.dataBase64 || ""), (c) => c.charCodeAt(0));
         const name = data.filename || `${title}.${to}`;
         downloadBlob(new Blob([bytes]), name);
         outEl.hidden = false;
-        outEl.innerHTML = `<span class="hint tight">已导出 ${escapeHtml(name)}（Pandoc 最高质量）</span>`;
-        log(`完成 · ${name}`);
+        const via = data.pdfEngine ? `印刷级 · ${data.pdfEngine}` : "Pandoc 最高质量";
+        outEl.innerHTML = `<span class="hint tight">已导出 ${escapeHtml(name)}（${escapeHtml(via)}）</span>`;
+        log(`完成 · ${name}${data.pdfEngine ? ` · engine=${data.pdfEngine}` : ""}`);
         toast("导出完成");
       } catch (err) {
         setError(err.message || String(err));

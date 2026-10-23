@@ -51,11 +51,11 @@ t("导出 html/epub/latex 含最高质量参数", () => {
 });
 
 t("MDM 导出菜单格式均有方案", () => {
-  const menu = ["docx", "odt", "epub", "rtf", "rst", "latex", "pptx", "mediawiki", "org", "opml", "html"];
+  const menu = ["pdf", "docx", "odt", "epub", "rtf", "rst", "latex", "pptx", "mediawiki", "org", "opml", "html"];
   for (const fmt of menu) {
     assert.ok(R.exportPandocPlan(fmt).known, `缺少导出方案：${fmt}`);
   }
-  for (const fmt of ["md", "html-standalone", "pdf", "png"]) {
+  for (const fmt of ["md", "html-standalone", "png"]) {
     assert.ok(R.exportLocalPlan(fmt).known, `缺少本地导出方案：${fmt}`);
   }
 });
@@ -83,7 +83,7 @@ t("auditQualityMatrix 通过", () => {
   const audit = R.auditQualityMatrix({
     mineruExts: [...(mineru.SUPPORTED_EXT || [])],
     pandocImportExts: Object.keys(pandoc.FILE_FROM || {}),
-    pandocExportFmts: ["docx", "odt", "epub", "rtf", "rst", "latex", "pptx", "mediawiki", "org", "opml", "html"],
+    pandocExportFmts: ["pdf", "docx", "odt", "epub", "rtf", "rst", "latex", "pptx", "mediawiki", "org", "opml", "html"],
   });
   assert.strictEqual(audit.ok, true, audit.problems.join("\n"));
 });

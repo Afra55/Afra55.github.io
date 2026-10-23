@@ -19,6 +19,7 @@ const EXT = {
   rst: "rst",
   latex: "tex",
   beamer: "pdf",
+  pdf: "pdf",
   pptx: "pptx",
   mediawiki: "wiki",
   org: "org",
@@ -34,6 +35,9 @@ const EXT = {
   json: "json",
   native: "native",
 };
+
+/** 印刷级 PDF 引擎优先级：Typst > XeLaTeX > LuaLaTeX > pdfLaTeX > wkhtmltopdf */
+const PDF_ENGINE_ORDER = ["typst", "xelatex", "lualatex", "pdflatex", "wkhtmltopdf"];
 
 /** 文件 → Markdown 时的 -f 映射（结构化文档优先 Pandoc） */
 const FILE_FROM = {
@@ -134,16 +138,94 @@ function makeBridgeTemp(prefix) {
   }
 }
 
+function resolveCmdCandidates(name) {
+  const n = String(name || "").trim();
+  const candidates = [];
+  if (process.platform === "win32") {
+    const la = process.env.LOCALAPPDATA || "";
+    const pf = process.env.ProgramFiles || "C:\\Program Files";
+    if (n === "typst") {
+      if (la) {
+        candidates.push(path.join(la, "Microsoft", "WinGet", "Links", "typst.exe"));
+        candidates.push(path.join(la, "Programs", "typst", "typst.exe"));
+      }
+      candidates.push(path.join(pf, "Typst", "typst.exe"));
+      candidates.push("typst.exe");
+    } else {
+      candidates.push(`${n}.exe`);
+    }
+  } else {
+    candidates.push(`/opt/homebrew/bin/${n}`, `/usr/local/bin/${n}`, `/usr/bin/${n}`, n);
+  }
+  candidates.push(n);
+  return candidates;
+}
+
+function resolveCmdBin(name, { refresh = false } = {}) {
+  const key = String(name || "");
+  if (!resolveCmdBin._cache) resolveCmdBin._cache = Object.create(null);
+  if (!refresh && resolveCmdBin._cache[key]) return resolveCmdBin._cache[key];
+  for (const c of resolveCmdCandidates(key)) {
+    try {
+      if (c.includes(path.sep) || c.includes("/")) {
+        if (fs.existsSync(c)) {
+          resolveCmdBin._cache[key] = c;
+          return c;
+        }
+      }
+    } catch (_) {}
+  }
+  resolveCmdBin._cache[key] = key; // PATH
+  return key;
+}
+
+async function probeCmd(name) {
+  const bin = resolveCmdBin(name, { refresh: true });
+  try {
+    const args = name === "typst" ? ["--version"] : ["--version"];
+    const { stdout, stderr } = await runCmd(bin, args, { timeout: 12000 });
+    const line = String(stdout || stderr || "")
+      .split(/\r?\n/)
+      .find((s) => s.trim()) || name;
+    return { ok: true, bin, version: line.trim().slice(0, 120) };
+  } catch (_) {
+    return { ok: false, bin, error: `未找到 ${name}` };
+  }
+}
+
+async function probePdfEngines() {
+  const engines = {};
+  for (const name of PDF_ENGINE_ORDER) {
+    engines[name] = await probeCmd(name);
+  }
+  const preferred = PDF_ENGINE_ORDER.find((n) => engines[n]?.ok) || "";
+  return { engines, preferred, printReady: !!preferred };
+}
+
+function cjkFontVars() {
+  const fonts =
+    process.platform === "win32"
+      ? ["Microsoft YaHei", "SimSun", "Noto Sans CJK SC"]
+      : process.platform === "darwin"
+        ? ["PingFang SC", "Heiti SC", "Noto Sans CJK SC", "Songti SC"]
+        : ["Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei", "DejaVu Sans"];
+  const main = fonts[0];
+  return { main, fonts };
+}
+
 async function checkPandoc() {
   const bin = resolvePandocBin();
   try {
     const { stdout } = await runCmd(bin, ["--version"], { timeout: 15000 });
     const first = String(stdout || "").split(/\r?\n/)[0] || "pandoc";
+    const pdf = await probePdfEngines();
     return {
       ok: true,
       version: first,
       bin,
       importFormats: Object.keys(FILE_FROM),
+      pdf,
+      features: { printPdf: pdf.printReady, preferredPdfEngine: pdf.preferred || null },
     };
   } catch (err) {
     return { ok: false, error: "未找到 pandoc（可点「一键安装」或手动安装）" };
@@ -248,26 +330,92 @@ const EXPORT_QUALITY_ARGS = {
   commonmark: ["--wrap=none"],
 };
 
+function writeExportImages(tmp, images) {
+  if (!Array.isArray(images)) return;
+  for (const im of images.slice(0, 200)) {
+    const rel = String(im?.path || "").replace(/\\/g, "/").replace(/\.\.+/g, "").replace(/^\/+/, "");
+    if (!rel || !im?.dataBase64) continue;
+    const dest = path.join(tmp, rel);
+    if (!dest.startsWith(tmp)) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, Buffer.from(String(im.dataBase64), "base64"));
+  }
+}
+
+/** 印刷级 PDF：Pandoc + Typst/XeLaTeX/… */
+async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine = "" } = {}) {
+  const pdfInfo = await probePdfEngines();
+  const engine = String(pdfEngine || pdfInfo.preferred || "").trim();
+  if (!engine || !pdfInfo.engines[engine]?.ok) {
+    const hint =
+      process.platform === "win32"
+        ? '可点「一键安装 Typst」或 winget install --id Typst.Typst -e'
+        : process.platform === "darwin"
+          ? "可 brew install typst"
+          : "可安装 typst 或 texlive-xetex";
+    throw new Error(`未找到印刷级 PDF 引擎（Typst / XeLaTeX）。${hint}`);
+  }
+
+  const tmp = makeBridgeTemp("mdm-pdf-");
+  const inPath = path.join(tmp, "in.md");
+  const outPath = path.join(tmp, "out.pdf");
+  const fromFmt = String(from || "gfm").trim() || "gfm";
+  const { main: cjkFont } = cjkFontVars();
+  fs.writeFileSync(inPath, String(text || ""), "utf8");
+  writeExportImages(tmp, images);
+
+  const args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${engine}`, "-o", outPath];
+  // 中文/CJK：Xe/LuaLaTeX 用 CJKmainfont；Typst 用 mainfont
+  if (engine === "xelatex" || engine === "lualatex") {
+    args.push("-V", `CJKmainfont=${cjkFont}`, "-V", `mainfont=${cjkFont}`, "--pdf-engine-opt=-interaction=nonstopmode");
+  } else if (engine === "typst") {
+    args.push("-V", `mainfont=${cjkFont}`);
+  }
+  if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
+
+  console.log(`[pandoc] 印刷级 PDF · engine=${engine} · font=${cjkFont} · tmp=${tmp}`);
+  try {
+    await runCmd(resolvePandocBin(), args, { cwd: tmp, timeout: 900000 });
+    if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 20) {
+      throw new Error("PDF 输出为空（请检查字体与 Typst/LaTeX 是否完整）");
+    }
+    const buf = fs.readFileSync(outPath);
+    return {
+      dataBase64: buf.toString("base64"),
+      filename: `${safeBase(title)}.pdf`,
+      engine: "pandoc",
+      pdfEngine: engine,
+      quality: "print",
+      from: fromFmt,
+      to: "pdf",
+      cjkFont,
+    };
+  } catch (err) {
+    const msg = String(err?.stderr || err?.message || err).trim();
+    if (/ENOENT|not recognized|not found/i.test(msg) && /pandoc/i.test(msg)) {
+      throw new Error("未找到 pandoc：可点「一键安装 pandoc」");
+    }
+    throw new Error((msg || "印刷级 PDF 失败").slice(0, 500));
+  } finally {
+    try {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    } catch (_) {}
+  }
+}
+
 /** Markdown 文本 → 其它格式（导出，默认最高质量） */
-async function convertFromTextOnce({ text, to, from = "gfm", title, images, quality = "max" } = {}) {
+async function convertFromTextOnce({ text, to, from = "gfm", title, images, quality = "max", pdfEngine } = {}) {
   const toFmt = String(to || "").trim().toLowerCase();
   if (!toFmt) throw new Error("缺少目标格式");
-  if (toFmt === "pdf") throw new Error("PDF 请用前端打印（Pandoc 出 PDF 需额外 LaTeX 引擎）");
+  if (toFmt === "pdf") {
+    return convertToPrintPdf({ text, from, title, images, pdfEngine });
+  }
   const ext = EXT[toFmt] || toFmt;
   const tmp = makeBridgeTemp("mdm-pandoc-");
   const outPath = path.join(tmp, `out.${ext}`);
   const fromFmt = String(from || "gfm").trim() || "gfm";
   try {
-    if (Array.isArray(images)) {
-      for (const im of images.slice(0, 200)) {
-        const rel = String(im?.path || "").replace(/\\/g, "/").replace(/\.\.+/g, "").replace(/^\/+/, "");
-        if (!rel || !im?.dataBase64) continue;
-        const dest = path.join(tmp, rel);
-        if (!dest.startsWith(tmp)) continue;
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.writeFileSync(dest, Buffer.from(String(im.dataBase64), "base64"));
-      }
-    }
+    writeExportImages(tmp, images);
     const args = ["-f", fromFmt, "-t", toFmt];
     if (quality !== "fast") {
       const extras = EXPORT_QUALITY_ARGS[toFmt] || [];
@@ -391,45 +539,45 @@ async function convert(body = {}) {
   return convertFromText(body);
 }
 
+async function wingetInstall(id) {
+  if (!(await hasCmd("winget"))) {
+    return {
+      installed: false,
+      needsManual: true,
+      command: `winget install --id ${id} -e`,
+      message: "未找到 winget（Windows 10 1809+ 自带）",
+    };
+  }
+  try {
+    const { stdout, stderr } = await runCmd(
+      "winget",
+      [
+        "install",
+        "--id",
+        id,
+        "-e",
+        "--accept-source-agreements",
+        "--accept-package-agreements",
+        "--disable-interactivity",
+      ],
+      { timeout: 900000 }
+    );
+    return { output: `${stdout}\n${stderr}`.trim().slice(-2000), command: `winget install --id ${id} -e` };
+  } catch (err) {
+    return {
+      output: `${err?.stdout || ""}\n${err?.stderr || ""}`.trim().slice(-2000),
+      command: `winget install --id ${id} -e`,
+    };
+  }
+}
+
 async function installPandoc() {
   const platform = process.platform;
   if (platform === "win32") {
-    if (!(await hasCmd("winget"))) {
-      return {
-        installed: false,
-        needsManual: true,
-        command: "winget install --id JohnMacFarlane.Pandoc -e",
-        message: "未找到 winget（Windows 10 1809+ 自带），请手动安装 pandoc",
-      };
-    }
-    try {
-      const { stdout, stderr } = await runCmd(
-        "winget",
-        [
-          "install",
-          "--id",
-          "JohnMacFarlane.Pandoc",
-          "-e",
-          "--accept-source-agreements",
-          "--accept-package-agreements",
-          "--disable-interactivity",
-        ],
-        { timeout: 900000 }
-      );
-      resolvePandocBin({ refresh: true });
-      const p = await checkPandoc();
-      return {
-        installed: p.ok,
-        output: `${stdout}\n${stderr}`.trim().slice(-2000),
-        pandoc: p,
-        command: "winget install --id JohnMacFarlane.Pandoc -e",
-      };
-    } catch (err) {
-      const out = `${err?.stdout || ""}\n${err?.stderr || ""}`.trim().slice(-2000);
-      resolvePandocBin({ refresh: true });
-      const p = await checkPandoc();
-      return { installed: p.ok, output: out, pandoc: p, command: "winget install --id JohnMacFarlane.Pandoc -e" };
-    }
+    const r = await wingetInstall("JohnMacFarlane.Pandoc");
+    resolvePandocBin({ refresh: true });
+    const p = await checkPandoc();
+    return { ...r, installed: p.ok, pandoc: p };
   }
   if (platform === "darwin") {
     if (await hasCmd("brew")) {
@@ -452,12 +600,76 @@ async function installPandoc() {
   };
 }
 
+/** 安装 Typst（印刷级 PDF 首选引擎，体积远小于完整 TeX） */
+async function installTypst() {
+  const platform = process.platform;
+  if (platform === "win32") {
+    const r = await wingetInstall("Typst.Typst");
+    resolveCmdBin("typst", { refresh: true });
+    const pdf = await probePdfEngines();
+    return {
+      ...r,
+      installed: !!pdf.engines.typst?.ok,
+      pdf,
+      package: "typst",
+    };
+  }
+  if (platform === "darwin") {
+    if (await hasCmd("brew")) {
+      try {
+        const { stdout, stderr } = await runCmd("brew", ["install", "typst"], { timeout: 900000 });
+        resolveCmdBin("typst", { refresh: true });
+        const pdf = await probePdfEngines();
+        return {
+          installed: !!pdf.engines.typst?.ok,
+          output: `${stdout}\n${stderr}`.trim().slice(-2000),
+          pdf,
+          command: "brew install typst",
+          package: "typst",
+        };
+      } catch (err) {
+        return {
+          installed: false,
+          output: `${err?.stderr || err?.message || ""}`.slice(-2000),
+          command: "brew install typst",
+          package: "typst",
+        };
+      }
+    }
+    return {
+      installed: false,
+      needsManual: true,
+      command: "brew install typst",
+      message: "未找到 Homebrew",
+      package: "typst",
+    };
+  }
+  return {
+    installed: false,
+    needsManual: true,
+    command: "请按 https://github.com/typst/typst 安装 typst，或 sudo apt install typst（若源可用）",
+    message: "Linux 请手动安装 Typst",
+    package: "typst",
+  };
+}
+
+async function installPackage(body = {}) {
+  const pkg = String(body.package || body.pkg || "pandoc").toLowerCase();
+  if (pkg === "typst" || pkg === "pdf" || pkg === "pdf-engine") return installTypst();
+  return installPandoc();
+}
+
 module.exports = {
   checkPandoc,
   convert,
   convertFromFile,
   convertFromText,
+  convertToPrintPdf,
   installPandoc,
+  installTypst,
+  installPackage,
+  probePdfEngines,
   resolvePandocBin,
   FILE_FROM,
+  PDF_ENGINE_ORDER,
 };
