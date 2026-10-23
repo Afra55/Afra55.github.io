@@ -4173,18 +4173,33 @@
     }
 
     // ---- import ----
-    // 文档入库：md/txt 直读；其余优先 MinerU（质量），未装则 Docling，无桥浏览器回退
-    // 与 MinerU 4 Supported Inputs 对齐；md/txt 前端直读，其余优先桥
+    // 按格式选最高质量引擎：
+    //   md/txt → 直读
+    //   docx/odt/rtf/epub/html/pptx/xlsx/csv… → Pandoc（结构最优）→ MinerU → Docling → 浏览器
+    //   pdf/图片/旧 doc/ofd/mhtml… → MinerU（视觉/OCR 最优）→ Docling → 浏览器
     const IMPORT_EXT_RE =
       /\.(md|markdown|txt|text|html?|shtml|mhtml|mht|docx?|pdf|pptx?|xlsx?|rtf|odt|ods|odp|epub|ofd|csv|tsv|png|jpe?g|webp|gif|tiff?|bmp|jp2)$/i;
     const BRIDGE_CONVERT_RE =
       /\.(pdf|ofd|epub|html?|shtml|mhtml|mht|csv|tsv|rtf|docx?|pptx?|xlsx?|odt|ods|odp|png|jpe?g|webp|gif|tiff?|bmp|jp2)$/i;
     const IMPORT_HINT =
-      ".md/.txt + PDF/图片(高级档) + Office/HTML/EPUB/OFD/CSV 等（MinerU；Office 等仅 flash）";
+      ".md/.txt 直读 · 结构化 Office/HTML/EPUB→Pandoc · PDF/图片/扫描→MinerU advanced";
 
     function isLegacyWordDoc(f) {
       const name = String(f?.name || "");
       return /\.doc$/i.test(name) && !/\.docx$/i.test(name);
+    }
+
+    /** 该格式是否应以 Pandoc 为第一引擎（结构化互转质量通常优于 MinerU flash） */
+    function prefersPandoc(name, type) {
+      if (isLegacyWordDoc({ name })) return false;
+      if (
+        /\.(docx|odt|rtf|epub|html?|shtml|pptx|xlsx|csv|tsv|rst|tex|org)$/i.test(name) ||
+        type === "text/html" ||
+        /officedocument\.(wordprocessingml|presentationml|spreadsheetml)/i.test(type)
+      ) {
+        return true;
+      }
+      return false;
     }
 
     function isImportableDoc(f) {
@@ -4255,15 +4270,18 @@
 
     let mineruHealthCache = { t: 0, data: null };
     let doclingHealthCache = { t: 0, data: null };
+    let pandocHealthCache = { t: 0, data: null };
 
     async function probeEngineHealth(mount, key) {
       try {
         const res = await fetch(`${baseUrl()}/${mount}/health`, { method: "GET", cache: "no-store" });
         const data = await res.json().catch(() => null);
+        const eng = key ? data?.[key] : data?.pandoc;
+        const ready = !!(res.ok && data?.ok && (key ? eng?.ok : data?.pandoc?.ok));
         return {
           bridge: true,
-          ready: !!(res.ok && data?.ok && data?.[key]?.ok),
-          error: data?.[key]?.error || data?.error || "",
+          ready,
+          error: eng?.error || data?.error || "",
           mount,
         };
       } catch (_) {
@@ -4284,6 +4302,14 @@
       if (doclingHealthCache.data && now - doclingHealthCache.t < 20000) return doclingHealthCache.data;
       const out = await probeEngineHealth("docling", "docling");
       doclingHealthCache = { t: now, data: out };
+      return out;
+    }
+
+    async function probePandocHealth() {
+      const now = Date.now();
+      if (pandocHealthCache.data && now - pandocHealthCache.t < 20000) return pandocHealthCache.data;
+      const out = await probeEngineHealth("pandoc", "pandoc");
+      pandocHealthCache = { t: now, data: out };
       return out;
     }
 
@@ -4308,8 +4334,10 @@
       const t0 = Date.now();
       const stageBase =
         mount === "mineru"
-          ? "MinerU 最高质量转换中（advanced/hybrid-high；可很久，请看黑窗口）"
-          : `${label} 转换中（含 OCR；大文件可能需数分钟）`;
+          ? "MinerU 最高质量转换中（PDF/图 advanced；可很久，请看黑窗口）"
+          : mount === "pandoc"
+            ? "Pandoc 结构化转换中（质量优先）"
+            : `${label} 转换中（含 OCR；大文件可能需数分钟）`;
       const tickStage = () => {
         const sec = Math.round((Date.now() - t0) / 1000);
         onStage?.(`${stageBase} · 已 ${sec}s · 可看本机桥黑窗口日志`);
@@ -4318,6 +4346,18 @@
       const tick = setInterval(tickStage, 1000);
       let res;
       try {
+        const body =
+          mount === "pandoc"
+            ? {
+                filename: file.name || "document.bin",
+                dataBase64,
+                to: "gfm",
+              }
+            : {
+                filename: file.name || "document.bin",
+                dataBase64,
+                forceOcr: !!forceOcr,
+              };
         res = await fetch(`${baseUrl()}/${mount}/convert`, {
           method: "POST",
           headers: {
@@ -4325,11 +4365,7 @@
             "X-Adb-Token": token(),
             "X-Ffmpeg-Token": token(),
           },
-          body: JSON.stringify({
-            filename: file.name || "document.bin",
-            dataBase64,
-            forceOcr: !!forceOcr,
-          }),
+          body: JSON.stringify(body),
           signal,
         });
       } finally {
@@ -4360,6 +4396,10 @@
 
     async function convertViaDocling(file, opts) {
       return convertViaBridge("docling", "Docling", file, opts);
+    }
+
+    async function convertViaPandoc(file, opts) {
+      return convertViaBridge("pandoc", "Pandoc", file, opts);
     }
 
     async function runBridgeInstall(mount, label, onProgress) {
@@ -4490,7 +4530,7 @@
     }
 
     /**
-     * 转成 Markdown：优先 MinerU → Docling → 浏览器。
+     * 转成 Markdown：按格式选最高质量引擎链。
      * opts.onStage(msg) / opts.signal / opts.allowInstall
      */
     async function fileToMarkdown(file, opts = {}) {
@@ -4499,7 +4539,6 @@
       const name = String(file.name || "");
       const type = String(file.type || "");
 
-      // 纯文本 / md：不走桥，避免无谓开销（MinerU 也不 parse 纯文本）
       if (/\.(md|markdown)$/i.test(name) || /markdown/i.test(type)) {
         return { text: await fileToMarkdownBrowser(file, { onStage }), via: "raw" };
       }
@@ -4507,121 +4546,107 @@
         return { text: await fileToMarkdownBrowser(file, { onStage }), via: "raw" };
       }
 
-      if (wantsBridgeConvert(file)) {
-        // PDF 不强制 OCR（数字版用 auto/VLM 更保表格）；仅图片/扫描图强制 OCR
-        const forceOcr = /\.(png|jpe?g|webp|gif|tiff?|bmp|jp2)$/i.test(name) || /^image\//i.test(type);
-        const [mineruH, doclingH] = await Promise.all([probeMineruHealth(), probeDoclingHealth()]);
-        const bridgeUp = !!(mineruH.bridge || doclingH.bridge);
+      if (!wantsBridgeConvert(file)) {
+        return { text: await fileToMarkdownBrowser(file, { onStage }), via: "browser" };
+      }
 
-        async function tryEngine(convertFn, label) {
-          try {
-            const r = await convertFn(file, { forceOcr, signal, onStage });
-            return {
-              text: r.text,
-              via: r.via || label.toLowerCase(),
-              imagesEmbedded: r.imagesEmbedded || 0,
-              hasTable: !!r.hasTable,
-            };
-          } catch (err) {
-            if (signal?.aborted || /已取消|AbortError/i.test(String(err?.message || err?.name || ""))) {
-              throw new Error("已取消");
-            }
-            throw err;
-          }
+      const forceOcr = /\.(png|jpe?g|webp|gif|tiff?|bmp|jp2)$/i.test(name) || /^image\//i.test(type);
+      const wantPandoc = prefersPandoc(name, type);
+      const [pandocH, mineruH, doclingH] = await Promise.all([
+        probePandocHealth(),
+        probeMineruHealth(),
+        probeDoclingHealth(),
+      ]);
+      const bridgeUp = !!(pandocH.bridge || mineruH.bridge || doclingH.bridge);
+
+      /** @type {{ fn: Function, label: string, via: string }[]} */
+      const chain = [];
+      if (wantPandoc) {
+        if (pandocH.ready) chain.push({ fn: convertViaPandoc, label: "Pandoc", via: "pandoc" });
+        if (mineruH.ready) chain.push({ fn: convertViaMineru, label: "MinerU", via: "mineru" });
+        if (doclingH.ready) chain.push({ fn: convertViaDocling, label: "Docling", via: "docling" });
+      } else {
+        if (mineruH.ready) chain.push({ fn: convertViaMineru, label: "MinerU", via: "mineru" });
+        if (doclingH.ready) chain.push({ fn: convertViaDocling, label: "Docling", via: "docling" });
+        // 非结构化格式一般不优先 Pandoc；作末位兜底（如 csv 旧版 pandoc）
+        if (pandocH.ready && /\.(csv|tsv)$/i.test(name)) {
+          chain.push({ fn: convertViaPandoc, label: "Pandoc", via: "pandoc" });
         }
+      }
 
-        if (mineruH.ready) {
-          try {
-            return await tryEngine(convertViaMineru, "MinerU");
-          } catch (err) {
-            const msg = String(err?.message || err);
-            if (/已取消/i.test(msg)) throw err;
-            if (doclingH.ready) {
-              onStage?.(`MinerU 失败，改用 Docling：${msg.slice(0, 60)}`);
-              try {
-                return await tryEngine(convertViaDocling, "Docling");
-              } catch (err2) {
-                const msg2 = String(err2?.message || err2);
-                if (/已取消/i.test(msg2)) throw err2;
-                if (canBrowserFallback(name, type)) {
-                  onStage?.(`桥失败，浏览器回退：${msg2.slice(0, 80)}`);
-                  return {
-                    text: await fileToMarkdownBrowser(file, { onStage }),
-                    via: "browser",
-                  };
-                }
-                throw err2;
-              }
-            }
-            if (
-              opts.allowInstall !== false &&
-              /未找到 MinerU|未安装|No module named|pip install/i.test(msg)
-            ) {
-              throw Object.assign(new Error(msg), { code: "MINERU_MISSING" });
-            }
-            if (canBrowserFallback(name, type)) {
-              onStage?.(`MinerU 失败，浏览器回退：${msg.slice(0, 80)}`);
-              return {
-                text: await fileToMarkdownBrowser(file, { onStage }),
-                via: "browser",
-              };
-            }
-            throw err;
+      async function tryOne(entry) {
+        const r = await entry.fn(file, { forceOcr, signal, onStage });
+        return {
+          text: r.text,
+          via: r.via || entry.via,
+          imagesEmbedded: r.imagesEmbedded || 0,
+          hasTable: !!r.hasTable,
+        };
+      }
+
+      let lastErr = null;
+      for (let i = 0; i < chain.length; i += 1) {
+        const entry = chain[i];
+        try {
+          if (i === 0) {
+            onStage?.(
+              wantPandoc
+                ? `质量路由：${entry.label}（结构化优先）…`
+                : `质量路由：${entry.label}（PDF/图/OCR 优先）…`
+            );
+          } else {
+            onStage?.(`${chain[i - 1].label} 未成功，改用 ${entry.label}…`);
           }
-        }
-
-        if (doclingH.ready) {
-          try {
-            onStage?.("MinerU 未就绪，使用 Docling 回退…");
-            return await tryEngine(convertViaDocling, "Docling");
-          } catch (err) {
-            const msg = String(err?.message || err);
-            if (/已取消/i.test(msg)) throw err;
-            if (
-              opts.allowInstall !== false &&
-              /未找到 Docling|未安装|No module named|pip install/i.test(msg)
-            ) {
-              throw Object.assign(new Error(msg), { code: "ENGINE_MISSING" });
-            }
-            if (canBrowserFallback(name, type)) {
-              onStage?.(`Docling 失败，浏览器回退：${msg.slice(0, 80)}`);
-              return {
-                text: await fileToMarkdownBrowser(file, { onStage }),
-                via: "browser",
-              };
-            }
-            throw err;
+          return await tryOne(entry);
+        } catch (err) {
+          const msg = String(err?.message || err);
+          if (signal?.aborted || /已取消|AbortError/i.test(msg) || /已取消/i.test(String(err?.name || ""))) {
+            throw new Error("已取消");
           }
+          lastErr = err;
+          onStage?.(`${entry.label} 失败：${msg.slice(0, 80)}`);
         }
+      }
 
-        if (bridgeUp) {
-          // 桥在、两引擎都未装：优先引导装 MinerU
-          if (
-            opts.allowInstall !== false &&
-            (/\.(pdf|pptx|xlsx|png|jpe?g|webp|tiff?|bmp)$/i.test(name) || /^image\//i.test(type))
-          ) {
-            throw Object.assign(new Error(mineruH.error || doclingH.error || "未安装文档转换引擎"), {
-              code: "MINERU_MISSING",
-            });
-          }
-          onStage?.("文档引擎未就绪，浏览器回退（扫描件无 OCR）…");
-          return {
-            text: await fileToMarkdownBrowser(file, { onStage }),
-            via: "browser",
-          };
-        }
+      if (
+        opts.allowInstall !== false &&
+        bridgeUp &&
+        !wantPandoc &&
+        !mineruH.ready &&
+        (/\.(pdf|png|jpe?g|webp|gif|tiff?|bmp|jp2|ofd|mhtml|mht|doc)$/i.test(name) ||
+          /^image\//i.test(type) ||
+          isLegacyWordDoc(file))
+      ) {
+        throw Object.assign(new Error(mineruH.error || doclingH.error || "未安装文档转换引擎"), {
+          code: "MINERU_MISSING",
+        });
+      }
 
-        onStage?.("本机桥未启动，浏览器回退（扫描件无 OCR）…");
+      if (
+        opts.allowInstall !== false &&
+        bridgeUp &&
+        wantPandoc &&
+        !pandocH.ready &&
+        !mineruH.ready &&
+        !doclingH.ready
+      ) {
+        // 结构化文档：先引导装 Pandoc（轻量）；用户也可稍后装 MinerU
+        throw Object.assign(new Error(pandocH.error || "未安装 Pandoc"), { code: "PANDOC_MISSING" });
+      }
+
+      if (canBrowserFallback(name, type)) {
+        onStage?.(
+          bridgeUp
+            ? `桥引擎未就绪/失败，浏览器回退：${String(lastErr?.message || "").slice(0, 60)}`
+            : "本机桥未启动，浏览器回退（扫描件无 OCR）…"
+        );
         return {
           text: await fileToMarkdownBrowser(file, { onStage }),
           via: "browser",
         };
       }
 
-      return {
-        text: await fileToMarkdownBrowser(file, { onStage }),
-        via: "browser",
-      };
+      throw lastErr || new Error(bridgeUp ? "文档转换失败" : "本机桥未启动，且该格式无浏览器回退");
     }
 
     /** 导入进度弹层（串行队列；可取消） */
@@ -4765,15 +4790,17 @@
           const text = typeof converted === "string" ? converted : converted?.text;
           const via = typeof converted === "string" ? "" : converted?.via || "";
           const viaNote =
-            via === "mineru"
-              ? `MinerU${converted?.hasTable ? "·表" : ""}${converted?.imagesEmbedded ? `·图${converted.imagesEmbedded}` : ""}`
-              : via === "docling"
-                ? "Docling"
-                : via === "browser"
-                  ? "浏览器回退（无表/图）"
-                  : via === "raw"
-                    ? ""
-                    : via;
+            via === "pandoc"
+              ? `Pandoc${converted?.hasTable ? "·表" : ""}${converted?.imagesEmbedded ? `·图${converted.imagesEmbedded}` : ""}`
+              : via === "mineru"
+                ? `MinerU${converted?.hasTable ? "·表" : ""}${converted?.imagesEmbedded ? `·图${converted.imagesEmbedded}` : ""}`
+                : via === "docling"
+                  ? "Docling"
+                  : via === "browser"
+                    ? "浏览器回退（无表/图）"
+                    : via === "raw"
+                      ? ""
+                      : via;
           prog?.update({
             index: i + 1,
             total: list.length,
@@ -4783,6 +4810,44 @@
           });
           await ingestMarkdownText(f, text, viaNote || undefined);
         } catch (err) {
+          if (err?.code === "PANDOC_MISSING" && !offeredInstall) {
+            offeredInstall = true;
+            prog?.close();
+            const okInstall = await confirmModal({
+              title: "安装 Pandoc（结构化文档最优）",
+              body: "Word / HTML / EPUB / ODT 等建议用 Pandoc（保留标题、列表、脚注，通常优于 MinerU flash）。\n约 100–150MB。\n\n现在用本机桥自动安装？装完会继续导入。",
+              okText: "自动安装",
+            });
+            if (okInstall) {
+              prog = openImportProgress(list.length);
+              try {
+                prog.update({ index: i + 1, total: list.length, name: f.name, stage: "安装 Pandoc…", pct: 5 });
+                await runPandocInstall();
+                pandocHealthCache = { t: 0, data: null };
+                toast("Pandoc 已安装，继续导入…");
+                i -= 1;
+                continue;
+              } catch (instErr) {
+                failMsgs.push(`Pandoc 安装失败：${instErr.message || instErr}`);
+                prog.log("Pandoc 安装失败，将尝试浏览器/其它引擎", "err");
+              }
+            } else {
+              prog = openImportProgress(list.length);
+              prog.log("未安装 Pandoc，结构化文档将回退", "warn");
+            }
+            try {
+              const text = await fileToMarkdownBrowser(f, {
+                onStage: (s) =>
+                  prog?.update({ index: i + 1, total: list.length, name: f.name, stage: s }),
+              });
+              await ingestMarkdownText(f, text, "浏览器回退");
+            } catch (err2) {
+              const msg = `${f.name}：${err2.message || err2}`;
+              failMsgs.push(msg);
+              prog?.log(`✗ ${msg}`, "err");
+            }
+            continue;
+          }
           if (
             (err?.code === "MINERU_MISSING" || err?.code === "ENGINE_MISSING" || err?.code === "DOCLING_MISSING") &&
             !offeredInstall
