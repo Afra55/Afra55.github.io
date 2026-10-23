@@ -4164,30 +4164,24 @@
         setSaveStatus("");
         if (err?.name === "AbortError") return; // 用户自己取消了
       }
-      // 3) 让桥按「文件夹名 + 文件名」在常见目录里反查
-      if (api?.revealMdmDoc && folderName) {
-        setSaveStatus("正在本机定位…");
-        try {
-          const res = await api.revealMdmDoc({ folderName, fileName: item.fileName });
-          if (res?.dirAbsPath) rememberDirPath(folderName, res.dirAbsPath);
-          setSaveStatus("");
-          toast(`已在本机打开：${res?.path || item.fileName}`);
-          return;
-        } catch (err) {
-          setSaveStatus("");
-          const msg = err?.message || String(err);
-          if (/未连接|未启动|Failed to fetch|超时/.test(msg)) {
-            showBridgeHelpModal("打开文件位置");
-            return;
-          }
-        }
+      // 3) 未记住路径：引导本机选目录 / 粘贴（不扫盘）
+      updatePathBanner();
+      const ok = await ensureDirPathGuided({ reason: "manual" });
+      if (!ok) {
+        setErr("请先记住本机路径后再打开文件位置");
+        return;
       }
-      // 3) 兜底：让用户填一次文件夹路径并记住
-      const manual = await askDirPathModal(folderName);
-      if (!manual) return;
+      const remembered = readRememberedDir(folderName);
+      if (!remembered || !api?.revealLocalPath) {
+        setErr("已记住路径，但本机桥不可用；请启动统一桥后重试");
+        return;
+      }
       try {
-        await revealByPath(manual);
+        setSaveStatus("正在本机定位…");
+        await revealByPath(remembered);
+        setSaveStatus("");
       } catch (err2) {
+        setSaveStatus("");
         setErr(`打开文件位置失败：${err2.message || err2}`);
       }
     }
