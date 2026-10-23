@@ -1,0 +1,49 @@
+<section id="mediafmt" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>媒体互转</h1>
+        <p>
+          图片 / 音频 / 视频格式转换入口：按类型走最高规格路径（本机 FFmpeg 优先，无桥网页保底）。
+          复杂剪辑请用下方专用工具。
+        </p>
+      </div>
+      <div class="panel-body">
+        <div id="mediafmt-bridge-shell" class="bridge-shell-host"></div>
+        <p class="error" id="mediafmt-error" hidden></p>
+
+        <div class="mediafmt-drop" id="mediafmt-drop">
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="mediafmt-file">选择媒体</label>
+            <input id="mediafmt-file" type="file" multiple hidden
+              accept="video/*,audio/*,image/*,.mp4,.mov,.mkv,.webm,.avi,.m4v,.mp3,.wav,.aac,.flac,.m4a,.ogg,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.avif" />
+            <button type="button" class="ghost-btn" id="mediafmt-clear">清空</button>
+          </div>
+          <p class="hint tight" id="mediafmt-meta">拖入视频/音频/图片；将提示该格式的最高质量路径并可一键转换。</p>
+        </div>
+
+        <ul class="mediafmt-list" id="mediafmt-list"></ul>
+
+        <div class="mediafmt-actions" id="mediafmt-actions" hidden>
+          <label class="flag">目标
+            <select id="mediafmt-target" class="mono"></select>
+          </label>
+          <div class="btn-row tool-actions">
+            <button type="button" class="primary-btn" id="mediafmt-run">最高质量转换</button>
+            <a class="secondary-btn" id="mediafmt-deep" href="#vidkit">打开专用工具</a>
+          </div>
+          <p class="hint tight" id="mediafmt-route"></p>
+        </div>
+
+        <div class="mediafmt-log" id="mediafmt-log" aria-live="polite"></div>
+        <div class="mediafmt-out" id="mediafmt-out" hidden></div>
+
+        <h2 class="subhead" style="margin-top:1.2rem">专用工具（更高阶）</h2>
+        <div class="mediafmt-cards">
+          <a class="mediafmt-card" href="#vidkit"><strong>视频工具</strong><span>格式转换 · 高观感压缩 · 本机 FFmpeg</span></a>
+          <a class="mediafmt-card" href="#audio"><strong>音频处理</strong><span>修剪 · 音量 · 抽音轨</span></a>
+          <a class="mediafmt-card" href="#imgkit"><strong>图片工具</strong><span>压缩 · 裁剪 · AVIF/mozjpeg</span></a>
+          <a class="mediafmt-card" href="#vtrim"><strong>视频修剪</strong><span>片头片尾 · 裁边 · 旋转</span></a>
+          <a class="mediafmt-card" href="#v2g"><strong>视频转 GIF</strong><span>高帧率动图</span></a>
+          <a class="mediafmt-card" href="#ffbridge"><strong>FFmpeg 本机桥</strong><span>批量转码 · 任务队列</span></a>
+        </div>
+      </div>
+    </section>

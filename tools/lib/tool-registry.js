@@ -60,7 +60,8 @@
         "mathedit",
         "mdslides",
         "memo",
-        "mdm"
+        "mdm",
+        "docfmt"
       ]
     },
     {
@@ -83,7 +84,8 @@
         "vtrim",
         "vidkit",
         "audio",
-        "vplay"
+        "vplay",
+        "mediafmt"
       ]
     },
     {
@@ -970,6 +972,30 @@
       ],
       "desktopOnly": true
     },
+    "docfmt": {
+      "name": "文档互转",
+      "aliases": [
+        "文档转换",
+        "docfmt",
+        "pandoc",
+        "转markdown",
+        "docx",
+        "格式互转"
+      ],
+      "desktopOnly": true
+    },
+    "mediafmt": {
+      "name": "媒体互转",
+      "aliases": [
+        "媒体转换",
+        "mediafmt",
+        "视频转换",
+        "音频转换",
+        "图片转换",
+        "转码"
+      ],
+      "desktopOnly": true
+    },
     "feedbackhub": {
       "name": "评价汇总",
       "aliases": [
@@ -1284,7 +1310,9 @@
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
     "gitbridge": "今日交码看板 + 说明模板 + Gerrit 视角 + 历史/工作线右键；统一桥 /git。",
     "fileunlock": "找出 Windows 上占用某文件/文件夹的程序，并可一键关闭释放占用（Restart Manager 检测，仅 Windows）。",
-    "mdm": "Markdown 文档管理：选本机文件夹存储、分类/标签/搜索、实时预览；导入 MD/TXT/HTML/DOCX/PDF/PPTX/XLSX/图片（有桥优先 MinerU 高质量转 MD，未装则 Docling，无桥浏览器回退），并可经本机桥 Pandoc 导出 docx/epub 等（仅电脑端）。",
+    "mdm": "Markdown 文档管理：选本机文件夹存储、分类/标签/搜索、实时预览；导入按质量路由（结构化 Pandoc / PDF·图 MinerU），导出经 Pandoc 最高质量参数。专用互转见「文档互转」。",
+    "docfmt": "文档格式互转：任意格式→Markdown、Markdown→docx/epub/html 等，按格式走最高规格引擎（Pandoc / MinerU / Docling），经统一本机桥，不上传公网。",
+    "mediafmt": "媒体格式互转入口：视频/音频走本机 FFmpeg 最高质量档；图片导向图片工具（mozjpeg/AVIF）；并链到视频工具、音频处理、修剪、GIF、FFmpeg 桥等专用面板。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
     "envkit": "一键安装/升级与统一桥探测：ADB、FFmpeg、yt-dlp、Git、Pandoc、MinerU、Docling、看板均列在 17888。",
