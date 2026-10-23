@@ -180,13 +180,15 @@
     giftest: "./extra-panels/giftest.js",
     fileunlock: "./extra-panels/fileunlock.js",
     mdm: "./extra-panels/mdm.js",
+    docfmt: "./extra-panels/docfmt.js",
+    mediafmt: "./extra-panels/mediafmt.js",
   };
 
   const EXTRA_PANEL_IDS = new Set([
     "timediff", "color", "url", "query", "uuid", "hash", "text", "caseconv", "coord",
     "yaml", "imgb64", "imgrecolor", "qrcode", "cron", "units", "sharecard", "numbase", "markdown",
     "eyedropper", "password", "gifmaker", "gifx", "v2g", "gifbb", "gifc", "gife", "gifm",
-    "adb", "vsplit", "vbb", "interpolator", "giftest", "fileunlock", "mdm",
+    "adb", "vsplit", "vbb", "interpolator", "giftest", "fileunlock", "mdm", "docfmt", "mediafmt",
   ]);
 
   const EXTRA_MEDIA_TOOLS = new Set([
@@ -215,6 +217,7 @@
     dateremind: ["solarlunar"],
     ipgeo: ["leaflet"],
     mdm: ["markdownit", "purify", "hljs", "cm6", "mdext", "mdmpure", "docquality"],
+    docfmt: ["docquality"],
   };
 
   /** 独立脚本，不走 extra 面板栈 */

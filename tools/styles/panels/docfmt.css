@@ -1,0 +1,58 @@
+#docfmt .docfmt-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0.6rem;
+  flex-wrap: wrap;
+}
+#docfmt .docfmt-tab {
+  border: 1px solid var(--border, #ccc);
+  background: transparent;
+  color: inherit;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+#docfmt .docfmt-tab.is-on {
+  border-color: var(--accent, #2a6);
+  background: color-mix(in srgb, var(--accent, #2a6) 12%, transparent);
+}
+#docfmt .docfmt-drop {
+  border: 1px dashed var(--border, #ccc);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+#docfmt .docfmt-drop.is-over {
+  border-color: var(--accent, #2a6);
+  background: color-mix(in srgb, var(--accent, #2a6) 8%, transparent);
+}
+#docfmt .docfmt-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+#docfmt .docfmt-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border, #ccc) 60%, transparent);
+  font-size: 0.92rem;
+}
+#docfmt .docfmt-ta {
+  width: 100%;
+  margin-top: 0.5rem;
+  min-height: 12rem;
+  resize: vertical;
+}
+#docfmt .docfmt-log {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  opacity: 0.9;
+}
+#docfmt .docfmt-out {
+  margin-top: 0.6rem;
+}
+#docfmt .docfmt-out a {
+  margin-right: 0.6rem;
+}

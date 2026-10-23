@@ -1,0 +1,66 @@
+<section id="docfmt" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>文档互转</h1>
+        <p>
+          任意文档 ↔ Markdown，按格式走最高规格引擎（Pandoc 结构化 / MinerU PDF·扫描）。
+          与 <a href="#mdm">Markdown 文档管理</a> 共用同一质量路由；数据仅经本机统一桥，不上传公网。
+        </p>
+      </div>
+      <div class="panel-body">
+        <div id="docfmt-bridge-shell" class="bridge-shell-host"></div>
+        <p class="error" id="docfmt-error" hidden></p>
+
+        <div class="docfmt-tabs" role="tablist">
+          <button type="button" class="docfmt-tab is-on" data-tab="to-md" role="tab" aria-selected="true">转为 Markdown</button>
+          <button type="button" class="docfmt-tab" data-tab="from-md" role="tab" aria-selected="false">Markdown 转出</button>
+        </div>
+
+        <div class="docfmt-pane" data-pane="to-md">
+          <div class="docfmt-drop" id="docfmt-drop-in">
+            <div class="btn-row tool-actions">
+              <label class="file-btn" for="docfmt-file-in">选择文档</label>
+              <input id="docfmt-file-in" type="file" multiple hidden
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.odt,.ods,.odp,.rtf,.epub,.ofd,.html,.htm,.mhtml,.mht,.csv,.tsv,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.jp2,.rst,.tex,.org,application/pdf,image/*" />
+              <button type="button" class="ghost-btn" id="docfmt-clear-in">清空</button>
+            </div>
+            <p class="hint tight" id="docfmt-meta-in">拖入 PDF / Office / HTML / 图片等；结构化走 Pandoc，扫描件走 MinerU advanced。</p>
+          </div>
+          <ul class="docfmt-list" id="docfmt-list-in"></ul>
+          <div class="btn-row tool-actions" style="margin-top:0.6rem">
+            <button type="button" class="primary-btn" id="docfmt-run-in">最高质量转为 MD</button>
+          </div>
+        </div>
+
+        <div class="docfmt-pane" data-pane="from-md" hidden>
+          <div class="docfmt-drop" id="docfmt-drop-out">
+            <div class="btn-row tool-actions">
+              <label class="file-btn" for="docfmt-file-out">选择 Markdown</label>
+              <input id="docfmt-file-out" type="file" accept=".md,.markdown,text/markdown,text/plain" hidden />
+              <button type="button" class="ghost-btn" id="docfmt-clear-out">清空</button>
+            </div>
+            <p class="hint tight" id="docfmt-meta-out">也可直接粘贴下方正文。导出经 Pandoc（gfm → 目标，quality=max）。</p>
+          </div>
+          <label class="flag" style="margin-top:0.5rem">目标格式
+            <select id="docfmt-to-fmt" class="mono">
+              <option value="docx">Word (.docx)</option>
+              <option value="odt">OpenDocument (.odt)</option>
+              <option value="epub">EPUB</option>
+              <option value="html">HTML（内嵌资源）</option>
+              <option value="rtf">RTF</option>
+              <option value="latex">LaTeX</option>
+              <option value="pptx">PowerPoint (.pptx)</option>
+              <option value="rst">reStructuredText</option>
+              <option value="org">Org-mode</option>
+              <option value="mediawiki">MediaWiki</option>
+            </select>
+          </label>
+          <textarea id="docfmt-md-text" class="mono docfmt-ta" rows="12" placeholder="# 标题&#10;&#10;在此粘贴 Markdown…" spellcheck="false"></textarea>
+          <div class="btn-row tool-actions" style="margin-top:0.6rem">
+            <button type="button" class="primary-btn" id="docfmt-run-out">最高质量导出</button>
+          </div>
+        </div>
+
+        <div class="docfmt-log" id="docfmt-log" aria-live="polite"></div>
+        <div class="docfmt-out" id="docfmt-out" hidden></div>
+      </div>
+    </section>
