@@ -35,7 +35,9 @@
   <p class="hint error" id="qs-error" hidden></p>
   <p class="hint" id="qs-status" hidden></p>
   <p class="hint support" id="qs-support" hidden></p>
+  <p class="hint">同框多码分列；仅 <code>[1/n]</code> 生码分片自动拼接，其它不同内容不合并。</p>
 
+  <p class="hint" id="qs-series-progress" hidden></p>
   <section class="panel result" id="qs-result" hidden>
     <label for="qs-text" id="qs-text-label">扫描结果</label>
     <ul id="qs-hit-list" class="hit-list" hidden></ul>
@@ -44,6 +46,7 @@
       <button type="button" class="primary" id="qs-copy">复制当前</button>
       <button type="button" id="qs-open" hidden>打开链接</button>
       <button type="button" class="primary" id="qs-again">继续扫</button>
+      <button type="button" class="ghost" id="qs-series-clear" hidden>清空分片</button>
     </div>
   </section>
 
