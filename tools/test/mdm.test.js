@@ -134,4 +134,53 @@ t("front-matter tags 多行 YAML 列表", () => {
   assert.deepStrictEqual(r3.tags, ["a", "b"]);
 });
 
+t("sanitizeRelPath 拒穿越与绝对路径", () => {
+  assert.strictEqual(P.sanitizeRelPath("assets/a.png"), "assets/a.png");
+  assert.strictEqual(P.sanitizeRelPath("./x/y.png"), "x/y.png");
+  assert.strictEqual(P.sanitizeRelPath("../secret.png"), null);
+  assert.strictEqual(P.sanitizeRelPath("a/../../b.png"), null);
+  assert.strictEqual(P.sanitizeRelPath("C:/Windows/a.png"), null);
+  assert.strictEqual(P.sanitizeRelPath("https://x/a.png"), null);
+  assert.strictEqual(P.sanitizeRelPath("data:image/png;base64,xx"), null);
+  assert.strictEqual(P.sanitizeRelPath(""), null);
+  assert.strictEqual(P.sanitizeRelPath("con.png"), null);
+  assert.strictEqual(P.sanitizeRelPath("ok/a:b.png"), null);
+});
+
+t("validateImportMarkdown 正常 / 拒二进制 / 空文件", () => {
+  const ok = P.validateImportMarkdown("---\ntitle: 你好\n---\n\n正文", { fileName: "x.md" });
+  assert.strictEqual(ok.ok, true);
+  assert.strictEqual(ok.title, "你好");
+  assert.strictEqual(ok.body.trim(), "正文");
+
+  const empty = P.validateImportMarkdown("", { fileName: "empty.md" });
+  assert.strictEqual(empty.ok, true);
+  assert.strictEqual(empty.title, "empty");
+
+  const bin = P.validateImportMarkdown("abc\0def", { fileName: "b.md" });
+  assert.strictEqual(bin.ok, false);
+  assert.ok(/二进制/.test(bin.error));
+
+  const badType = P.validateImportMarkdown(null, { fileName: "n.md" });
+  assert.strictEqual(badType.ok, false);
+
+  const fromName = P.validateImportMarkdown("# hi", { fileName: "my-note.md" });
+  assert.strictEqual(fromName.title, "my-note");
+
+  const dirtyTitle = P.validateImportMarkdown("---\ntitle: a/b:c\n---\nx", { fileName: "z.md" });
+  assert.ok(!/[\\/:*?]/.test(dirtyTitle.title));
+});
+
+t("collectRefs 跳过穿越路径", () => {
+  const refs = P.collectRefs('![a](assets/a.png) ![bad](../x.png) <img src="ok/b.png">');
+  assert.deepStrictEqual(refs.sort(), ["assets/a.png", "ok/b.png"]);
+});
+
+t("mdm.js 导入走 validateImportMarkdown", () => {
+  const src = require("fs").readFileSync(path.join(__dirname, "..", "extra-panels", "mdm.js"), "utf8");
+  assert.ok(/validateImportMarkdown/.test(src));
+  assert.ok(/sanitizeRelPath/.test(src));
+  assert.ok(/校验并入库/.test(src));
+});
+
 console.log(`mdm.test: ${n} passed`);

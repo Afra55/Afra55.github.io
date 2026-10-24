@@ -5039,14 +5039,26 @@
       let offeredInstall = false;
 
       async function ingestMarkdownText(f, text, note) {
-        const fm = parseFrontMatter(text);
-        const title = fm.title || f.name.replace(/\.[^.]+$/, "");
+        const checked =
+          typeof MP.validateImportMarkdown === "function"
+            ? MP.validateImportMarkdown(text, { fileName: f?.name || "" })
+            : null;
+        if (checked && !checked.ok) {
+          throw new Error(checked.error || "Markdown 校验失败");
+        }
+        const title =
+          (checked && checked.title) ||
+          parseFrontMatter(text).title ||
+          String(f?.name || "").replace(/\.[^.]+$/, "") ||
+          "未命名";
+        const body = checked ? checked.body : parseFrontMatter(text).body;
+        const fmHead = checked ? checked.head : parseFrontMatter(text).head || "";
         const baseDir = String(f.webkitRelativePath || f.__relPath || f.name || "")
           .replace(/\\/g, "/")
           .split("/")
           .slice(0, -1)
           .join("/");
-        const res = await importDocImages(fm.body, baseDir, assetMap);
+        const res = await importDocImages(body, baseDir, assetMap);
         imgN += res.imported;
         const item = {
           id: uid(),
@@ -5060,7 +5072,7 @@
           size: new Blob([res.text]).size,
           excerpt: res.text.replace(/\s+/g, " ").trim().slice(0, 160),
         };
-        item.fmHead = fm.head || "";
+        item.fmHead = fmHead;
         await writeDocText(item, buildFrontMatterBlock(item, res.text));
         state.index.items.push(item);
         n += 1;
@@ -5098,6 +5110,9 @@
               }),
           });
           const text = typeof converted === "string" ? converted : converted?.text;
+          if (typeof text !== "string") {
+            throw new Error("转换结果无效（非文本）");
+          }
           const via = typeof converted === "string" ? "" : converted?.via || "";
           const viaNote =
             via === "pandoc"
@@ -5115,7 +5130,7 @@
             index: i + 1,
             total: list.length,
             name: f.name,
-            stage: "入库…",
+            stage: "校验并入库…",
             pct: ((i + 0.85) / list.length) * 100,
           });
           await ingestMarkdownText(f, text, viaNote || undefined);
@@ -5276,48 +5291,71 @@
     /** 把 .md 引用的本地资源（图/视频/音频/附件）一并写入目标文件夹（保留相对路径） */
     async function importDocImages(body, baseDir, assetMap) {
       if (!state.mode || !assetMap.size) return { text: body, imported: 0 };
-      let imported = 0;
-      const tasks = [];
       const text = String(body || "");
-      const refs = new Set();
-      for (const re of [/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, /(?:src|href)\s*=\s*["']([^"']+)["']/gi]) {
-        let m;
-        while ((m = re.exec(text))) if (isRelativeRef(m[1])) refs.add(m[1]);
-      }
-      for (const ref of refs) {
-        const clean = String(ref).replace(/^\.\//, "").replace(/^\/+/, "");
+      const sanitize = (v) =>
+        typeof MP.sanitizeRelPath === "function"
+          ? MP.sanitizeRelPath(v)
+          : (() => {
+              const s = String(v || "")
+                .replace(/\\/g, "/")
+                .replace(/^\.\//, "")
+                .replace(/^\/+/, "");
+              if (!s || s.split("/").includes("..")) return null;
+              return s;
+            })();
+      // collectRefs 已 sanitize；再过一遍防御
+      const collected = (typeof MP.collectRefs === "function" ? MP.collectRefs(text) : [])
+        .map(sanitize)
+        .filter(Boolean);
+      const tasks = [];
+      for (const safe of collected) {
         const cands = [];
-        if (baseDir) cands.push(`${baseDir}/${clean}`);
-        cands.push(clean, clean.split("/").pop());
+        if (baseDir) cands.push(`${baseDir}/${safe}`);
+        cands.push(safe, safe.split("/").pop());
         let file = null;
         for (const c of cands) {
-          if (assetMap.has(c)) {
+          if (c && assetMap.has(c)) {
             file = assetMap.get(c);
             break;
           }
         }
         if (!file) continue;
-        tasks.push(writeAssetFile(clean, file));
-        imported += 1;
+        tasks.push(
+          writeAssetFile(safe, file).catch((err) => {
+            console.warn("[mdm] 资源写入跳过", safe, err?.message || err);
+            return false;
+          })
+        );
       }
-      await Promise.all(tasks);
-      return { text, imported };
+      const results = await Promise.all(tasks);
+      return { text, imported: results.filter(Boolean).length };
     }
 
     async function writeAssetFile(rel, file) {
-      const parts = String(rel || "").split("/").filter((p) => p && p !== ".");
-      if (!parts.length) return false;
-      const clean = parts.join("/");
+      const safe =
+        typeof MP.sanitizeRelPath === "function"
+          ? MP.sanitizeRelPath(rel)
+          : String(rel || "")
+              .replace(/\\/g, "/")
+              .split("/")
+              .filter((p) => p && p !== "." && p !== "..")
+              .join("/");
+      if (!safe) return false;
+      const parts = safe.split("/");
       if (state.mode === "dir" && state.dirHandle) {
         let dir = state.dirHandle;
-        for (let i = 0; i < parts.length - 1; i++) dir = await dir.getDirectoryHandle(parts[i], { create: true });
+        for (let i = 0; i < parts.length - 1; i++) {
+          // 再次拒绝穿越段（防御）
+          if (parts[i] === ".." || parts[i] === ".") return false;
+          dir = await dir.getDirectoryHandle(parts[i], { create: true });
+        }
         const fh = await dir.getFileHandle(parts[parts.length - 1], { create: true });
         const w = await fh.createWritable();
         await w.write(file);
         await w.close();
         return true;
       }
-      await idbSet("assets", clean, file);
+      await idbSet("assets", safe, file);
       return true;
     }
 
