@@ -29,6 +29,7 @@ const STEPS = [
   { name: "mdm smoke", cmd: "node", args: ["mdm-smoke.cjs"] },
   { name: "mdm tests", cmd: "node", args: ["test/mdm.test.js"] },
   { name: "mdm find-doc tests", cmd: "node", args: ["test/mdm-find-doc.test.js"] },
+  { name: "mineru image-min tokens", cmd: "node", args: ["test/mineru-image-min-tokens.test.js"] },
   { name: "adb bridge smoke", cmd: "node", args: ["adb-bridge/smoke-check.js"] },
   { name: "ffmpeg bridge smoke", cmd: "node", args: ["ffmpeg-bridge/smoke-check.js"] },
 ];

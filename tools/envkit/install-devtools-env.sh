@@ -394,7 +394,8 @@ sync_bridges() {
   done
 
   # MinerU 高质量文档→MD（质量主力；建议 GPU：pip install mineru[full]）
-  for f in server.js mineru-ops.js; do
+  mkdir -p "$BRIDGE_DIR/mineru-bridge/pyhooks"
+  for f in server.js mineru-ops.js pyhooks/ensure_image_min_tokens.py; do
     info "mineru-bridge/$f"
     download_file "${BASE_URL}/mineru-bridge/$f" "$BRIDGE_DIR/mineru-bridge/$f" || warn "下载失败 $f"
   done
@@ -431,6 +432,7 @@ sync_bridges() {
     "$BRIDGE_DIR/pandoc-bridge/pandoc-ops.js" \
     "$BRIDGE_DIR/mineru-bridge/server.js" \
     "$BRIDGE_DIR/mineru-bridge/mineru-ops.js" \
+    "$BRIDGE_DIR/mineru-bridge/pyhooks/ensure_image_min_tokens.py" \
     "$BRIDGE_DIR/docling-bridge/server.js" \
     "$BRIDGE_DIR/docling-bridge/docling-ops.js" \
     "$BRIDGE_DIR/lanboard-bridge/server.js"
