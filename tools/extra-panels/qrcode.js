@@ -207,29 +207,180 @@
       });
     }
 
+    /** 与备忘录图片预览同交互：滚轮缩放、拖拽平移、＋/－/还原、双击切换 */
+    let qrLbView = null;
+
     function ensureQrLightbox() {
       let lb = document.getElementById("qr-lightbox");
-      if (lb) return lb;
-      lb = document.createElement("div");
-      lb.id = "qr-lightbox";
-      lb.className = "qr-lightbox";
-      lb.hidden = true;
-      lb.innerHTML =
-        '<button type="button" class="qr-lightbox-close" aria-label="关闭">关闭</button>' +
-        '<div class="qr-lightbox-stage"></div>' +
-        '<p class="qr-lightbox-hint">放大后用手机扫；再点空白处关闭</p>';
-      document.body.appendChild(lb);
-      const close = () => {
+      if (lb && lb.dataset.qrZoomBound === "1") return lb;
+      if (lb && lb.dataset.qrZoomBound !== "1") {
+        lb.remove();
+        lb = null;
+      }
+
+      if (!lb) {
+        lb = document.createElement("div");
+        lb.id = "qr-lightbox";
+        lb.className = "qr-lightbox";
         lb.hidden = true;
-        lb.querySelector(".qr-lightbox-stage").innerHTML = "";
-      };
-      lb.querySelector(".qr-lightbox-close")?.addEventListener("click", close);
+        lb.setAttribute("role", "dialog");
+        lb.setAttribute("aria-label", "二维码放大预览");
+        lb.innerHTML =
+          '<div class="qr-lightbox-inner">' +
+          '<div class="qr-lightbox-head">' +
+          '<p class="qr-lightbox-hint" id="qr-lightbox-cap">滚轮缩放 · 拖拽平移 · 方便手机扫</p>' +
+          '<button type="button" class="qr-lightbox-close" aria-label="关闭">关闭</button>' +
+          "</div>" +
+          '<div class="qr-lightbox-stage" id="qr-lightbox-stage"></div>' +
+          '<div class="qr-lightbox-toolbar">' +
+          '<button type="button" class="ghost-btn qr-lightbox-zoom-out" aria-label="缩小">－</button>' +
+          '<span class="mono qr-lightbox-zoom-pct">100%</span>' +
+          '<button type="button" class="ghost-btn qr-lightbox-zoom-in" aria-label="放大">＋</button>' +
+          '<button type="button" class="ghost-btn qr-lightbox-zoom-reset">还原</button>' +
+          "</div></div>";
+        document.body.appendChild(lb);
+      }
+
+      const stage = lb.querySelector(".qr-lightbox-stage");
+      const pctEl = lb.querySelector(".qr-lightbox-zoom-pct");
+      const closeBtn = lb.querySelector(".qr-lightbox-close");
+      const zoomInBtn = lb.querySelector(".qr-lightbox-zoom-in");
+      const zoomOutBtn = lb.querySelector(".qr-lightbox-zoom-out");
+      const zoomResetBtn = lb.querySelector(".qr-lightbox-zoom-reset");
+
+      const view = { scale: 1, x: 0, y: 0, dragging: false, lastX: 0, lastY: 0, moved: false };
+      qrLbView = view;
+
+      function mediaEl() {
+        return stage?.querySelector(".qr-lightbox-img") || null;
+      }
+
+      function syncTransform() {
+        const el = mediaEl();
+        if (!el) return;
+        el.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
+        if (pctEl) pctEl.textContent = `${Math.round(view.scale * 100)}%`;
+      }
+
+      function mediaSize(el) {
+        if (!el) return { w: 1, h: 1 };
+        if (el.tagName === "CANVAS") return { w: el.width || 1, h: el.height || 1 };
+        return { w: el.naturalWidth || el.width || 1, h: el.naturalHeight || el.height || 1 };
+      }
+
+      function fitImage() {
+        const el = mediaEl();
+        if (!el || !stage) return;
+        const sw = stage.clientWidth || 1;
+        const sh = stage.clientHeight || 1;
+        const { w: nw, h: nh } = mediaSize(el);
+        // 二维码允许放大铺满舞台，方便手机扫（备忘录预览则封顶 1）
+        view.scale = Math.min(sw / nw, sh / nh) * 0.92;
+        view.x = 0;
+        view.y = 0;
+        syncTransform();
+      }
+
+      function clampScale(next) {
+        return Math.min(12, Math.max(0.15, next));
+      }
+
+      function zoomAt(clientX, clientY, nextScale) {
+        if (!stage) return;
+        const rect = stage.getBoundingClientRect();
+        const cx = clientX - rect.left - rect.width / 2;
+        const cy = clientY - rect.top - rect.height / 2;
+        const ratio = nextScale / (view.scale || 1);
+        view.x = cx - (cx - view.x) * ratio;
+        view.y = cy - (cy - view.y) * ratio;
+        view.scale = nextScale;
+        syncTransform();
+      }
+
+      function close() {
+        lb.hidden = true;
+        if (stage) stage.innerHTML = "";
+        view.scale = 1;
+        view.x = 0;
+        view.y = 0;
+        view.dragging = false;
+        if (pctEl) pctEl.textContent = "100%";
+      }
+
+      closeBtn?.addEventListener("click", (e) => {
+        e.preventDefault();
+        close();
+      });
       lb.addEventListener("click", (ev) => {
         if (ev.target === lb) close();
       });
       document.addEventListener("keydown", (ev) => {
         if (ev.key === "Escape" && !lb.hidden) close();
       });
+
+      zoomInBtn?.addEventListener("click", () => {
+        const rect = stage.getBoundingClientRect();
+        zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, clampScale(view.scale * 1.2));
+      });
+      zoomOutBtn?.addEventListener("click", () => {
+        const rect = stage.getBoundingClientRect();
+        zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, clampScale(view.scale / 1.2));
+      });
+      zoomResetBtn?.addEventListener("click", fitImage);
+
+      stage?.addEventListener(
+        "wheel",
+        (e) => {
+          if (lb.hidden) return;
+          e.preventDefault();
+          const factor = Math.exp(-e.deltaY * 0.0015);
+          zoomAt(e.clientX, e.clientY, clampScale(view.scale * factor));
+        },
+        { passive: false }
+      );
+
+      stage?.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        view.dragging = true;
+        view.moved = false;
+        view.lastX = e.clientX;
+        view.lastY = e.clientY;
+        stage.setPointerCapture?.(e.pointerId);
+      });
+      stage?.addEventListener("pointermove", (e) => {
+        if (!view.dragging) return;
+        const dx = e.clientX - view.lastX;
+        const dy = e.clientY - view.lastY;
+        if (Math.abs(dx) + Math.abs(dy) > 2) view.moved = true;
+        view.x += dx;
+        view.y += dy;
+        view.lastX = e.clientX;
+        view.lastY = e.clientY;
+        syncTransform();
+      });
+      const endDrag = () => {
+        view.dragging = false;
+      };
+      stage?.addEventListener("pointerup", endDrag);
+      stage?.addEventListener("pointercancel", endDrag);
+      stage?.addEventListener("dblclick", (e) => {
+        e.preventDefault();
+        const fitScale = (() => {
+          const el = mediaEl();
+          if (!el) return 1;
+          const sw = stage.clientWidth || 1;
+          const sh = stage.clientHeight || 1;
+          const { w: nw, h: nh } = mediaSize(el);
+          return Math.min(sw / nw, sh / nh) * 0.92;
+        })();
+        if (view.scale > fitScale * 1.15) fitImage();
+        else zoomAt(e.clientX, e.clientY, clampScale(Math.max(view.scale * 1.8, fitScale * 1.6)));
+      });
+
+      lb._qrFit = fitImage;
+      lb._qrClose = close;
+      lb._qrSync = syncTransform;
+      lb.dataset.qrZoomBound = "1";
       return lb;
     }
 
@@ -240,6 +391,7 @@
       if (!src) return;
       const lb = ensureQrLightbox();
       const stage = lb.querySelector(".qr-lightbox-stage");
+      if (!stage) return;
       stage.innerHTML = "";
       let node;
       if (src.tagName === "CANVAS") {
@@ -248,11 +400,27 @@
         node.height = src.height;
         node.getContext("2d").drawImage(src, 0, 0);
       } else {
-        node = src.cloneNode(true);
+        node = document.createElement("img");
+        node.src = src.currentSrc || src.src;
+        node.alt = src.alt || "二维码";
       }
       node.className = "qr-lightbox-img";
+      node.draggable = false;
       stage.appendChild(node);
+      if (qrLbView) {
+        qrLbView.scale = 1;
+        qrLbView.x = 0;
+        qrLbView.y = 0;
+        qrLbView.dragging = false;
+      }
       lb.hidden = false;
+      const runFit = () => lb._qrFit?.();
+      if (node.tagName === "IMG") {
+        if (node.complete && node.naturalWidth) runFit();
+        else node.onload = runFit;
+      } else {
+        requestAnimationFrame(runFit);
+      }
     }
 
     function bindQrLightbox(root) {
