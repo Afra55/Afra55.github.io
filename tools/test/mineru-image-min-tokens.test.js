@@ -50,7 +50,7 @@ t("pyhooks/ensure_image_min_tokens.py 存在", () => {
 t("桥版本已 bump（含 mineru image-min）", () => {
   const m = adbServer.match(/const BRIDGE_VERSION = "0\.9\.(\d+)"/);
   assert.ok(m, "adb bridge version");
-  assert.ok(Number(m[1]) >= 82, `expected >= 0.9.82, got 0.9.${m[1]}`);
+  assert.ok(Number(m[1]) >= 84, `expected >= 0.9.84, got 0.9.${m[1]}`);
 });
 
 t("convert 会调用 image-min 预抬", () => {
