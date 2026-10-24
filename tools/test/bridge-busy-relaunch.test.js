@@ -14,11 +14,11 @@ function t(name, fn) {
   n += 1;
 }
 
-t("桥版本 0.9.83+", () => {
+t("桥版本 0.9.84+", () => {
   const m = adb.match(/const BRIDGE_VERSION = "([^"]+)"/);
   assert.ok(m, "missing BRIDGE_VERSION");
   const parts = m[1].split(".").map(Number);
-  assert.ok(parts[0] > 0 || parts[1] > 9 || parts[2] >= 83, `version ${m[1]} too old`);
+  assert.ok(parts[0] > 0 || parts[1] > 9 || parts[2] >= 84, `version ${m[1]} too old`);
 });
 
 t("长任务 busy 会延后 relaunch", () => {
