@@ -1621,7 +1621,7 @@ a.secondary-btn {
 .qr-piece {
   display: grid;
   gap: 0.25rem;
-  width: min(100%, 22rem);
+  width: min(100%, 28rem);
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -1635,7 +1635,7 @@ a.secondary-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(100%, min(72vw, 72vh, 22rem));
+  width: min(100%, min(92vw, 72vh, 28rem));
   max-width: 100%;
   min-width: 0;
   aspect-ratio: 1 / 1;
@@ -1646,6 +1646,12 @@ a.secondary-btn {
   margin-top: 0.5rem;
   box-sizing: border-box;
   overflow: hidden;
+  cursor: zoom-in;
+}
+
+.qr-box.qr-box--dense {
+  width: min(100%, 96vw);
+  max-width: 36rem;
 }
 
 .qr-box img,
@@ -1657,6 +1663,62 @@ a.secondary-btn {
   max-height: 100%;
   object-fit: contain;
   image-rendering: pixelated;
+}
+
+.qr-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(8, 12, 20, 0.88);
+  box-sizing: border-box;
+}
+
+.qr-lightbox[hidden] {
+  display: none !important;
+}
+
+.qr-lightbox-stage {
+  max-width: min(96vw, 96vh);
+  max-height: min(96vw, 86vh);
+}
+
+.qr-lightbox-img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(96vw, 96vh);
+  max-height: min(96vw, 86vh);
+  background: #fff;
+  padding: 0.75rem;
+  border-radius: 12px;
+  image-rendering: pixelated;
+  box-sizing: border-box;
+}
+
+.qr-lightbox-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  background: #fff;
+  color: #0b1220;
+  font: inherit;
+  cursor: pointer;
+}
+
+.qr-lightbox-hint {
+  margin: 0;
+  color: #e8eef8;
+  font-size: 0.9rem;
+  text-align: center;
 }
 
 .meta-row .copy-btn {

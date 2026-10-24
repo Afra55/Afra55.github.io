@@ -22,12 +22,26 @@
     let qrLastFrame = null;
     let qrHits = [];
     let qrActiveHit = 0;
+    /** 规格上限（v40-L 字节）；超此必须拆，否则生成失败 */
     const QR_CAP_L40 = 2953;
+    /**
+     * 手机扫屏友好单张预算（约 v15–v20、模块 ≤97）。
+     * 2000 字（尤其中文）若硬塞一张会密到 v30+，屏上每格 ≈2px，扫不到。
+     */
+    const QR_CAP_PHONE = 700;
   
     function qrPayloadBytes(text) {
       const s = String(text);
-      const encoded = encodeURI(s).replace(/%[0-9a-fA-F]{2}/g, "a");
-      return encoded.length + (encoded.length !== s.length ? 3 : 0);
+      try {
+        return new TextEncoder().encode(s).length;
+      } catch (_) {
+        const encoded = encodeURI(s).replace(/%[0-9a-fA-F]{2}/g, "a");
+        return encoded.length + (encoded.length !== s.length ? 3 : 0);
+      }
+    }
+
+    function qrPreferSplit(text) {
+      return qrPayloadBytes(text) > QR_CAP_PHONE;
     }
   
     function qrEccFromLevel(level) {
@@ -47,21 +61,23 @@
     function qrTargetPx(moduleCount) {
       const n = Math.max(21, Number(moduleCount) || 29);
       const border = 4;
-      // 目标约 5～6px/模块，最短边至少 360，最长 720（屏上可扫）
-      const raw = (n + border * 2) * (n >= 57 ? 6 : 5);
-      return Math.min(720, Math.max(360, raw));
+      // 目标 ≥5px/模块；密码抬到 8px；画布最长 1280（保存/全屏放大用）
+      const per = n >= 97 ? 8 : n >= 57 ? 6 : 5;
+      const raw = (n + border * 2) * per;
+      return Math.min(1280, Math.max(420, raw));
     }
 
     function drawQrCanvas(parent, qr, px) {
       const border = 4;
       const n = qr.size;
       const target = px || qrTargetPx(n);
-      const scale = Math.max(2, Math.floor(target / (n + border * 2)));
+      const scale = Math.max(4, Math.floor(target / (n + border * 2)));
       const size = (n + border * 2) * scale;
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = size;
       canvas.setAttribute("role", "img");
-      canvas.setAttribute("aria-label", "二维码");
+      canvas.setAttribute("aria-label", "二维码，点按可放大扫描");
+      canvas.title = "点按放大，方便手机扫描";
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, size, size);
@@ -74,24 +90,22 @@
         }
       }
       parent.appendChild(canvas);
+      if (n >= 57) parent.classList.add("qr-box--dense");
     }
 
-    function qrCorrectLevels() {
+    function qrCorrectLevels({ preferLow = false } = {}) {
       const map = globalThis.QRCode?.CorrectLevel;
       const qg = globalThis.qrcodegen?.QrCode;
-      if (map) {
-        return [
-          { level: map.M, label: "标准纠错" },
-          { level: map.L, label: "低纠错（容量更大）" },
-        ];
-      }
-      if (qg) {
-        return [
-          { level: qg.Ecc.MEDIUM, label: "标准纠错", qg: true },
-          { level: qg.Ecc.LOW, label: "低纠错（容量更大）", qg: true },
-        ];
-      }
-      return [];
+      const lowFirst = [
+        { level: map?.L ?? qg?.Ecc?.LOW, label: "低纠错（更好扫）", qg: !map },
+        { level: map?.M ?? qg?.Ecc?.MEDIUM, label: "标准纠错", qg: !map },
+      ].filter((x) => x.level != null);
+      const midFirst = [
+        { level: map?.M ?? qg?.Ecc?.MEDIUM, label: "标准纠错", qg: !map },
+        { level: map?.L ?? qg?.Ecc?.LOW, label: "低纠错（容量更大）", qg: !map },
+      ].filter((x) => x.level != null);
+      if (!map && !qg) return [];
+      return preferLow ? lowFirst : midFirst;
     }
 
     function renderQrBoxWithEcc(text, ecc, { qgDirect = false } = {}) {
@@ -146,22 +160,23 @@
       return el;
     }
   
-    function splitQrChunks(text) {
+    function splitQrChunks(text, byteCap = QR_CAP_PHONE) {
       const total = String(text);
-      let n = Math.max(2, Math.ceil(qrPayloadBytes(total) / (QR_CAP_L40 - 16)));
+      const cap = Math.max(64, Math.min(QR_CAP_L40, Number(byteCap) || QR_CAP_PHONE));
+      let n = Math.max(2, Math.ceil(qrPayloadBytes(total) / Math.max(32, cap - 16)));
       for (; n < 99; n += 1) {
         const chunks = [];
         let pos = 0;
         let ok = true;
         for (let i = 0; i < n; i += 1) {
           const prefix = `[${i + 1}/${n}]`;
-          const budget = QR_CAP_L40 - qrPayloadBytes(prefix);
+          const budget = cap - qrPayloadBytes(prefix);
           if (budget < 8) {
             ok = false;
             break;
           }
           let take = Math.min(total.length - pos, budget);
-          while (take > 0 && qrPayloadBytes(prefix + total.slice(pos, pos + take)) > QR_CAP_L40) take -= 1;
+          while (take > 0 && qrPayloadBytes(prefix + total.slice(pos, pos + take)) > cap) take -= 1;
           if (take <= 0) {
             ok = false;
             break;
@@ -172,6 +187,79 @@
         if (ok && pos >= total.length) return chunks;
       }
       return [];
+    }
+
+    function renderQrPieces(chunks, lowLevel) {
+      chunks.forEach((payload, i) => {
+        const piece = document.createElement("div");
+        piece.className = "qr-piece";
+        const lab = document.createElement("p");
+        lab.className = "hint tight qr-piece-label";
+        lab.textContent = `第 ${i + 1}/${chunks.length} 张`;
+        piece.appendChild(lab);
+        piece.appendChild(
+          renderQrBoxWithEcc(payload, lowLevel, { qgDirect: !globalThis.QRCode?.CorrectLevel })
+        );
+        wrap.appendChild(piece);
+      });
+    }
+
+    function ensureQrLightbox() {
+      let lb = document.getElementById("qr-lightbox");
+      if (lb) return lb;
+      lb = document.createElement("div");
+      lb.id = "qr-lightbox";
+      lb.className = "qr-lightbox";
+      lb.hidden = true;
+      lb.innerHTML =
+        '<button type="button" class="qr-lightbox-close" aria-label="关闭">关闭</button>' +
+        '<div class="qr-lightbox-stage"></div>' +
+        '<p class="qr-lightbox-hint">放大后用手机扫；再点空白处关闭</p>';
+      document.body.appendChild(lb);
+      const close = () => {
+        lb.hidden = true;
+        lb.querySelector(".qr-lightbox-stage").innerHTML = "";
+      };
+      lb.querySelector(".qr-lightbox-close")?.addEventListener("click", close);
+      lb.addEventListener("click", (ev) => {
+        if (ev.target === lb) close();
+      });
+      document.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape" && !lb.hidden) close();
+      });
+      return lb;
+    }
+
+    function openQrLightbox(fromEl) {
+      const src = fromEl?.matches?.("canvas, img")
+        ? fromEl
+        : fromEl?.querySelector?.("canvas, img");
+      if (!src) return;
+      const lb = ensureQrLightbox();
+      const stage = lb.querySelector(".qr-lightbox-stage");
+      stage.innerHTML = "";
+      let node;
+      if (src.tagName === "CANVAS") {
+        node = document.createElement("canvas");
+        node.width = src.width;
+        node.height = src.height;
+        node.getContext("2d").drawImage(src, 0, 0);
+      } else {
+        node = src.cloneNode(true);
+      }
+      node.className = "qr-lightbox-img";
+      stage.appendChild(node);
+      lb.hidden = false;
+    }
+
+    function bindQrLightbox(root) {
+      if (!root || root.dataset.qrLbBound === "1") return;
+      root.dataset.qrLbBound = "1";
+      root.addEventListener("click", (ev) => {
+        const box = ev.target.closest?.(".qr-box");
+        if (!box || !root.contains(box)) return;
+        openQrLightbox(box);
+      });
     }
 
     function setExportButtons(on) {
@@ -307,7 +395,27 @@
         if (typeof QRCode === "undefined" && typeof globalThis.qrcodegen?.QrCode === "undefined") {
           throw new Error("QRCode 库未加载");
         }
-        const tries = qrCorrectLevels();
+        const bytes = qrPayloadBytes(text);
+        const lowLevel = globalThis.QRCode?.CorrectLevel?.L ?? globalThis.qrcodegen?.QrCode?.Ecc?.LOW;
+        bindQrLightbox(wrap);
+
+        // 长文本优先拆成手机可扫的多张（单张过密时摄像头认不出）
+        if (qrPreferSplit(text) && lowLevel != null) {
+          const chunks = splitQrChunks(text, QR_CAP_PHONE);
+          if (chunks.length >= 2) {
+            renderQrPieces(chunks, lowLevel);
+            if (meta) {
+              meta.textContent =
+                `约 ${text.length} 字 / ${bytes} 字节，已拆成 ${chunks.length} 张便于手机扫描。` +
+                `逐张扫描后去掉 [n/m] 前缀并按顺序拼接；点图可放大。`;
+            }
+            setError($("#qr-error"), "");
+            setExportButtons(true);
+            return;
+          }
+        }
+
+        const tries = qrCorrectLevels({ preferLow: bytes > 200 });
         if (!tries.length) throw new Error("QRCode 库未加载");
         for (const { level, label, qg } of tries) {
           try {
@@ -316,8 +424,8 @@
             const side = canvas?.width || canvas?.naturalWidth || 0;
             if (meta) {
               meta.textContent = side
-                ? `已生成 · ${label} · 约 ${text.length} 字 · 图 ${side}×${side}px（屏上自适应完整显示）`
-                : `已生成 · ${label} · 约 ${text.length} 字`;
+                ? `已生成 · ${label} · 约 ${text.length} 字 · 图 ${side}×${side}px · 点图可放大扫描`
+                : `已生成 · ${label} · 约 ${text.length} 字 · 点图可放大扫描`;
             }
             setError($("#qr-error"), "");
             setExportButtons(true);
@@ -326,23 +434,12 @@
             if (!/Too long|overflow/i.test(String(err.message || err))) throw err;
           }
         }
-        const chunks = splitQrChunks(text);
-        if (!chunks.length) throw new Error("内容过长，无法生成二维码");
-        const lowLevel = globalThis.QRCode?.CorrectLevel?.L ?? globalThis.qrcodegen?.QrCode?.Ecc?.LOW;
-        chunks.forEach((payload, i) => {
-          const piece = document.createElement("div");
-          piece.className = "qr-piece";
-          const lab = document.createElement("p");
-          lab.className = "hint tight qr-piece-label";
-          lab.textContent = `第 ${i + 1}/${chunks.length} 张`;
-          piece.appendChild(lab);
-          piece.appendChild(
-            renderQrBoxWithEcc(payload, lowLevel, { qgDirect: !globalThis.QRCode?.CorrectLevel })
-          );
-          wrap.appendChild(piece);
-        });
+        const chunks = splitQrChunks(text, QR_CAP_L40);
+        if (!chunks.length || lowLevel == null) throw new Error("内容过长，无法生成二维码");
+        renderQrPieces(chunks, lowLevel);
         if (meta) {
-          meta.textContent = `内容较长，已拆成 ${chunks.length} 张二维码。扫描后去掉 [n/m] 前缀并按顺序拼接。`;
+          meta.textContent =
+            `内容较长，已拆成 ${chunks.length} 张二维码。扫描后去掉 [n/m] 前缀并按顺序拼接；点图可放大。`;
         }
         setError($("#qr-error"), "");
         setExportButtons(true);
