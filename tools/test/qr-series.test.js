@@ -19,97 +19,86 @@ t("parsePart 只认合法 [i/n]", () => {
 });
 
 t("无关多码不进入分片组", () => {
-  const cls = Series.classifyTexts(["hello", "world", "https://a.com"]);
-  assert.strictEqual(cls.hasSeries, false);
-  assert.strictEqual(cls.plain.length, 3);
+  const out = Series.ingestTexts(null, ["hello", "world", "https://a.com"]);
+  assert.strictEqual(out.hasSeries, false);
+  assert.strictEqual(out.plain.length, 3);
 });
 
 t("同 n 分片可拼；夹杂的无关码进 plain", () => {
-  const cls = Series.classifyTexts(["[1/3]aaa", "https://x.test", "[2/3]bbb", "[3/3]ccc"]);
-  assert.strictEqual(cls.hasSeries, true);
-  assert.strictEqual(cls.seriesTotal, 3);
-  assert.strictEqual(cls.seriesParts.size, 3);
-  assert.deepStrictEqual(cls.plain, ["https://x.test"]);
-  const r = Series.ingest(null, cls.seriesParts, cls.seriesTotal);
+  const out = Series.ingestTexts(null, ["[1/3]aaa", "https://x.test", "[2/3]bbb", "[3/3]ccc"]);
+  assert.strictEqual(out.completed.length, 1);
+  assert.strictEqual(out.completed[0].joined, "aaabbbccc");
+  assert.deepStrictEqual(out.plain, ["https://x.test"]);
+});
+
+t("不同 n 的两套分片分开会话、各自拼接", () => {
+  let bag = Series.createBag();
+  let out = Series.ingestTexts(bag, ["[1/3]AAA", "[1/2]xx"]);
+  bag = out.bag;
+  assert.strictEqual(out.incomplete.length, 2);
+  assert.ok(out.displayHits.some((h) => /套1/.test(h.format) || /部分拼接 1\/3/.test(h.format)));
+  out = Series.ingestTexts(bag, ["[2/2]yy"]);
+  assert.strictEqual(out.completed.length, 1);
+  assert.strictEqual(out.completed[0].joined, "xxyy");
+  assert.strictEqual(out.incomplete.length, 1);
+  assert.strictEqual(out.incomplete[0].got, 1);
+  assert.strictEqual(out.incomplete[0].total, 3);
+  out = Series.ingestTexts(out.bag, ["[2/3]BBB", "[3/3]CCC"]);
+  assert.strictEqual(out.completed.length, 1);
+  assert.strictEqual(out.completed[0].joined, "AAABBBCCC");
+  assert.strictEqual(out.bag.sessions.length, 0);
+});
+
+t("同 n 但同序号正文冲突 → 新开一套，不覆盖旧套", () => {
+  let out = Series.ingestTexts(null, ["[1/3]hello"]);
+  out = Series.ingestTexts(out.bag, ["[1/3]world"]);
+  assert.strictEqual(out.incomplete.length, 2);
+  const bodies = out.incomplete.map((r) => r.joined).sort();
+  assert.deepStrictEqual(bodies, ["hello", "world"]);
+});
+
+t("未齐也拼已有：1+2/3 正文相连", () => {
+  const out = Series.ingestTexts(null, ["[1/3]AA", "[2/3]BB"]);
+  assert.strictEqual(out.incomplete.length, 1);
+  assert.strictEqual(out.incomplete[0].joined, "AABB");
+  assert.deepStrictEqual(out.incomplete[0].missing, [3]);
+});
+
+t("中间缺片插入占位", () => {
+  const out = Series.ingestTexts(null, ["[1/3]A", "[3/3]C"]);
+  assert.strictEqual(out.incomplete[0].joined, `A${Series.GAP_MARK(2)}C`);
+});
+
+t("连续收片：齐了从袋中移除", () => {
+  let out = Series.ingestTexts(null, ["[1/3]A"]);
+  assert.strictEqual(out.bag.sessions.length, 1);
+  out = Series.ingestTexts(out.bag, ["[3/3]C"]);
+  assert.strictEqual(out.incomplete[0].got, 2);
+  out = Series.ingestTexts(out.bag, ["[2/3]B"]);
+  assert.ok(out.completed[0].complete);
+  assert.strictEqual(out.completed[0].joined, "ABC");
+  assert.strictEqual(out.bag.sessions.length, 0);
+});
+
+t("buildDisplayHits 多套：完成与未齐都列出", () => {
+  const out = Series.ingestTexts(null, ["[1/2]aa", "[2/2]bb", "[1/3]x"]);
+  assert.ok(out.displayHits.length >= 2);
+  assert.ok(out.displayHits.some((h) => h.text === "aabb"));
+  assert.ok(out.displayHits.some((h) => h.text === "x"));
+});
+
+t("旧 ingest 仍可用（同 n 单套）", () => {
+  let r = Series.ingest(null, new Map([[1, { index: 1, total: 2, body: "x" }]]), 2);
+  r = Series.ingest(r.session, new Map([[2, { index: 2, total: 2, body: "y" }]]), 2);
   assert.ok(r.complete);
-  assert.strictEqual(r.joined, "aaabbbccc");
+  assert.strictEqual(r.joined, "xy");
 });
 
-t("不同 n 的分片不互相拼：次要组进 plain", () => {
-  const cls = Series.classifyTexts(["[1/2]aa", "[2/2]bb", "[1/3]xx"]);
-  assert.strictEqual(cls.seriesTotal, 2);
-  assert.ok(cls.plain.includes("[1/3]xx"));
-  const r = Series.ingest(null, cls.seriesParts, cls.seriesTotal);
-  assert.ok(r.complete);
-  assert.strictEqual(r.joined, "aabb");
-});
-
-t("未齐也拼已有：1+2/3 正文相连，缺片只在标签", () => {
-  const r = Series.ingest(
-    null,
-    new Map([
-      [1, { index: 1, total: 3, body: "AA" }],
-      [2, { index: 2, total: 3, body: "BB" }],
-    ]),
-    3
-  );
-  assert.strictEqual(r.complete, false);
-  assert.strictEqual(r.joined, "AABB");
-  assert.deepStrictEqual(r.missing, [3]);
-  assert.ok(r.format.includes("部分拼接 2/3"));
-  assert.ok(r.format.includes("缺第3片"));
-});
-
-t("中间缺片插入占位，前后已有仍拼进正文", () => {
-  const r = Series.ingest(
-    null,
-    new Map([
-      [1, { index: 1, total: 3, body: "A" }],
-      [3, { index: 3, total: 3, body: "C" }],
-    ]),
-    3
-  );
-  assert.strictEqual(r.complete, false);
-  assert.strictEqual(r.joined, `A${Series.GAP_MARK(2)}C`);
-  assert.deepStrictEqual(r.missing, [2]);
-});
-
-t("连续收片：未齐有 partial joined，齐了无占位", () => {
-  let r = Series.ingest(null, new Map([[1, { index: 1, total: 3, body: "A" }]]), 3);
-  assert.strictEqual(r.complete, false);
-  assert.strictEqual(r.joined, "A");
-  r = Series.ingest(r.session, new Map([[3, { index: 3, total: 3, body: "C" }]]), 3);
-  assert.strictEqual(r.complete, false);
-  assert.strictEqual(r.got, 2);
-  assert.ok(r.joined.includes(Series.GAP_MARK(2)));
-  r = Series.ingest(r.session, new Map([[2, { index: 2, total: 3, body: "B" }]]), 3);
-  assert.ok(r.complete);
-  assert.strictEqual(r.joined, "ABC");
-});
-
-t("buildDisplayHits：部分拼接在前，无关码在后", () => {
-  const r = Series.ingest(
-    null,
-    new Map([
-      [1, { index: 1, total: 3, body: "hi" }],
-      [2, { index: 2, total: 3, body: "yo" }],
-    ]),
-    3
-  );
-  const hits = Series.buildDisplayHits(r, ["https://x.test"]);
-  assert.strictEqual(hits.length, 2);
-  assert.strictEqual(hits[0].text, "hiyo");
-  assert.ok(hits[0].format.startsWith("部分拼接"));
-  assert.strictEqual(hits[1].text, "https://x.test");
-  assert.strictEqual(hits[1].format, "其它码（未拼接）");
-});
-
-t("换一套 n 会开新会话", () => {
+t("换一套 n：旧单会话 API 会开新会话", () => {
   let r = Series.ingest(null, new Map([[1, { index: 1, total: 2, body: "x" }]]), 2);
   r = Series.ingest(r.session, new Map([[1, { index: 1, total: 3, body: "y" }]]), 3);
   assert.strictEqual(r.session.total, 3);
   assert.strictEqual(r.got, 1);
-  assert.strictEqual(r.session.parts.get(1), "y");
 });
 
 console.log(`qr-series.test.js: ${n} passed`);

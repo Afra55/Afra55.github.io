@@ -35,7 +35,7 @@
               <canvas id="qr-scan-canvas" hidden></canvas>
               <img id="qr-scan-preview" class="img-preview" alt="" hidden />
             </div>
-            <p class="hint tight" id="qr-multi-hint">同框多码会列出；仅生码分片 <code>[1/n]</code> 会拼接（未齐也先拼已有，缺片可继续扫），其它不同内容单独列出不合并。</p>
+            <p class="hint tight" id="qr-multi-hint">同框多码会列出；生码分片 <code>[1/n]</code> 按套分开拼接（扫到另一套不会并进当前套），未齐也先拼已有；无前缀内容不合并。</p>
             <div class="label-row" style="margin-top:0.8rem" id="qr-result-head" hidden>
               <label for="qr-decoded" id="qr-decoded-label">扫描结果</label>
               <button type="button" class="copy-btn" data-copy-value="qr-decoded">复制当前</button>

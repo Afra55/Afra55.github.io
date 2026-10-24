@@ -23,7 +23,8 @@
     let qrHits = [];
     let qrActiveHit = 0;
     /** @type {{ total: number, parts: Map<number, string> } | null} */
-    let qrSeries = null;
+    /** 多套分片袋：互不合并，各自拼接 */
+    let qrSeriesBag = null;
     let qrSeriesLastToastAt = 0;
     /** 规格上限（v40-L 字节）；超此必须拆，否则生成失败 */
     const QR_CAP_L40 = 2953;
@@ -683,7 +684,9 @@
     }
   
     function seriesIncomplete() {
-      return !!(qrSeries && qrSeries.total >= 2 && qrSeries.parts.size > 0 && qrSeries.parts.size < qrSeries.total);
+      const Series = globalThis.DevToolsQrSeries;
+      if (Series?.bagHasIncomplete) return Series.bagHasIncomplete(qrSeriesBag);
+      return false;
     }
 
     function updateSeriesProgressUi() {
@@ -691,13 +694,13 @@
       const clearBtn = $("#qr-series-clear");
       const Series = globalThis.DevToolsQrSeries;
       if (!el) return;
-      if (qrSeries && qrSeries.total >= 2 && qrSeries.parts.size > 0) {
-        const got = qrSeries.parts.size;
-        const done = got >= qrSeries.total;
+      const lines = Series?.bagProgressLines?.(qrSeriesBag) || [];
+      if (lines.length) {
         el.hidden = false;
-        el.textContent = done
-          ? `分片已齐 ${got}/${qrSeries.total}，已自动拼接（无 [i/n] 前缀的其它码不会并入）`
-          : `${Series?.progressLabel(got, qrSeries.total) || `分片 ${got}/${qrSeries.total}`} · 已拼已有，点「继续扫」补缺；无关码不会并入`;
+        el.textContent =
+          lines.length > 1
+            ? `进行中 ${lines.length} 套（互不合并）：${lines.join("；")} · 点「继续扫」补缺`
+            : `${lines[0]} · 已拼已有，点「继续扫」补缺；另一套 [i/n] 会单独开会话`;
         if (clearBtn) clearBtn.hidden = false;
       } else {
         el.hidden = true;
@@ -707,9 +710,9 @@
     }
 
     function clearSeriesSession() {
-      qrSeries = null;
+      qrSeriesBag = null;
       updateSeriesProgressUi();
-      toast("已清空分片进度");
+      toast("已清空全部分片进度");
     }
 
     function showResultUi(on) {
@@ -838,52 +841,54 @@
 
     /**
      * 智能分流：
-     * - 带 [i/n] 且同 n → 记入分片会话，齐了才拼
+     * - 带 [i/n] → 按内容归入对应套（多套互不合并）
      * - 其它内容 → 独立列出，绝不拼进正文
-     * 返回是否继续开着摄像头收分片。
      */
     function ingestDecodedHits(hits, { fromCamera = false } = {}) {
       const list = (hits || []).filter((h) => h?.text);
       if (!list.length) return { keepScanning: false };
       const Series = globalThis.DevToolsQrSeries;
-      if (!Series?.classifyTexts) {
+      if (!Series?.ingestTexts) {
         showHits(list);
         if (fromCamera) stopCamera();
         return { keepScanning: false };
       }
-      const cls = Series.classifyTexts(list.map((h) => h.text));
-      if (!cls.hasSeries) {
-        // 全是无关内容：保持旧行为，多码分列、不拼接
-        if (!seriesIncomplete()) qrSeries = null;
+      const out = Series.ingestTexts(
+        qrSeriesBag || Series.createBag(),
+        list.map((h) => h.text)
+      );
+      qrSeriesBag = out.bag;
+
+      if (!out.hasSeries) {
+        if (!seriesIncomplete()) qrSeriesBag = null;
         showHits(list);
         if (fromCamera) stopCamera();
         return { keepScanning: false };
       }
 
-      const result = Series.ingest(qrSeries, cls.seriesParts, cls.seriesTotal);
-      qrSeries = result.session;
-
-      // 未齐也先拼已有 + 列出无关码，停下来方便复制；点「继续扫」补缺片
-      const display = (Series.buildDisplayHits(result, cls.plain) || []).map((h) => ({
-        ...h,
-        bbox: null,
-      }));
+      const display = (out.displayHits || []).map((h) => ({ ...h, bbox: null }));
       if (display.length) showHits(display);
 
-      if (result.complete) {
-        if (qrDecodedLabel) qrDecodedLabel.textContent = "拼接结果";
-        qrSeries = null;
-        updateSeriesProgressUi();
-        toast(`已自动拼接 ${result.total} 张分片`);
-      } else {
-        updateSeriesProgressUi();
+      updateSeriesProgressUi();
+      const nDone = out.completed?.length || 0;
+      const nOpen = out.incomplete?.length || 0;
+      if (nDone && !nOpen) {
         if (qrDecodedLabel) {
-          qrDecodedLabel.textContent = `部分拼接 ${result.got}/${result.total} · 可点「继续扫」补齐`;
+          qrDecodedLabel.textContent = nDone > 1 ? `拼接结果（${nDone} 套）` : "拼接结果";
+        }
+        toast(nDone > 1 ? `已分别拼好 ${nDone} 套分片` : `已自动拼接 ${out.completed[0].total} 张分片`);
+      } else {
+        if (qrDecodedLabel) {
+          qrDecodedLabel.textContent =
+            nOpen > 1
+              ? `${nOpen} 套分片进行中（分开拼接）· 可继续扫`
+              : `部分拼接 ${out.incomplete[0]?.got || 0}/${out.incomplete[0]?.total || "?"} · 可点「继续扫」`;
         }
         const now = Date.now();
-        if (result.added.length && now - qrSeriesLastToastAt > 800) {
+        if (out.addedAny && now - qrSeriesLastToastAt > 800) {
           qrSeriesLastToastAt = now;
-          toast(`${Series.progressLabel(result.got, result.total)} · 已拼已有，可继续扫`);
+          const lines = Series.bagProgressLines?.(qrSeriesBag) || [];
+          toast(lines.length > 1 ? `多套进行中：${lines.join("；")}` : `${lines[0] || "已更新"} · 可继续扫`);
         }
       }
       if (fromCamera) stopCamera();
@@ -989,7 +994,7 @@
       qrUserStopped = false;
       setError(qrDecodeError, "");
       const keepSeries = seriesIncomplete();
-      if (!keepSeries) qrSeries = null;
+      if (!keepSeries) qrSeriesBag = null;
       if (qrDecoded) qrDecoded.value = "";
       qrHits = [];
       qrLastFrame = null;
