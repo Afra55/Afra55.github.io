@@ -184,10 +184,59 @@ def _tensor_info_end(data: bytes, kv_end: int, tensor_count: int) -> int:
     return off
 
 
+def _first_tensor_offset(data: bytes, kv_end: int, tensor_count: int) -> int | None:
+    """GGUF tensor offset 相对数据区；首个张量应为 0。非 0 多为损坏（旧补丁误加了 insert_len）。"""
+    if tensor_count <= 0:
+        return None
+    buf = memoryview(data)
+    off = kv_end
+    _, off = _read_string(buf, off)
+    (n_dims,) = struct.unpack_from("<I", buf, off)
+    off += 4 + 8 * n_dims + 4
+    (toff,) = struct.unpack_from("<Q", buf, off)
+    return int(toff)
+
+
+def _gguf_looks_corrupt(path: Path) -> bool:
+    try:
+        meta = _load_meta_prefix(path)
+        _kvs, kv_end, tensor_count, _ver = _parse_kvs(meta)
+        if tensor_count <= 0:
+            return False
+        need = _tensor_info_end(meta, kv_end, min(tensor_count, 1))
+        if need > len(meta):
+            with path.open("rb") as f:
+                f.seek(len(meta))
+                meta = meta + f.read(need - len(meta))
+        first = _first_tensor_offset(meta, kv_end, tensor_count)
+        return first is not None and first != 0
+    except Exception:
+        return True
+
+
+def _restore_backup(path: Path) -> bool:
+    bak = Path(str(path) + ".bak-imin")
+    if not bak.is_file():
+        return False
+    try:
+        shutil.copyfile(bak, path)
+        marker = Path(str(path) + MARKER_SUFFIX)
+        try:
+            marker.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
+
+
 def _stream_insert_u32_kv(path: Path, meta: bytes, kv_end: int, tensor_count: int, key: str, value: int) -> None:
-    """流式插入 KV：元数据在内存里改，权重按块从原文件拷到临时文件。"""
+    """流式插入 KV：元数据在内存里改，权重按块从原文件拷到临时文件。
+
+    重要：GGUF 里 tensor offset 是相对「数据区起点」的，插入 KV 后相对偏移不变，
+    绝不能 +insert_len（旧 bug 会导致 first tensor offset=44 一类错误）。
+    """
     insert = _encode_u32_kv(key, value)
-    insert_len = len(insert)
     old_kv_count = struct.unpack_from("<Q", meta, 16)[0]
     new_header = bytearray(meta[:24])
     struct.pack_into("<Q", new_header, 16, old_kv_count + 1)
@@ -214,9 +263,9 @@ def _stream_insert_u32_kv(path: Path, meta: bytes, kv_end: int, tensor_count: in
         (ttype,) = struct.unpack_from("<I", buf, off)
         infos += struct.pack("<I", ttype)
         off += 4
-        (toff,) = struct.unpack_from("<Q", buf, off)
+        # 保持相对 offset 原样
+        infos += bytes(buf[off : off + 8])
         off += 8
-        infos += struct.pack("<Q", toff + insert_len)
 
     align = 32
     head = bytes(new_header) + meta[24:kv_end] + insert + bytes(infos)
@@ -239,10 +288,23 @@ def _stream_insert_u32_kv(path: Path, meta: bytes, kv_end: int, tensor_count: in
 
 def patch_mmproj(path: Path, min_tokens: int = DEFAULT_MIN_TOKENS) -> str:
     marker = Path(str(path) + MARKER_SUFFIX)
+
+    # 旧版 insert 补丁曾把相对 offset +insert_len，表现为 first tensor offset≠0
+    if _gguf_looks_corrupt(path):
+        if _restore_backup(path):
+            print(f"[image-min] restored corrupt mmproj from .bak-imin: {path}", flush=True)
+        else:
+            return (
+                "fail:corrupt-mmproj: first tensor offset≠0（多为旧补丁损坏）。"
+                "请删该 mmproj（及同名 .devtools-imin-1024），让 MinerU 重新下载模型"
+            )
+
     if marker.is_file():
         try:
             if int(marker.read_text(encoding="utf-8").strip() or "0") >= min_tokens:
-                return "skip"
+                # marker 在，但文件又坏了的话上面已处理；再确认一次
+                if not _gguf_looks_corrupt(path):
+                    return "skip"
         except Exception:
             pass
 
@@ -267,27 +329,50 @@ def patch_mmproj(path: Path, min_tokens: int = DEFAULT_MIN_TOKENS) -> str:
                 f.write(blob)
             # 校验：只再读元数据头
             meta2 = _load_meta_prefix(path)
-            ck, *_ = _parse_kvs(meta2)
+            ck, kv2, tc2, _ = _parse_kvs(meta2)
             vt, vs, _ = ck[KEY_IMAGE_MIN]
             if _read_u32ish(memoryview(meta2), vs, vt) < target:
+                _restore_backup(path)
                 return "fail:verify"
+            if tc2 > 0:
+                first = _first_tensor_offset(meta2, kv2, tc2)
+                if first is not None and first != 0:
+                    _restore_backup(path)
+                    return "fail:verify-offset"
             marker.write_text(str(min_tokens), encoding="utf-8")
             return "ok"
 
         _backup_once(path)
         _stream_insert_u32_kv(path, meta, kv_end, tensor_count, KEY_IMAGE_MIN, target)
         meta2 = _load_meta_prefix(path)
-        ck, *_ = _parse_kvs(meta2)
+        ck, kv2, tc2, _ = _parse_kvs(meta2)
         if KEY_IMAGE_MIN not in ck:
+            _restore_backup(path)
             return "fail:insert-verify"
         vt, vs, _ = ck[KEY_IMAGE_MIN]
         if _read_u32ish(memoryview(meta2), vs, vt) < target:
+            _restore_backup(path)
             return "fail:insert-value"
+        if tc2 > 0:
+            # 可能 meta2 不够覆盖 tensor info
+            need = _tensor_info_end(meta2, kv2, min(tc2, 1))
+            if need > len(meta2):
+                with path.open("rb") as f:
+                    f.seek(len(meta2))
+                    meta2 = meta2 + f.read(need - len(meta2))
+            first = _first_tensor_offset(meta2, kv2, tc2)
+            if first is not None and first != 0:
+                _restore_backup(path)
+                return "fail:insert-offset"
         marker.write_text(str(min_tokens), encoding="utf-8")
         return "ok"
     except Exception as err:
         try:
             Path(str(path) + ".devtools-tmp").unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            _restore_backup(path)
         except Exception:
             pass
         return f"fail:write:{err}"
@@ -321,14 +406,33 @@ def patch_models_dir(models_dir: Path, min_tokens: int = DEFAULT_MIN_TOKENS) -> 
 def _selftest() -> None:
     import tempfile
 
-    def build(kvs: list[tuple[str, int, bytes]]) -> bytes:
+    def build(kvs: list[tuple[str, int, bytes]], tensors: list[tuple[str, int]] | None = None) -> bytes:
+        """tensors: list of (name, relative_offset). Data blob padded after infos."""
         body = bytearray()
         for key, vtype, val in kvs:
             body += _encode_string(key)
             body += struct.pack("<I", vtype)
             body += val
-        header = GGUF_MAGIC + struct.pack("<I", 3) + struct.pack("<Q", 0) + struct.pack("<Q", len(kvs))
-        return bytes(header + body)
+        tensors = tensors or []
+        header = (
+            GGUF_MAGIC
+            + struct.pack("<I", 3)
+            + struct.pack("<Q", len(tensors))
+            + struct.pack("<Q", len(kvs))
+        )
+        infos = bytearray()
+        for name, toff in tensors:
+            infos += _encode_string(name)
+            infos += struct.pack("<I", 1)  # n_dims
+            infos += struct.pack("<Q", 4)  # dim0
+            infos += struct.pack("<I", 0)  # F32
+            infos += struct.pack("<Q", toff)
+        head = bytes(header + body + infos)
+        align = 32
+        head += b"\x00" * ((-len(head)) % align)
+        # 每个假张量 16 字节占位
+        data = b"\x00" * max((max((t[1] for t in tensors), default=0) + 16), 16 if tensors else 0)
+        return head + data
 
     with tempfile.TemporaryDirectory() as td:
         td_path = Path(td)
@@ -361,15 +465,53 @@ def _selftest() -> None:
                 [
                     (KEY_PATCH, UINT32, struct.pack("<I", patch)),
                     (KEY_MERGE, UINT32, struct.pack("<I", merge)),
-                ]
+                ],
+                tensors=[("v.blk.0.attn_out.bias", 0), ("v.blk.0.attn_out.weight", 16)],
             )
         )
         assert patch_mmproj(p2) == "ok", patch_mmproj(p2)
         meta = _load_meta_prefix(p2)
-        kvs, *_ = _parse_kvs(meta)
+        kvs, kv_end, tc, _ = _parse_kvs(meta)
         assert KEY_IMAGE_MIN in kvs
         vt, vs, _ = kvs[KEY_IMAGE_MIN]
         assert _read_u32ish(memoryview(meta), vs, vt) == high
+        need = _tensor_info_end(meta, kv_end, tc)
+        if need > len(meta):
+            with p2.open("rb") as f:
+                f.seek(len(meta))
+                meta = meta + f.read(need - len(meta))
+        assert _first_tensor_offset(meta, kv_end, tc) == 0, "insert 不得改相对 offset"
+
+        # 模拟旧 bug：first offset=44 → 应从 bak 恢复再打补丁
+        p3 = td_path / "c.mmproj.gguf"
+        good = build(
+            [
+                (KEY_PATCH, UINT32, struct.pack("<I", patch)),
+                (KEY_MERGE, UINT32, struct.pack("<I", merge)),
+            ],
+            tensors=[("v.blk.0.attn_out.bias", 0)],
+        )
+        p3.write_bytes(good)
+        shutil.copyfile(p3, Path(str(p3) + ".bak-imin"))
+        broken = build(
+            [
+                (KEY_PATCH, UINT32, struct.pack("<I", patch)),
+                (KEY_MERGE, UINT32, struct.pack("<I", merge)),
+            ],
+            tensors=[("v.blk.0.attn_out.bias", 44)],
+        )
+        p3.write_bytes(broken)
+        assert _gguf_looks_corrupt(p3)
+        assert patch_mmproj(p3) == "ok", patch_mmproj(p3)
+        meta = _load_meta_prefix(p3)
+        _kvs, kv_end, tc, _ = _parse_kvs(meta)
+        need = _tensor_info_end(meta, kv_end, tc)
+        if need > len(meta):
+            with p3.open("rb") as f:
+                f.seek(len(meta))
+                meta = meta + f.read(need - len(meta))
+        assert _first_tensor_offset(meta, kv_end, tc) == 0
+        assert not _gguf_looks_corrupt(p3)
     print("selftest ok")
 
 

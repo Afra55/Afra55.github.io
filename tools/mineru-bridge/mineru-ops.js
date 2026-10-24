@@ -750,6 +750,11 @@ async function ensureQwenImageMinTokens(env) {
       for (const line of text.split(/\r?\n/).filter(Boolean).slice(0, 12)) {
         console.log(`[mineru] image-min ${line}`);
       }
+      if (/fail:corrupt-mmproj/i.test(text)) {
+        console.log(
+          "[mineru] mmproj 已损坏（旧 image-min 补丁）。请删除 mineru-data/models 下对应 mmproj*.gguf 与 *.devtools-imin-1024，再转换以重新下载；若有 *.bak-imin 可先改回原名。"
+        );
+      }
     }
   } catch (err) {
     console.log(`[mineru] image-min 预抬跳过：${err?.message || err}`);
