@@ -35,6 +35,7 @@
     "docling-bridge/docling-ops.js",
     "mineru-bridge/server.js",
     "mineru-bridge/mineru-ops.js",
+    "mineru-bridge/pyhooks/ensure_image_min_tokens.py",
     "lanboard-bridge/server.js",
     "adb-bridge/server.js"
   ]

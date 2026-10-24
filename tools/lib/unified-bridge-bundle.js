@@ -104,6 +104,7 @@
         doclingOpsJs,
         mineruServerJs,
         mineruOpsJs,
+        mineruImageMinPy,
         lanboardServerJs,
         scriptRaw,
         resolvePortJs,
@@ -129,6 +130,7 @@
         fetchTextAsset("./docling-bridge/docling-ops.js").catch(() => ""),
         fetchTextAsset("./mineru-bridge/server.js").catch(() => ""),
         fetchTextAsset("./mineru-bridge/mineru-ops.js").catch(() => ""),
+        fetchTextAsset("./mineru-bridge/pyhooks/ensure_image_min_tokens.py").catch(() => ""),
         fetchTextAsset("./lanboard-bridge/server.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
         fetchTextAsset("./adb-bridge/resolve-port.js").catch(() => ""),
@@ -161,7 +163,7 @@
         "  - git-bridge/server.js + git-ops.js + noop-editor.*",
         "  - fileunlock-bridge/server.js + lock-ops.js（Windows 文件占用解锁）",
         "  - pandoc-bridge/server.js + pandoc-ops.js（Markdown → 任意格式，需本机装 pandoc）",
-        "  - mineru-bridge/server.js + mineru-ops.js（PDF→MD 质量主力，建议 GPU：pip install \"mineru[full]\"）",
+        "  - mineru-bridge/server.js + mineru-ops.js + pyhooks/ensure_image_min_tokens.py（PDF→MD 质量主力，建议 GPU：pip install \"mineru[full]\"）",
         "  - docling-bridge/server.js + docling-ops.js（无 GPU / 未装 MinerU 时回退 OCR）",
         "  - lanboard-bridge/server.js（局域网看板文字快照 / 媒体暂存）",
         "  - vendor/scrcpy-server-v3.1（可选）",
@@ -202,6 +204,9 @@
       if (doclingOpsJs) zip.file("docling-bridge/docling-ops.js", doclingOpsJs);
       if (mineruServerJs) zip.file("mineru-bridge/server.js", mineruServerJs);
       if (mineruOpsJs) zip.file("mineru-bridge/mineru-ops.js", mineruOpsJs);
+      if (mineruImageMinPy) {
+        zip.file("mineru-bridge/pyhooks/ensure_image_min_tokens.py", mineruImageMinPy);
+      }
       if (lanboardServerJs) zip.file("lanboard-bridge/server.js", lanboardServerJs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {

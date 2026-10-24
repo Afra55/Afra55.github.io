@@ -7,7 +7,7 @@
 
 const { checkMinerU, convert, installMinerU } = require("./mineru-ops");
 
-const BRIDGE_VERSION = "0.1.5";
+const BRIDGE_VERSION = "0.1.6";
 const FEATURES = { mineru: true, ocr: true, gpuRecommended: true };
 
 function readBody(req, limit = 96 * 1024 * 1024, { onProgress } = {}) {

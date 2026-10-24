@@ -670,9 +670,15 @@ function resolveBridgeRoot() {
 
 let loggedMineruDataDirs = false;
 
+/** Qwen-VL 官方推荐下限（grounding / OCR）；只抬 min，不压低 max。 */
+const QWEN_IMAGE_MIN_TOKENS = "1024";
+
 /**
  * MinerU 运行环境：模型默认落到桥目录 mineru-data/，避免占满 C: 用户目录。
  * 可用环境变量覆盖：MINERU_HOME / MINERU_MODEL_BASE_DIR / MINERU_CONFIG
+ *
+ * 质量：默认 LLAMA_ARG_IMAGE_MIN_TOKENS=1024（llama-server / 认 env 的路径）。
+ * 进程内 llama-cpp-engine 不读该 env，转换前另跑 pyhooks 抬 mmproj 元数据。
  */
 function mineruEnv() {
   const env = { ...process.env };
@@ -681,6 +687,11 @@ function mineruEnv() {
   // 管道捕获时默认块缓冲，黑窗口会像死机；强制行缓冲
   env.PYTHONUNBUFFERED = "1";
   env.PYTHONIOENCODING = env.PYTHONIOENCODING || "utf-8";
+
+  // Qwen-VL：推荐下限 1024 image tokens（质量优先；用户已设则不覆盖）
+  if (!String(env.LLAMA_ARG_IMAGE_MIN_TOKENS || "").trim()) {
+    env.LLAMA_ARG_IMAGE_MIN_TOKENS = QWEN_IMAGE_MIN_TOKENS;
+  }
 
   const bridgeRoot = resolveBridgeRoot();
   const dataHome = path.join(bridgeRoot, "mineru-data");
@@ -704,8 +715,45 @@ function mineruEnv() {
     console.log(`[mineru] MINERU_HOME：${env.MINERU_HOME}`);
     console.log(`[mineru] 配置文件：${env.MINERU_CONFIG}`);
     console.log(`[mineru] 临时目录：${path.join(dataHome, "tmp")}`);
+    console.log(
+      `[mineru] Qwen-VL image-min-tokens=${env.LLAMA_ARG_IMAGE_MIN_TOKENS}（质量推荐下限；可用 LLAMA_ARG_IMAGE_MIN_TOKENS 覆盖）`
+    );
   }
   return env;
+}
+
+/**
+ * 进程内 llama-cpp-engine 不读 LLAMA_ARG_*：转换前抬高 mmproj 的 image_min_pixels。
+ * 无模型 / 无 Python / 脚本失败都不阻断转换。
+ */
+async function ensureQwenImageMinTokens(env) {
+  const modelsDir = String(env?.MINERU_MODEL_BASE_DIR || "").trim();
+  if (!modelsDir) return;
+  const script = path.join(__dirname, "pyhooks", "ensure_image_min_tokens.py");
+  if (!fs.existsSync(script)) return;
+  let py;
+  try {
+    py = await resolvePython();
+  } catch (_) {
+    return;
+  }
+  if (!py) return;
+  const minTok = String(env.LLAMA_ARG_IMAGE_MIN_TOKENS || QWEN_IMAGE_MIN_TOKENS).trim() || QWEN_IMAGE_MIN_TOKENS;
+  try {
+    const r = await runCmd(
+      py.file,
+      [...py.argsPrefix, script, "--models-dir", modelsDir, "--min-tokens", minTok],
+      { timeout: 120000, env }
+    );
+    const text = `${r.stdout || ""}\n${r.stderr || ""}`.trim();
+    if (text) {
+      for (const line of text.split(/\r?\n/).filter(Boolean).slice(0, 12)) {
+        console.log(`[mineru] image-min ${line}`);
+      }
+    }
+  } catch (err) {
+    console.log(`[mineru] image-min 预抬跳过：${err?.message || err}`);
+  }
 }
 
 /**
@@ -792,6 +840,7 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
   fs.writeFileSync(inPath, buf);
   const stem = path.basename(name, path.extname(name)) || "out";
   const env = mineruEnv();
+  await ensureQwenImageMinTokens(env);
   const errors = [];
   const t0 = Date.now();
   const sizeKb = Math.max(1, Math.round(buf.length / 1024));
@@ -1092,5 +1141,7 @@ module.exports = {
   convert,
   installMinerU,
   resolveMinerU,
+  mineruEnv,
+  QWEN_IMAGE_MIN_TOKENS,
   SUPPORTED_EXT,
 };
