@@ -20,6 +20,8 @@ t("长文本优先拆分常量存在", () => {
   assert.ok(/qrPreferSplit/.test(src));
   assert.ok(/openQrLightbox|qr-lightbox/.test(src));
   assert.ok(/点图可放大/.test(src) || /点按可放大/.test(src));
+  assert.ok(/qr-lightbox-toolbar|zoomAt|fitImage/.test(src));
+  assert.ok(/wheel/.test(src) && /pointerdown/.test(src));
 });
 
 t("渲染最小模块像素 ≥4，上限抬到 1280", () => {
@@ -27,10 +29,12 @@ t("渲染最小模块像素 ≥4，上限抬到 1280", () => {
   assert.ok(/Math\.min\(1280,/.test(src));
 });
 
-t("样式支持 denser 放大与 lightbox", () => {
+t("样式支持 denser 放大与 lightbox 缩放拖拽", () => {
   assert.ok(/qr-box--dense/.test(css));
   assert.ok(/\.qr-lightbox\b/.test(css));
   assert.ok(/min\(100%,\s*min\(92vw/.test(css));
+  assert.ok(/\.qr-lightbox-toolbar\b/.test(css));
+  assert.ok(/touch-action:\s*none/.test(css));
 });
 
 t("2000 ASCII 拆成多张且每张可编码", () => {

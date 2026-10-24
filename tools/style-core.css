@@ -1594,10 +1594,8 @@ a.secondary-btn {
   inset: 0;
   z-index: 12000;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
   padding: 1rem;
   background: rgba(8, 12, 20, 0.88);
   box-sizing: border-box;
@@ -1607,28 +1605,37 @@ a.secondary-btn {
   display: none !important;
 }
 
-.qr-lightbox-stage {
-  max-width: min(96vw, 96vh);
-  max-height: min(96vw, 86vh);
+.qr-lightbox-inner {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  width: min(94vw, 1400px);
+  height: min(92vh, 960px);
+  max-width: min(94vw, 1400px);
+  max-height: min(92vh, 960px);
+  padding: 0.75rem;
+  box-sizing: border-box;
+  background: var(--panel-strong, rgba(11, 18, 32, 0.96));
+  color: var(--ink, #e8eef8);
+  border-radius: 14px;
+  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.45);
 }
 
-.qr-lightbox-img {
-  display: block;
-  width: auto;
-  height: auto;
-  max-width: min(96vw, 96vh);
-  max-height: min(96vw, 86vh);
-  background: #fff;
-  padding: 0.75rem;
-  border-radius: 12px;
-  image-rendering: pixelated;
-  box-sizing: border-box;
+.qr-lightbox-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.qr-lightbox-hint {
+  margin: 0;
+  flex: 1 1 auto;
+  color: var(--muted, #a8b3c7);
+  font-size: 0.9rem;
 }
 
 .qr-lightbox-close {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
   border: 0;
   border-radius: 999px;
   padding: 0.45rem 0.9rem;
@@ -1636,13 +1643,54 @@ a.secondary-btn {
   color: #0b1220;
   font: inherit;
   cursor: pointer;
+  flex: 0 0 auto;
 }
 
-.qr-lightbox-hint {
-  margin: 0;
-  color: #e8eef8;
-  font-size: 0.9rem;
+.qr-lightbox-stage {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  background: #fff;
+  touch-action: none;
+  cursor: grab;
+}
+
+.qr-lightbox-stage:active {
+  cursor: grabbing;
+}
+
+.qr-lightbox-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  image-rendering: pixelated;
+  user-select: none;
+  -webkit-user-drag: none;
+  box-sizing: border-box;
+}
+
+.qr-lightbox-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.qr-lightbox-zoom-pct {
+  min-width: 3.5rem;
   text-align: center;
+  color: var(--muted, #a8b3c7);
+  font-size: 0.85rem;
 }
 
 .meta-row .copy-btn {
