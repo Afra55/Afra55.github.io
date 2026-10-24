@@ -455,7 +455,7 @@ async function checkMinerU() {
       formats: [...SUPPORTED_EXT],
       ocr: true,
       gpuRecommended: true,
-      note: "MinerU：PDF 默认最高质量（advanced / hybrid-high）；时长可很长。建议 GPU。也可回退 Docling。",
+      note: "MinerU：PDF 默认最高质量（advanced）。独显走 GPU；仅集显/无卡默认 CPU 仍冲 advanced（避免 Vulkan 崩）。也可回退 Docling。",
     };
   } catch (err) {
     return {
@@ -669,9 +669,161 @@ function resolveBridgeRoot() {
 }
 
 let loggedMineruDataDirs = false;
+let loggedBackendPolicy = false;
+/** @type {string[]|null} */
+let cachedVideoAdapters = null;
 
 /** Qwen-VL 官方推荐下限（grounding / OCR）；只抬 min，不压低 max。 */
 const QWEN_IMAGE_MIN_TOKENS = "1024";
+
+/**
+ * 根据显卡名称归类：discrete | igpu | none | unknown
+ * 用于决定 llama-cpp 走 Vulkan GPU 还是 CPU（集显 Vulkan 易 device lost）。
+ */
+function classifyGpuName(name) {
+  const n = String(name || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!n) return "unknown";
+  if (/microsoft\s+basic\s+display|basic\s+render\s+driver|remote\s+desktop/.test(n)) return "none";
+  // Apple Silicon / 独显级 GPU
+  if (/apple\s+m\d|apple\s+gpu/.test(n)) return "discrete";
+  if (/\bintel\b/.test(n) && /\barc\b/.test(n)) return "discrete";
+  if (/\bnvidia\b/.test(n)) {
+    if (/nsight|nvs\b/.test(n)) return "unknown";
+    return "discrete";
+  }
+  if (/\bradeon\b|\bamd\b/.test(n)) {
+    // 独显：RX / Pro / Instinct / FirePro 等
+    if (/\brx\s*\d|radeon\s+pro|instinct|firepro|\bw\d{3,}\b|\bxt\b|\bxtx\b/.test(n)) return "discrete";
+    // 集显 / APU：Radeon Graphics、Vega Graphics
+    if (/radeon\s*\(?tm\)?\s*graphics|radeon\s+graphics|vega\s*(graphics|\d)|graphics\s*$/.test(n)) {
+      return "igpu";
+    }
+    if (/graphics/.test(n) && !/\brx\b/.test(n)) return "igpu";
+    return "discrete";
+  }
+  if (/\bintel\b/.test(n) && /(uhd|iris|hd\s*graphics|graphics)/.test(n)) return "igpu";
+  if (/\b(uhd|iris)\b/.test(n)) return "igpu";
+  return "unknown";
+}
+
+/** @param {string[]} names */
+function summarizeGpuClass(names) {
+  const list = Array.isArray(names) ? names : [];
+  const classes = list.map(classifyGpuName);
+  if (classes.includes("discrete")) return "discrete";
+  if (classes.includes("igpu")) return "igpu";
+  if (list.length && classes.every((c) => c === "none")) return "none";
+  if (!list.length) return "unknown";
+  return "unknown";
+}
+
+function listVideoAdaptersSync() {
+  if (cachedVideoAdapters) return cachedVideoAdapters;
+  const { execFileSync } = require("child_process");
+  /** @type {string[]} */
+  let names = [];
+  try {
+    if (process.platform === "win32") {
+      const out = execFileSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+        ],
+        { encoding: "utf8", timeout: 10000, windowsHide: true, maxBuffer: 1024 * 1024 }
+      );
+      names = String(out || "")
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else if (process.platform === "darwin") {
+      const out = execFileSync("system_profiler", ["SPDisplaysDataType", "-detailLevel", "mini"], {
+        encoding: "utf8",
+        timeout: 12000,
+        maxBuffer: 2 * 1024 * 1024,
+      });
+      const chip = [...String(out || "").matchAll(/Chipset Model:\s*(.+)/gi)].map((m) => m[1].trim());
+      names = chip.length ? chip : ["Apple GPU"];
+    } else {
+      let out = "";
+      try {
+        out = execFileSync("lspci", [], { encoding: "utf8", timeout: 8000, maxBuffer: 2 * 1024 * 1024 });
+      } catch (_) {
+        out = "";
+      }
+      names = String(out || "")
+        .split(/\r?\n/)
+        .filter((line) => /VGA|3D|Display/i.test(line))
+        .map((line) => line.replace(/^[^:]+:\s*/, "").trim())
+        .filter(Boolean);
+    }
+  } catch (_) {
+    names = [];
+  }
+  cachedVideoAdapters = names;
+  return names;
+}
+
+/**
+ * 独显 → auto（Vulkan/Metal GPU 冲 advanced）；
+ * 仅集显 / 无卡 → cpu（仍冲 advanced，避免集显 Vulkan device lost）；
+ * 用户已设 MINERU_LLAMA_CPP_BACKEND 则不覆盖。
+ */
+function applyLlamaCppBackendPolicy(env) {
+  const user = String(env.MINERU_LLAMA_CPP_BACKEND || "").trim();
+  if (user) {
+    if (!loggedBackendPolicy) {
+      loggedBackendPolicy = true;
+      console.log(`[mineru] llama-cpp 后端：用户指定 MINERU_LLAMA_CPP_BACKEND=${user}`);
+    }
+    return;
+  }
+  // macOS Metal 较稳，默认 auto
+  if (process.platform === "darwin") {
+    env.MINERU_LLAMA_CPP_BACKEND = "auto";
+    if (!loggedBackendPolicy) {
+      loggedBackendPolicy = true;
+      console.log("[mineru] llama-cpp 后端策略：macOS → auto（Metal/CPU，冲 advanced）");
+    }
+    return;
+  }
+  const names = listVideoAdaptersSync();
+  const kind = summarizeGpuClass(names);
+  let backend = "cpu";
+  let reason = "";
+  if (kind === "discrete") {
+    backend = "auto";
+    reason = `检测到独显（${names.join(" / ")}）→ auto（优先 GPU 跑 advanced）`;
+  } else if (kind === "igpu") {
+    backend = "cpu";
+    reason = `仅集显（${names.join(" / ")}）→ cpu（避免 Vulkan device lost；仍用 advanced）`;
+  } else if (kind === "none") {
+    backend = "cpu";
+    reason = `无可用 GPU（${names.join(" / ") || "无"}）→ cpu（仍用 advanced）`;
+  } else {
+    backend = "cpu";
+    reason = names.length
+      ? `未识别独显（${names.join(" / ")}）→ cpu（稳妥冲 advanced；有独显可设 MINERU_LLAMA_CPP_BACKEND=auto）`
+      : "未探测到显卡 → cpu（仍用 advanced）";
+  }
+  env.MINERU_LLAMA_CPP_BACKEND = backend;
+  if (!loggedBackendPolicy) {
+    loggedBackendPolicy = true;
+    console.log(`[mineru] llama-cpp 后端策略：${reason}`);
+  }
+}
+
+function looksLikeGpuBackendLost(err) {
+  const msg = `${err?.stderr || ""}\n${err?.stdout || ""}\n${err?.message || ""}`;
+  return /ggml_vulkan|ErrorDeviceLost|device lost on Vulkan|vk::(?:Device|Queue)|failed to process mtmd chunk|decode\(\) failed/i.test(
+    msg
+  );
+}
 
 /**
  * MinerU 运行环境：模型默认落到桥目录 mineru-data/，避免占满 C: 用户目录。
@@ -679,6 +831,7 @@ const QWEN_IMAGE_MIN_TOKENS = "1024";
  *
  * 质量：默认 LLAMA_ARG_IMAGE_MIN_TOKENS=1024（llama-server / 认 env 的路径）。
  * 进程内 llama-cpp-engine 不读该 env，转换前另跑 pyhooks 抬 mmproj 元数据。
+ * GPU：独显 auto；仅集显/无卡默认 cpu；用户可用 MINERU_LLAMA_CPP_BACKEND 覆盖。
  */
 function mineruEnv() {
   const env = { ...process.env };
@@ -708,6 +861,8 @@ function mineruEnv() {
   if (!env.MINERU_HOME) env.MINERU_HOME = dataHome;
   if (!env.MINERU_MODEL_BASE_DIR) env.MINERU_MODEL_BASE_DIR = modelsDir;
   if (!env.MINERU_CONFIG) env.MINERU_CONFIG = configPath;
+
+  applyLlamaCppBackendPolicy(env);
 
   if (!loggedMineruDataDirs) {
     loggedMineruDataDirs = true;
@@ -1005,11 +1160,38 @@ async function convert({ filename, dataBase64, forceOcr = false, ocrLang = "" } 
             console.log(`[mineru] ${att.label} 进程非 0 但已产出 MD，按成功处理`);
             return finishFromPicked(pickedEarly, att.label);
           }
-          if (att.retryWait && looksLikeWaitTimeout(err) && round < maxRounds - 1) {
+          // 独显/集显 Vulkan 崩了：同档改 CPU 再冲，避免直接掉到 basic
+          const backendNow = String(env.MINERU_LLAMA_CPP_BACKEND || "").trim().toLowerCase();
+          if (looksLikeGpuBackendLost(err) && backendNow !== "cpu") {
+            console.log(
+              `[mineru] ${att.label} GPU/Vulkan 失败，同档改用 CPU 重试（保持最高质量，不立刻降档）…`
+            );
+            const cpuEnv = { ...env, MINERU_LLAMA_CPP_BACKEND: "cpu" };
+            try {
+              await runSpawn(att.file, att.args, {
+                timeout: SPAWN_TIMEOUT_MS,
+                cwd: tmp,
+                env: cpuEnv,
+                logPrefix: "[mineru] ",
+              });
+              env.MINERU_LLAMA_CPP_BACKEND = "cpu";
+              roundOk = true;
+              break;
+            } catch (errCpu) {
+              lastErr = errCpu;
+              const pickedCpu = collectMarkdown(att.outHint, outDir, stem);
+              if (pickedCpu?.text && String(pickedCpu.text).trim()) {
+                console.log(`[mineru] ${att.label}+cpu 进程非 0 但已产出 MD，按成功处理`);
+                env.MINERU_LLAMA_CPP_BACKEND = "cpu";
+                return finishFromPicked(pickedCpu, `${att.label}+cpu`);
+              }
+            }
+          }
+          if (att.retryWait && looksLikeWaitTimeout(lastErr) && round < maxRounds - 1) {
             console.log(`[mineru] ${att.label} 仅客户端等待超时，任务可能仍在跑，继续等…`);
             continue;
           }
-          const detail = String(err?.stderr || err?.message || err).slice(0, 240);
+          const detail = String(lastErr?.stderr || lastErr?.message || lastErr).slice(0, 240);
           errors.push(`${att.label}: ${detail}`);
           console.log(`[mineru] ${att.label} 失败：${detail}`);
           break;
@@ -1147,6 +1329,10 @@ module.exports = {
   installMinerU,
   resolveMinerU,
   mineruEnv,
+  classifyGpuName,
+  summarizeGpuClass,
+  looksLikeGpuBackendLost,
+  applyLlamaCppBackendPolicy,
   QWEN_IMAGE_MIN_TOKENS,
   SUPPORTED_EXT,
 };
