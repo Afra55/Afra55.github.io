@@ -210,7 +210,7 @@
       el.textContent =
         got >= series.total
           ? `分片已齐 ${got}/${series.total}`
-          : `${api?.progressLabel(got, series.total) || `分片 ${got}/${series.total}`} · 继续扫缺的张；无 [i/n] 的码不拼接`;
+          : `${api?.progressLabel(got, series.total) || `分片 ${got}/${series.total}`} · 已拼已有，可继续扫补缺；无 [i/n] 的码不拼接`;
       if (clearBtn) clearBtn.hidden = false;
     } else {
       el.hidden = true;
@@ -277,46 +277,29 @@
     }
     const result = api.ingest(series, cls.seriesParts, cls.seriesTotal);
     series = result.session;
+    const display = api.buildDisplayHits(result, cls.plain);
+    if (display.length) showHits(display);
+
     if (result.complete) {
-      showHits([
-        { text: result.joined, format: `拼接全文 · ${result.total} 片` },
-        ...cls.plain.map((t) => ({ text: t, format: "其它码（未拼接）" })),
-      ]);
       if (resultLabel) resultLabel.textContent = "拼接结果";
       series = null;
       updateSeriesProgressUi();
       toast(`已自动拼接 ${result.total} 张分片`);
-      if (fromCamera) stopCamera();
-      return { keepScanning: false };
-    }
-    updateSeriesProgressUi();
-    const now = Date.now();
-    if (result.added.length && now - seriesToastAt > 800) {
-      seriesToastAt = now;
-      toast(`${api.progressLabel(result.got, result.total)} · 继续扫`);
-      try {
-        if (navigator.vibrate) navigator.vibrate(30);
-      } catch (_) {}
-    }
-    if (fromCamera) {
-      if (startBtn) startBtn.hidden = true;
-      if (stopBtn) stopBtn.hidden = false;
-      if (resultPanel) resultPanel.hidden = true;
-      document.body.classList.remove("has-result");
-      return { keepScanning: true };
-    }
-    const partial = [];
-    for (let i = 1; i <= result.total; i += 1) {
-      if (result.session.parts.has(i)) {
-        partial.push({
-          text: `[${i}/${result.total}]${result.session.parts.get(i)}`,
-          format: `分片 ${i}/${result.total}`,
-        });
+    } else {
+      updateSeriesProgressUi();
+      if (resultLabel) {
+        resultLabel.textContent = `部分拼接 ${result.got}/${result.total} · 可继续扫补齐`;
+      }
+      const now = Date.now();
+      if (result.added.length && now - seriesToastAt > 800) {
+        seriesToastAt = now;
+        toast(`${api.progressLabel(result.got, result.total)} · 已拼已有，可继续扫`);
+        try {
+          if (navigator.vibrate) navigator.vibrate(30);
+        } catch (_) {}
       }
     }
-    for (const t of cls.plain) partial.push({ text: t, format: "其它码（未拼接）" });
-    if (partial.length) showHits(partial);
-    if (resultLabel) resultLabel.textContent = `分片未齐（${result.got}/${result.total}）`;
+    if (fromCamera) stopCamera();
     return { keepScanning: false };
   }
 
