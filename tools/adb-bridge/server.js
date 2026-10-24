@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.82";
+const BRIDGE_VERSION = "0.9.83";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5532,16 +5532,22 @@ async function handleApi(req, res, url) {
       const stripped = url.pathname === "/pandoc" ? "/" : url.pathname.slice(7) || "/";
       const isPandocHealth = stripped === "/health" && req.method === "GET";
       if (!isPandocHealth && req.method !== "OPTIONS") requireToken(req);
-      if (stripped === "/convert" && req.method === "POST") {
+      const isConvert = stripped === "/convert" && req.method === "POST";
+      if (isConvert) {
         console.log("");
         console.log("[bridge] → Pandoc 文档转换 · 请看下方 [pandoc] 进度");
+        beginBridgeBusy("pandoc-convert");
       }
       wrapResWithCors(res, origin);
-      await pandocBridge.handleRequest(req, res, {
-        pathname: stripped,
-        alreadyAuthed: !isPandocHealth,
-        embedded: true,
-      });
+      try {
+        await pandocBridge.handleRequest(req, res, {
+          pathname: stripped,
+          alreadyAuthed: !isPandocHealth,
+          embedded: true,
+        });
+      } finally {
+        if (isConvert) endBridgeBusy("pandoc-convert");
+      }
       return;
     }
 
@@ -5555,16 +5561,22 @@ async function handleApi(req, res, url) {
       const isDoclingHealth =
         (stripped === "/health" || stripped === "/") && req.method === "GET";
       if (!isDoclingHealth && req.method !== "OPTIONS") requireToken(req);
-      if (stripped === "/convert" && req.method === "POST") {
+      const isConvert = stripped === "/convert" && req.method === "POST";
+      if (isConvert) {
         console.log("");
         console.log("[bridge] → Docling 文档转换（MDM 导入 PDF 等）· 请看下方 [docling] 进度");
+        beginBridgeBusy("docling-convert");
       }
       wrapResWithCors(res, origin);
-      await doclingBridge.handleRequest(req, res, {
-        pathname: stripped,
-        alreadyAuthed: !isDoclingHealth,
-        embedded: true,
-      });
+      try {
+        await doclingBridge.handleRequest(req, res, {
+          pathname: stripped,
+          alreadyAuthed: !isDoclingHealth,
+          embedded: true,
+        });
+      } finally {
+        if (isConvert) endBridgeBusy("docling-convert");
+      }
       return;
     }
 
@@ -5578,16 +5590,22 @@ async function handleApi(req, res, url) {
       const isMineruHealth =
         (stripped === "/health" || stripped === "/") && req.method === "GET";
       if (!isMineruHealth && req.method !== "OPTIONS") requireToken(req);
-      if (stripped === "/convert" && req.method === "POST") {
+      const isConvert = stripped === "/convert" && req.method === "POST";
+      if (isConvert) {
         console.log("");
         console.log("[bridge] → MinerU 文档转换（MDM 导入 PDF 等）· 请看下方 [mineru] 进度");
+        beginBridgeBusy("mineru-convert");
       }
       wrapResWithCors(res, origin);
-      await mineruBridge.handleRequest(req, res, {
-        pathname: stripped,
-        alreadyAuthed: !isMineruHealth,
-        embedded: true,
-      });
+      try {
+        await mineruBridge.handleRequest(req, res, {
+          pathname: stripped,
+          alreadyAuthed: !isMineruHealth,
+          embedded: true,
+        });
+      } finally {
+        if (isConvert) endBridgeBusy("mineru-convert");
+      }
       return;
     }
 
@@ -6919,6 +6937,37 @@ function findStartScript() {
 }
 
 /**
+ * 长任务（MinerU/Docling/Pandoc 转换）进行中禁止立刻 relaunch：
+ * 否则黑窗口会被 closeOldWindowAfterRelaunch 直接 taskkill，用户看到「运行中突然不见了」。
+ */
+let bridgeBusyCount = 0;
+let relaunchWhenIdle = false;
+let relaunchIdleTimer = null;
+
+function beginBridgeBusy(reason) {
+  bridgeBusyCount += 1;
+  if (bridgeBusyCount === 1) {
+    console.log(`[bridge] 长任务开始：${reason || "job"}（期间自动更新会延后重启，黑窗口保持打开）`);
+  }
+}
+
+function endBridgeBusy(reason) {
+  bridgeBusyCount = Math.max(0, bridgeBusyCount - 1);
+  if (bridgeBusyCount > 0) return;
+  if (!relaunchWhenIdle) return;
+  if (relaunchIdleTimer) clearTimeout(relaunchIdleTimer);
+  relaunchIdleTimer = setTimeout(() => {
+    relaunchIdleTimer = null;
+    if (bridgeBusyCount > 0) return;
+    relaunchWhenIdle = false;
+    console.log("");
+    console.log(`[bridge] 长任务已结束${reason ? `（${reason}）` : ""}，开始延后的更新重启…`);
+    console.log("");
+    relaunchBridge();
+  }, 1000);
+}
+
+/**
  * 更新后重启：优先走启动脚本，这样仍会走「检测是否已有桥 + 让用户选复用/重启/取消」的正常启动流程。
  * 没有启动脚本时退回直接重启（server 自身的 listenWithFallback 会处理端口占用）。
  * 若本次是由启动脚本拉起的（DEVTOOLS_BRIDGE_FROM_SCRIPT=1），新窗口起来后自动关掉本窗口。
@@ -6937,6 +6986,17 @@ function closeOldWindowAfterRelaunch() {
 }
 
 function relaunchBridge() {
+  if (bridgeBusyCount > 0) {
+    if (!relaunchWhenIdle) {
+      relaunchWhenIdle = true;
+      console.log("");
+      console.log(
+        `[bridge] 有 ${bridgeBusyCount} 个长任务进行中，更新文件已就绪；等任务结束后再重启（黑窗口不会现在关掉）`
+      );
+      console.log("");
+    }
+    return;
+  }
   try {
     const script = findStartScript();
     if (script) {
@@ -7170,6 +7230,12 @@ process.on("exit", () => {
 process.on("uncaughtException", (err) => {
   console.error("");
   console.error("未捕获异常:", err && err.stack ? err.stack : err);
+  console.error("窗口将保持打开，便于查看错误。按 Ctrl+C 退出。");
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("");
+  console.error("未处理的 Promise 拒绝:", reason && reason.stack ? reason.stack : reason);
   console.error("窗口将保持打开，便于查看错误。按 Ctrl+C 退出。");
 });
 
