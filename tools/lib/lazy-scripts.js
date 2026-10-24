@@ -687,6 +687,7 @@
     if (TOOL_FILES[id]) {
       report(0.94, `加载${id} 模块…`);
       if (id === "qrcode") {
+        await loadScript("./lib/qr-series.js");
         await loadScript("./lib/code-scan.js");
       }
       if (id === "apidebug") {

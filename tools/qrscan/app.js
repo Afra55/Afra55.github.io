@@ -33,8 +33,12 @@
   let lastFrame = null;
   let hits = [];
   let activeHit = 0;
+  /** @type {{ total: number, parts: Map<number, string> } | null} */
+  let series = null;
+  let seriesToastAt = 0;
 
   const Scan = () => window.DevToolsCodeScan;
+  const SeriesApi = () => window.DevToolsQrSeries;
 
   function isStandalone() {
     try {
@@ -76,6 +80,9 @@
   function ensureLibs() {
     if (libsReady) return libsReady;
     libsReady = (async () => {
+      if (!window.DevToolsQrSeries) {
+        await loadScript("../lib/qr-series.js");
+      }
       if (!window.DevToolsCodeScan) {
         await loadScript("../lib/code-scan.js");
       }
@@ -188,6 +195,30 @@
     });
   }
 
+  function seriesIncomplete() {
+    return !!(series && series.total >= 2 && series.parts.size > 0 && series.parts.size < series.total);
+  }
+
+  function updateSeriesProgressUi() {
+    const el = $("#qs-series-progress");
+    const clearBtn = $("#qs-series-clear");
+    const api = SeriesApi();
+    if (!el) return;
+    if (series && series.total >= 2 && series.parts.size > 0) {
+      const got = series.parts.size;
+      el.hidden = false;
+      el.textContent =
+        got >= series.total
+          ? `分片已齐 ${got}/${series.total}`
+          : `${api?.progressLabel(got, series.total) || `分片 ${got}/${series.total}`} · 继续扫缺的张；无 [i/n] 的码不拼接`;
+      if (clearBtn) clearBtn.hidden = false;
+    } else {
+      el.hidden = true;
+      el.textContent = "";
+      if (clearBtn) clearBtn.hidden = true;
+    }
+  }
+
   function showHits(list, meta) {
     const found = (list || []).filter((h) => h?.text);
     if (!found.length) return;
@@ -208,12 +239,85 @@
       startBtn.textContent = "继续扫";
     }
     if (stopBtn) stopBtn.hidden = true;
+    if (againBtn) againBtn.textContent = seriesIncomplete() ? "继续扫分片" : "继续扫";
     renderHitList(found);
     selectHit(0);
+    updateSeriesProgressUi();
     try {
       if (navigator.vibrate) navigator.vibrate(40);
     } catch (_) {}
     void meta;
+  }
+
+  function clearSeriesSession() {
+    series = null;
+    updateSeriesProgressUi();
+    if (againBtn) againBtn.textContent = "继续扫";
+    if (startBtn && !scanning) {
+      startBtn.textContent = resultPanel && !resultPanel.hidden ? "继续扫" : "扫码";
+    }
+    toast("已清空分片进度");
+  }
+
+  function ingestDecodedHits(list, { fromCamera = false } = {}) {
+    const found = (list || []).filter((h) => h?.text);
+    if (!found.length) return { keepScanning: false };
+    const api = SeriesApi();
+    if (!api?.classifyTexts) {
+      showHits(found);
+      if (fromCamera) stopCamera();
+      return { keepScanning: false };
+    }
+    const cls = api.classifyTexts(found.map((h) => h.text));
+    if (!cls.hasSeries) {
+      if (!seriesIncomplete()) series = null;
+      showHits(found);
+      if (fromCamera) stopCamera();
+      return { keepScanning: false };
+    }
+    const result = api.ingest(series, cls.seriesParts, cls.seriesTotal);
+    series = result.session;
+    if (result.complete) {
+      showHits([
+        { text: result.joined, format: `拼接全文 · ${result.total} 片` },
+        ...cls.plain.map((t) => ({ text: t, format: "其它码（未拼接）" })),
+      ]);
+      if (resultLabel) resultLabel.textContent = "拼接结果";
+      series = null;
+      updateSeriesProgressUi();
+      toast(`已自动拼接 ${result.total} 张分片`);
+      if (fromCamera) stopCamera();
+      return { keepScanning: false };
+    }
+    updateSeriesProgressUi();
+    const now = Date.now();
+    if (result.added.length && now - seriesToastAt > 800) {
+      seriesToastAt = now;
+      toast(`${api.progressLabel(result.got, result.total)} · 继续扫`);
+      try {
+        if (navigator.vibrate) navigator.vibrate(30);
+      } catch (_) {}
+    }
+    if (fromCamera) {
+      if (startBtn) startBtn.hidden = true;
+      if (stopBtn) stopBtn.hidden = false;
+      if (resultPanel) resultPanel.hidden = true;
+      document.body.classList.remove("has-result");
+      return { keepScanning: true };
+    }
+    const partial = [];
+    for (let i = 1; i <= result.total; i += 1) {
+      if (result.session.parts.has(i)) {
+        partial.push({
+          text: `[${i}/${result.total}]${result.session.parts.get(i)}`,
+          format: `分片 ${i}/${result.total}`,
+        });
+      }
+    }
+    for (const t of cls.plain) partial.push({ text: t, format: "其它码（未拼接）" });
+    if (partial.length) showHits(partial);
+    if (resultLabel) resultLabel.textContent = `分片未齐（${result.got}/${result.total}）`;
+    return { keepScanning: false };
   }
 
   function stopCamera({ fromUser } = {}) {
@@ -236,11 +340,13 @@
       video.hidden = true;
     }
     const showingResult = resultPanel && !resultPanel.hidden;
+    const cont = showingResult || seriesIncomplete();
     if (startBtn) {
       startBtn.hidden = false;
-      startBtn.textContent = showingResult ? "继续扫" : "扫码";
+      startBtn.textContent = cont ? "继续扫" : "扫码";
     }
     if (stopBtn) stopBtn.hidden = true;
+    updateSeriesProgressUi();
   }
 
   function drawVideoFrame() {
@@ -277,8 +383,8 @@
             if (!scanning) return;
             if (found?.length) {
               lastFrame = drawn.imageData;
-              showHits(found, `摄像头 · ${found.length} 个`);
-              stopCamera();
+              const { keepScanning } = ingestDecodedHits(found, { fromCamera: true });
+              if (!keepScanning) stopCamera();
             }
           })
           .catch(() => {})
@@ -294,6 +400,8 @@
     userStopped = false;
     setError("");
     setStatus("");
+    const keepSeries = seriesIncomplete();
+    if (!keepSeries) series = null;
     if (resultPanel) resultPanel.hidden = true;
     document.body.classList.remove("has-result");
     if (resultText) resultText.value = "";
@@ -307,6 +415,7 @@
       canvas.hidden = true;
       canvas.classList.remove("hit-preview");
     }
+    updateSeriesProgressUi();
     await ensureLibs();
     stopCamera();
     userStopped = false;
@@ -338,7 +447,7 @@
     scanning = true;
     if (startBtn) startBtn.hidden = true;
     if (stopBtn) stopBtn.hidden = false;
-    setStatus("");
+    setStatus(keepSeries ? SeriesApi()?.progressLabel(series.parts.size, series.total) || "" : "");
     scanFrame();
   }
 
@@ -464,10 +573,15 @@
     try {
       await ensureLibs();
       const { hits: found, meta } = await decodeFromFile(file);
-      showHits(found, meta);
+      ingestDecodedHits(found, { fromCamera: false });
+      void meta;
     } catch (err) {
       setError(err.message || String(err));
     }
+  });
+
+  $("#qs-series-clear")?.addEventListener("click", () => {
+    clearSeriesSession();
   });
 
   window.addEventListener("pagehide", () => stopCamera());

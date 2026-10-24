@@ -33,6 +33,7 @@ const STEPS = [
   { name: "bridge busy relaunch", cmd: "node", args: ["test/bridge-busy-relaunch.test.js"] },
   { name: "qrcode long text", cmd: "node", args: ["test/qrcode-long-text.test.js"] },
   { name: "qrcode decode roundtrip", cmd: "node", args: ["test/qrcode-decode-roundtrip.test.js"] },
+  { name: "qr series stitch", cmd: "node", args: ["test/qr-series.test.js"] },
   { name: "adb bridge smoke", cmd: "node", args: ["adb-bridge/smoke-check.js"] },
   { name: "ffmpeg bridge smoke", cmd: "node", args: ["ffmpeg-bridge/smoke-check.js"] },
 ];
