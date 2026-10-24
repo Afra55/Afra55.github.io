@@ -44,16 +44,64 @@ t("不同 n 的分片不互相拼：次要组进 plain", () => {
   assert.strictEqual(r.joined, "aabb");
 });
 
-t("连续收片：未齐不 complete，齐了才 joined", () => {
+t("未齐也拼已有：1+2/3 正文相连，缺片只在标签", () => {
+  const r = Series.ingest(
+    null,
+    new Map([
+      [1, { index: 1, total: 3, body: "AA" }],
+      [2, { index: 2, total: 3, body: "BB" }],
+    ]),
+    3
+  );
+  assert.strictEqual(r.complete, false);
+  assert.strictEqual(r.joined, "AABB");
+  assert.deepStrictEqual(r.missing, [3]);
+  assert.ok(r.format.includes("部分拼接 2/3"));
+  assert.ok(r.format.includes("缺第3片"));
+});
+
+t("中间缺片插入占位，前后已有仍拼进正文", () => {
+  const r = Series.ingest(
+    null,
+    new Map([
+      [1, { index: 1, total: 3, body: "A" }],
+      [3, { index: 3, total: 3, body: "C" }],
+    ]),
+    3
+  );
+  assert.strictEqual(r.complete, false);
+  assert.strictEqual(r.joined, `A${Series.GAP_MARK(2)}C`);
+  assert.deepStrictEqual(r.missing, [2]);
+});
+
+t("连续收片：未齐有 partial joined，齐了无占位", () => {
   let r = Series.ingest(null, new Map([[1, { index: 1, total: 3, body: "A" }]]), 3);
   assert.strictEqual(r.complete, false);
-  assert.strictEqual(r.got, 1);
+  assert.strictEqual(r.joined, "A");
   r = Series.ingest(r.session, new Map([[3, { index: 3, total: 3, body: "C" }]]), 3);
   assert.strictEqual(r.complete, false);
   assert.strictEqual(r.got, 2);
+  assert.ok(r.joined.includes(Series.GAP_MARK(2)));
   r = Series.ingest(r.session, new Map([[2, { index: 2, total: 3, body: "B" }]]), 3);
   assert.ok(r.complete);
   assert.strictEqual(r.joined, "ABC");
+});
+
+t("buildDisplayHits：部分拼接在前，无关码在后", () => {
+  const r = Series.ingest(
+    null,
+    new Map([
+      [1, { index: 1, total: 3, body: "hi" }],
+      [2, { index: 2, total: 3, body: "yo" }],
+    ]),
+    3
+  );
+  const hits = Series.buildDisplayHits(r, ["https://x.test"]);
+  assert.strictEqual(hits.length, 2);
+  assert.strictEqual(hits[0].text, "hiyo");
+  assert.ok(hits[0].format.startsWith("部分拼接"));
+  assert.strictEqual(hits[1].text, "https://x.test");
+  assert.strictEqual(hits[1].format, "其它码（未拼接）");
 });
 
 t("换一套 n 会开新会话", () => {

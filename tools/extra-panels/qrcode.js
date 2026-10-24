@@ -529,7 +529,7 @@
         el.hidden = false;
         el.textContent = done
           ? `分片已齐 ${got}/${qrSeries.total}，已自动拼接（无 [i/n] 前缀的其它码不会并入）`
-          : `${Series?.progressLabel(got, qrSeries.total) || `分片 ${got}/${qrSeries.total}`} · 请继续扫缺的张；其它无关码不会拼进来`;
+          : `${Series?.progressLabel(got, qrSeries.total) || `分片 ${got}/${qrSeries.total}`} · 已拼已有，点「继续扫」补缺；无关码不会并入`;
         if (clearBtn) clearBtn.hidden = false;
       } else {
         el.hidden = true;
@@ -695,55 +695,30 @@
       const result = Series.ingest(qrSeries, cls.seriesParts, cls.seriesTotal);
       qrSeries = result.session;
 
+      // 未齐也先拼已有 + 列出无关码，停下来方便复制；点「继续扫」补缺片
+      const display = (Series.buildDisplayHits(result, cls.plain) || []).map((h) => ({
+        ...h,
+        bbox: null,
+      }));
+      if (display.length) showHits(display);
+
       if (result.complete) {
-        const display = [
-          { text: result.joined, format: `拼接全文 · ${result.total} 片`, bbox: null },
-          ...cls.plain.map((t) => ({ text: t, format: "其它码（未拼接）", bbox: null })),
-        ];
-        showHits(display);
         if (qrDecodedLabel) qrDecodedLabel.textContent = "拼接结果";
         qrSeries = null;
         updateSeriesProgressUi();
         toast(`已自动拼接 ${result.total} 张分片`);
-        if (fromCamera) stopCamera();
-        return { keepScanning: false };
-      }
-
-      // 分片未齐：更新进度；摄像头则继续扫
-      updateSeriesProgressUi();
-      const now = Date.now();
-      if (result.added.length && now - qrSeriesLastToastAt > 800) {
-        qrSeriesLastToastAt = now;
-        toast(`${Series.progressLabel(result.got, result.total)} · 继续扫下一张`);
-      }
-      if (fromCamera) {
-        // 保持预览，不进入结果独占态
-        if (qrCamStart) qrCamStart.hidden = true;
-        if (qrCamStop) qrCamStop.hidden = false;
-        const head = $("#qr-result-head");
-        if (head) head.hidden = true;
-        if (qrDecoded) qrDecoded.hidden = true;
-        if (qrDecodeList) qrDecodeList.hidden = true;
-        return { keepScanning: true };
-      }
-
-      // 选图：展示已收到的分片原文 + 同图里的无关码
-      const partialHits = [];
-      for (let i = 1; i <= result.total; i += 1) {
-        if (result.session.parts.has(i)) {
-          partialHits.push({
-            text: `[${i}/${result.total}]${result.session.parts.get(i)}`,
-            format: `分片 ${i}/${result.total}`,
-            bbox: null,
-          });
+      } else {
+        updateSeriesProgressUi();
+        if (qrDecodedLabel) {
+          qrDecodedLabel.textContent = `部分拼接 ${result.got}/${result.total} · 可点「继续扫」补齐`;
+        }
+        const now = Date.now();
+        if (result.added.length && now - qrSeriesLastToastAt > 800) {
+          qrSeriesLastToastAt = now;
+          toast(`${Series.progressLabel(result.got, result.total)} · 已拼已有，可继续扫`);
         }
       }
-      for (const t of cls.plain) partialHits.push({ text: t, format: "其它码（未拼接）", bbox: null });
-      if (partialHits.length) showHits(partialHits);
-      if (qrDecodedLabel) {
-        qrDecodedLabel.textContent = `分片未齐（${result.got}/${result.total}）· 可点「继续扫」`;
-      }
-      updateSeriesProgressUi();
+      if (fromCamera) stopCamera();
       return { keepScanning: false };
     }
 
