@@ -304,7 +304,7 @@
             license: "Apache-2.0",
             repo: "https://github.com/huggingface/transformers.js",
             usedIn:
-              "图片换色 · AI 抠图多模型（MODNet / RMBG-2.0 / BEN2 / BiRefNet，本地 ONNX 经 background-removal 管线；权重来自 Hugging Face，国内走 hf-mirror.com 镜像）",
+              "图片换色 · AI 抠图多模型（MODNet / RMBG-2.0 / BEN2 走 background-removal；BiRefNet Lite/全量走 AutoModel 专用前向；权重来自 Hugging Face，国内走 hf-mirror.com 镜像）",
             path: "cdn.jsdelivr.net/npm/@huggingface/transformers",
           },
         ],
