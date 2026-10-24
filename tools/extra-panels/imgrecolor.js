@@ -12,14 +12,31 @@
   const RMBG_URL = "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm";
   const TJ_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm";
 
-  // 识别方式 → 加载策略。kind：mp=MediaPipe / imgly=@imgly isnet / tj=transformers.js 通用管线
+  // 识别方式 → 加载策略。
+  // kind：mp=MediaPipe / imgly=@imgly isnet / tj=transformers.js background-removal 管线
+  //       biref=BiRefNet 专用 AutoModel（input_image→output_image，不能走通用 pipeline）
   const AI_MODELS = {
     mp: { label: "MediaPipe（人像 · 秒开）", kind: "mp", size: "~0.3MB", mb: 0.3 },
     modnet: { label: "MODNet（人像 · 精细发丝）", kind: "tj", model: "Xenova/modnet", dtype: "q8", size: "~6MB", mb: 6 },
     isnet: { label: "RMBG-1.4（通用 · 均衡）", kind: "imgly", size: "~40MB", mb: 40 },
     rmbg2: { label: "RMBG-2.0（通用 · 新）", kind: "tj", model: "kn4666/bria-rmbg-2.0-web", dtype: "q8", size: "~350MB", mb: 350 },
     ben2: { label: "BEN2（通用 · 强）", kind: "tj", model: "onnx-community/BEN2-ONNX", dtype: "fp16", size: "~210MB", mb: 210 },
-    birefnet: { label: "BiRefNet（通用 · 最强）", kind: "tj", model: "onnx-community/BiRefNet-ONNX", dtype: "fp16", size: "~470MB", mb: 470 },
+    birefnet: {
+      label: "BiRefNet Lite（通用 · 强）",
+      kind: "biref",
+      model: "onnx-community/BiRefNet_lite-ONNX",
+      dtype: "fp16",
+      size: "~110MB",
+      mb: 110,
+    },
+    birefnet_full: {
+      label: "BiRefNet（通用 · 最强）",
+      kind: "biref",
+      model: "onnx-community/BiRefNet-ONNX",
+      dtype: "fp16",
+      size: "~470MB",
+      mb: 470,
+    },
   };
   const HEAVY_MB = 150; // 首次下载超过该体积先让用户确认
 
@@ -335,12 +352,23 @@
 
   /** 把加载错误翻译成用户能处理的提示 */
   function describeErr(err) {
-    const msg = String((err && err.message) || err || "未知错误");
-    if (/failed to fetch|networkerror|load failed|network error|err_/i.test(msg))
+    const raw = err && err.message != null ? err.message : err;
+    const msg = String(raw || "未知错误").trim();
+    // ORT / Cache 失败时有时只抛出字节数（如 512048000 ≈ 模型体积）
+    const onlyNum = /^(?:error:\s*)?(\d{6,})$/i.exec(msg);
+    if (onlyNum) {
+      const bytes = Number(onlyNum[1]);
+      if (bytes >= 50 * 1048576) {
+        return `内存/缓存不足（约需 ${fmtMB(bytes)}MB；请换 BiRefNet Lite / BEN2 / RMBG-1.4，或关掉其它标签页后重试）`;
+      }
+    }
+    if (/failed to fetch|networkerror|load failed|network error|err_|cors|403|404|502|503/i.test(msg))
       return "网络中断（模型托管在 Hugging Face，已自动尝试国内镜像 hf-mirror；请检查网络或换更小的模型）";
-    if (/out of memory|oom|allocation|array buffer/i.test(msg)) return "内存不足（该模型太大，建议换 MODNet / RMBG-1.4）";
+    if (/out of memory|oom|allocation|array buffer|oom error|exceeded|quota/i.test(msg))
+      return "内存不足（该模型太大，建议换 BiRefNet Lite / MODNet / RMBG-1.4）";
     if (/timeout|超时|aborted/i.test(msg)) return "超时（模型较大、网络太慢）";
-    return msg;
+    if (/webgpu/i.test(msg) && /device|adapter|lost/i.test(msg)) return "WebGPU 不可用，已应回退 CPU；请再试或换更小模型";
+    return msg.length > 160 ? msg.slice(0, 160) + "…" : msg;
   }
 
   async function detectOnce(gen) {
@@ -366,9 +394,23 @@
     setProgress(spec.kind === "mp" ? null : 0, "准备下载模型…");
     try {
       const t0 = performance.now();
-      const keep = spec.kind === "mp" ? "mpSeg" : spec.kind === "imgly" ? "rmbg" : "tj:" + spec.model;
+      const keep =
+        spec.kind === "mp"
+          ? "mpSeg"
+          : spec.kind === "imgly"
+            ? "rmbg"
+            : spec.kind === "biref"
+              ? "biref:" + spec.model
+              : "tj:" + spec.model;
       releaseAI(keep);
-      const raw = spec.kind === "mp" ? await segmentMP() : spec.kind === "imgly" ? await segmentRMBG() : await segmentTJ(spec);
+      const raw =
+        spec.kind === "mp"
+          ? await segmentMP()
+          : spec.kind === "imgly"
+            ? await segmentRMBG()
+            : spec.kind === "biref"
+              ? await segmentBiRef(spec)
+              : await segmentTJ(spec);
       if (gen !== detectGen) return; // 期间又切了模式 → 丢弃
       const refineOn = els.refine ? els.refine.checked : true;
       const m = refineOn ? refineMask(raw) : raw;
@@ -565,6 +607,94 @@
     }
     delete aiState.tj[key]; // 半成品清掉，允许重试
     throw lastErr || new Error("模型加载失败");
+  }
+
+  /**
+   * BiRefNet 官方用法：AutoModel + AutoProcessor，前向 input_image → output_image。
+   * 不能用 background-removal pipeline（接口不兼容，易下完大文件后仍失败）。
+   */
+  async function getBiRefBundle(spec) {
+    const mod = await getTJ();
+    const key = "biref:" + spec.model;
+    if (aiState.tj[key]) return aiState.tj[key];
+    if (typeof mod.AutoModel?.from_pretrained !== "function" || typeof mod.AutoProcessor?.from_pretrained !== "function") {
+      throw new Error("transformers.js 版本过旧，缺少 AutoModel");
+    }
+    const gpu = await hasWebGPU();
+    const devices = gpu ? ["webgpu", "wasm"] : ["wasm"];
+    const dtypes = [...new Set([spec.dtype || "fp16", "fp16", "fp32"].filter(Boolean))];
+    let lastErr;
+    for (let i = 0; i < TJ_HOSTS.length; i++) {
+      const host = TJ_HOSTS[(tjHost + i) % TJ_HOSTS.length];
+      if (mod.env) mod.env.remoteHost = host;
+      for (const device of devices) {
+        for (const dtype of dtypes) {
+          try {
+            setProgress(
+              0,
+              `加载 BiRefNet（${host.replace(/^https?:\/\//, "")} · ${dtype}${device === "webgpu" ? " · WebGPU" : ""}）…`
+            );
+            const model = await mod.AutoModel.from_pretrained(spec.model, {
+              dtype,
+              device,
+              progress_callback: tjProgress,
+            });
+            const processor = await mod.AutoProcessor.from_pretrained(spec.model, {
+              progress_callback: tjProgress,
+            });
+            if (mod.env) tjHost = TJ_HOSTS.indexOf(host);
+            if (device === "webgpu") console.info("[imgrecolor] BiRefNet WebGPU 已启用", spec.model, dtype);
+            const bundle = { model, processor, RawImage: mod.RawImage, dtype, device };
+            aiState.tj[key] = bundle;
+            return bundle;
+          } catch (e) {
+            lastErr = e;
+            console.warn("[imgrecolor] BiRefNet 加载失败", host, device, dtype, spec.model, e);
+          }
+        }
+      }
+    }
+    delete aiState.tj[key];
+    throw lastErr || new Error("BiRefNet 加载失败");
+  }
+
+  async function segmentBiRef(spec) {
+    const { model, processor, RawImage } = await getBiRefBundle(spec);
+    if (!RawImage?.fromURL) throw new Error("RawImage 不可用");
+    setProgress(null, "BiRefNet 推理中…");
+    const srcBlob = await new Promise((r) => els.canvas.toBlob(r, "image/png"));
+    const url = URL.createObjectURL(srcBlob);
+    try {
+      const image = await RawImage.fromURL(url);
+      const processed = await processor(image);
+      const pixel_values = processed?.pixel_values;
+      if (!pixel_values) throw new Error("预处理失败（无 pixel_values）");
+      const out = await model({ input_image: pixel_values });
+      const tensor = out?.output_image;
+      if (!tensor) throw new Error("模型未返回 output_image");
+      // 与 HF README 一致：sigmoid → uint8 掩码，再缩放到原图尺寸
+      let maskTensor = Array.isArray(tensor) ? tensor[0] : tensor;
+      if (maskTensor?.sigmoid) maskTensor = maskTensor.sigmoid();
+      if (maskTensor?.mul) maskTensor = maskTensor.mul(255);
+      if (maskTensor?.to) maskTensor = maskTensor.to("uint8");
+      let maskImg = await RawImage.fromTensor(maskTensor);
+      if (typeof maskImg.resize === "function") {
+        maskImg = await maskImg.resize(image.width, image.height);
+      }
+      const scaled = rawToCanvas(maskImg);
+      const mc = document.createElement("canvas");
+      mc.width = workW;
+      mc.height = workH;
+      const mctx = mc.getContext("2d", { willReadFrequently: true });
+      mctx.drawImage(scaled, 0, 0, workW, workH);
+      const d = mctx.getImageData(0, 0, workW, workH).data;
+      const maskOut = new Uint8Array(workW * workH);
+      // fromTensor 灰度图通常写在 R 通道
+      for (let i = 0; i < maskOut.length; i++) maskOut[i] = d[i * 4];
+      return maskOut;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   /** transformers.js RawImage → canvas（灰度/掩码或 RGBA 前景） */
