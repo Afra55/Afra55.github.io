@@ -33,8 +33,8 @@
   let lastFrame = null;
   let hits = [];
   let activeHit = 0;
-  /** @type {{ total: number, parts: Map<number, string> } | null} */
-  let series = null;
+  /** @type {{ sessions: object[] } | null} */
+  let seriesBag = null;
   let seriesToastAt = 0;
 
   const Scan = () => window.DevToolsCodeScan;
@@ -196,7 +196,9 @@
   }
 
   function seriesIncomplete() {
-    return !!(series && series.total >= 2 && series.parts.size > 0 && series.parts.size < series.total);
+    const api = SeriesApi();
+    if (api?.bagHasIncomplete) return api.bagHasIncomplete(seriesBag);
+    return false;
   }
 
   function updateSeriesProgressUi() {
@@ -204,13 +206,13 @@
     const clearBtn = $("#qs-series-clear");
     const api = SeriesApi();
     if (!el) return;
-    if (series && series.total >= 2 && series.parts.size > 0) {
-      const got = series.parts.size;
+    const lines = api?.bagProgressLines?.(seriesBag) || [];
+    if (lines.length) {
       el.hidden = false;
       el.textContent =
-        got >= series.total
-          ? `分片已齐 ${got}/${series.total}`
-          : `${api?.progressLabel(got, series.total) || `分片 ${got}/${series.total}`} · 已拼已有，可继续扫补缺；无 [i/n] 的码不拼接`;
+        lines.length > 1
+          ? `进行中 ${lines.length} 套（互不合并）：${lines.join("；")}`
+          : `${lines[0]} · 可继续扫补缺；另一套会单独识别`;
       if (clearBtn) clearBtn.hidden = false;
     } else {
       el.hidden = true;
@@ -250,50 +252,55 @@
   }
 
   function clearSeriesSession() {
-    series = null;
+    seriesBag = null;
     updateSeriesProgressUi();
     if (againBtn) againBtn.textContent = "继续扫";
     if (startBtn && !scanning) {
       startBtn.textContent = resultPanel && !resultPanel.hidden ? "继续扫" : "扫码";
     }
-    toast("已清空分片进度");
+    toast("已清空全部分片进度");
   }
 
   function ingestDecodedHits(list, { fromCamera = false } = {}) {
     const found = (list || []).filter((h) => h?.text);
     if (!found.length) return { keepScanning: false };
     const api = SeriesApi();
-    if (!api?.classifyTexts) {
+    if (!api?.ingestTexts) {
       showHits(found);
       if (fromCamera) stopCamera();
       return { keepScanning: false };
     }
-    const cls = api.classifyTexts(found.map((h) => h.text));
-    if (!cls.hasSeries) {
-      if (!seriesIncomplete()) series = null;
+    const out = api.ingestTexts(
+      seriesBag || api.createBag(),
+      found.map((h) => h.text)
+    );
+    seriesBag = out.bag;
+    if (!out.hasSeries) {
+      if (!seriesIncomplete()) seriesBag = null;
       showHits(found);
       if (fromCamera) stopCamera();
       return { keepScanning: false };
     }
-    const result = api.ingest(series, cls.seriesParts, cls.seriesTotal);
-    series = result.session;
-    const display = api.buildDisplayHits(result, cls.plain);
-    if (display.length) showHits(display);
+    if (out.displayHits?.length) showHits(out.displayHits);
 
-    if (result.complete) {
-      if (resultLabel) resultLabel.textContent = "拼接结果";
-      series = null;
-      updateSeriesProgressUi();
-      toast(`已自动拼接 ${result.total} 张分片`);
-    } else {
-      updateSeriesProgressUi();
+    updateSeriesProgressUi();
+    const nDone = out.completed?.length || 0;
+    const nOpen = out.incomplete?.length || 0;
+    if (nDone && !nOpen) {
       if (resultLabel) {
-        resultLabel.textContent = `部分拼接 ${result.got}/${result.total} · 可继续扫补齐`;
+        resultLabel.textContent = nDone > 1 ? `拼接结果（${nDone} 套）` : "拼接结果";
+      }
+      toast(nDone > 1 ? `已分别拼好 ${nDone} 套` : `已自动拼接 ${out.completed[0].total} 张分片`);
+    } else {
+      if (resultLabel) {
+        resultLabel.textContent =
+          nOpen > 1 ? `${nOpen} 套分片进行中（分开拼接）` : `部分拼接 ${out.incomplete[0]?.got || 0}/${out.incomplete[0]?.total || "?"} · 可继续扫`;
       }
       const now = Date.now();
-      if (result.added.length && now - seriesToastAt > 800) {
+      if (out.addedAny && now - seriesToastAt > 800) {
         seriesToastAt = now;
-        toast(`${api.progressLabel(result.got, result.total)} · 已拼已有，可继续扫`);
+        const lines = api.bagProgressLines?.(seriesBag) || [];
+        toast(lines.length > 1 ? `多套：${lines.join("；")}` : `${lines[0] || "已更新"} · 可继续扫`);
         try {
           if (navigator.vibrate) navigator.vibrate(30);
         } catch (_) {}
@@ -384,7 +391,7 @@
     setError("");
     setStatus("");
     const keepSeries = seriesIncomplete();
-    if (!keepSeries) series = null;
+    if (!keepSeries) seriesBag = null;
     if (resultPanel) resultPanel.hidden = true;
     document.body.classList.remove("has-result");
     if (resultText) resultText.value = "";
@@ -430,7 +437,10 @@
     scanning = true;
     if (startBtn) startBtn.hidden = true;
     if (stopBtn) stopBtn.hidden = false;
-    setStatus(keepSeries ? SeriesApi()?.progressLabel(series.parts.size, series.total) || "" : "");
+    {
+      const lines = SeriesApi()?.bagProgressLines?.(seriesBag) || [];
+      setStatus(keepSeries ? (lines.length > 1 ? `继续收 ${lines.length} 套分片` : lines[0] || "") : "");
+    }
     scanFrame();
   }
 
