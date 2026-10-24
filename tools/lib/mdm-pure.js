@@ -57,6 +57,95 @@
     return Boolean(v) && !/^(https?:|data:|blob:|#|mailto:|tel:|\/\/)/i.test(v);
   }
 
+  /**
+   * 规范化本地资源相对路径；拒绝穿越 / 绝对盘符 / 空段。
+   * 返回 posix 相对路径，或 null（不可写入）。
+   */
+  function sanitizeRelPath(ref) {
+    let s = String(ref || "").trim().replace(/\\/g, "/");
+    if (!s) return null;
+    // 去掉 query / hash（Markdown 里偶发）
+    s = s.replace(/[?#].*$/, "");
+    if (!s || !isRelativeRef(s)) return null;
+    if (/^[a-zA-Z]:/.test(s)) return null; // Windows 盘符
+    s = s.replace(/^\.\//, "").replace(/^\/+/, "");
+    const parts = s.split("/").filter((p) => p && p !== ".");
+    if (!parts.length) return null;
+    if (parts.some((p) => p === ".." || p.includes("\0"))) return null;
+    // 文件名禁止控制字符与 Windows 保留符
+    const base = parts[parts.length - 1];
+    if (/[\u0000-\u001f<>:"|?*]/.test(base)) return null;
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i.test(base)) return null;
+    return parts.join("/");
+  }
+
+  /**
+   * 导入前校验 Markdown 文本：必须是字符串、非二进制、可解析。
+   * 返回 { ok, text, title, body, head, tags, error }；ok=false 时 error 为可读原因。
+   */
+  function validateImportMarkdown(raw, opts) {
+    const o = opts || {};
+    const fileName = String(o.fileName || o.name || "").trim();
+    if (raw == null) {
+      return { ok: false, text: "", title: "", body: "", head: "", tags: [], error: "转换结果为空" };
+    }
+    if (typeof raw !== "string") {
+      return { ok: false, text: "", title: "", body: "", head: "", tags: [], error: "转换结果不是文本" };
+    }
+    let text = raw;
+    // 去 BOM（readTextSmart 已处理多数情况，这里兜底）
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    // 空文件允许导入为空白文
+    if (!text.length) {
+      const titleFallback = fileName.replace(/\.[^.]+$/, "") || "未命名";
+      return { ok: true, text: "", title: titleFallback, body: "", head: "", tags: [], error: "" };
+    }
+    // 含 NUL → 几乎肯定是二进制误标成 .md
+    if (text.includes("\0")) {
+      return {
+        ok: false,
+        text: "",
+        title: "",
+        body: "",
+        head: "",
+        tags: [],
+        error: "文件含二进制内容，无法作为 Markdown 导入",
+      };
+    }
+    // 抽样：前 4KB 若控制字符占比过高，拒收
+    const sample = text.slice(0, 4096);
+    let ctrl = 0;
+    for (let i = 0; i < sample.length; i += 1) {
+      const c = sample.charCodeAt(i);
+      if (c < 9 || (c > 13 && c < 32)) ctrl += 1;
+    }
+    if (sample.length >= 64 && ctrl / sample.length > 0.05) {
+      return {
+        ok: false,
+        text: "",
+        title: "",
+        body: "",
+        head: "",
+        tags: [],
+        error: "文件不像文本 Markdown（控制字符过多）",
+      };
+    }
+    const fm = parseFrontMatter(text);
+    const titleFromFile = fileName.replace(/\.[^.]+$/, "");
+    const title = String(fm.title || titleFromFile || "未命名").trim() || "未命名";
+    // 标题净化：去掉路径分隔与控制符，避免写文件名炸掉
+    const safeTitle = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim() || "未命名";
+    return {
+      ok: true,
+      text,
+      title: safeTitle,
+      body: fm.body,
+      head: fm.head || "",
+      tags: Array.isArray(fm.tags) ? fm.tags : [],
+      error: "",
+    };
+  }
+
   /** 收集正文里引用的本地资源相对路径（图片 / 普通链接 / src·href，去重） */
   function collectRefs(text) {
     const refs = new Set();
@@ -69,7 +158,8 @@
     for (const re of patterns) {
       let m;
       while ((m = re.exec(s))) {
-        if (isRelativeRef(m[1])) refs.add(m[1].replace(/^\.\//, "").replace(/^\/+/, ""));
+        const clean = sanitizeRelPath(m[1]);
+        if (clean) refs.add(clean);
       }
     }
     return [...refs];
@@ -217,6 +307,8 @@
     slugify,
     parseFrontMatter,
     isRelativeRef,
+    sanitizeRelPath,
+    validateImportMarkdown,
     collectRefs,
     parseTableAt,
     buildTable,
