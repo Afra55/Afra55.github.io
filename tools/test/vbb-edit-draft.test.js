@@ -23,6 +23,16 @@ t("含强制取消与并行池销毁", () => {
   assert.ok(/vbbAbort\?\.addEventListener\("click".*forceAbortVbb/s.test(src));
 });
 
+t("取消后解锁 UI，且用任务世代避免旧 finally 误清", () => {
+  assert.ok(src.includes("function beginVbbJob"));
+  assert.ok(src.includes("function finishVbbJob"));
+  assert.ok(src.includes("vbbJobActiveEpoch"));
+  assert.ok(src.includes("unlockUi"));
+  assert.ok(src.includes("已停止转换"));
+  assert.ok(src.includes('throw new Error("已取消")'));
+  assert.ok(/abortVbb \|\| String\(err/.test(src));
+});
+
 t("含编辑草稿保存/恢复/导出", () => {
   assert.ok(src.includes("saveVbbEditDraftsSync"));
   assert.ok(src.includes("restoreVbbEditDrafts"));

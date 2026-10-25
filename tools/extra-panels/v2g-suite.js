@@ -7514,6 +7514,10 @@
       let abortVbb = false;
       /** 批处理并行 FFmpeg 实例；取消时必须一并 terminate，否则点取消无响应 */
       let vbbLiveFfmpegPool = [];
+      /** 任务世代：取消后旧 finally 不得清掉新任务的 busy/池 */
+      let vbbJobEpoch = 0;
+      let vbbJobActiveEpoch = 0;
+      let vbbCancelToastShown = false;
       const VBB_EDIT_DRAFT_LS_KEY = "devtools-vbb-edit-drafts-json-v1";
       let vbbMode = "duration";
       let vbbWorkflow = "single";
@@ -9638,6 +9642,40 @@
         abortV2g = false;
       }
 
+      /** 开始可取消长任务；返回 epoch，结束时交给 finishVbbJob */
+      function beginVbbJob() {
+        abortVbb = false;
+        abortV2g = false;
+        vbbCancelToastShown = false;
+        vbbBusy = true;
+        vbbJobActiveEpoch = ++vbbJobEpoch;
+        return vbbJobActiveEpoch;
+      }
+
+      /** 仅当仍是当前任务时解锁；被 forceAbort 作废后为 no-op */
+      function finishVbbJob(epoch) {
+        if (epoch !== vbbJobActiveEpoch) return false;
+        vbbJobActiveEpoch = 0;
+        vbbBusy = false;
+        vbbSuppressGlobalProgress = false;
+        resetVbbAbort();
+        if (vbbAbort) {
+          vbbAbort.hidden = true;
+          vbbAbort.disabled = false;
+          vbbAbort.textContent = "取消";
+        }
+        try {
+          setVbbButtons();
+        } catch (_) {}
+        return true;
+      }
+
+      function toastVbbCancelled(msg = "已取消") {
+        if (vbbCancelToastShown) return;
+        vbbCancelToastShown = true;
+        toast(msg);
+      }
+
       function vbbFileDraftKey(file) {
         if (!file) return "";
         return `${file.name || ""}|${Number(file.size) || 0}|${Number(file.lastModified) || 0}`;
@@ -9824,10 +9862,13 @@
         }
       }
 
-      /** 强制取消：杀单例 + 并行池；并落盘编辑草稿 */
+      /** 强制取消：杀单例 + 并行池；落盘编辑；解锁界面（不改任何裁剪数据） */
       function forceAbortVbb(opts = {}) {
         abortVbb = true;
         abortV2g = true;
+        // 作废进行中的任务：旧 finally 的 finishVbbJob 变成 no-op，避免误清新任务
+        vbbJobActiveEpoch = 0;
+        vbbJobEpoch += 1;
         const saved = saveVbbEditDraftsSync();
         try {
           terminateFfmpegInstance({ revokeAssets: false });
@@ -9836,17 +9877,44 @@
         try {
           scheduleFfmpegPrewarm?.();
         } catch (_) {}
+        // 只改任务状态文案：已完成的 GIF 保留；编辑方案绝不清空
+        try {
+          vbbClips.forEach((c, i) => {
+            if (!c) return;
+            if (c.jobStatus === "pending" || c.jobStatus === "running") {
+              if (!c.gifBlob) c.error = "已取消";
+              setVbbClipJob(i, { status: "error", progress: 0, text: "已取消" });
+            }
+          });
+        } catch (_) {}
         if (vbbAbort) {
           vbbAbort.textContent = "正在停止…";
-          window.setTimeout(() => {
-            if (vbbAbort && abortVbb) vbbAbort.textContent = "取消";
-          }, 2500);
+          vbbAbort.disabled = true;
         }
+        const unlockUi = () => {
+          vbbBusy = false;
+          vbbSuppressGlobalProgress = false;
+          try {
+            setVbbProgress(false, 0, "");
+          } catch (_) {}
+          if (vbbAbort) {
+            vbbAbort.hidden = true;
+            vbbAbort.disabled = false;
+            vbbAbort.textContent = "取消";
+          }
+          try {
+            setVbbButtons();
+            renderVbbResults();
+          } catch (_) {}
+        };
+        // 引擎已杀，多数路径马上进 finally；若卡在 wasm，超时也要解锁，避免界面假死
+        window.setTimeout(unlockUi, opts.silent ? 0 : 500);
         if (opts.silent) return saved;
+        vbbCancelToastShown = true;
         toast(
           saved > 0
-            ? `已强制停止 · 已保存 ${saved} 个编辑草稿（刷新后请重选相同文件即可恢复）`
-            : "已强制停止（当前无编辑可保存）"
+            ? `已停止转换 · 编辑已保存（${saved}）· 可直接再点转换，无需重裁；刷新后请重选相同文件恢复`
+            : "已停止转换 · 可再点转换"
         );
         return saved;
       }
@@ -10832,10 +10900,11 @@
         try {
           saveVbbEditDraftsSync();
         } catch (_) {}
-        if (vbbBusy) {
+        if (vbbBusy || vbbJobActiveEpoch) {
           forceAbortVbb({ silent: true });
         }
         vbbBusy = false;
+        vbbJobActiveEpoch = 0;
         vbbLiveFfmpegPool = [];
         vbbNeedReselect = false;
         vbbSourceFile = null;
@@ -11013,8 +11082,7 @@
         const ranges = computeVbbManualRanges();
         const srcW = vbbVideo.videoWidth || 0;
         const srcH = vbbVideo.videoHeight || 0;
-        abortVbb = false;
-        vbbBusy = true;
+        const jobEpoch = beginVbbJob();
         setVbbButtons();
         if (vbbAbort) vbbAbort.hidden = false;
         setError(vbbError, "");
@@ -11130,13 +11198,10 @@
           if (String(err?.message) !== "已取消") {
             markVbbNeedReselect(err);
             setError(vbbError, vbbFriendlyErr(err));
-          } else toast("已取消");
+          } else toastVbbCancelled();
           setVbbProgress(false, 0, "");
         } finally {
-          vbbBusy = false;
-          resetVbbAbort();
-          if (vbbAbort) vbbAbort.hidden = true;
-          setVbbButtons();
+          finishVbbJob(jobEpoch);
         }
       }
   
@@ -11763,8 +11828,7 @@
       // 各段若做过「编辑」（裁时长/裁画面），拼接时一并带上。
       async function mergeVbbVideosToOne() {
         if (!isVbbBatchMode() || vbbBusy) return;
-        abortVbb = false;
-        vbbBusy = true;
+        const jobEpoch = beginVbbJob();
         setVbbButtons();
         if (vbbAbort) vbbAbort.hidden = false;
         setError(vbbError, "");
@@ -11902,14 +11966,14 @@
           if (!blob.size) throw new Error("拼接结果为空");
           const mergedFile = new File([blob], `merged-${Date.now()}.mp4`, { type: "video/mp4" });
           setVbbProgress(true, 0.92, `拼接完成 · ${formatKb(blob.size)} · 开始转黑盒 GIF…`);
-          vbbBusy = false;
-          if (vbbAbort) vbbAbort.hidden = true;
+          // 拼接阶段结束，交给整段黑盒（新 job）；避免旧 finally 误清新任务
+          finishVbbJob(jobEpoch);
           await loadVbbFile(mergedFile);
           toast("已拼接，开始生成黑盒 GIF…");
           await runVbbSingleBlackbox();
         } catch (err) {
           if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
-          else toast("已取消");
+          else toastVbbCancelled();
           setVbbProgress(false, 0, "");
         } finally {
           try {
@@ -11917,10 +11981,7 @@
             const ff = await getFfmpegInstance();
             await ff.deleteFile("merged.mp4");
           } catch (_) {}
-          vbbBusy = false;
-          resetVbbAbort();
-          if (vbbAbort) vbbAbort.hidden = true;
-          setVbbButtons();
+          finishVbbJob(jobEpoch);
         }
       }
 
@@ -11940,8 +12001,7 @@
         if (!isVbbBatchMode() || vbbBusy) return;
         persistActiveVbbMarks();
         saveVbbEditDraftsSync();
-        abortVbb = false;
-        vbbBusy = true;
+        const jobEpoch = beginVbbJob();
         vbbSuppressGlobalProgress = true; // 只留卡片进度
         setVbbButtons();
         if (vbbAbort) vbbAbort.hidden = false;
@@ -11977,10 +12037,7 @@
         });
         const total = jobs.length;
         if (!total) {
-          vbbBusy = false;
-          vbbSuppressGlobalProgress = false;
-          if (vbbAbort) vbbAbort.hidden = true;
-          setVbbButtons();
+          finishVbbJob(jobEpoch);
           toast("没有可转换的片段");
           return;
         }
@@ -12214,8 +12271,15 @@
                 );
                 return { ok: true };
             } catch (err) {
-              const msg0 = String(err?.message || err || "");
-              if (msg0 === "已取消") throw err;
+              // 强制杀进程后错误文案常不是「已取消」——一律按取消收尾，避免标成失败并继续跑
+              if (abortVbb || String(err?.message || err || "") === "已取消") {
+                if (vbbClips[i] && !vbbClips[i].gifBlob) {
+                  vbbClips[i].error = "已取消";
+                  setVbbClipJob(i, { status: "error", progress: 0, text: "已取消" });
+                  refreshVbbClipRow(i);
+                }
+                throw new Error("已取消");
+              }
               const elapsedSec = (performance.now() - t0) / 1000;
               const msg = reportVbbEncodeError(err, vbbClips[i]);
               vbbLog(`[vbb] #${i + 1} FAIL ${Math.round(elapsedSec * 1000)}ms · ${msg}`);
@@ -12316,7 +12380,7 @@
           }
         } catch (err) {
           if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
-          else toast("已取消");
+          else toastVbbCancelled();
           setVbbProgress(false, 0, "");
         } finally {
           while (pool.length) {
@@ -12324,18 +12388,12 @@
               destroyFfmpegInstance?.(pool.pop());
             } catch (_) {}
           }
-          vbbLiveFfmpegPool = [];
-          vbbBusy = false;
-          vbbSuppressGlobalProgress = false;
-          resetVbbAbort();
-          if (vbbAbort) {
-            vbbAbort.hidden = true;
-            vbbAbort.textContent = "取消";
-          }
-          setVbbButtons();
+          // 仅本任务仍有效时清全局池引用；被取消作废后勿动新任务的池
+          if (jobEpoch === vbbJobActiveEpoch) vbbLiveFfmpegPool = [];
           try {
             saveVbbEditDraftsSync();
           } catch (_) {}
+          finishVbbJob(jobEpoch);
         }
       }
 
@@ -12347,8 +12405,7 @@
           const srcH = vbbVideo.videoHeight || 0;
           if (!vbbSingleEdit) vbbSingleEdit = makeVbbEditState(duration, srcW, srcH);
           const win = resolveVbbEncodeEdits({ edit: vbbSingleEdit, duration, srcW, srcH }, vbbSourceFile, duration, srcW, srcH);
-          abortVbb = false;
-          vbbBusy = true;
+          const jobEpoch = beginVbbJob();
           vbbSuppressGlobalProgress = true; // 只留卡片进度
           setVbbButtons();
         if (vbbAbort) vbbAbort.hidden = false;
@@ -12451,15 +12508,16 @@
               : `已完成 · ${formatKb(encoded.blob.size)} · 可点下方「下载 GIF」`
           );
         } catch (err) {
-          if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
-          else toast("已取消");
+          if (abortVbb || String(err?.message) === "已取消") {
+            if (vbbClips[0] && !vbbClips[0].gifBlob) {
+              vbbClips[0].error = "已取消";
+              setVbbClipJob(0, { status: "error", progress: 0, text: "已取消" });
+            }
+            toastVbbCancelled();
+          } else setError(vbbError, err.message || String(err));
           setVbbProgress(false, 0, "");
         } finally {
-          vbbBusy = false;
-          vbbSuppressGlobalProgress = false;
-          resetVbbAbort();
-          if (vbbAbort) vbbAbort.hidden = true;
-          setVbbButtons();
+          finishVbbJob(jobEpoch);
         }
       }
 
@@ -12485,8 +12543,7 @@
   
       async function runVbbAnalyze() {
         if (!vbbSourceFile || !vbbVideo?.src || vbbBusy) return;
-        abortVbb = false;
-        vbbBusy = true;
+        const jobEpoch = beginVbbJob();
         setVbbButtons();
         if (vbbAbort) vbbAbort.hidden = false;
         setError(vbbError, "");
@@ -12592,13 +12649,10 @@
           if (String(err && err.message) !== "已取消") {
             markVbbNeedReselect(err);
             setError(vbbError, vbbFriendlyErr(err));
-          } else toast("已取消分析");
+          } else toastVbbCancelled("已取消分析");
           if (String(err && err.message) === "已取消") setVbbProgress(false, 0, "");
         } finally {
-          vbbBusy = false;
-          resetVbbAbort();
-          if (vbbAbort) vbbAbort.hidden = true;
-          setVbbButtons();
+          finishVbbJob(jobEpoch);
         }
       }
   
@@ -12606,8 +12660,7 @@
         const plan = resolveActiveVbbPlan();
         if (!vbbSourceFile || !plan?.ranges?.length || vbbBusy) return;
         vbbAnalysis.active = plan;
-        abortVbb = false;
-        vbbBusy = true;
+        const jobEpoch = beginVbbJob();
         setVbbButtons();
         if (vbbAbort) vbbAbort.hidden = false;
         setError(vbbError, "");
@@ -12816,7 +12869,13 @@
               notifyVbbProgress(i, plan.ranges.length);
               maybeAutoDownloadVbbGif(clip, i);
             } catch (err) {
-              if (String(err && err.message) === "已取消") throw err;
+              if (abortVbb || String(err && err.message) === "已取消") {
+                if (clip && !clip.gifBlob) {
+                  clip.error = "已取消";
+                  setVbbClipJob(i, { status: "error", progress: 0, text: "已取消" });
+                }
+                throw new Error("已取消");
+              }
               reportVbbEncodeError(err, clip);
               setVbbClipJob(i, { status: "error", progress: 1, text: "失败" });
             }
@@ -12872,14 +12931,11 @@
           if (String(err && err.message) !== "已取消") {
             markVbbNeedReselect(err);
             setError(vbbError, vbbFriendlyErr(err));
-          } else toast("已取消");
+          } else toastVbbCancelled();
           clearVbbClipJobs();
           renderVbbResults();
         } finally {
-          vbbBusy = false;
-          resetVbbAbort();
-          if (vbbAbort) vbbAbort.hidden = true;
-          setVbbButtons();
+          finishVbbJob(jobEpoch);
         }
       }
   
@@ -12892,7 +12948,7 @@
           setError(vbbError, "至少要 2 条已生成的 GIF 才能合并");
           return;
         }
-        vbbBusy = true;
+        const jobEpoch = beginVbbJob();
         setVbbButtons();
         setError(vbbError, "");
         hideVbbMergedBlock();
@@ -12928,10 +12984,10 @@
           toast("已合并为一条 GIF");
         } catch (err) {
           setVbbProgress(false, 0, "");
-          setError(vbbError, err.message || String(err));
+          if (abortVbb || String(err?.message) === "已取消") toastVbbCancelled();
+          else setError(vbbError, err.message || String(err));
         } finally {
-          vbbBusy = false;
-          setVbbButtons();
+          finishVbbJob(jobEpoch);
         }
       }
   
