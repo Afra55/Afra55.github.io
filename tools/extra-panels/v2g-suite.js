@@ -12584,6 +12584,9 @@
           notifyVbbProgress(0, 1);
           maybeAutoDownloadVbbGif(vbbClips[0], 0);
           refreshVbbClipRow(0);
+          try {
+            saveVbbEditDraftsSync(); // 整段成功 → 清掉该片草稿
+          } catch (_) {}
           const doneBits = [
             formatKb(encoded.blob.size),
             encoded.fps ? `${encoded.fps} FPS` : "",
