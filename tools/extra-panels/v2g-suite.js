@@ -9897,7 +9897,7 @@
       function downloadVbbEditDraftsJson() {
         const items = collectVbbEditDraftItems();
         if (!items.length) {
-          toast("当前没有可导出的编辑");
+          toast("当前没有可备份的未完成编辑（已成功出 GIF 的不会进备份）");
           return false;
         }
         saveVbbEditDraftsSync();
@@ -9916,8 +9916,56 @@
             URL.revokeObjectURL(url);
           } catch (_) {}
         }, 2000);
-        toast(`已备份 ${items.length} 个未完成视频的编辑方案（JSON，不含视频；平时靠自动保存即可）`);
+        toast(`已下载备份 JSON（${items.length}）· 还原请点「导入备份」，或刷新后重选同一批视频`);
         return true;
+      }
+
+      /** 从「备份编辑」的 JSON 写回本机草稿；若已选视频则立刻套上 */
+      async function importVbbEditDraftsFromFile(file) {
+        if (!file) return 0;
+        let data;
+        try {
+          const text = await file.text();
+          data = JSON.parse(text);
+        } catch (_) {
+          throw new Error("备份文件不是有效 JSON");
+        }
+        if (!data || !Array.isArray(data.items) || !data.items.length) {
+          throw new Error("备份里没有可还原的编辑");
+        }
+        const payload = { v: 1, at: Date.now(), items: data.items };
+        localStorage.setItem(VBB_EDIT_DRAFT_LS_KEY, JSON.stringify(payload));
+        let n = 0;
+        if (isVbbBatchMode() && vbbBatchFiles.length) {
+          n = restoreVbbEditDrafts(vbbBatchFiles);
+          renderVbbBatchList({ keepSelection: true });
+          syncVbbBatchMeta();
+          syncVbbEditUi();
+          syncVbbEditPreview();
+        } else if (vbbSourceFile) {
+          const probe = {
+            file: vbbSourceFile,
+            duration: Number(vbbVideo?.duration) || 0,
+            srcW: Number(vbbVideo?.videoWidth) || 0,
+            srcH: Number(vbbVideo?.videoHeight) || 0,
+            edit: vbbSingleEdit,
+            marks: Array.isArray(vbbMarks) ? vbbMarks.slice() : [],
+          };
+          n = restoreVbbEditDrafts([probe]);
+          if (n > 0) {
+            vbbSingleEdit = probe.edit;
+            if (Array.isArray(probe.marks) && probe.marks.length) vbbMarks = probe.marks.slice();
+            if (probe.draftStart != null) vbbDraftStart = probe.draftStart;
+            syncVbbEditUi();
+            syncVbbEditPreview();
+          }
+        }
+        if (n > 0) {
+          toast(`已导入并还原 ${n} 个视频的编辑`);
+        } else {
+          toast(`已导入 ${data.items.length} 条备份 · 请重新选择对应视频即可自动套上`);
+        }
+        return data.items.length;
       }
 
       function destroyVbbLiveFfmpegPool() {
@@ -14107,8 +14155,9 @@
         getActivePlan: () => (vbbAnalysis ? resolveActiveVbbPlan() : null),
         getClips: () => vbbClips.slice(),
         getBatchFiles: () => vbbBatchFiles.slice(),
-        /** 紧急：导出/保存编辑草稿（不含视频）；强制取消 */
+        /** 紧急：导出/导入/保存编辑草稿（不含视频）；强制取消 */
         exportEditDrafts: () => downloadVbbEditDraftsJson(),
+        importEditDrafts: (file) => importVbbEditDraftsFromFile(file),
         saveEditDrafts: () => saveVbbEditDraftsSync(),
         forceAbort: () => forceAbortVbb(),
         getEditDraftPayload: () => ({ v: 1, at: Date.now(), items: collectVbbEditDraftItems() }),
@@ -14198,6 +14247,15 @@
       });
       $("#vbb-export-edits")?.addEventListener("click", () => {
         downloadVbbEditDraftsJson();
+      });
+      $("#vbb-import-edits")?.addEventListener("change", (e) => {
+        const f = e.target?.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        importVbbEditDraftsFromFile(f).catch((err) => {
+          setError(vbbError, err?.message || String(err));
+          toast(err?.message || "导入失败");
+        });
       });
       // 手机 Safari 常不走 beforeunload：切后台/杀页用 pagehide/visibility 落盘
       const persistVbbDraftsOnLeave = () => {

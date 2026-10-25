@@ -40,6 +40,13 @@ t("含编辑草稿保存/恢复/导出", () => {
   assert.ok(src.includes("devtools-vbb-edit-drafts-json-v1"));
   assert.ok(panel.includes('id="vbb-export-edits"'));
   assert.ok(panel.includes("备份编辑"));
+  assert.ok(panel.includes('id="vbb-import-edits"'));
+  assert.ok(panel.includes("导入备份"));
+});
+
+t("含 JSON 备份导入还原", () => {
+  assert.ok(src.includes("importVbbEditDraftsFromFile"));
+  assert.ok(src.includes("importEditDrafts:"));
 });
 
 t("未完成才进草稿，全部成功则清空 localStorage 键", () => {

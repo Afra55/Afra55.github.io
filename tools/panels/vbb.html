@@ -126,7 +126,9 @@
           <button type="button" class="secondary-btn" id="vbb-merge-video" disabled title="把已选的多个视频按顺序拼成一个视频，然后当作一个视频走黑盒生成 GIF">拼接后转黑盒</button>
           <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF；宽高不一致会自动统一尺寸并补边；超限会自动压黑盒">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
-          <button type="button" class="ghost-btn" id="vbb-export-edits" title="可选：把裁剪方案另存为 JSON 文件（平时不用点）。未生成完的会自动保存在本机；刷新后请重新选同一批视频即可恢复。已成功出 GIF 的会自动从草稿里移除">备份编辑</button>
+          <button type="button" class="ghost-btn" id="vbb-export-edits" title="可选应急：把未完成的裁剪方案存成 JSON 文件。平时不用点——每个视频在编辑里点保存后会自动记在本机；刷新后重新选同一批视频即可还原">备份编辑</button>
+          <label class="ghost-btn" for="vbb-import-edits" title="从之前「备份编辑」下载的 JSON 还原方案，然后重新选对应视频（或已选中的会立刻套上）">导入备份</label>
+          <input id="vbb-import-edits" class="visually-hidden" type="file" accept="application/json,.json" />
           <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载</button>
           <a class="secondary-btn" id="vbb-merged-dl" href="#" download="blackbox-merged.gif" hidden>下载合并 GIF</a>
         </div>
