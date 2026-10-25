@@ -549,6 +549,24 @@ select.meta-input.text-choice {
   text-overflow: ellipsis;
 }
 
+/* 手机：两行完整显示阶段+细节，避免一行省略号看不清 */
+@media (max-width: 900px) {
+  .vbb-result-list .vsplit-clip-progress-head {
+    align-items: flex-start;
+  }
+  .vbb-result-list .vsplit-clip-progress-head .hint {
+    white-space: pre-line;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.4;
+    max-height: 2.8em;
+    word-break: break-word;
+    text-overflow: ellipsis;
+  }
+}
+
 .vbb-result-list .vsplit-clip-progress-pct {
   flex: 0 0 auto;
   font-size: 0.78rem;

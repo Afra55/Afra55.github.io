@@ -189,6 +189,30 @@
         return `排队 ${formatWaitClockSec(Date.now() - origin)}`;
       }
 
+      /**
+       * 手机进度两行（完整可见）：
+       * 上行：阶段全文（如 ②试档 · 15帧/秒）
+       * 下行：已用时 + 可取消
+       * 例：②试档 · 15帧/秒\n已用 12s
+       */
+      function formatMobileTwoLineProgress(main, waitLabel) {
+        let head = String(main || "").trim() || "处理中…";
+        head = head
+          .replace(/\s*·\s*本条已\d+\s*s[^\n]*/gi, "")
+          .replace(/（正常试档中，可取消）/g, "")
+          .replace(/\s*·\s*可取消\s*$/g, "")
+          .split(/\n+/)
+          .map((s) => s.trim())
+          .filter(Boolean)[0] || "处理中…";
+        const tips = [];
+        const w = String(waitLabel || "").trim();
+        if (w) tips.push(`已用 ${w}`);
+        const sec = Number(String(waitLabel || "").replace(/[^\d.]/g, ""));
+        if (sec >= 60) tips.push("可取消");
+        if (!tips.length) tips.push("进行中");
+        return `${head}\n${tips.join(" · ")}`;
+      }
+
       /** 进度条上方主文案：排队用秒数；运行中阶段优先，时长只作后缀。 */
       function formatClipProgressText(job) {
         const status = job?.jobStatus || "";
@@ -198,6 +222,13 @@
         if (status === "pending") return waitLabel || stage || "等待中…";
         if (status === "running") {
           const main = stage && stage !== "等待中…" ? stage : "处理中…";
+          const mobile =
+            typeof isLikelyMobileBrowser === "function"
+              ? isLikelyMobileBrowser()
+              : typeof isCoarsePointer === "function"
+                ? isCoarsePointer()
+                : false;
+          if (mobile) return formatMobileTwoLineProgress(main, waitLabel);
           if (waitLabel && !main.includes(waitLabel)) return `${main} · ${waitLabel}`;
           return main;
         }

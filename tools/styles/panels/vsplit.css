@@ -894,6 +894,26 @@ body.vsplit-fs-open {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .vsplit-clip-progress-head {
+    align-items: flex-start;
+  }
+  .vsplit-clip-progress-head .hint {
+    white-space: pre-line;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.4;
+    max-height: 2.8em;
+    word-break: break-word;
+    text-overflow: ellipsis;
+  }
 }
 
 .vsplit-clip-progress-pct {

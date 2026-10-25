@@ -5039,14 +5039,14 @@
                 lastStallHintAt = Date.now();
                 const sec = Math.round(stalled / 1000);
                 const wall = Math.max(1, Math.round((performance.now() - t0) / 1000));
-                vbbLog(`[vbb] #${i + 1} stall ${sec}s · still waiting (no skip)`);
-                // 不是跳过：手机 wasm/FFmpeg 重活时常几十秒无百分比变化，只提示续等
-                const lastStage = formatVbbJobStage(lastProgressText) || "处理中";
+                // 不是跳过：只刷新阶段文案；已用时由进度条两行展示（手机完整可见）
+                const lastStage = formatVbbJobStage(lastProgressText) || "②试档";
                 setVbbClipJob(i, {
                   status: "running",
                   progress: Math.min(0.98, Math.max(0.02, 0.12 + Math.min(0.86, lastLocal) * 0.86)),
-                  text: `${lastStage} · 本条已${wall}s（正常试档中，可取消）`,
+                  text: lastStage,
                 });
+                vbbLog(`[vbb] #${i + 1} stall ${sec}s wall=${wall}s stage=${lastStage}`);
               }, 2000);
               try {
                 // 串行才重启单例：并行用租赁实例，避免互踢；删中间后多歇一会让 worker 干净退出

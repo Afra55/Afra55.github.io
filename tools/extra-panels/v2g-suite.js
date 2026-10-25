@@ -4984,6 +4984,30 @@
         return `排队 ${formatWaitClockSec(Date.now() - origin)}`;
       }
 
+      /**
+       * 手机进度两行（完整可见）：
+       * 上行：阶段全文（如 ②试档 · 15帧/秒）
+       * 下行：已用时 + 可取消
+       * 例：②试档 · 15帧/秒\n已用 12s
+       */
+      function formatMobileTwoLineProgress(main, waitLabel) {
+        let head = String(main || "").trim() || "处理中…";
+        head = head
+          .replace(/\s*·\s*本条已\d+\s*s[^\n]*/gi, "")
+          .replace(/（正常试档中，可取消）/g, "")
+          .replace(/\s*·\s*可取消\s*$/g, "")
+          .split(/\n+/)
+          .map((s) => s.trim())
+          .filter(Boolean)[0] || "处理中…";
+        const tips = [];
+        const w = String(waitLabel || "").trim();
+        if (w) tips.push(`已用 ${w}`);
+        const sec = Number(String(waitLabel || "").replace(/[^\d.]/g, ""));
+        if (sec >= 60) tips.push("可取消");
+        if (!tips.length) tips.push("进行中");
+        return `${head}\n${tips.join(" · ")}`;
+      }
+
       /** 进度条上方主文案：排队用秒数；运行中阶段优先，时长只作后缀。 */
       function formatClipProgressText(job) {
         const status = job?.jobStatus || "";
@@ -4993,6 +5017,13 @@
         if (status === "pending") return waitLabel || stage || "等待中…";
         if (status === "running") {
           const main = stage && stage !== "等待中…" ? stage : "处理中…";
+          const mobile =
+            typeof isLikelyMobileBrowser === "function"
+              ? isLikelyMobileBrowser()
+              : typeof isCoarsePointer === "function"
+                ? isCoarsePointer()
+                : false;
+          if (mobile) return formatMobileTwoLineProgress(main, waitLabel);
           if (waitLabel && !main.includes(waitLabel)) return `${main} · ${waitLabel}`;
           return main;
         }
@@ -9483,7 +9514,7 @@
         }
         if (/读取\s*GIF|读取结果|封装/.test(t)) return "③收尾";
 
-        if (/^(完成|失败|等待|编码|合并|分析|压缩|降宽)/.test(t) && t.length <= 12) return t;
+        if (/^(完成|失败|等待|合并|分析|压缩|降宽)$/.test(t)) return t;
         if (/样片|分析/.test(t)) return t.replace(/编码样片/, "样片").replace(/分析中\s*[·.]?\s*/, "分析 ");
 
         if ((m = t.match(/^(\d+)FPS\s*·\s*(.+)$/i))) {
@@ -12441,14 +12472,14 @@
                 lastStallHintAt = Date.now();
                 const sec = Math.round(stalled / 1000);
                 const wall = Math.max(1, Math.round((performance.now() - t0) / 1000));
-                vbbLog(`[vbb] #${i + 1} stall ${sec}s · still waiting (no skip)`);
-                // 不是跳过：手机 wasm/FFmpeg 重活时常几十秒无百分比变化，只提示续等
-                const lastStage = formatVbbJobStage(lastProgressText) || "处理中";
+                // 不是跳过：只刷新阶段文案；已用时由进度条两行展示（手机完整可见）
+                const lastStage = formatVbbJobStage(lastProgressText) || "②试档";
                 setVbbClipJob(i, {
                   status: "running",
                   progress: Math.min(0.98, Math.max(0.02, 0.12 + Math.min(0.86, lastLocal) * 0.86)),
-                  text: `${lastStage} · 本条已${wall}s（正常试档中，可取消）`,
+                  text: lastStage,
                 });
+                vbbLog(`[vbb] #${i + 1} stall ${sec}s wall=${wall}s stage=${lastStage}`);
               }, 2000);
               try {
                 // 串行才重启单例：并行用租赁实例，避免互踢；删中间后多歇一会让 worker 干净退出
