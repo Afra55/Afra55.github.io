@@ -7512,6 +7512,9 @@
       let vbbEditSkipBusy = false;
       let vbbScrubRaf = 0;
       let abortVbb = false;
+      /** 批处理并行 FFmpeg 实例；取消时必须一并 terminate，否则点取消无响应 */
+      let vbbLiveFfmpegPool = [];
+      const VBB_EDIT_DRAFT_LS_KEY = "devtools-vbb-edit-drafts-json-v1";
       let vbbMode = "duration";
       let vbbWorkflow = "single";
       /** 自定义段时长参考值（均分开启时仅用于算段数，不直接覆盖为实际每段时长） */
@@ -8684,6 +8687,7 @@
             };
             clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
             if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
+            saveVbbEditDraftsSync();
             // 外预览落点与编辑内 keep 首帧一致（预览 keep，非成片加垫）
             const previewKeeps = vbbKeepRangesFromEdit(item.edit, item.duration);
             const seekTo = Number(previewKeeps[0]?.start);
@@ -9632,6 +9636,219 @@
       function resetVbbAbort() {
         abortVbb = false;
         abortV2g = false;
+      }
+
+      function vbbFileDraftKey(file) {
+        if (!file) return "";
+        return `${file.name || ""}|${Number(file.size) || 0}|${Number(file.lastModified) || 0}`;
+      }
+
+      function serializeVbbEditDraft(edit) {
+        if (!edit) return null;
+        return {
+          trimStart: Number(edit.trimStart) || 0,
+          trimEnd: Number(edit.trimEnd) || 0,
+          cutouts: Array.isArray(edit.cutouts)
+            ? edit.cutouts.map((c) => ({
+                start: Number(c.start) || 0,
+                end: Number(c.end) || 0,
+              }))
+            : [],
+          cropOn: Boolean(edit.cropOn),
+          crop: edit.crop
+            ? {
+                x: Number(edit.crop.x) || 0,
+                y: Number(edit.crop.y) || 0,
+                w: Number(edit.crop.w) || 0,
+                h: Number(edit.crop.h) || 0,
+              }
+            : null,
+        };
+      }
+
+      function collectVbbEditDraftItems() {
+        /** @type {any[]} */
+        const items = [];
+        if (isVbbBatchMode() && vbbBatchFiles.length) {
+          persistActiveVbbMarks();
+          vbbBatchFiles.forEach((item) => {
+            if (!item?.file) return;
+            items.push({
+              key: vbbFileDraftKey(item.file),
+              name: item.file.name || "",
+              size: Number(item.file.size) || 0,
+              lastModified: Number(item.file.lastModified) || 0,
+              duration: Number(item.duration) || 0,
+              srcW: Number(item.srcW) || 0,
+              srcH: Number(item.srcH) || 0,
+              edit: serializeVbbEditDraft(item.edit),
+              marks: Array.isArray(item.marks)
+                ? item.marks.map((m) => ({ start: Number(m.start) || 0, end: Number(m.end) || 0 }))
+                : [],
+              draftStart:
+                item.draftStart != null && Number.isFinite(Number(item.draftStart))
+                  ? Number(item.draftStart)
+                  : null,
+            });
+          });
+        } else if (vbbSourceFile) {
+          const edit = vbbSingleEdit || getActiveVbbEditItem()?.edit || null;
+          items.push({
+            key: vbbFileDraftKey(vbbSourceFile),
+            name: vbbSourceFile.name || "",
+            size: Number(vbbSourceFile.size) || 0,
+            lastModified: Number(vbbSourceFile.lastModified) || 0,
+            duration: Number(vbbVideo?.duration) || 0,
+            srcW: Number(vbbVideo?.videoWidth) || 0,
+            srcH: Number(vbbVideo?.videoHeight) || 0,
+            edit: serializeVbbEditDraft(edit),
+            marks: Array.isArray(vbbMarks)
+              ? vbbMarks.map((m) => ({ start: Number(m.start) || 0, end: Number(m.end) || 0 }))
+              : [],
+            draftStart: vbbDraftStart != null && Number.isFinite(Number(vbbDraftStart)) ? Number(vbbDraftStart) : null,
+          });
+        }
+        return items;
+      }
+
+      /** 同步写入 localStorage（刷新/崩页前尽量保住裁剪方案；不含视频文件） */
+      function saveVbbEditDraftsSync() {
+        try {
+          const items = collectVbbEditDraftItems();
+          if (!items.length) return 0;
+          const payload = { v: 1, at: Date.now(), items };
+          localStorage.setItem(VBB_EDIT_DRAFT_LS_KEY, JSON.stringify(payload));
+          return items.length;
+        } catch (err) {
+          vbbLog(`[vbb] 保存编辑草稿失败：${err?.message || err}`);
+          return 0;
+        }
+      }
+
+      function readVbbEditDraftPayload() {
+        try {
+          const raw = localStorage.getItem(VBB_EDIT_DRAFT_LS_KEY);
+          if (!raw) return null;
+          const data = JSON.parse(raw);
+          if (!data || !Array.isArray(data.items)) return null;
+          return data;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function applyVbbEditDraftToItem(item, draft) {
+        if (!item || !draft) return false;
+        let changed = false;
+        if (draft.edit) {
+          item.edit = {
+            trimStart: Number(draft.edit.trimStart) || 0,
+            trimEnd: Number(draft.edit.trimEnd) || item.duration,
+            cutouts: Array.isArray(draft.edit.cutouts)
+              ? draft.edit.cutouts.map((c) => ({
+                  start: Number(c.start) || 0,
+                  end: Number(c.end) || 0,
+                }))
+              : [],
+            cropOn: Boolean(draft.edit.cropOn),
+            crop: draft.edit.crop
+              ? { ...draft.edit.crop }
+              : { x: 0, y: 0, w: item.srcW, h: item.srcH },
+          };
+          clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
+          changed = true;
+        }
+        if (Array.isArray(draft.marks) && draft.marks.length) {
+          item.marks = draft.marks.map((m) => ({
+            start: Number(m.start) || 0,
+            end: Number(m.end) || 0,
+          }));
+          changed = true;
+        }
+        if (draft.draftStart != null && Number.isFinite(Number(draft.draftStart))) {
+          item.draftStart = Number(draft.draftStart);
+          changed = true;
+        }
+        return changed;
+      }
+
+      /** 重选同名同尺寸同 mtime 文件时恢复裁剪/打点 */
+      function restoreVbbEditDrafts(probed) {
+        const data = readVbbEditDraftPayload();
+        if (!data?.items?.length || !probed?.length) return 0;
+        const byKey = new Map(data.items.map((d) => [String(d.key || ""), d]));
+        let n = 0;
+        probed.forEach((item) => {
+          const d = byKey.get(vbbFileDraftKey(item.file));
+          if (d && applyVbbEditDraftToItem(item, d)) n += 1;
+        });
+        return n;
+      }
+
+      function downloadVbbEditDraftsJson() {
+        const items = collectVbbEditDraftItems();
+        if (!items.length) {
+          toast("当前没有可导出的编辑");
+          return false;
+        }
+        saveVbbEditDraftsSync();
+        const blob = new Blob([JSON.stringify({ v: 1, at: Date.now(), items }, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `vbb-edits-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => {
+          try {
+            URL.revokeObjectURL(url);
+          } catch (_) {}
+        }, 2000);
+        toast(`已导出 ${items.length} 个视频的编辑方案（不含视频文件）`);
+        return true;
+      }
+
+      function destroyVbbLiveFfmpegPool() {
+        while (vbbLiveFfmpegPool.length) {
+          const ff = vbbLiveFfmpegPool.pop();
+          try {
+            destroyFfmpegInstance?.(ff);
+          } catch (_) {
+            try {
+              ff?.terminate?.();
+            } catch (_) {}
+          }
+        }
+      }
+
+      /** 强制取消：杀单例 + 并行池；并落盘编辑草稿 */
+      function forceAbortVbb(opts = {}) {
+        abortVbb = true;
+        abortV2g = true;
+        const saved = saveVbbEditDraftsSync();
+        try {
+          terminateFfmpegInstance({ revokeAssets: false });
+        } catch (_) {}
+        destroyVbbLiveFfmpegPool();
+        try {
+          scheduleFfmpegPrewarm?.();
+        } catch (_) {}
+        if (vbbAbort) {
+          vbbAbort.textContent = "正在停止…";
+          window.setTimeout(() => {
+            if (vbbAbort && abortVbb) vbbAbort.textContent = "取消";
+          }, 2500);
+        }
+        if (opts.silent) return saved;
+        toast(
+          saved > 0
+            ? `已强制停止 · 已保存 ${saved} 个编辑草稿（刷新后请重选相同文件即可恢复）`
+            : "已强制停止（当前无编辑可保存）"
+        );
+        return saved;
       }
   
       function formatVbbClock(sec) {
@@ -10612,13 +10829,14 @@
       }
   
       function clearVbb() {
+        try {
+          saveVbbEditDraftsSync();
+        } catch (_) {}
         if (vbbBusy) {
-          abortVbb = true;
-          abortV2g = true;
-          terminateFfmpegInstance({ revokeAssets: false });
-          scheduleFfmpegPrewarm();
+          forceAbortVbb({ silent: true });
         }
         vbbBusy = false;
+        vbbLiveFfmpegPool = [];
         vbbNeedReselect = false;
         vbbSourceFile = null;
         vbbBatchFiles = [];
@@ -10680,12 +10898,17 @@
           probed.push(item);
         }
         vbbBatchFiles = probed;
+        const restored = restoreVbbEditDrafts(vbbBatchFiles);
         renderVbbBatchList();
         syncVbbBatchMeta();
         setVbbButtons();
         await selectVbbBatchItem(0, { force: true });
         prefetchVbbVtrimEditor();
-        toast("全部视频已就绪 · 可逐个预览/打点或「编辑」，点 × 可移除，再「一键黑盒」");
+        toast(
+          restored > 0
+            ? `全部视频已就绪 · 已恢复 ${restored} 个草稿编辑 · 可再「一键黑盒」`
+            : "全部视频已就绪 · 可逐个预览/打点或「编辑」，点 × 可移除，再「一键黑盒」"
+        );
       }
   
       async function loadVbbFile(file) {
@@ -10751,6 +10974,22 @@
         if (!(duration > 0) || !vbbVideo.videoWidth) throw new Error("视频时长或尺寸无效");
         if (duration < VBB_MIN_SPAN) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
         vbbSingleEdit = makeVbbEditState(duration, vbbVideo.videoWidth, vbbVideo.videoHeight);
+        {
+          const probe = {
+            file: pinned,
+            duration,
+            srcW: vbbVideo.videoWidth,
+            srcH: vbbVideo.videoHeight,
+            edit: vbbSingleEdit,
+            marks: [],
+          };
+          const restored = restoreVbbEditDrafts([probe]);
+          if (restored > 0) {
+            vbbSingleEdit = probe.edit;
+            if (Array.isArray(probe.marks) && probe.marks.length) vbbMarks = probe.marks.slice();
+            if (probe.draftStart != null) vbbDraftStart = probe.draftStart;
+          }
+        }
         if (vbbMeta) {
           vbbMeta.textContent = formatLocalPickMeta(
             pinned,
@@ -11700,6 +11939,7 @@
       async function runVbbBatchBlackbox() {
         if (!isVbbBatchMode() || vbbBusy) return;
         persistActiveVbbMarks();
+        saveVbbEditDraftsSync();
         abortVbb = false;
         vbbBusy = true;
         vbbSuppressGlobalProgress = true; // 只留卡片进度
@@ -11784,6 +12024,7 @@
                 if (abortVbb) throw new Error("已取消");
                 pool.push(await createFfmpegInstance());
               }
+              vbbLiveFfmpegPool = pool.slice();
               toast(`并行 ${conc} 路转换 · ${currentMediaPerf().label}`);
               vbbLog(`[vbb] batch parallel concurrency=${conc} total=${total}`);
             } catch (err) {
@@ -11793,6 +12034,7 @@
                   destroyFfmpegInstance?.(pool.pop());
                 } catch (_) {}
               }
+              vbbLiveFfmpegPool = [];
               conc = 1;
               toast("并行引擎启动失败 · 改为逐个转换");
             }
@@ -12040,6 +12282,7 @@
                   destroyFfmpegInstance?.(pool.pop());
                 } catch (_) {}
               }
+              vbbLiveFfmpegPool = [];
               conc = 1;
               for (let i = 0; i < total; i++) {
                 if (abortVbb) throw new Error("已取消");
@@ -12081,11 +12324,18 @@
               destroyFfmpegInstance?.(pool.pop());
             } catch (_) {}
           }
+          vbbLiveFfmpegPool = [];
           vbbBusy = false;
           vbbSuppressGlobalProgress = false;
           resetVbbAbort();
-          if (vbbAbort) vbbAbort.hidden = true;
+          if (vbbAbort) {
+            vbbAbort.hidden = true;
+            vbbAbort.textContent = "取消";
+          }
           setVbbButtons();
+          try {
+            saveVbbEditDraftsSync();
+          } catch (_) {}
         }
       }
 
@@ -13710,6 +13960,11 @@
         getActivePlan: () => (vbbAnalysis ? resolveActiveVbbPlan() : null),
         getClips: () => vbbClips.slice(),
         getBatchFiles: () => vbbBatchFiles.slice(),
+        /** 紧急：导出/保存编辑草稿（不含视频）；强制取消 */
+        exportEditDrafts: () => downloadVbbEditDraftsJson(),
+        saveEditDrafts: () => saveVbbEditDraftsSync(),
+        forceAbort: () => forceAbortVbb(),
+        getEditDraftPayload: () => ({ v: 1, at: Date.now(), items: collectVbbEditDraftItems() }),
         syncUi: () => {
           syncVbbEditUi();
           renderVbbBatchList({ keepSelection: true });
@@ -13792,10 +14047,17 @@
         packDownloadVbbGifs().catch((err) => setError(vbbError, err.message || String(err)));
       });
       vbbAbort?.addEventListener("click", () => {
-        abortVbb = true;
-        abortV2g = true;
-        terminateFfmpegInstance({ revokeAssets: false });
-        scheduleFfmpegPrewarm();
+        forceAbortVbb();
+      });
+      $("#vbb-export-edits")?.addEventListener("click", () => {
+        downloadVbbEditDraftsJson();
+      });
+      window.addEventListener("beforeunload", (e) => {
+        const n = saveVbbEditDraftsSync();
+        if (n > 0 || vbbBusy) {
+          e.preventDefault();
+          e.returnValue = "";
+        }
       });
       vbbJumpGo?.addEventListener("click", () => {
         const t = parseVbbJumpTime(vbbJumpTime?.value);
