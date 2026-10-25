@@ -41,6 +41,14 @@ t("含编辑草稿保存/恢复/导出", () => {
   assert.ok(panel.includes('id="vbb-export-edits"'));
 });
 
+t("手机草稿：软匹配名+大小，且 pagehide/visibility 落盘", () => {
+  assert.ok(src.includes("vbbFileDraftSoftKey"));
+  assert.ok(src.includes("findVbbEditDraftForItem"));
+  assert.ok(src.includes('addEventListener("pagehide"'));
+  assert.ok(src.includes("visibilitychange"));
+  assert.ok(src.includes("别刷新，直接再点「一键黑盒」"));
+});
+
 t("DevToolsVbb 暴露紧急导出与强制取消", () => {
   assert.ok(src.includes("exportEditDrafts:"));
   assert.ok(src.includes("forceAbort:"));

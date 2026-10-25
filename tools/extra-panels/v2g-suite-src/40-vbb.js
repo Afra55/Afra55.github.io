@@ -2279,6 +2279,53 @@
         return `${file.name || ""}|${Number(file.size) || 0}|${Number(file.lastModified) || 0}`;
       }
 
+      /** 手机重选常丢 lastModified：用 文件名+大小 作软键 */
+      function vbbFileDraftSoftKey(fileOrDraft) {
+        if (!fileOrDraft) return "";
+        const name = fileOrDraft.name || fileOrDraft.file?.name || "";
+        const size = Number(fileOrDraft.size ?? fileOrDraft.file?.size) || 0;
+        return `${name}|${size}`;
+      }
+
+      /**
+       * 匹配草稿：精确 key → 名+大小（手机）→ 名+大小+时长/分辨率消歧。
+       * used 避免同名同大小多文件抢同一份草稿。
+       */
+      function findVbbEditDraftForItem(item, drafts, used) {
+        if (!item?.file || !Array.isArray(drafts) || !drafts.length) return null;
+        const mark = (i) => {
+          used.add(i);
+          return drafts[i];
+        };
+        const exact = vbbFileDraftKey(item.file);
+        for (let i = 0; i < drafts.length; i++) {
+          if (used.has(i)) continue;
+          if (String(drafts[i]?.key || "") === exact) return mark(i);
+        }
+        const soft = vbbFileDraftSoftKey(item.file);
+        const softIdx = [];
+        for (let i = 0; i < drafts.length; i++) {
+          if (used.has(i)) continue;
+          if (vbbFileDraftSoftKey(drafts[i]) === soft) softIdx.push(i);
+        }
+        if (!softIdx.length) return null;
+        if (softIdx.length === 1) return mark(softIdx[0]);
+        const dur = Number(item.duration) || 0;
+        const w = Number(item.srcW) || 0;
+        const h = Number(item.srcH) || 0;
+        const ranked = softIdx.filter((i) => {
+          const d = drafts[i];
+          const dd = Number(d?.duration) || 0;
+          const dw = Number(d?.srcW) || 0;
+          const dh = Number(d?.srcH) || 0;
+          if (dur > 0 && dd > 0 && Math.abs(dur - dd) > 0.35) return false;
+          if (w > 0 && dw > 0 && w !== dw) return false;
+          if (h > 0 && dh > 0 && h !== dh) return false;
+          return true;
+        });
+        return mark((ranked.length ? ranked : softIdx)[0]);
+      }
+
       function serializeVbbEditDraft(edit) {
         if (!edit) return null;
         return {
@@ -2408,14 +2455,14 @@
         return changed;
       }
 
-      /** 重选同名同尺寸同 mtime 文件时恢复裁剪/打点 */
+      /** 重选文件时恢复裁剪/打点（手机允许名+大小软匹配，因 mtime 常变） */
       function restoreVbbEditDrafts(probed) {
         const data = readVbbEditDraftPayload();
         if (!data?.items?.length || !probed?.length) return 0;
-        const byKey = new Map(data.items.map((d) => [String(d.key || ""), d]));
+        const used = new Set();
         let n = 0;
         probed.forEach((item) => {
-          const d = byKey.get(vbbFileDraftKey(item.file));
+          const d = findVbbEditDraftForItem(item, data.items, used);
           if (d && applyVbbEditDraftToItem(item, d)) n += 1;
         });
         return n;
@@ -2505,14 +2552,27 @@
             renderVbbResults();
           } catch (_) {}
         };
-        // 引擎已杀，多数路径马上进 finally；若卡在 wasm，超时也要解锁，避免界面假死
-        window.setTimeout(unlockUi, opts.silent ? 0 : 500);
+        // 引擎已杀，多数路径马上进 finally；手机 wasm 更易假死，稍早解锁并再踢一脚 terminate
+        const unlockMs = opts.silent ? 0 : isLikelyMobileBrowser() ? 280 : 500;
+        window.setTimeout(() => {
+          unlockUi();
+          if (isLikelyMobileBrowser()) {
+            try {
+              terminateFfmpegInstance({ revokeAssets: false });
+            } catch (_) {}
+          }
+        }, unlockMs);
         if (opts.silent) return saved;
         vbbCancelToastShown = true;
+        const mobile = isLikelyMobileBrowser();
         toast(
           saved > 0
-            ? `已停止转换 · 编辑已保存（${saved}）· 可直接再点转换，无需重裁；刷新后请重选相同文件恢复`
-            : "已停止转换 · 可再点转换"
+            ? mobile
+              ? `已停止 · 编辑已留在本机（${saved}）· 别刷新，直接再点「一键黑盒」；若已刷新请重新选同一批视频`
+              : `已停止转换 · 编辑已保存（${saved}）· 可直接再点转换，无需重裁；刷新后请重选相同文件恢复`
+            : mobile
+              ? "已停止 · 可再点「一键黑盒」"
+              : "已停止转换 · 可再点转换"
         );
         return saved;
       }
@@ -6705,6 +6765,16 @@
       });
       $("#vbb-export-edits")?.addEventListener("click", () => {
         downloadVbbEditDraftsJson();
+      });
+      // 手机 Safari 常不走 beforeunload：切后台/杀页用 pagehide/visibility 落盘
+      const persistVbbDraftsOnLeave = () => {
+        try {
+          saveVbbEditDraftsSync();
+        } catch (_) {}
+      };
+      window.addEventListener("pagehide", persistVbbDraftsOnLeave);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") persistVbbDraftsOnLeave();
       });
       window.addEventListener("beforeunload", (e) => {
         const n = saveVbbEditDraftsSync();
