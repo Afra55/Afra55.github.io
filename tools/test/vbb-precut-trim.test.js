@@ -57,6 +57,19 @@ t("预裁用精确重编码，禁止 copy 优先（避免关键帧多出片头�
   assert.ok(src.includes("预裁切失败，回退整片 seek"));
 });
 
+t("预裁会话缓存：命中只复用，算法仍是精确重编码", () => {
+  assert.ok(src.includes("vbbPrecutClipCache"));
+  assert.ok(src.includes("预裁切缓存命中"));
+  assert.ok(src.includes("rememberVbbPrecutClip"));
+  assert.ok(src.includes("clearVbbPrecutClipCache"));
+  const fn = src.slice(
+    src.indexOf("async function materializeVbbTrimClip"),
+    src.indexOf("async function prepareVbbEncodeSource")
+  );
+  assert.ok(fn.includes("trim=start="));
+  assert.ok(!/"copy"/.test(fn));
+});
+
 t("整段结果卡时间轴保留编辑起点（勿写成 prepared 的 0）", () => {
   assert.ok(src.includes("vbbClips[0].start = win.startSec"));
   assert.ok(src.includes("prepared.startSec 常为 0"));

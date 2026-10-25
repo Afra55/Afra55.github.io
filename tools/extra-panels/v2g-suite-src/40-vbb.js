@@ -112,6 +112,12 @@
       let abortVbb = false;
       /** 批处理并行 FFmpeg 实例；取消时必须一并 terminate，否则点取消无响应 */
       let vbbLiveFfmpegPool = [];
+      /**
+       * 会话内预裁短片缓存：同一文件+同一精确窗只重编码一次。
+       * 不改变裁切算法（仍走 materializeVbbTrimClip 精确重编码），仅避免重复劳动。
+       */
+      const vbbPrecutClipCache = new Map();
+      const VBB_PRECUT_CACHE_MAX = 8;
       /** 任务世代：取消后旧 finally 不得清掉新任务的 busy/池 */
       let vbbJobEpoch = 0;
       let vbbJobActiveEpoch = 0;
@@ -965,16 +971,52 @@
         return s > 0.05 || leftover >= 8;
       }
 
+      function vbbPrecutClipCacheKey(file, startSec, span, srcW, srcH) {
+        const id = file
+          ? `${file.name || ""}|${Number(file.size) || 0}|${Number(file.lastModified) || 0}`
+          : "";
+        return `${id}|${Number(startSec).toFixed(3)}|${Number(span).toFixed(3)}|${Math.round(Number(srcW) || 0)}x${Math.round(Number(srcH) || 0)}`;
+      }
+
+      function rememberVbbPrecutClip(key, result) {
+        if (!key || !result?.file) return;
+        if (vbbPrecutClipCache.has(key)) vbbPrecutClipCache.delete(key);
+        vbbPrecutClipCache.set(key, result);
+        while (vbbPrecutClipCache.size > VBB_PRECUT_CACHE_MAX) {
+          const oldest = vbbPrecutClipCache.keys().next().value;
+          vbbPrecutClipCache.delete(oldest);
+        }
+      }
+
+      function clearVbbPrecutClipCache() {
+        vbbPrecutClipCache.clear();
+      }
+
       /**
        * 把 [startSec, startSec+span) 先裁成短片再进阶梯（仅 shouldPrecut 为真时调用）。
        * 用精确重编码（-i 后再 -ss/-t），不用 copy：copy 会按关键帧提前，片头可能多出未裁内容。
        * 分辨率保持调用方传入，避免影响去色边/seed。
+       * 同会话同窗命中缓存则直接复用（字节与参数不变，不降精度）。
        */
       async function materializeVbbTrimClip(file, startSec, span, srcW, srcH, onProgress, ffmpegLease) {
         const start = Math.max(0, Number(startSec) || 0);
         const dur = Math.max(0.05, Number(span) || 0.05);
         const keepW = Math.max(1, Math.round(Number(srcW) || 1));
         const keepH = Math.max(1, Math.round(Number(srcH) || 1));
+        const cacheKey = vbbPrecutClipCacheKey(file, start, dur, keepW, keepH);
+        const cached = vbbPrecutClipCache.get(cacheKey);
+        if (cached?.file && Number(cached.file.size) > 1024) {
+          vbbLog(`[vbb] 预裁切缓存命中 ${dur.toFixed(2)}s @ ${start.toFixed(2)}s`);
+          onProgress?.(0.12, `复用预裁切 ${dur.toFixed(1)}s`);
+          return {
+            file: cached.file,
+            duration: Number(cached.duration) || dur,
+            srcW: keepW,
+            srcH: keepH,
+            materialized: true,
+            fromCache: true,
+          };
+        }
         const ffmpeg =
           ffmpegLease ||
           (typeof getFfmpegInstance === "function"
@@ -1050,8 +1092,10 @@
           `[vbb] 预裁切(保守) ${dur.toFixed(2)}s @ ${start.toFixed(2)}s → ${formatKb(outFile.size)}（明显裁短才启用）`
         );
         onProgress?.(0.12, `已预裁切 ${dur.toFixed(1)}s`);
-        // 宽高原样返回，避免去色边/seed 坐标系漂移
-        return { file: outFile, duration: dur, srcW: keepW, srcH: keepH, materialized: true };
+        // 宽高跟样返回，避免去色边/seed 坐标系漂移
+        const result = { file: outFile, duration: dur, srcW: keepW, srcH: keepH, materialized: true };
+        rememberVbbPrecutClip(cacheKey, result);
+        return result;
       }
 
       /**
@@ -2908,6 +2952,15 @@
         // 合并 GIF：只要有 ≥2 个已生成的 GIF 就能合并（批量模式下同样可用）
         if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy;
         if (vbbZip) vbbZip.disabled = gifCount < 1 || vbbBusy;
+        const retryBtn = $("#vbb-retry-failed");
+        if (retryBtn) {
+          const failN = vbbClips.filter((c) => c && !c.gifBlob && (c.error || c.jobStatus === "error")).length;
+          // 仅批量：有失败/取消项时可重跑；成功项保留不动
+          retryBtn.hidden = !(isVbbBatchMode() && failN > 0);
+          retryBtn.disabled = !isVbbBatchMode() || vbbBusy || failN < 1;
+          if (failN > 0) retryBtn.textContent = `重跑失败（${failN}）`;
+          else retryBtn.textContent = "重跑失败";
+        }
         if (isVbbManualMode()) paintVbbManualControls();
       }
   
@@ -3636,6 +3689,7 @@
         vbbBusy = false;
         vbbJobActiveEpoch = 0;
         vbbLiveFfmpegPool = [];
+        clearVbbPrecutClipCache();
         vbbNeedReselect = false;
         vbbSourceFile = null;
         vbbBatchFiles = [];
@@ -4727,16 +4781,7 @@
         return msg;
       }
 
-      async function runVbbBatchBlackbox() {
-        if (!isVbbBatchMode() || vbbBusy) return;
-        persistActiveVbbMarks();
-        saveVbbEditDraftsSync();
-        const jobEpoch = beginVbbJob();
-        vbbSuppressGlobalProgress = true; // 只留卡片进度
-        setVbbButtons();
-        if (vbbAbort) vbbAbort.hidden = false;
-        setError(vbbError, "");
-        clearVbbResults();
+      function buildVbbBatchJobs() {
         /** @type {{ item: any, startSec: number, span: number, edit: any, sourceName: string, fromMark: boolean }[]} */
         const jobs = [];
         vbbBatchFiles.forEach((item) => {
@@ -4765,13 +4810,11 @@
             fromMark: false,
           });
         });
-        const total = jobs.length;
-        if (!total) {
-          finishVbbJob(jobEpoch);
-          toast("没有可转换的片段");
-          return;
-        }
-        vbbClips = jobs.map((job) => ({
+        return jobs;
+      }
+
+      function makeVbbBatchClipShell(job) {
+        return {
           start: job.startSec,
           span: job.span,
           sourceName: job.sourceName,
@@ -4782,11 +4825,59 @@
           gifDuration: 0,
           error: "",
           ...vbbPendingJobFields(),
-        }));
-        renderVbbResults();
-        let ok = 0;
-        let doneCount = 0;
-        const finishedIdx = new Set();
+        };
+      }
+
+      async function runVbbBatchBlackbox(opts = {}) {
+        if (!isVbbBatchMode() || vbbBusy) return;
+        const retryFailed = Boolean(opts.retryFailed);
+        persistActiveVbbMarks();
+        saveVbbEditDraftsSync();
+        const jobEpoch = beginVbbJob();
+        vbbSuppressGlobalProgress = true; // 只留卡片进度
+        setVbbButtons();
+        if (vbbAbort) vbbAbort.hidden = false;
+        setError(vbbError, "");
+        const jobs = buildVbbBatchJobs();
+        const total = jobs.length;
+        if (!total) {
+          finishVbbJob(jobEpoch);
+          toast("没有可转换的片段");
+          return;
+        }
+        /** 已有成功 GIF 的下标：重跑失败时跳过，绝不重编码成功项 */
+        const skipOk = new Set();
+        if (retryFailed) {
+          if (vbbClips.length !== total) {
+            finishVbbJob(jobEpoch);
+            toast("列表已变，请重新「一键黑盒」");
+            return;
+          }
+          let failN = 0;
+          for (let i = 0; i < total; i++) {
+            if (vbbClips[i]?.gifBlob) {
+              skipOk.add(i);
+              continue;
+            }
+            failN += 1;
+            vbbClips[i] = makeVbbBatchClipShell(jobs[i]);
+            setVbbClipJob(i, { status: "pending", progress: 0, text: "等待重跑…" });
+          }
+          if (!failN) {
+            finishVbbJob(jobEpoch);
+            toast("没有失败项可重跑");
+            return;
+          }
+          toast(`重跑失败 ${failN} 项 · 已成功的 ${skipOk.size} 项保留不动`);
+          renderVbbResults();
+        } else {
+          clearVbbResults();
+          vbbClips = jobs.map((job) => makeVbbBatchClipShell(job));
+          renderVbbResults();
+        }
+        let ok = skipOk.size;
+        let doneCount = skipOk.size;
+        const finishedIdx = new Set(skipOk);
         // 沿用成功方案：仅当时长+源宽高+源帧率接近时复用（勿只按时长）
         let reuseSeed = null;
         const pool = [];
@@ -4833,6 +4924,13 @@
 
           const encodeOne = async (i, ffmpegLease) => {
             if (abortVbb) throw new Error("已取消");
+            if (skipOk.has(i) || vbbClips[i]?.gifBlob) {
+              if (!finishedIdx.has(i)) {
+                finishedIdx.add(i);
+                doneCount += 1;
+              }
+              return { ok: true, skipped: true };
+            }
             const job = jobs[i];
             const item = job.item;
             setVbbClipJob(i, { status: "running", progress: 0.02, text: conc > 1 ? `并行编码…` : "准备编码…" });
@@ -5039,8 +5137,9 @@
             const mobileBatch = typeof isLikelyMobileBrowser === "function" && isLikelyMobileBrowser();
             for (let i = 0; i < total; i++) {
               if (abortVbb) throw new Error("已取消");
+              if (skipOk.has(i)) continue;
               // 手机连续多条：条间多歇一会，让 wasm/FFmpeg 堆有机会回收，减轻第 N 条假死
-              if (mobileBatch && i > 0) {
+              if (mobileBatch && doneCount > skipOk.size) {
                 setVbbClipJob(i, { status: "running", progress: 0.01, text: "清理内存后继续…" });
                 try {
                   terminateFfmpegInstance({ revokeAssets: false });
@@ -5059,8 +5158,15 @@
                 while (true) {
                   if (abortVbb) throw new Error("已取消");
                   if (forceSerialRest) return;
-                  const i = nextIdx++;
-                  if (i >= total) return;
+                  let i = -1;
+                  while (nextIdx < total) {
+                    const cand = nextIdx++;
+                    if (!skipOk.has(cand)) {
+                      i = cand;
+                      break;
+                    }
+                  }
+                  if (i < 0) return;
                   const result = await encodeOne(i, lease);
                   // 并行中途 OOM：停掉后续并行，剩余改串行（本 worker 退出；主流程再扫失败项）
                   if (result && result.memory) {
@@ -6827,6 +6933,11 @@
           .finally(() => blurVbbActionButton(btn));
       });
         vbbOneclick?.addEventListener("click", () => withVbbWake(() => runVbbOneClick()).catch((err) => setError(vbbError, err.message || String(err))));
+      $("#vbb-retry-failed")?.addEventListener("click", () =>
+        withVbbWake(() => runVbbBatchBlackbox({ retryFailed: true })).catch((err) =>
+          setError(vbbError, err.message || String(err))
+        )
+      );
         $("#vbb-merge-video")?.addEventListener("click", () =>
           withVbbWake(() => mergeVbbVideosToOne()).catch((err) => setError(vbbError, err.message || String(err)))
         );

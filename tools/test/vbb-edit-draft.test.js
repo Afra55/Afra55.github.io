@@ -49,6 +49,13 @@ t("含 JSON 备份导入还原", () => {
   assert.ok(src.includes("importEditDrafts:"));
 });
 
+t("批量可重跑失败且保留成功 GIF", () => {
+  assert.ok(src.includes("retryFailed"));
+  assert.ok(src.includes("skipOk"));
+  assert.ok(src.includes("已成功的"));
+  assert.ok(panel.includes('id="vbb-retry-failed"'));
+});
+
 t("未完成才进草稿，全部成功则清空 localStorage 键", () => {
   assert.ok(src.includes("isVbbFileEncodeFullyDone"));
   assert.ok(src.includes("还没生成成功"));
