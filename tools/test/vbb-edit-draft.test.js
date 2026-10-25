@@ -60,4 +60,83 @@ t("批处理开始前与结束后会保存草稿", () => {
   assert.ok(/runVbbBatchBlackbox[\s\S]*saveVbbEditDraftsSync/.test(src));
 });
 
+t("强制取消不清空编辑字段，只标任务状态", () => {
+  assert.ok(src.includes("编辑方案绝不清空"));
+  assert.ok(/jobStatus === "pending" \|\| c\.jobStatus === "running"/.test(src));
+  const start = src.indexOf("function forceAbortVbb");
+  const end = src.indexOf("\n      function formatVbbClock", start);
+  assert.ok(start > 0 && end > start);
+  const body = src.slice(start, end);
+  assert.ok(!/vbbSingleEdit\s*=\s*null/.test(body));
+  assert.ok(!/vbbBatchFiles\s*=\s*\[\]/.test(body));
+  assert.ok(!/item\.edit\s*=/.test(body));
+  assert.ok(body.includes("saveVbbEditDraftsSync"));
+  assert.ok(body.includes("destroyVbbLiveFfmpegPool"));
+});
+
+/** 从源码抽出纯函数做行为断言（手机 mtime 变化仍能恢复） */
+function loadDraftMatchers() {
+  const start = src.indexOf("function vbbFileDraftKey(file)");
+  const end = src.indexOf("function serializeVbbEditDraft(edit)");
+  assert.ok(start > 0 && end > start);
+  // eslint-disable-next-line no-new-func
+  return new Function(`${src.slice(start, end)}; return { vbbFileDraftKey, vbbFileDraftSoftKey, findVbbEditDraftForItem };`)();
+}
+
+t("软匹配：mtime 变了仍能按名+大小找回草稿", () => {
+  const { findVbbEditDraftForItem } = loadDraftMatchers();
+  const drafts = [
+    {
+      key: "a.mp4|1000|111",
+      name: "a.mp4",
+      size: 1000,
+      lastModified: 111,
+      duration: 12.5,
+      srcW: 1280,
+      srcH: 720,
+      edit: { trimStart: 1, trimEnd: 8 },
+    },
+  ];
+  const used = new Set();
+  const item = {
+    file: { name: "a.mp4", size: 1000, lastModified: 999999 },
+    duration: 12.5,
+    srcW: 1280,
+    srcH: 720,
+  };
+  const hit = findVbbEditDraftForItem(item, drafts, used);
+  assert.ok(hit);
+  assert.equal(hit.edit.trimStart, 1);
+  assert.equal(used.size, 1);
+});
+
+t("软匹配：同名同大小按时长消歧，且 used 不重复占用", () => {
+  const { findVbbEditDraftForItem } = loadDraftMatchers();
+  const drafts = [
+    { key: "x.mp4|200|1", name: "x.mp4", size: 200, duration: 10, srcW: 720, srcH: 1280, edit: { id: "short" } },
+    { key: "x.mp4|200|2", name: "x.mp4", size: 200, duration: 40, srcW: 720, srcH: 1280, edit: { id: "long" } },
+  ];
+  const used = new Set();
+  const a = findVbbEditDraftForItem(
+    { file: { name: "x.mp4", size: 200, lastModified: 9 }, duration: 40, srcW: 720, srcH: 1280 },
+    drafts,
+    used
+  );
+  const b = findVbbEditDraftForItem(
+    { file: { name: "x.mp4", size: 200, lastModified: 8 }, duration: 10, srcW: 720, srcH: 1280 },
+    drafts,
+    used
+  );
+  assert.equal(a.edit.id, "long");
+  assert.equal(b.edit.id, "short");
+  assert.equal(used.size, 2);
+});
+
+t("任务世代：begin/finish/forceAbort 协同存在且 busy 只在 begin 置 true", () => {
+  assert.ok(src.includes("vbbJobActiveEpoch = 0"));
+  assert.ok(src.includes("vbbJobEpoch += 1"));
+  assert.equal((src.match(/vbbBusy\s*=\s*true/g) || []).length, 1);
+  assert.ok(src.includes("if (epoch !== vbbJobActiveEpoch) return false"));
+});
+
 console.log(`vbb-edit-draft.test.js: ${n} passed`);
