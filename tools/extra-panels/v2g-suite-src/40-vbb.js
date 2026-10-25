@@ -1990,56 +1990,120 @@
           .replace(/读取\s*GIF/g, "读取结果")
           .replace(/本地载入/g, "载入视频")
           .replace(/抽取片段/g, "截取片段")
+          .replace(/导出\s*RGBA(?:\s*帧)?/gi, "导出帧")
           .replace(/准备编码/g, "准备编码")
           .replace(/编码中请稍候/g, "编码中")
           .trim();
       }
 
+      /**
+       * 把底层编码器杂讯收成用户可读阶段：
+       * ①准备/预裁/删中间 → ②试档 → ③出帧/写GIF → ④加宽/压缩
+       * 不改变任何编码策略，只改展示文案。
+       */
       function vbbStageText(text) {
-        const t = String(text || "").trim();
-        if (!t) return "";
-        if (/^(完成|失败|等待|编码|合并|分析|整段转换|批量转换)/.test(t) && t.length <= 24) return t;
+        const t0 = String(text || "").trim();
+        if (!t0) return "";
+        // 已带阶段前缀的，轻度规范化后直接用
+        if (/^[①②③④]/.test(t0) && t0.length <= 36) {
+          return t0.replace(/\s*·\s*/g, " · ").trim();
+        }
+        // 短状态原样返回；勿把「编码 GIF…」误当成终态「编码」
+        if (/^(完成|失败|等待|合并|分析|整段转换|批量转换)$/.test(t0)) return t0;
+        if (/^(完成|失败|等待|合并|分析|整段转换|批量转换)\b/.test(t0) && t0.length <= 24) return t0;
 
+        let t = t0;
         let m;
-        if ((m = t.match(/^黑盒编码\s*·\s*(\d+)\s*FPS/i))) return `试 ${m[1]} 帧/秒`;
-        if ((m = t.match(/^黑盒压缩\s*·\s*(\d+)\s*FPS(?:\s*·\s*(.+))?$/i))) {
-          const tail = m[2] ? vbbStageText(m[2]) : "";
-          return tail ? `压缩 ${m[1]} FPS · ${tail}` : `压缩 ${m[1]} 帧/秒`;
-        }
-        if ((m = t.match(/^黑盒加宽\s*·\s*(\d+)/i))) return `加宽至 ${m[1]}px`;
-        if ((m = t.match(/^试\s*(\d+)\s*帧\/秒/i))) return t;
-        if ((m = t.match(/^压缩\s*(\d+)\s*FPS/i))) return t;
-        if ((m = t.match(/^加宽至\s*(\d+)px/i))) return t;
-        if (/^沿用帧率/.test(t) || /^沿用方案/.test(t)) return t.replace(/\s*·\s*/g, " · ");
-        if ((m = t.match(/^沿用后超限降宽\s*·\s*(\d+)/i))) return `方案超限，降宽至 ${m[1]}px`;
 
-        if (/^(完成|失败|等待|编码|合并|分析|压缩|降宽)/.test(t) && t.length <= 12) return t;
-        const fps = t.match(/(\d+)FPS/);
-        if (fps && /压缩|编码/.test(t)) return `${fps[1]} FPS`;
-        if (/降宽/.test(t)) {
-          const w = t.match(/→\s*(\d+)/) || t.match(/宽\s*(\d+)/);
-          return w ? `降宽 ${w[1]}` : "降宽";
+        // —— ① 准备 / 预裁 / 删中间 ——
+        if (/复用预裁|预裁切缓存/.test(t)) return "①预裁 · 复用短片";
+        if (/预裁切失败/.test(t)) return "①预裁失败 · 改整片编码";
+        if (/预裁切|已预裁切/.test(t)) {
+          const sec = t.match(/(\d+(?:\.\d+)?)\s*s/i);
+          return sec ? `①预裁 · ${sec[1]}s` : "①预裁中";
         }
-        if (/沿用/.test(t)) return t.includes("方案") ? "沿用方案" : "沿用";
+        if (/删中间|应用删中间|拼接保留段|准备拼接编辑/.test(t)) {
+          const step = t.match(/(\d+)\s*\/\s*(\d+)/);
+          return step ? `①删中间 · ${step[1]}/${step[2]}` : "①删中间";
+        }
+        if (/准备引擎|载入引擎|加载引擎|准备 FFmpeg|连接本机|载入本地编码器|载入编码器|载入视频/.test(t)) {
+          return "①准备编码器";
+        }
+        if (/准备编码|并行编码|等待重跑|清理内存/.test(t)) {
+          if (/清理内存/.test(t)) return "①清理内存…";
+          if (/等待重跑/.test(t)) return "①等待重跑…";
+          return "①准备中…";
+        }
+
+        // —— ② 试档（帧率 / 宽度 / 画质）——
+        if ((m = t.match(/^黑盒编码\s*·\s*(\d+)\s*FPS/i))) return `②试档 · ${m[1]}帧/秒`;
+        if ((m = t.match(/^试\s*(\d+)\s*帧\/秒/i))) return `②试档 · ${m[1]}帧/秒`;
+        if ((m = t.match(/(\d+)\s*FPS/i)) && /试|编码|黑盒/.test(t) && !/压缩|加宽|导出|写入|RGBA|gifski/i.test(t)) {
+          const w = t.match(/宽\s*(\d+)/) || t.match(/(\d+)\s*px/i);
+          const q = t.match(/画质\s*(\d+)/) || t.match(/gq\s*(\d+)/i) || t.match(/q\s*(\d+)/i);
+          const bits = [`②试档 · ${m[1]}帧/秒`];
+          if (w) bits.push(`宽${w[1]}`);
+          if (q) bits.push(`画质${q[1]}`);
+          return bits.join(" · ");
+        }
+        if (/^沿用帧率/.test(t) || /^沿用方案/.test(t)) return `②沿用方案`;
+        if ((m = t.match(/^沿用后超限降宽\s*·\s*(\d+)/i))) return `②方案超限 · 降宽${m[1]}`;
+        if (/抬质/.test(t)) return "②试档 · 抬画质";
+        if (/降宽/.test(t)) {
+          const w = t.match(/→\s*(\d+)/) || t.match(/宽\s*(\d+)/) || t.match(/(\d+)\s*px/);
+          return w ? `②试档 · 降宽${w[1]}` : "②试档 · 降宽";
+        }
+
+        // —— ④ 加宽 / 压缩（先于③，避免「压缩」被误判）——
+        if ((m = t.match(/^黑盒加宽\s*·\s*(\d+)/i)) || (m = t.match(/^加宽至\s*(\d+)/i)) || (m = t.match(/加宽.*?(\d+)\s*px/i))) {
+          return `④加宽 · ${m[1]}px`;
+        }
+        if (/加宽/.test(t)) return "④加宽中";
+        if ((m = t.match(/^黑盒压缩\s*·\s*(\d+)\s*FPS(?:\s*·\s*(.+))?$/i))) {
+          return `④压缩 · ${m[1]}帧/秒`;
+        }
+        if ((m = t.match(/^压缩\s*(\d+)\s*FPS/i))) return `④压缩 · ${m[1]}帧/秒`;
+        if (/压缩|轻压|O3|lossy/i.test(t) && !/导出|RGBA|写入/.test(t)) return "④压缩中";
+
+        // —— ③ 出帧 / 写 GIF ——
+        if (/导出\s*RGBA|导出帧|抽帧|截取片段|抽取片段/.test(t)) {
+          const pct = t.match(/(\d+)\s*%/);
+          const frac = t.match(/(\d+)\s*\/\s*(\d+)/);
+          if (pct) return `③出帧 · ${pct[1]}%`;
+          if (frac) return `③出帧 · ${frac[1]}/${frac[2]}`;
+          const sec = t.match(/已\s*(\d+)\s*s/);
+          if (sec) return `③出帧 · 已${sec[1]}s`;
+          return "③出帧中";
+        }
+        if (/写入\s*GIF|编码\s*GIF|GIF\s*…|GIF\s*\.\.\.|gifski|调色板|写入帧|本机编码\s*GIF/i.test(t)) {
+          const pct = t.match(/(\d+)\s*%/);
+          return pct ? `③写GIF · ${pct[1]}%` : "③写GIF中";
+        }
+        if (/读取\s*GIF|读取结果|封装/.test(t)) return "③收尾";
+
+        if (/^(完成|失败|等待|合并|分析|压缩|降宽)$/.test(t)) return t;
         if (/样片|分析/.test(t)) return t.replace(/编码样片/, "样片").replace(/分析中\s*[·.]?\s*/, "分析 ");
 
         if ((m = t.match(/^(\d+)FPS\s*·\s*(.+)$/i))) {
           const head = vbbFfmpegPhaseText(m[2].split("·")[0]?.trim());
-          return head ? `${m[1]} FPS · ${head}` : `${m[1]} FPS`;
+          const mapped = head ? vbbStageText(head) : "";
+          if (mapped) return mapped;
+          return head ? `②试档 · ${m[1]}帧/秒 · ${head}` : `②试档 · ${m[1]}帧/秒`;
         }
 
-        return t
+        const cleaned = t
           .replace(/超限→黑盒|仍超限[，,]?\s*改走黑盒/g, "超限")
-          .replace(/清晰 GIF|锐度 GIF/g, (m) => m.replace(" GIF", ""))
+          .replace(/清晰 GIF|锐度 GIF/g, (x) => x.replace(" GIF", ""))
           .replace(/时长黑盒|手动黑盒|批量黑盒|黑盒回退|黑盒完成|黑盒编码|改走黑盒|压黑盒|黑盒压缩|黑盒加宽|符合黑盒|黑盒/g, "")
           .replace(/\s*·\s*/g, " · ")
           .replace(/(^·|·$)/g, "")
           .trim();
+        return cleaned || t0;
       }
 
       function formatVbbJobStage(text) {
         const raw = String(text || "").trim();
-        if (!raw) return "处理中…";
+        if (!raw) return "①准备中…";
         return vbbTickerLine(raw) || vbbStageText(raw) || raw;
       }
 
@@ -2052,18 +2116,20 @@
       function vbbTickerLine(text) {
         const t = String(text || "").trim();
         if (!t) return "";
+        // 已是阶段文案：保留
+        if (/^[①②③④]/.test(t)) return vbbStageText(t) || t;
         if (/已用时|%\s*·|编码中|请稍候/.test(t)) {
           const elapsed = t.match(/已用时\s*(\d+)\s*s/i);
           const pct = t.match(/(\d+)\s*%/);
           const phaseRaw = t.split("·")[0]?.trim() || "";
-          const phase = vbbFfmpegPhaseText(phaseRaw) || vbbStageText(phaseRaw);
+          const phase = vbbStageText(vbbFfmpegPhaseText(phaseRaw) || phaseRaw);
           const stalled = /编码中|请稍候/.test(t);
           const parts = [];
           if (phase) parts.push(phase);
-          else if (phaseRaw && !/^\d+%?$/.test(phaseRaw)) parts.push(vbbStageText(phaseRaw) || phaseRaw.slice(0, 12));
+          else if (phaseRaw && !/^\d+%?$/.test(phaseRaw)) parts.push(vbbStageText(phaseRaw) || phaseRaw.slice(0, 16));
           if (pct) parts.push(`${pct[1]}%`);
           if (elapsed) parts.push(`${elapsed[1]}s`);
-          if (stalled && (!pct || Number(pct[1]) < 99)) parts.push("编码中");
+          if (stalled && (!pct || Number(pct[1]) < 99) && !/③|④/.test(phase || "")) parts.push("进行中");
           if (parts.length) return parts.join(" · ");
         }
         return vbbStageText(t) || t;
@@ -3919,7 +3985,7 @@
               singleMeta
             );
             const followTip = reuse.fromCache ? " · 沿用方案" : "";
-            setVbbClipJob(i, { status: "running", progress: 0.02, text: "准备编码…" });
+            setVbbClipJob(i, { status: "running", progress: 0.02, text: formatVbbJobStage("准备编码…") });
             setVbbProgress(true, i / ranges.length, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), {
               sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`,
               busy: true,
@@ -4933,7 +4999,11 @@
             }
             const job = jobs[i];
             const item = job.item;
-            setVbbClipJob(i, { status: "running", progress: 0.02, text: conc > 1 ? `并行编码…` : "准备编码…" });
+            setVbbClipJob(i, {
+              status: "running",
+              progress: 0.02,
+              text: formatVbbJobStage(conc > 1 ? "并行编码…" : "准备编码…"),
+            });
               const win = { startSec: job.startSec, span: job.span, edit: job.edit };
               if (!(Number(item.srcFps) >= 5) && item.file && typeof detectSourceFps === "function") {
                 const f = Number(await detectSourceFps(item.file).catch(() => 0)) || 0;
@@ -4971,10 +5041,11 @@
                 const wall = Math.max(1, Math.round((performance.now() - t0) / 1000));
                 vbbLog(`[vbb] #${i + 1} stall ${sec}s · still waiting (no skip)`);
                 // 不是跳过：手机 wasm/FFmpeg 重活时常几十秒无百分比变化，只提示续等
+                const lastStage = formatVbbJobStage(lastProgressText) || "处理中";
                 setVbbClipJob(i, {
                   status: "running",
                   progress: Math.min(0.98, Math.max(0.02, 0.12 + Math.min(0.86, lastLocal) * 0.86)),
-                  text: `仍在编码（本条已 ${wall}s · ${sec}s 无百分比更新；短片若过久可取消重试）`,
+                  text: `${lastStage} · 本条已${wall}s（正常试档中，可取消）`,
                 });
               }, 2000);
               try {
@@ -5009,12 +5080,13 @@
                       setVbbClipJob(i, {
                         status: "running",
                         progress: Math.min(0.12, 0.02 + Math.min(0.1, n) * 0.1),
-                        text: text || "应用删中间…",
+                        text: formatVbbJobStage(text || "应用删中间…"),
                       });
                     },
                   }
                 );
                 if (itemAborted()) throw new Error("已取消");
+                setVbbClipJob(i, { status: "running", progress: 0.12, text: "②试档 · 开始…" });
                 // crop 相对原片坐标（与改前一致）；预裁只加速解码，不改取样坐标系
                 const vbbCrop = await resolveVbbEncodeCrop(
                   item.file,
@@ -5045,7 +5117,7 @@
                     }
                     if (n > lastLocal) lastLocal = n;
                     lastProgressText = t;
-                    const stage = vbbTickerLine(text) || (conc > 1 ? "并行编码" : "编码");
+                    const stage = formatVbbJobStage(text || (conc > 1 ? "并行编码" : "编码"));
                     setVbbClipJob(i, {
                       status: "running",
                       progress: Math.min(0.98, 0.12 + Math.min(0.86, n) * 0.86),
@@ -5053,7 +5125,7 @@
                     });
                     const overall = (doneCount + Math.min(0.95, n)) / total;
                     setVbbProgress(true, overall, `批量转换 · ${doneCount}/${total}${conc > 1 ? ` · ${conc}路` : ""}`, {
-                      sub: item.file.name,
+                      sub: `${item.file.name} · ${stage}`,
                       busy: true,
                     });
                   },
@@ -5269,7 +5341,7 @@
         try {
           await prewarmFfmpegEngine().catch(() => {});
           bumpVbbEncodeProgress(0.03, "整段转换", "准备编码器…");
-          setVbbClipJob(0, { status: "running", progress: 0.02, text: "准备编码…" });
+          setVbbClipJob(0, { status: "running", progress: 0.02, text: formatVbbJobStage("准备编码…") });
           const prepared = await prepareVbbEncodeSource(
             vbbSourceFile,
             win.edit,
@@ -5285,6 +5357,7 @@
               },
             }
           );
+          setVbbClipJob(0, { status: "running", progress: 0.12, text: "②试档 · 开始…" });
           durationLabel = `${prepared.span.toFixed(1)}s`;
           // 预裁后 prepared.startSec 常为 0：展示仍用编辑窗起点，避免结果卡时间轴跳到 0
           vbbClips[0].start = win.startSec;

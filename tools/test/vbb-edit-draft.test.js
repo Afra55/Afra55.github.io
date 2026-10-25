@@ -56,6 +56,14 @@ t("批量可重跑失败且保留成功 GIF", () => {
   assert.ok(panel.includes('id="vbb-retry-failed"'));
 });
 
+t("进度文案分阶段：①准备/预裁 ②试档 ③出帧/写GIF ④加宽/压缩", () => {
+  assert.ok(src.includes("①准备/预裁/删中间"));
+  assert.ok(src.includes("②试档"));
+  assert.ok(src.includes("③出帧"));
+  assert.ok(src.includes("④加宽"));
+  assert.ok(src.includes("formatVbbJobStage"));
+});
+
 t("未完成才进草稿，全部成功则清空 localStorage 键", () => {
   assert.ok(src.includes("isVbbFileEncodeFullyDone"));
   assert.ok(src.includes("还没生成成功"));
