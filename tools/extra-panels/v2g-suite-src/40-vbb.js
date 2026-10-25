@@ -2349,6 +2349,22 @@
         };
       }
 
+      /**
+       * 该源视频是否已全部出 GIF 成功。
+       * 成功则不再进草稿；取消/失败/未跑的继续自动保存。
+       */
+      function isVbbFileEncodeFullyDone(file) {
+        if (!file || !Array.isArray(vbbClips) || !vbbClips.length) return false;
+        if (!isVbbBatchMode()) {
+          return vbbSourceFile === file && vbbClips.every((c) => Boolean(c?.gifBlob));
+        }
+        const name = file.name || "";
+        const related = vbbClips.filter((c) => String(c?.sourceFile || "") === name);
+        if (!related.length) return false;
+        return related.every((c) => Boolean(c?.gifBlob));
+      }
+
+      /** 只收集「还没生成成功」的编辑；已成功的自动排除 */
       function collectVbbEditDraftItems() {
         /** @type {any[]} */
         const items = [];
@@ -2356,6 +2372,7 @@
           persistActiveVbbMarks();
           vbbBatchFiles.forEach((item) => {
             if (!item?.file) return;
+            if (isVbbFileEncodeFullyDone(item.file)) return;
             items.push({
               key: vbbFileDraftKey(item.file),
               name: item.file.name || "",
@@ -2375,6 +2392,7 @@
             });
           });
         } else if (vbbSourceFile) {
+          if (isVbbFileEncodeFullyDone(vbbSourceFile)) return items;
           const edit = vbbSingleEdit || getActiveVbbEditItem()?.edit || null;
           items.push({
             key: vbbFileDraftKey(vbbSourceFile),
@@ -2394,11 +2412,17 @@
         return items;
       }
 
-      /** 同步写入 localStorage（刷新/崩页前尽量保住裁剪方案；不含视频文件） */
+      /**
+       * 同步写入 localStorage（取消/切后台/刷新前保住未完成裁剪；不含视频文件）。
+       * 全部已成功时清空草稿键，避免下次误恢复。
+       */
       function saveVbbEditDraftsSync() {
         try {
           const items = collectVbbEditDraftItems();
-          if (!items.length) return 0;
+          if (!items.length) {
+            localStorage.removeItem(VBB_EDIT_DRAFT_LS_KEY);
+            return 0;
+          }
           const payload = { v: 1, at: Date.now(), items };
           localStorage.setItem(VBB_EDIT_DRAFT_LS_KEY, JSON.stringify(payload));
           return items.length;
@@ -2490,7 +2514,7 @@
             URL.revokeObjectURL(url);
           } catch (_) {}
         }, 2000);
-        toast(`已导出 ${items.length} 个视频的编辑方案（不含视频文件）`);
+        toast(`已备份 ${items.length} 个未完成视频的编辑方案（JSON，不含视频；平时靠自动保存即可）`);
         return true;
       }
 
@@ -4924,6 +4948,10 @@
                 ok += 1;
                 maybeAutoDownloadVbbGif(vbbClips[i], i);
                 refreshVbbClipRow(i);
+                // 该源片全部成功则从草稿剔除；未完成的继续留着
+                try {
+                  saveVbbEditDraftsSync();
+                } catch (_) {}
                 vbbLog(
                   `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(elapsedSec * 1000)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · ${encoded.compressRounds || 0}轮 · conc=${conc}`
                 );

@@ -39,6 +39,13 @@ t("含编辑草稿保存/恢复/导出", () => {
   assert.ok(src.includes("downloadVbbEditDraftsJson"));
   assert.ok(src.includes("devtools-vbb-edit-drafts-json-v1"));
   assert.ok(panel.includes('id="vbb-export-edits"'));
+  assert.ok(panel.includes("备份编辑"));
+});
+
+t("未完成才进草稿，全部成功则清空 localStorage 键", () => {
+  assert.ok(src.includes("isVbbFileEncodeFullyDone"));
+  assert.ok(src.includes("还没生成成功"));
+  assert.ok(src.includes("localStorage.removeItem(VBB_EDIT_DRAFT_LS_KEY)"));
 });
 
 t("手机草稿：软匹配名+大小，且 pagehide/visibility 落盘", () => {
