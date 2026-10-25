@@ -8362,7 +8362,8 @@
 
       /**
        * 把 [startSec, startSec+span) 先裁成短片再进阶梯（仅 shouldPrecut 为真时调用）。
-       * 优先 stream copy，失败再轻量重编码；分辨率保持调用方传入，避免影响去色边/seed。
+       * 用精确重编码（-i 后再 -ss/-t），不用 copy：copy 会按关键帧提前，片头可能多出未裁内容。
+       * 分辨率保持调用方传入，避免影响去色边/seed。
        */
       async function materializeVbbTrimClip(file, startSec, span, srcW, srcH, onProgress, ffmpegLease) {
         const start = Math.max(0, Number(startSec) || 0);
@@ -8376,22 +8377,23 @@
             : null);
         if (!ffmpeg) throw new Error("无法加载编码器以预裁切片段");
         onProgress?.(0.04, `预裁切 ${dur.toFixed(1)}s…`);
-        const ext = typeof v2gSourceExt === "function" ? v2gSourceExt(file) : "mp4";
         const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => onProgress?.(0.06, "载入视频…"));
-        const out = `trim-${Date.now().toString(36)}.${ext === "webm" ? "webm" : "mp4"}`;
-        // 1) 优先 copy：不改画质；失败再 ultrafast 重编码
+        const out = `trim-${Date.now().toString(36)}.mp4`;
+        // 精确半开窗；trim 滤镜失败再 -ss/-t 重编码
         let args = [
-          "-ss",
-          String(start),
           "-i",
           inName,
-          "-t",
-          String(dur),
           "-an",
-          "-c",
-          "copy",
-          "-avoid_negative_ts",
-          "make_zero",
+          "-vf",
+          `trim=start=${start}:end=${start + dur},setpts=PTS-STARTPTS,format=yuv420p`,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-crf",
+          "18",
+          "-pix_fmt",
+          "yuv420p",
           "-movflags",
           "+faststart",
           "-y",
@@ -12137,7 +12139,8 @@
             }
           );
           durationLabel = `${prepared.span.toFixed(1)}s`;
-          vbbClips[0].start = prepared.startSec;
+          // 预裁后 prepared.startSec 常为 0：展示仍用编辑窗起点，避免结果卡时间轴跳到 0
+          vbbClips[0].start = win.startSec;
           vbbClips[0].span = prepared.span;
           const vbbCrop = await resolveVbbEncodeCrop(
             vbbSourceFile,
