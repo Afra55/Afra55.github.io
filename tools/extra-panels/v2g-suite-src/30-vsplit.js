@@ -190,27 +190,81 @@
       }
 
       /**
-       * 手机进度两行（完整可见）：
-       * 上行：阶段全文（如 ②试档 · 15帧/秒）
-       * 下行：已用时 + 可取消
-       * 例：②试档 · 15帧/秒\n已用 12s
+       * 手机进度两行（简单完整）：
+       * 上行：阶段 + 帧率/进度 + 画质（有则显）
+       * 下行：宽高 + 片段时长 + 已用时（≥60s 加可取消）
+       * 例：②试档 · 15帧/秒 · 画质3
+       *     420×748 · 时长7.2s · 已用12s
        */
-      function formatMobileTwoLineProgress(main, waitLabel) {
-        let head = String(main || "").trim() || "处理中…";
-        head = head
+      function formatMobileTwoLineProgress(main, waitLabel, extras = {}) {
+        let raw = String(main || "").trim() || "处理中…";
+        raw = raw
           .replace(/\s*·\s*本条已\d+\s*s[^\n]*/gi, "")
           .replace(/（正常试档中，可取消）/g, "")
           .replace(/\s*·\s*可取消\s*$/g, "")
           .split(/\n+/)
           .map((s) => s.trim())
           .filter(Boolean)[0] || "处理中…";
-        const tips = [];
-        const w = String(waitLabel || "").trim();
-        if (w) tips.push(`已用 ${w}`);
+
+        const fps = raw.match(/(\d+)\s*帧\/秒/) || raw.match(/(\d+)\s*FPS/i);
+        const q = raw.match(/画质\s*(\d+)/i) || raw.match(/(?:^|[·\s])q\s*(\d+)/i);
+        const wh = raw.match(/(\d+)\s*×\s*(\d+)/);
+        const wOnly = raw.match(/宽\s*(\d+)/);
+        const pct = raw.match(/(\d+)\s*%/);
+        const frac = raw.match(/(\d+)\s*\/\s*(\d+)/);
+        const stageM = raw.match(/^([①②③④][^·%]*)/);
+        let stage = (stageM ? stageM[1] : raw.split("·")[0] || "处理中…").trim();
+        stage = stage.replace(/\s*·\s*$/, "").trim() || "处理中…";
+        // 去掉误吸进阶段名的帧率/宽高等（已单独拆）
+        stage = stage
+          .replace(/\s*\d+\s*帧\/秒\s*$/i, "")
+          .replace(/\s*\d+\s*FPS\s*$/i, "")
+          .replace(/\s*画质\s*\d+\s*$/i, "")
+          .replace(/\s*宽\s*\d+\s*$/i, "")
+          .replace(/\s*\d+\s*×\s*\d+\s*$/i, "")
+          .trim() || "处理中…";
+
+        const headBits = [stage];
+        if (fps) headBits.push(`${fps[1]}帧/秒`);
+        else if (pct) headBits.push(`${pct[1]}%`);
+        else if (frac) headBits.push(`${frac[1]}/${frac[2]}`);
+        // 预裁「①预裁 · 7.2s」这类秒数留在上行
+        else {
+          const precutSec = raw.match(/^[①②③④][^\n]*?·\s*([\d.]+)\s*s\b/i);
+          if (precutSec && /预裁|准备|删中间/.test(stage)) headBits.push(`${precutSec[1]}s`);
+          else if (/复用短片|开始…|沿用方案|抬画质|降宽|失败|收尾/.test(raw)) {
+            const rest = raw
+              .replace(stage, "")
+              .replace(/^\s*·\s*/, "")
+              .trim();
+            if (rest && rest.length <= 12 && !/帧|宽|画质|FPS|×|%/.test(rest)) headBits.push(rest);
+          }
+        }
+        if (q) headBits.push(`画质${q[1]}`);
+
+        const tipBits = [];
+        let width = wh ? Number(wh[1]) : wOnly ? Number(wOnly[1]) : 0;
+        let height = wh ? Number(wh[2]) : 0;
+        if (width && !height) {
+          const sw = Number(extras.srcW) || 0;
+          const sh = Number(extras.srcH) || 0;
+          if (sw > 0 && sh > 0) height = Math.max(1, Math.round((width * sh) / sw));
+        }
+        if (width && height) tipBits.push(`${width}×${height}`);
+        else if (width) tipBits.push(`宽${width}`);
+
+        const span = Number(extras.span) || 0;
+        if (span > 0) {
+          const s = span >= 10 ? Math.round(span) : Math.max(0.1, Math.round(span * 10) / 10);
+          tipBits.push(`时长${s}s`);
+        }
+        const wait = String(waitLabel || "").trim();
+        if (wait) tipBits.push(`已用 ${wait}`);
         const sec = Number(String(waitLabel || "").replace(/[^\d.]/g, ""));
-        if (sec >= 60) tips.push("可取消");
-        if (!tips.length) tips.push("进行中");
-        return `${head}\n${tips.join(" · ")}`;
+        if (sec >= 60) tipBits.push("可取消");
+        if (!tipBits.length) tipBits.push("进行中");
+
+        return `${headBits.join(" · ")}\n${tipBits.join(" · ")}`;
       }
 
       /** 进度条上方主文案：排队用秒数；运行中阶段优先，时长只作后缀。 */
@@ -228,7 +282,13 @@
               : typeof isCoarsePointer === "function"
                 ? isCoarsePointer()
                 : false;
-          if (mobile) return formatMobileTwoLineProgress(main, waitLabel);
+          if (mobile) {
+            return formatMobileTwoLineProgress(main, waitLabel, {
+              span: Number(job?.span) || Number(job?.gifDuration) || 0,
+              srcW: Number(job?.srcW) || Number(job?.gifOutW) || 0,
+              srcH: Number(job?.srcH) || Number(job?.gifOutH) || 0,
+            });
+          }
           if (waitLabel && !main.includes(waitLabel)) return `${main} · ${waitLabel}`;
           return main;
         }

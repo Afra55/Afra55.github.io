@@ -2036,11 +2036,27 @@
         }
 
         // —— ② 试档（帧率 / 宽度 / 画质）——
-        if ((m = t.match(/^黑盒编码\s*·\s*(\d+)\s*FPS/i))) return `②试档 · ${m[1]}帧/秒`;
+        // 底层 stageLabel：15FPS·宽420·q3 / 尝试 15FPS·宽420
+        if (
+          (m = t.match(/(?:尝试\s*)?(\d+)\s*FPS\s*[·.]\s*宽\s*(\d+)(?:\s*[·.]\s*q\s*(\d+))?/i)) &&
+          !/压缩|加宽|导出|写入|RGBA|gifski|硬闸/i.test(t)
+        ) {
+          const bits = [`②试档 · ${m[1]}帧/秒`, `宽${m[2]}`];
+          if (m[3]) bits.push(`画质${m[3]}`);
+          return bits.join(" · ");
+        }
+        if ((m = t.match(/^黑盒编码\s*·\s*(\d+)\s*FPS/i))) {
+          const w = t.match(/宽\s*(\d+)/);
+          const q = t.match(/画质\s*(\d+)/) || t.match(/\bq\s*(\d+)/i);
+          const bits = [`②试档 · ${m[1]}帧/秒`];
+          if (w) bits.push(`宽${w[1]}`);
+          if (q) bits.push(`画质${q[1]}`);
+          return bits.join(" · ");
+        }
         if ((m = t.match(/^试\s*(\d+)\s*帧\/秒/i))) return `②试档 · ${m[1]}帧/秒`;
         if ((m = t.match(/(\d+)\s*FPS/i)) && /试|编码|黑盒/.test(t) && !/压缩|加宽|导出|写入|RGBA|gifski/i.test(t)) {
           const w = t.match(/宽\s*(\d+)/) || t.match(/(\d+)\s*px/i);
-          const q = t.match(/画质\s*(\d+)/) || t.match(/gq\s*(\d+)/i) || t.match(/q\s*(\d+)/i);
+          const q = t.match(/画质\s*(\d+)/) || t.match(/gq\s*(\d+)/i) || t.match(/\bq\s*(\d+)/i);
           const bits = [`②试档 · ${m[1]}帧/秒`];
           if (w) bits.push(`宽${w[1]}`);
           if (q) bits.push(`画质${q[1]}`);
@@ -3940,6 +3956,8 @@
         vbbClips = ranges.map((r) => ({
           start: r.start,
           span: r.span,
+          srcW,
+          srcH,
           gifBlob: null,
           gifUrl: "",
           gifNote: "",
@@ -4885,6 +4903,8 @@
           span: job.span,
           sourceName: job.sourceName,
           sourceFile: job.item.file.name || "video",
+          srcW: Number(job.item?.srcW) || 0,
+          srcH: Number(job.item?.srcH) || 0,
           gifBlob: null,
           gifUrl: "",
           gifNote: "",
@@ -5328,6 +5348,8 @@
             start: win.startSec,
             span: win.span,
             sourceName: vbbGifBaseName(vbbSourceFile),
+            srcW,
+            srcH,
             gifBlob: null,
             gifUrl: "",
             gifNote: "",
@@ -5608,6 +5630,8 @@
           vbbClips = plan.ranges.map((r) => ({
             start: r.start,
             span: r.span,
+            srcW,
+            srcH,
             gifBlob: null,
             gifUrl: "",
             gifNote: "",

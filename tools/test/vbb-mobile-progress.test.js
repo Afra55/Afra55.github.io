@@ -33,24 +33,41 @@ function loadFormatMobileTwoLine() {
   return box.fn;
 }
 
-t("手机两行：上行阶段全文，下行已用时", () => {
+function loadVbbStageText() {
+  const m = vbb.match(/function vbbStageText\([\s\S]*?\n      \}/);
+  assert.ok(m, "missing vbbStageText");
+  const box = {};
+  vm.runInNewContext(`${m[0]}\nthis.fn = vbbStageText;`, box);
+  return box.fn;
+}
+
+t("手机两行：阶段+帧率+画质 / 宽高+时长+已用", () => {
   const fn = loadFormatMobileTwoLine();
-  assert.strictEqual(fn("②试档 · 15帧/秒", "12s"), "②试档 · 15帧/秒\n已用 12s");
-  assert.strictEqual(fn("①预裁 · 7.2s", "3.4s"), "①预裁 · 7.2s\n已用 3.4s");
+  assert.strictEqual(
+    fn("②试档 · 15帧/秒 · 宽420 · 画质3", "12s", { span: 7.2, srcW: 1080, srcH: 1920 }),
+    "②试档 · 15帧/秒 · 画质3\n420×747 · 时长7.2s · 已用 12s"
+  );
 });
 
-t("手机两行：超 60s 提示可取消；剥离旧 stall 尾巴", () => {
+t("手机两行：无宽高时仍有时长；超60s可取消", () => {
   const fn = loadFormatMobileTwoLine();
-  assert.strictEqual(fn("②试档", "83s"), "②试档\n已用 83s · 可取消");
+  assert.strictEqual(fn("③出帧 · 40%", "83s", { span: 10 }), "③出帧 · 40%\n时长10s · 已用 83s · 可取消");
   assert.strictEqual(
-    fn("②试档 · 本条已90s（正常试档中，可取消）", "90s"),
-    "②试档\n已用 90s · 可取消"
+    fn("②试档 · 本条已90s（正常试档中，可取消）", "90s", { span: 5 }),
+    "②试档\n时长5s · 已用 90s · 可取消"
   );
 });
 
 t("手机两行：无已用时仍有下行", () => {
   const fn = loadFormatMobileTwoLine();
-  assert.strictEqual(fn("③出帧 · 40%", ""), "③出帧 · 40%\n进行中");
+  assert.strictEqual(fn("①准备中…", "", {}), "①准备中…\n进行中");
+});
+
+t("阶段映射：FPS·宽·q 保留帧率宽画质", () => {
+  const stage = loadVbbStageText();
+  assert.strictEqual(stage("15FPS·宽420·q3"), "②试档 · 15帧/秒 · 宽420 · 画质3");
+  assert.strictEqual(stage("尝试 12FPS·宽380"), "②试档 · 12帧/秒 · 宽380");
+  assert.strictEqual(stage("黑盒编码 · 15FPS"), "②试档 · 15帧/秒");
 });
 
 t("手机 CSS：进度 hint 两行 clamp", () => {
@@ -63,6 +80,11 @@ t("手机 CSS：进度 hint 两行 clamp", () => {
 t("stall 只刷新阶段，不再塞「本条已Xs」长串", () => {
   assert.ok(!vbb.includes("本条已${wall}s（正常试档中，可取消）"));
   assert.ok(vbb.includes("已用时由进度条两行展示"));
+});
+
+t("批量卡片壳带 srcW/srcH 供宽高估算", () => {
+  assert.ok(vbb.includes("srcW: Number(job.item?.srcW)"));
+  assert.ok(vbb.includes("srcH: Number(job.item?.srcH)"));
 });
 
 console.log(`ok ${n}`);
