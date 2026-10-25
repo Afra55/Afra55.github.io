@@ -1272,11 +1272,11 @@
           encodeInput = inName;
           if (aborted()) throw new Error("已取消");
   
-          // 大文件先按段 remux，避免整片在调色板滤镜里反复解复用（手机易加载失败/白屏）
+          // 大文件、或非片头窗：先按段 remux，避免整片反复解复用（失败则仍用原片+ss）
           const wantSeg =
-            file.size >= FFMPEG_SEG_FILE_BYTES &&
             Number.isFinite(opts.startSec) &&
-            Number.isFinite(opts.span);
+            Number.isFinite(opts.span) &&
+            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
           if (wantSeg) {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
@@ -2046,11 +2046,11 @@
           encodeInput = inName;
           if (aborted()) throw new Error("已取消");
 
-          // 大文件先按段 remux（同 ffmpeg 管线），避免整片反复解复用
+          // 大文件、或非片头窗：先按段 remux（失败则仍用原片+ss）
           const wantSeg =
-            file.size >= FFMPEG_SEG_FILE_BYTES &&
             Number.isFinite(opts.startSec) &&
-            Number.isFinite(opts.span);
+            Number.isFinite(opts.span) &&
+            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
           if (wantSeg) {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);

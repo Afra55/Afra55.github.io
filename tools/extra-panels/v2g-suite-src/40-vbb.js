@@ -943,13 +943,30 @@
       }
 
       /**
-       * 把 [startSec, startSec+span) 先裁成短片，再进黑盒阶梯。
-       * 旧逻辑只把 start/span 传给每一次试宽/试帧，整段原片被反复 seek 解码，
-       * 30s 里裁 7s 在手机上可拖到十几分钟；预裁一次后阶梯只啃短片。
+       * 仅「明显裁短」才预裁：避免轻微 trim / 整段路径多一次重编码。
+       * 例：30s→7s 会触发；剪掉 1s、或保留大半段 → 仍走旧 start/span。
+       */
+      function shouldPrecutVbbWindow(fullDur, startSec, span) {
+        const d = Math.max(0, Number(fullDur) || 0);
+        const s = Math.max(0, Number(startSec) || 0);
+        const len = Math.max(0, Number(span) || 0);
+        if (!(d >= 16) || !(len >= VBB_MIN_SPAN)) return false;
+        const leftover = d - len;
+        // 至少砍掉 8s，且保留段不超过原片 55%（偶发超长场景）
+        if (leftover < 8 - 1e-6) return false;
+        if (len > d * 0.55 + 1e-6) return false;
+        return s > 0.05 || leftover >= 8;
+      }
+
+      /**
+       * 把 [startSec, startSec+span) 先裁成短片再进阶梯（仅 shouldPrecut 为真时调用）。
+       * 优先 stream copy，失败再轻量重编码；分辨率保持调用方传入，避免影响去色边/seed。
        */
       async function materializeVbbTrimClip(file, startSec, span, srcW, srcH, onProgress, ffmpegLease) {
         const start = Math.max(0, Number(startSec) || 0);
         const dur = Math.max(0.05, Number(span) || 0.05);
+        const keepW = Math.max(1, Math.round(Number(srcW) || 1));
+        const keepH = Math.max(1, Math.round(Number(srcH) || 1));
         const ffmpeg =
           ffmpegLease ||
           (typeof getFfmpegInstance === "function"
@@ -957,30 +974,22 @@
             : null);
         if (!ffmpeg) throw new Error("无法加载编码器以预裁切片段");
         onProgress?.(0.04, `预裁切 ${dur.toFixed(1)}s…`);
+        const ext = typeof v2gSourceExt === "function" ? v2gSourceExt(file) : "mp4";
         const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => onProgress?.(0.06, "载入视频…"));
-        // 只裁时间，偶数化分辨率；不要 pad（否则会造黑边，干扰去色边）
-        const W = Math.max(2, Math.round((Number(srcW) || 720) / 2) * 2);
-        const H = Math.max(2, Math.round((Number(srcH) || 404) / 2) * 2);
-        const out = `trim-${Date.now().toString(36)}.mp4`;
-        const scaleVf =
-          Math.abs(W - (Number(srcW) || 0)) > 0.5 || Math.abs(H - (Number(srcH) || 0)) > 0.5
-            ? `scale=${W}:${H}:flags=neighbor,setsar=1,`
-            : "";
-        // 优先精确 trim；失败再 -ss/-t 重编码（不用 copy，避免关键帧偏几秒）
+        const out = `trim-${Date.now().toString(36)}.${ext === "webm" ? "webm" : "mp4"}`;
+        // 1) 优先 copy：不改画质；失败再 ultrafast 重编码
         let args = [
+          "-ss",
+          String(start),
           "-i",
           inName,
+          "-t",
+          String(dur),
           "-an",
-          "-vf",
-          `trim=start=${start}:end=${start + dur},setpts=PTS-STARTPTS,${scaleVf}format=yuv420p`,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "ultrafast",
-          "-crf",
-          "18",
-          "-pix_fmt",
-          "yuv420p",
+          "-c",
+          "copy",
+          "-avoid_negative_ts",
+          "make_zero",
           "-movflags",
           "+faststart",
           "-y",
@@ -996,8 +1005,6 @@
             "-t",
             String(dur),
             "-an",
-            "-vf",
-            `${scaleVf}format=yuv420p`,
             "-c:v",
             "libx264",
             "-preset",
@@ -1016,6 +1023,7 @@
         if (code !== 0) throw new Error("预裁切片段失败");
         const data = await ffmpeg.readFile(out);
         const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+        if (!(raw.byteLength > 1024)) throw new Error("预裁切输出过小");
         const bytes = new Uint8Array(raw.byteLength);
         bytes.set(raw);
         let outFile = new File([bytes], (file.name || "edit").replace(/\.[^.]+$/, "") + "-trim.mp4", {
@@ -1029,13 +1037,16 @@
         try {
           await ffmpeg.deleteFile(out);
         } catch (_) {}
-        vbbLog(`[vbb] 预裁切 ${dur.toFixed(2)}s @ ${start.toFixed(2)}s → ${formatKb(outFile.size)}（后续阶梯不再啃整段原片）`);
+        vbbLog(
+          `[vbb] 预裁切(保守) ${dur.toFixed(2)}s @ ${start.toFixed(2)}s → ${formatKb(outFile.size)}（明显裁短才启用）`
+        );
         onProgress?.(0.12, `已预裁切 ${dur.toFixed(1)}s`);
-        return { file: outFile, duration: dur, srcW: W, srcH: H, materialized: true };
+        // 宽高原样返回，避免去色边/seed 坐标系漂移
+        return { file: outFile, duration: dur, srcW: keepW, srcH: keepH, materialized: true };
       }
 
       /**
-       * 编码前：多段 keep（删中间）先拼成一条；单段/打点窗先预裁成短片再黑盒。
+       * 编码前：多段 keep（删中间）先拼成一条；仅明显裁短时预裁短片。
        * @returns {Promise<{ file: File, startSec: number, span: number, srcW: number, srcH: number, edit: any, cutNote: string }>}
        */
       async function prepareVbbEncodeSource(file, edit, srcW, srcH, duration, opts = {}) {
@@ -1076,11 +1087,8 @@
             cutNote = `删${cuts.length}段`;
           }
         }
-        // 单段 trim / 打点：只要不是整段，就预裁一次，避免阶梯 N 次反复解整片
-        const trimmed =
-          !alreadyMaterialized &&
-          (startSec > 0.05 || (fullDur > 0.2 && span < fullDur - 0.15));
-        if (trimmed) {
+        // 保守：仅明显裁短才预裁；失败则静默回退旧 start/span（行为与改前一致）
+        if (!alreadyMaterialized && shouldPrecutVbbWindow(fullDur, startSec, span)) {
           try {
             const mat = await materializeVbbTrimClip(
               outFile,
@@ -1098,7 +1106,6 @@
             outH = mat.srcH;
             if (!cutNote) cutNote = `裁 ${span.toFixed(1)}s`;
           } catch (err) {
-            // 预裁失败不阻断：仍按 start/span 进阶梯（慢，但能出片）
             vbbLog(`[vbb] 预裁切失败，回退整片 seek：${err?.message || err}`);
             opts.onProgress?.(0.08, "预裁切失败 · 回退整片编码…");
           }
@@ -3394,7 +3401,12 @@
               await ensureFfmpegInputWritten(ff, vbbSourceFile, () => {});
             } catch (_) {}
           }
-          const fullDur = Number(vbbVideo?.duration) || 0;
+          const vbbCrop = await vbbResolveCrop(
+            vbbSourceFile,
+            srcW,
+            srcH,
+            Number(vbbVideo?.duration) || 0
+          );
           let singleSrcFps = 0;
           if (typeof detectSourceFps === "function" && vbbSourceFile) {
             singleSrcFps = Number(await detectSourceFps(vbbSourceFile).catch(() => 0)) || 0;
@@ -3411,34 +3423,18 @@
               vbbSpeedFactorForSpan(r.span),
               singleMeta
             );
+            const followTip = reuse.fromCache ? " · 沿用方案" : "";
             setVbbClipJob(i, { status: "running", progress: 0.02, text: "准备编码…" });
             setVbbProgress(true, i / ranges.length, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), {
               sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`,
               busy: true,
             });
-            const prepared = await prepareVbbEncodeSource(vbbSourceFile, null, srcW, srcH, fullDur, {
-              fromMark: true,
+            const encoded = await encodeBlackboxClip({
+              file: vbbSourceFile,
               startSec: r.start,
               span: r.span,
-              onProgress: (local, text) => {
-                const p = (i + Math.min(0.1, (Number(local) || 0) * 0.1)) / ranges.length;
-                const stage = bumpVbbEncodeProgress(p, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), text || "预裁切…");
-                setVbbClipJob(i, { status: "running", progress: Math.min(0.12, (Number(local) || 0) * 0.12), text: stage });
-              },
-            });
-            const vbbCrop = await resolveVbbEncodeCrop(
-              prepared.file,
-              null,
               srcW,
               srcH,
-              prepared.span
-            );
-            const encoded = await encodeBlackboxClip({
-              file: prepared.file,
-              startSec: prepared.startSec,
-              span: prepared.span,
-              srcW: prepared.srcW,
-              srcH: prepared.srcH,
               qualityFirst: vbbQualityFirstOn(),
               isAborted: () => abortVbb,
               seed: reuse.seed || undefined,
@@ -4488,13 +4484,13 @@
                   }
                 );
                 if (itemAborted()) throw new Error("已取消");
-                // 去色边在预裁后的短片上取样（更快）；手动绿框仍按原片坐标归一化
+                // crop 相对原片坐标（与改前一致）；预裁只加速解码，不改取样坐标系
                 const vbbCrop = await resolveVbbEncodeCrop(
-                  prepared.file,
+                  item.file,
                   win.edit,
                   item.srcW,
                   item.srcH,
-                  prepared.span
+                  item.duration
                 );
                 if (itemAborted()) throw new Error("已取消");
                 const encoded = await encodeBlackboxClip({
@@ -4742,11 +4738,11 @@
           vbbClips[0].start = prepared.startSec;
           vbbClips[0].span = prepared.span;
           const vbbCrop = await resolveVbbEncodeCrop(
-            prepared.file,
+            vbbSourceFile,
             win.edit,
             srcW,
             srcH,
-            prepared.span
+            duration
           );
           const encoded = await encodeBlackboxClip({
             file: prepared.file,
@@ -4996,8 +4992,12 @@
             ...vbbPendingJobFields(),
           }));
           renderVbbResults();
-          const execFullDur =
-            Number(vbbVideo?.duration) || Number(vbbAnalysis?.duration) || 0;
+          const vbbCrop = await vbbResolveCrop(
+            vbbSourceFile,
+            srcW,
+            srcH,
+            Number(vbbVideo?.duration) || Number(vbbAnalysis?.duration) || 0
+          );
           let execSrcFps = Number(vbbAnalysis?.srcFps) || 0;
           if (!(execSrcFps >= 5) && typeof detectSourceFps === "function" && vbbSourceFile) {
             execSrcFps = Number(await detectSourceFps(vbbSourceFile).catch(() => 0)) || 0;
@@ -5031,31 +5031,6 @@
             setVbbClipJob(i, { status: "running", progress: 0.02, text: encodeTag ? `${encodeTag}…` : "编码…" });
             setVbbProgress(true, i / plan.ranges.length, mainLine(), { sub: timeRange, busy: true });
             try {
-              const prepared = await prepareVbbEncodeSource(
-                vbbSourceFile,
-                null,
-                srcW,
-                srcH,
-                execFullDur,
-                {
-                  fromMark: true,
-                  startSec: r.start,
-                  span: r.span,
-                  onProgress: (local, text) => {
-                    const p = Math.min(0.08, (Number(local) || 0) * 0.08);
-                    const stage = vbbTickerLine(text) || "预裁切…";
-                    setVbbClipJob(i, { status: "running", progress: p, text: stage });
-                    bumpProgress(p, stage);
-                  },
-                }
-              );
-              const vbbCrop = await resolveVbbEncodeCrop(
-                prepared.file,
-                null,
-                srcW,
-                srcH,
-                prepared.span
-              );
               let encoded;
               let usedFallback = false;
               let usedWidth = reuseSeed && !reuseSeed.usedFallback
@@ -5064,14 +5039,14 @@
               if (isWide && !(reuseSeed && reuseSeed.usedFallback)) {
                 const tryEncodeWide = async (maxW, localBase, localSpan) =>
                   encodeBlackboxGif({
-                    file: prepared.file,
+                    file: vbbSourceFile,
                     fps: reuseSeed?.fps || 15,
                     maxW,
                     quality: V2G_BLACKBOX_QUALITY,
-                    startSec: prepared.startSec,
-                    span: prepared.span,
-                    srcW: prepared.srcW,
-                    srcH: prepared.srcH,
+                    startSec: r.start,
+                    span: r.span,
+                    srcW,
+                    srcH,
                     speed: vbbSpeedFactorForSpan(r.span),
                     crop: vbbCrop,
                     skipWatermark: true,
@@ -5114,11 +5089,11 @@
                   setVbbClipJob(i, { status: "running", progress: 0.8, text: "超限压缩…" });
                   bumpProgress(0.8, "超限压缩");
                   encoded = await encodeBlackboxClip({
-                    file: prepared.file,
-                    startSec: prepared.startSec,
-                    span: prepared.span,
-                    srcW: prepared.srcW,
-                    srcH: prepared.srcH,
+                    file: vbbSourceFile,
+                    startSec: r.start,
+                    span: r.span,
+                    srcW,
+                    srcH,
                     qualityFirst: vbbQualityFirstOn(),
                     isAborted,
                     seed: reuseSeed || null,
@@ -5135,11 +5110,11 @@
                 }
               } else {
                 encoded = await encodeBlackboxClip({
-                  file: prepared.file,
-                  startSec: prepared.startSec,
-                  span: prepared.span,
-                  srcW: prepared.srcW,
-                  srcH: prepared.srcH,
+                  file: vbbSourceFile,
+                  startSec: r.start,
+                  span: r.span,
+                  srcW,
+                  srcH,
                   qualityFirst: vbbQualityFirstOn(),
                   isAborted,
                   seed: reuseSeed || null,

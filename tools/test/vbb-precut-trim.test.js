@@ -3,9 +3,14 @@
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
+const vm = require("vm");
 
 const src = fs.readFileSync(
   path.join(__dirname, "..", "extra-panels", "v2g-suite-src", "40-vbb.js"),
+  "utf8"
+);
+const shared = fs.readFileSync(
+  path.join(__dirname, "..", "extra-panels", "v2g-suite-src", "10-shared-encode.js"),
   "utf8"
 );
 
@@ -15,30 +20,50 @@ function t(name, fn) {
   n += 1;
 }
 
-t("含 materializeVbbTrimClip 预裁切", () => {
-  assert.ok(src.includes("async function materializeVbbTrimClip"));
-  assert.ok(src.includes("后续阶梯不再啃整段原片"));
+/** 抽出 shouldPrecutVbbWindow 做门闩单测（不跑整面板） */
+function loadShouldPrecut() {
+  const m = src.match(/function shouldPrecutVbbWindow\([\s\S]*?\n      \}/);
+  assert.ok(m, "missing shouldPrecutVbbWindow");
+  const box = {};
+  vm.runInNewContext(`const VBB_MIN_SPAN = 0.5;\n${m[0]}\nthis.fn = shouldPrecutVbbWindow;`, box);
+  return box.fn;
+}
+
+t("含保守门闩 shouldPrecutVbbWindow", () => {
+  assert.ok(src.includes("function shouldPrecutVbbWindow"));
+  assert.ok(src.includes("明显裁短才启用") || src.includes("明显裁短才预裁"));
 });
 
-t("prepareVbbEncodeSource 对单段 trim / 打点会预裁", () => {
-  assert.ok(src.includes("单段 trim / 打点：只要不是整段，就预裁一次"));
-  assert.ok(/const trimmed =[\s\S]*startSec > 0\.05/.test(src));
-  assert.ok(src.includes("await materializeVbbTrimClip("));
+t("门闩：30s→7s 启用；轻微裁切/整段不启用", () => {
+  const should = loadShouldPrecut();
+  assert.strictEqual(should(30, 5, 7), true, "30s 裁 7s 应预裁");
+  assert.strictEqual(should(30, 0, 7), true, "30s 从头裁 7s 应预裁");
+  assert.strictEqual(should(30, 0, 30), false, "整段不预裁");
+  assert.strictEqual(should(30, 0, 28), false, "只砍 2s 不预裁");
+  assert.strictEqual(should(12, 0, 5), false, "短源不预裁");
+  assert.strictEqual(should(20, 0, 12), false, "保留过半不预裁");
 });
 
-t("预裁切不做 pad（避免假黑边）", () => {
-  const fn = src.slice(src.indexOf("async function materializeVbbTrimClip"), src.indexOf("async function prepareVbbEncodeSource"));
-  assert.ok(fn.includes("不要 pad"));
-  assert.ok(!/pad=\$\{W\}:\$\{H\}/.test(fn), "trim 预裁不应 pad 到画布");
+t("预裁优先 copy，失败才回退", () => {
+  const fn = src.slice(
+    src.indexOf("async function materializeVbbTrimClip"),
+    src.indexOf("async function prepareVbbEncodeSource")
+  );
+  assert.ok(fn.includes('"copy"') || fn.includes("'copy'"));
+  assert.ok(src.includes("预裁切失败，回退整片 seek"));
 });
 
-t("整段/批量/手动/切分 编码前走 prepare", () => {
-  const prepareCalls = src.split("await prepareVbbEncodeSource(").length - 1;
-  assert.ok(prepareCalls >= 4, `prepare 调用过少: ${prepareCalls}`);
+t("手动打点 / 切分方案未强行改接线（仍可直接 encode）", () => {
+  // 手动：应有一次整片 vbbResolveCrop，且 encode 用 vbbSourceFile + r.start（旧路径）
+  const manual = src.slice(src.indexOf("async function runVbbManualBlackbox"), src.indexOf("function vbbSpeedLimitSec"));
+  assert.ok(manual.includes("vbbResolveCrop("));
+  assert.ok(/encodeBlackboxClip\(\{\s*file:\s*vbbSourceFile/.test(manual));
+  assert.ok(!manual.includes("prepareVbbEncodeSource("), "手动模式勿强行 prepare");
 });
 
-t("去色边在预裁短片上取样", () => {
-  assert.ok(src.includes("去色边在预裁后的短片上取样") || /resolveVbbEncodeCrop\(\s*prepared\.file/.test(src));
+t("编码器：非片头窗也允许 wantSeg（失败回退原片）", () => {
+  assert.ok(shared.includes("Number(opts.startSec) > 0.05"));
+  assert.ok(shared.includes("file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05"));
 });
 
 console.log(`vbb-precut-trim.test.js: ${n} passed`);
