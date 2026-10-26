@@ -12,8 +12,8 @@
   const MIN_CUTOUT = 0.2;
   /** 两段保留区之间最小间隙 */
   const MIN_KEEP_GAP = 0.25;
-  /** 仅贴片头/片尾时吸附；过大易在抬手时「跳一下」 */
-  const SNAP_EDGE_SEC = 0.06;
+  /** 片头/片尾/红段边磁吸半径；过大易在抬手时「跳一下」 */
+  const SNAP_EDGE_SEC = 0.08;
   /**
    * 手机送手抖动：抬手瞬间触点常再偏一点。
    * 用抬手前约 LIFT_LAG_MS 的位置定黄/红柄，再对齐解码器所见帧。
@@ -348,6 +348,9 @@
     let scrubSeekWanted = null;
     let scrubSeekInflight = false;
     let dragSeekTimer = 0;
+    /** 松手后短暂保留黄/红柄时间戳，方便确认吸附落点 */
+    let tipHoldTimer = 0;
+    let tipHoldKind = "";
     let playheadRaf = 0;
     let playWindowGen = 0;
     let playWindowLooping = false;
@@ -666,8 +669,14 @@
       if (tipStart) tipStart.textContent = formatClock(startSec);
       if (tipEnd) tipEnd.textContent = formatClock(endSec);
       const dragging = Boolean(drag);
-      const showStart = dragging && (drag.kind === "start" || drag.kind === "window");
-      const showEnd = dragging && (drag.kind === "end" || drag.kind === "window");
+      const showStart =
+        (dragging && (drag.kind === "start" || drag.kind === "window")) ||
+        tipHoldKind === "start" ||
+        tipHoldKind === "window";
+      const showEnd =
+        (dragging && (drag.kind === "end" || drag.kind === "window")) ||
+        tipHoldKind === "end" ||
+        tipHoldKind === "window";
       if (tipStart) tipStart.hidden = !showStart;
       if (tipEnd) tipEnd.hidden = !showEnd;
     }
@@ -933,6 +942,27 @@
       return clamp(snapped, 0, duration);
     }
 
+    /** 靠近红段边也吸一下（删中间接点好对齐） */
+    function snapNearCutouts(t) {
+      let best = clamp(t, 0, duration);
+      let bestDist = SNAP_EDGE_SEC;
+      const list = normalizeCutoutsList(cutouts, startSec, endSec);
+      for (const c of list) {
+        for (const edge of [Number(c.start) || 0, Number(c.end) || 0]) {
+          const d = Math.abs(best - edge);
+          if (d <= bestDist) {
+            bestDist = d;
+            best = edge;
+          }
+        }
+      }
+      return best;
+    }
+
+    function snapTrimHandle(t, which) {
+      return snapNearCutouts(snapEdgeOnly(snapToFrameGrid(t), which));
+    }
+
     /** 记录拖拽采样，供送手时回看抬手前稳定位置 */
     function pushDragSample(t) {
       if (!drag) return;
@@ -954,6 +984,27 @@
         if (samples[i].at <= targetAt) return samples[i].t;
       }
       return samples[0].t;
+    }
+
+    /** 松手后短留时间戳，让人看清吸到哪一帧 */
+    function flashSnapFeedback(kind, moved) {
+      if (moved) {
+        timeline?.classList.remove("is-pulse", "is-snap");
+        // 强制重启动画
+        void timeline?.offsetWidth;
+        timeline?.classList.add("is-pulse", "is-snap");
+        hapticLight();
+      }
+      tipHoldKind = kind || "";
+      if (tipStart) tipStart.hidden = !(tipHoldKind === "start" || tipHoldKind === "window");
+      if (tipEnd) tipEnd.hidden = !(tipHoldKind === "end" || tipHoldKind === "window");
+      if (tipHoldTimer) clearTimeout(tipHoldTimer);
+      tipHoldTimer = setTimeout(() => {
+        tipHoldKind = "";
+        tipHoldTimer = 0;
+        timeline?.classList.remove("is-snap");
+        syncHandleTips();
+      }, 700);
     }
 
     function setStart(t, { preview = true, immediateSeek = false } = {}) {
@@ -1005,13 +1056,12 @@
       if (!drag) return;
       const kind = drag.kind;
       const cutIndex = drag.cutIndex;
-      // 抬手：先去掉送手抖动 → 帧格吸附 → 再对齐浏览器实际显示帧
+      // 抬手：去送手抖动 → 帧格/边磁吸 → 对齐浏览器实际显示帧
       if (kind === "start") {
         const preLift = dragSecBeforeLift(startSec);
         const before = startSec;
-        const want = quantizeTrimSec(snapEdgeOnly(snapToFrameGrid(preLift), "start"));
+        const want = quantizeTrimSec(snapTrimHandle(preLift, "start"));
         startSec = want;
-        if (Math.abs(before - want) > FRAME_SNAP_SEC * 0.4) hapticLight();
         try {
           video.pause();
         } catch (_) {}
@@ -1032,11 +1082,11 @@
         await seekPlayheadExact(startSec);
         paintTimeline();
         updateLabels();
+        flashSnapFeedback("start", Math.abs(before - startSec) > FRAME_SNAP_SEC * 0.35);
       } else if (kind === "end") {
         const preLift = dragSecBeforeLift(endSec);
         const before = endSec;
-        const want = quantizeTrimSec(snapEdgeOnly(snapToFrameGrid(preLift), "end"));
-        if (Math.abs(before - want) > FRAME_SNAP_SEC * 0.4) hapticLight();
+        const want = quantizeTrimSec(snapTrimHandle(preLift, "end"));
         setEnd(want, {
           preview: false,
           immediateSeek: false,
@@ -1063,22 +1113,29 @@
         await seekPlayheadExact(endKeepSec());
         paintTimeline();
         updateLabels();
+        flashSnapFeedback("end", Math.abs(before - endSec) > FRAME_SNAP_SEC * 0.35);
       } else if (kind === "window") {
+        const beforeStart = startSec;
         const span = Math.max(MIN_SPAN, endSec - startSec);
-        startSec = quantizeTrimSec(snapEdgeOnly(snapToFrameGrid(startSec), "start"));
+        const liftStart = dragSecBeforeLift(startSec);
+        startSec = quantizeTrimSec(snapTrimHandle(liftStart, "start"));
         endSec = clamp(startSec + span, startSec + MIN_SPAN, duration);
-        endSec = quantizeTrimSec(snapEdgeOnly(snapToFrameGrid(endSec), "end"));
+        endSec = quantizeTrimSec(snapTrimHandle(endSec, "end"));
         if (endSec - startSec < MIN_SPAN) endSec = Math.min(duration, startSec + MIN_SPAN);
         clipCutoutsToWindow();
         await seekPlayheadExact(startSec);
         paintTimeline();
         updateLabels();
+        flashSnapFeedback("window", Math.abs(beforeStart - startSec) > FRAME_SNAP_SEC * 0.35);
       } else if (kind === "cut-start" || kind === "cut-end") {
         const idx = Number(cutIndex);
         if (idx >= 0 && idx < cutouts.length) {
           const c = cutouts[idx];
           const live = kind === "cut-end" ? c.end : c.start;
-          const preLift = snapToFrameGrid(dragSecBeforeLift(live));
+          const preLift = snapTrimHandle(
+            dragSecBeforeLift(live),
+            kind === "cut-end" ? "end" : "start"
+          );
           setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", preLift);
           try {
             video.pause();
@@ -1099,7 +1156,6 @@
               ? Math.max(want, shown)
               : Math.min(want, shown)
             : want;
-          if (Math.abs(snapped - live) > FRAME_SNAP_SEC * 0.4) hapticLight();
           setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", snapped);
           // 红柄抬手：停在接点保留侧最后一帧（与 GIF 跳切所见一致）
           selectedCutout = idx;
@@ -1112,6 +1168,7 @@
               : Math.max(startSec, Number(cut.start) - 0.05);
             await seekPlayheadExact(joinAt);
           }
+          flashSnapFeedback(kind === "cut-end" ? "end" : "start", Math.abs(snapped - live) > FRAME_SNAP_SEC * 0.35);
         } else {
           clipCutoutsToWindow();
           paintCutouts();
@@ -1370,6 +1427,15 @@
       filmGen += 1;
       playWindowGen += 1;
       playWindowLooping = false;
+      if (tipHoldTimer) {
+        clearTimeout(tipHoldTimer);
+        tipHoldTimer = 0;
+      }
+      tipHoldKind = "";
+      if (dragSeekTimer) {
+        clearTimeout(dragSeekTimer);
+        dragSeekTimer = 0;
+      }
       cancelAnimationFrame(playheadRaf);
       cancelAnimationFrame(cropLiveRaf);
       try {
@@ -1665,7 +1731,21 @@
         syncHandleTips();
         return;
       }
-      const t = ratioFromClientX(e.clientX) * duration;
+      const raw = ratioFromClientX(e.clientX) * duration;
+      // 拖拽中就有边磁吸（片头/片尾/红段），松手再帧格对齐
+      let t = raw;
+      if (drag.kind === "start") t = snapNearCutouts(snapEdgeOnly(raw, "start"));
+      else if (drag.kind === "end") t = snapNearCutouts(snapEdgeOnly(raw, "end"));
+      else if (drag.kind === "cut-start") t = snapNearCutouts(snapEdgeOnly(raw, "start"));
+      else if (drag.kind === "cut-end") t = snapNearCutouts(snapEdgeOnly(raw, "end"));
+      if (Math.abs(t - raw) > 0.0005 && Math.abs(t - raw) <= SNAP_EDGE_SEC) {
+        if (!drag._magnetAt || Math.abs(drag._magnetAt - t) > 0.001) {
+          drag._magnetAt = t;
+          hapticLight();
+        }
+      } else {
+        drag._magnetAt = null;
+      }
       pushDragSample(t);
       if (drag.kind === "start") setStart(t);
       else if (drag.kind === "end") setEnd(t);

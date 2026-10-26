@@ -21,19 +21,21 @@ t("粗指针/窄屏用触控文案，不主推键盘", () => {
   assert.ok(vtrim.includes("松手吸附") || vtrim.includes("吸附对齐"));
 });
 
-t("手机送手防抖：抬手前采样 + 帧格吸附", () => {
+t("手机送手防抖：抬手前采样 + 帧格/边磁吸 + 反馈", () => {
   assert.ok(vtrim.includes("LIFT_LAG_MS"));
   assert.ok(vtrim.includes("FRAME_SNAP_SEC"));
   assert.ok(vtrim.includes("function dragSecBeforeLift"));
   assert.ok(vtrim.includes("function snapToFrameGrid"));
+  assert.ok(vtrim.includes("function snapNearCutouts"));
+  assert.ok(vtrim.includes("function flashSnapFeedback"));
   assert.ok(vtrim.includes("pushDragSample"));
   const finish = vtrim.slice(
     vtrim.indexOf("async function finishTrimDrag"),
     vtrim.indexOf("function ratioFromClientX")
   );
   assert.ok(finish.includes("dragSecBeforeLift"));
-  assert.ok(finish.includes("snapToFrameGrid"));
-  assert.ok(finish.includes("hapticLight"));
+  assert.ok(finish.includes("snapTrimHandle") || finish.includes("snapToFrameGrid"));
+  assert.ok(finish.includes("flashSnapFeedback"));
 });
 
 t("预览轻点不 toggle 播放（只用底部按钮）", () => {

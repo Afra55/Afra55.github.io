@@ -2552,7 +2552,15 @@
         return related.every((c) => Boolean(c?.gifBlob));
       }
 
-      /** 只收集「还没生成成功」的编辑；已成功的自动排除 */
+      /** 有裁剪/打点才值得进草稿；全片未改的不要写回，否则「清除草稿」会被 pagehide 立刻复活 */
+      function vbbDraftPayloadWorthSaving(edit, duration, srcW, srcH, marks, draftStart) {
+        if (vbbEditIsDirty(edit, duration, srcW, srcH)) return true;
+        if (Array.isArray(marks) && marks.length > 0) return true;
+        if (draftStart != null && Number.isFinite(Number(draftStart))) return true;
+        return false;
+      }
+
+      /** 只收集「还没生成成功」且确有编辑内容的草稿；已成功 / 已清空的自动排除 */
       function collectVbbEditDraftItems() {
         /** @type {any[]} */
         const items = [];
@@ -2561,6 +2569,25 @@
           vbbBatchFiles.forEach((item) => {
             if (!item?.file) return;
             if (isVbbFileEncodeFullyDone(item.file)) return;
+            const marks = Array.isArray(item.marks)
+              ? item.marks.map((m) => ({ start: Number(m.start) || 0, end: Number(m.end) || 0 }))
+              : [];
+            const draftStart =
+              item.draftStart != null && Number.isFinite(Number(item.draftStart))
+                ? Number(item.draftStart)
+                : null;
+            if (
+              !vbbDraftPayloadWorthSaving(
+                item.edit,
+                item.duration,
+                item.srcW,
+                item.srcH,
+                marks,
+                draftStart
+              )
+            ) {
+              return;
+            }
             items.push({
               key: vbbFileDraftKey(item.file),
               name: item.file.name || "",
@@ -2570,31 +2597,33 @@
               srcW: Number(item.srcW) || 0,
               srcH: Number(item.srcH) || 0,
               edit: serializeVbbEditDraft(item.edit),
-              marks: Array.isArray(item.marks)
-                ? item.marks.map((m) => ({ start: Number(m.start) || 0, end: Number(m.end) || 0 }))
-                : [],
-              draftStart:
-                item.draftStart != null && Number.isFinite(Number(item.draftStart))
-                  ? Number(item.draftStart)
-                  : null,
+              marks,
+              draftStart,
             });
           });
         } else if (vbbSourceFile) {
           if (isVbbFileEncodeFullyDone(vbbSourceFile)) return items;
           const edit = vbbSingleEdit || getActiveVbbEditItem()?.edit || null;
+          const marks = Array.isArray(vbbMarks)
+            ? vbbMarks.map((m) => ({ start: Number(m.start) || 0, end: Number(m.end) || 0 }))
+            : [];
+          const draftStart =
+            vbbDraftStart != null && Number.isFinite(Number(vbbDraftStart)) ? Number(vbbDraftStart) : null;
+          const duration = Number(vbbVideo?.duration) || 0;
+          const srcW = Number(vbbVideo?.videoWidth) || 0;
+          const srcH = Number(vbbVideo?.videoHeight) || 0;
+          if (!vbbDraftPayloadWorthSaving(edit, duration, srcW, srcH, marks, draftStart)) return items;
           items.push({
             key: vbbFileDraftKey(vbbSourceFile),
             name: vbbSourceFile.name || "",
             size: Number(vbbSourceFile.size) || 0,
             lastModified: Number(vbbSourceFile.lastModified) || 0,
-            duration: Number(vbbVideo?.duration) || 0,
-            srcW: Number(vbbVideo?.videoWidth) || 0,
-            srcH: Number(vbbVideo?.videoHeight) || 0,
+            duration,
+            srcW,
+            srcH,
             edit: serializeVbbEditDraft(edit),
-            marks: Array.isArray(vbbMarks)
-              ? vbbMarks.map((m) => ({ start: Number(m.start) || 0, end: Number(m.end) || 0 }))
-              : [],
-            draftStart: vbbDraftStart != null && Number.isFinite(Number(vbbDraftStart)) ? Number(vbbDraftStart) : null,
+            marks,
+            draftStart,
           });
         }
         return items;
