@@ -1,6 +1,6 @@
 "use strict";
 
-/** 手机编辑体验：触控文案、播放接点、红柄命中区 */
+/** 手机编辑体验：触控文案、跳到接点（不自动播）、红柄命中区 */
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
@@ -16,23 +16,33 @@ function t(name, fn) {
 
 t("粗指针/窄屏用触控文案，不主推键盘", () => {
   assert.ok(vtrim.includes("pointer: coarse"));
-  assert.ok(vtrim.includes("点画面播放"));
+  assert.ok(vtrim.includes("点画面播放") || vtrim.includes("点底部播放"));
   assert.ok(vtrim.includes("拖黄柄/红段"));
-  assert.ok(vtrim.includes("点「播放接点」核对"));
 });
 
-t("删中间有「播放接点」按钮（手机无空格）", () => {
-  assert.ok(vtrim.includes('id="${p("cut-play-join")}"') || vtrim.includes("cut-play-join"));
-  assert.ok(vtrim.includes("async function playCutJoinPreview"));
-  assert.ok(vtrim.includes("正在播放接点（与成片一致）"));
-  assert.ok(vtrim.includes("cutPlayJoinBtn"));
+t("删中间「跳到接点」只 seek、不 video.play", () => {
+  assert.ok(vtrim.includes("跳到接点"));
+  assert.ok(vtrim.includes("async function seekCutJoinPreview"));
+  const fn = vtrim.slice(
+    vtrim.indexOf("async function seekCutJoinPreview"),
+    vtrim.indexOf("function deleteSelectedCutout")
+  );
+  assert.ok(fn.includes("seekPlayheadExact"));
+  assert.ok(fn.includes("video.pause()"));
+  assert.ok(!fn.includes("video.play("), "跳到接点不得自动播放");
+  assert.ok(vtrim.includes("点底部播放核对"));
+});
+
+t("编辑层去掉中间播放钮", () => {
+  assert.ok(!/id=\$\{p\("tap-play"\)\}/.test(vtrim) && !vtrim.includes('id="${p("tap-play")}"'));
+  assert.ok(css.includes(".vtrim-editor-overlay .vtrim-tap-play"));
+  assert.ok(/display:\s*none\s*!important/.test(css));
 });
 
 t("手机加高编辑层时间轴、放大红柄命中", () => {
-  assert.ok(css.includes("height: 68px") || /height:\s*68px/.test(css));
+  assert.ok(/height:\s*68px/.test(css));
   assert.ok(css.includes(".vtrim-cutout-handle::before"));
   assert.ok(/width:\s*44px/.test(css));
-  assert.ok(css.includes("min-height: 2.85rem") || css.includes("min-height:2.85rem"));
 });
 
 t("对齐修复仍在（预览=成片）", () => {

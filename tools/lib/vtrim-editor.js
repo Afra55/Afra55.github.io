@@ -109,7 +109,7 @@
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
         <div class="vtrim-preview-wrap" id="${p("preview-wrap")}">
           <video id="${p("video")}" class="vtrim-video" playsinline muted preload="metadata"></video>
-          <button type="button" class="vtrim-tap-play" id="${p("tap-play")}" hidden aria-label="播放或暂停"></button>
+          <!-- 预览中间不再叠播放钮：底部已有播放/暂停，避免手机重复 -->
           <p class="vtrim-film-loading hint" id="${p("film-loading")}" hidden>正在生成胶片预览…</p>
           <div class="vtrim-crop-box" id="${p("crop-box")}" hidden>
             <span class="vtrim-crop-grid" aria-hidden="true"></span>
@@ -160,7 +160,7 @@
           </div>
           <div class="btn-row tool-actions vtrim-cut-tools" id="${p("cut-tools")}" hidden aria-label="删中间">
             <button type="button" class="secondary-btn" id="${p("cut-add")}" title="从进度条当前位置起添加删除区（当前帧=删除起点；红柄两端所见帧都会删）">添加删除段</button>
-            <button type="button" class="secondary-btn" id="${p("cut-play-join")}" title="跳到删段接点前并播放，核对是否与成片一致">播放接点</button>
+            <button type="button" class="secondary-btn" id="${p("cut-play-join")}" title="跳到删段接点前（不自动播放），再点底部播放核对">跳到接点</button>
             <button type="button" class="ghost-btn" id="${p("cut-del")}" title="删除当前选中的删除段" disabled>删选中段</button>
             <button type="button" class="ghost-btn" id="${p("cut-clear")}" title="清空全部删除段">清空</button>
           </div>
@@ -270,7 +270,6 @@
     const previewWrap = $("preview-wrap");
     const video = $("video");
     const cropBox = $("crop-box");
-    const tapPlay = $("tap-play");
     const filmLoading = $("film-loading");
     const playBtn = $("play");
     const muteBtn = $("mute");
@@ -384,8 +383,8 @@
               : "拖绿框 · 双击重置 · 空格播放"
             : editMode === "cut"
               ? phone
-                ? "拖进度到起点 → 添加删除段 → 拖红柄 · 点「播放接点」核对"
-                : "拖进度到起点 → 添加删除段 → 拖红柄 · 播放核对接点 · Delete 删选中"
+                ? "拖进度到起点 → 添加删除段 → 拖红柄 · 「跳到接点」后点底部播放"
+                : "拖进度到起点 → 添加删除段 → 拖红柄 · 「跳到接点」后点播放核对"
               : phone
                 ? "拖黄柄裁片头片尾 · 点画面播放 · 下方可微调"
                 : "拖黄柄裁片头片尾 · 空格播放 · ←/→ 微调进度";
@@ -494,7 +493,7 @@
       if (selectedCutout < 0) selectedCutout = cutouts.length - 1;
       syncCutoutUi();
       updateLabels();
-      // 落到删段前约 0.4s，方便点「播放接点」/点画面核对接点（与成片同一套 keep）
+      // 落到删段前约 0.4s，方便再「跳到接点」后点底部播放核对（不自动播）
       const keeps = keepRangesLocal();
       const prevKeep = [...keeps].reverse().find((k) => Number(k.end) <= a + 0.08);
       const joinAt = prevKeep
@@ -502,11 +501,11 @@
         : Math.max(startSec, a - 0.4);
       previewSeek(joinAt, { throttle: false });
       hapticLight();
-      toast(coarseUi() ? "已添加 · 拖红柄精调 · 可点「播放接点」" : "已添加删除段 · 拖红柄精调 · 空格播放核对接点");
+      toast(coarseUi() ? "已添加 · 拖红柄精调 · 可「跳到接点」再点播放" : "已添加删除段 · 拖红柄精调 · 可跳到接点后播放核对");
     }
 
-    /** 手机主路径：跳到选中/首个删段接点前并播放，核对预览=成片 */
-    async function playCutJoinPreview() {
+    /** 跳到选中/首个删段接点前；不自动播放——须用户点底部播放 */
+    async function seekCutJoinPreview() {
       const cuts = normalizeCutoutsList(cutouts, startSec, endSec);
       if (!cuts.length) {
         toast("还没有删除段");
@@ -520,10 +519,12 @@
         ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.45)
         : Math.max(startSec, Number(cut.start) - 0.45);
       playWindowLooping = false;
+      try {
+        video.pause();
+      } catch (_) {}
       await seekPlayheadExact(joinAt);
       hapticLight();
-      await video.play().catch(() => {});
-      toast("正在播放接点（与成片一致）");
+      toast("已跳到接点前 · 点底部播放核对");
     }
 
     function deleteSelectedCutout() {
@@ -1492,7 +1493,7 @@
     bindNudgeHold($("nudge-end-p"), () => setEnd(endSec + 0.1, { immediateSeek: true }), "end");
     cutAddBtn?.addEventListener("click", () => addCutoutAtPlayhead());
     cutPlayJoinBtn?.addEventListener("click", () => {
-      playCutJoinPreview().catch((err) => toast(err?.message || String(err) || "播放失败"));
+      seekCutJoinPreview().catch((err) => toast(err?.message || String(err) || "跳转失败"));
     });
     cutDelBtn?.addEventListener("click", () => deleteSelectedCutout());
     cutClearBtn?.addEventListener("click", () => {
@@ -1752,7 +1753,6 @@
     objectUrl = URL.createObjectURL(file);
     video.src = objectUrl;
     video.muted = true;
-    if (tapPlay) tapPlay.hidden = false;
 
     return new Promise((resolve, reject) => {
       resolveOpen = resolve;

@@ -34,9 +34,9 @@ t("快捷键：空格播放、Delete 删段、方向键微调进度", () => {
   assert.ok(key.includes("ArrowLeft") && key.includes("ArrowRight"));
 });
 
-t("删中间模式提示可核对接点", () => {
-  assert.ok(vtrim.includes("播放接点") || vtrim.includes("播放核对接点"));
-  assert.ok(vtrim.includes("与成片一致") || vtrim.includes("预览=成片"));
+t("删中间可跳到接点再手动播放", () => {
+  assert.ok(vtrim.includes("跳到接点") || vtrim.includes("seekCutJoinPreview"));
+  assert.ok(vtrim.includes("点底部播放") || vtrim.includes("预览与成片对齐"));
 });
 
 console.log(`vbb-editor-ux.test.js: ${n} passed`);

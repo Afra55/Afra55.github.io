@@ -328,7 +328,6 @@
   height: 52px;
   border: 0;
   border-radius: 999px;
-  /* 半透明深底 + 实心三角，避免空心白圈观感 */
   background: rgba(8, 14, 26, 0.68);
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
   pointer-events: none;
@@ -351,7 +350,6 @@
   background: transparent;
   box-shadow: none;
 }
-/* 播放中显示半透明暂停图标（点画面仍可切换） */
 .vtrim-preview-wrap.is-playing .vtrim-tap-play {
   opacity: 0.55;
   background: rgba(8, 14, 26, 0.55);
@@ -365,6 +363,10 @@
   border-radius: 1px;
   background: #fff;
   box-shadow: 13px 0 0 #fff;
+}
+/* 黑盒编辑层：中间播放钮与底部重复，一律隐藏 */
+.vtrim-editor-overlay .vtrim-tap-play {
+  display: none !important;
 }
 
 .vtrim-film-loading {
