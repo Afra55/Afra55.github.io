@@ -12,6 +12,49 @@
     return s || fallback;
   }
 
+  /**
+   * 把「导入用的文件夹名」规整成可用标签名。
+   * 保留可读性（空格/中文/emoji），只去掉会捣乱的控制符与路径非法字符。
+   * @returns {string} 空串表示不可用
+   */
+  function normalizeImportFolderTagName(raw, opts) {
+    const o = opts || {};
+    const defaultName = String(o.defaultTagName || "默认");
+    let s = String(raw || "");
+    try {
+      s = s.normalize("NFKC");
+    } catch (_) {}
+    s = s.replace(/[\u0000-\u001f\u007f]/g, "");
+    s = s.replace(/[\u200b-\u200d\ufeff]/g, "");
+    // 路径/文件名非法符 → 空格；勿整段丢掉
+    s = s.replace(/[\\/:*?"<>|]+/g, " ");
+    s = s.replace(/\s+/g, " ").trim();
+    // Windows 尾点/尾空格；开头的 . 与 #
+    s = s.replace(/^[.#\s]+/, "").replace(/[.\s]+$/g, "").trim();
+    if (!s || s === "." || s === "..") return "";
+    if (s.length > 48) s = s.slice(0, 48).replace(/\s+$/g, "");
+    if (!s) return "";
+    // 设备保留名整词时加后缀，避免个别系统怪异
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(s)) s = `${s}_文件夹`;
+    // 「默认」是系统固定标签，导入文件夹勿抢占
+    if (s === defaultName) s = `${defaultName}文件夹`;
+    return s;
+  }
+
+  /**
+   * 从 webkitRelativePath / __relPath 取导入根文件夹名并规整为标签。
+   * 仅当路径至少两段（文件夹/文件）时才有文件夹名；单文件导入返回 ""。
+   */
+  function folderTagFromRelPath(relPath, opts) {
+    const rel = String(relPath || "")
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "");
+    if (!rel) return "";
+    const parts = rel.split("/").filter((p) => p && p !== "." && p !== "..");
+    if (parts.length < 2) return "";
+    return normalizeImportFolderTagName(parts[0], opts);
+  }
+
   /** 解析 YAML front-matter（title/tags；head=原始头部） */
   function parseFrontMatter(text) {
     const m = String(text || "").match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
@@ -305,6 +348,8 @@
 
   const api = {
     slugify,
+    normalizeImportFolderTagName,
+    folderTagFromRelPath,
     parseFrontMatter,
     isRelativeRef,
     sanitizeRelPath,

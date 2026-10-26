@@ -890,7 +890,7 @@
       if (els.importDirBtn) {
         els.importDirBtn.disabled = !dirOnly;
         els.importDirBtn.title = dirOnly
-          ? "选择文件夹：.md/.txt 直读；PDF/Office/HTML/图片等经本机桥转 Markdown（连同引用图片）"
+          ? "选择文件夹导入：文档自动打上「文件夹名」标签；.md/.txt 直读；PDF/Office/HTML/图片等经本机桥转 Markdown"
           : "仅「文件夹」模式可用";
       }
       const hasMode = Boolean(state.mode);
@@ -5053,20 +5053,26 @@
           "未命名";
         const body = checked ? checked.body : parseFrontMatter(text).body;
         const fmHead = checked ? checked.head : parseFrontMatter(text).head || "";
-        const baseDir = String(f.webkitRelativePath || f.__relPath || f.name || "")
-          .replace(/\\/g, "/")
-          .split("/")
-          .slice(0, -1)
-          .join("/");
+        const relPath = String(f.webkitRelativePath || f.__relPath || f.name || "").replace(/\\/g, "/");
+        const baseDir = relPath.split("/").slice(0, -1).join("/");
         const res = await importDocImages(body, baseDir, assetMap);
         imgN += res.imported;
+        // 导入文件夹：用根文件夹名自动打标签（单文件导入无相对路径则不加）
+        const folderTagName =
+          typeof MP.folderTagFromRelPath === "function"
+            ? MP.folderTagFromRelPath(relPath, { defaultTagName: DEFAULT_TAG_NAME })
+            : "";
+        const tagIds = [];
+        if (folderTagName) {
+          const tid = ensureTag(folderTagName);
+          if (tid) tagIds.push(tid);
+        }
         const item = {
           id: uid(),
           title,
           titleSaved: title,
           fileName: uniqueFileName(title, ""),
-          // 导入不自动建标签；侧栏标签仅用户在文档上自行添加
-          tagIds: [],
+          tagIds,
           createdAt: Date.now(),
           updatedAt: Date.now(),
           size: new Blob([res.text]).size,

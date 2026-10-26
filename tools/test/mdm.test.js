@@ -183,4 +183,42 @@ t("mdm.js 导入走 validateImportMarkdown", () => {
   assert.ok(/校验并入库/.test(src));
 });
 
+t("normalizeImportFolderTagName 适配怪名字", () => {
+  assert.strictEqual(P.normalizeImportFolderTagName("工作笔记"), "工作笔记");
+  assert.strictEqual(P.normalizeImportFolderTagName("  My Docs  "), "My Docs");
+  assert.strictEqual(P.normalizeImportFolderTagName("a/b:c*d?e"), "a b c d e");
+  assert.strictEqual(P.normalizeImportFolderTagName("...hidden..."), "hidden");
+  assert.strictEqual(P.normalizeImportFolderTagName("#话题"), "话题");
+  assert.strictEqual(P.normalizeImportFolderTagName("默认"), "默认文件夹");
+  assert.strictEqual(P.normalizeImportFolderTagName("默认", { defaultTagName: "默认" }), "默认文件夹");
+  assert.strictEqual(P.normalizeImportFolderTagName("con"), "con_文件夹");
+  assert.strictEqual(P.normalizeImportFolderTagName(""), "");
+  assert.strictEqual(P.normalizeImportFolderTagName("."), "");
+  assert.strictEqual(P.normalizeImportFolderTagName("..\u0000.."), "");
+  assert.ok(P.normalizeImportFolderTagName("📚 读书").includes("读书"));
+  assert.strictEqual(P.normalizeImportFolderTagName("x".repeat(80)).length, 48);
+  // 零宽字符剥掉
+  assert.strictEqual(P.normalizeImportFolderTagName("ab\u200bcd"), "abcd");
+});
+
+t("folderTagFromRelPath 仅文件夹导入才出标签", () => {
+  assert.strictEqual(P.folderTagFromRelPath("笔记/a.md"), "笔记");
+  assert.strictEqual(P.folderTagFromRelPath("笔记/子/a.md"), "笔记");
+  assert.strictEqual(P.folderTagFromRelPath("My Docs/x.md"), "My Docs");
+  assert.strictEqual(P.folderTagFromRelPath("a\\b\\c.md"), "a");
+  assert.strictEqual(P.folderTagFromRelPath("alone.md"), "");
+  assert.strictEqual(P.folderTagFromRelPath(""), "");
+  assert.strictEqual(P.folderTagFromRelPath("默认/x.md"), "默认文件夹");
+});
+
+t("mdm.js 导入文件夹自动打文件夹名标签", () => {
+  const src = require("fs").readFileSync(path.join(__dirname, "..", "extra-panels", "mdm.js"), "utf8");
+  assert.ok(/folderTagFromRelPath/.test(src));
+  assert.ok(/文件夹名/.test(src));
+  const ingest = src.slice(src.indexOf("async function ingestMarkdownText"), src.indexOf("for (let i = 0; i < list.length"));
+  assert.ok(ingest.includes("folderTagName"));
+  assert.ok(ingest.includes("ensureTag(folderTagName)"));
+  assert.ok(!/导入不自动建标签/.test(ingest));
+});
+
 console.log(`mdm.test: ${n} passed`);
