@@ -259,7 +259,8 @@ function normalizeEncodeOpts(opts = {}) {
   const quality = Math.max(1, Math.min(100, Math.round(Number(opts.quality) || Number(opts.gifskiQuality) || 90)));
   const startSec = Math.max(0, Number(opts.startSec) || 0);
   const span = Math.max(0, Number(opts.span) || Number(opts.durationSec) || 0);
-  const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
+  // 与面板 V2G_BLACKBOX_MAX_SPEED 对齐（压缩时长长片）
+  const speed = Math.max(1, Math.min(48, Number(opts.speed) || 1));
   const brightness = Number(opts.brightness) || 0;
   const crop = opts.crop && typeof opts.crop === "object" ? opts.crop : null;
   const lossy = Math.max(0, Math.min(200, Math.round(Number(opts.lossy) || 0)));

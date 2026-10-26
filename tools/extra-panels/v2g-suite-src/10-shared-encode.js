@@ -61,6 +61,11 @@
       const V2G_BLACKBOX_MID_SPAN_SEC = 24;
       /** 产品：单段整段拉满；不因时长自动切片成多条 GIF */
       const V2G_BLACKBOX_OPT_MAX_SPAN_SEC = 36;
+      /**
+       * 「压缩时长」最大倍速。旧值 16：源>8 分钟且目标 30s 时成片会明显长于目标。
+       * 48 ≈ 24 分钟压到 30s；再长则标记 speedCapped，成片按上限加速。
+       */
+      const V2G_BLACKBOX_MAX_SPEED = 48;
       /** 默认余量提帧目标（30fps 源等）；25fps 源见 blackboxFpsCandidates */
       const V2G_BLACKBOX_HIGH_FPS = 20;
       const V2G_BLACKBOX_HIGH_FPS_MAX_SPAN = 20;
@@ -1203,7 +1208,7 @@
           ({ startSec, span } = resolveV2gSpan());
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
-        const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
+        const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const effSpan = span / speed;
         // 半开区间 [start, end)：不 +1，避免片尾比编辑拖到的位置多出几帧
         const naturalFrames = Math.max(2, Math.round(effSpan * fps));
@@ -1517,6 +1522,43 @@
         return durations;
       }
 
+      /** 把已有 delay 按比例拉到目标成片秒数（保留静止帧相对长短） */
+      function scaleGifDurationsToTargetMs(durations, targetSpanSec) {
+        const n = durations?.length || 0;
+        if (n < 1) return durations;
+        const sum = [...durations].reduce((a, b) => a + (Number(b) || 0), 0);
+        const targetMs = Math.max(n * 10, Math.round(Math.max(0.05, Number(targetSpanSec) || 0) * 1000));
+        if (!(sum > 0) || !(targetMs > 0)) return durations;
+        if (Math.abs(sum - targetMs) / targetMs < 0.02) return durations;
+        const out = new Uint32Array(n);
+        let allocated = 0;
+        for (let i = 0; i < n; i += 1) {
+          if (i === n - 1) {
+            out[i] = Math.max(10, Math.round((targetMs - allocated) / 10) * 10);
+          } else {
+            const ms = Math.max(10, Math.round(((Number(durations[i]) || 0) * targetMs) / sum / 10) * 10);
+            out[i] = ms;
+            allocated += ms;
+          }
+        }
+        return out;
+      }
+
+      /** 压缩时长 → 倍速；超上限则封顶并标记 capped */
+      function resolveBlackboxSpeed(spanSec, speedLimitSec, maxSpeed) {
+        const span = Math.max(0, Number(spanSec) || 0);
+        const lim = Math.max(0, Number(speedLimitSec) || 0);
+        const cap = Math.max(1, Number(maxSpeed) || V2G_BLACKBOX_MAX_SPEED);
+        if (!(lim > 0) || !(span > lim)) {
+          return { speed: 1, capped: false, targetSec: span, effSpan: span };
+        }
+        const raw = span / lim;
+        const speed = Math.max(1, Math.min(cap, raw));
+        const capped = raw > cap + 0.01;
+        const effSpan = span / speed;
+        return { speed, capped, targetSec: lim, effSpan };
+      }
+
       /**
        * 大文件预切段：开了倍速时禁止 -c copy（关键帧会少切，再按原 span 算倍速会多加速）。
        * 例：要 60s→30s，copy 只出 ~40s，仍按 ×2 → 成片 ~20s。
@@ -1795,7 +1837,7 @@
           ({ startSec, span } = resolveV2gSpan());
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
-        const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
+        const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const effSpan = span / speed;
         const frameCount = Math.max(2, Math.round(effSpan * fps));
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
@@ -1966,7 +2008,7 @@
           ({ startSec, span } = resolveV2gSpan());
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
-        const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
+        const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const effSpan = span / speed;
         // 半开区间 [start, end)：不 +1，避免片尾比编辑拖到的位置多出几帧
         const frameCount = Math.max(2, Math.round(effSpan * fps));
@@ -2212,22 +2254,26 @@
               Math.max(0.05, Number(opts.span) || 0) / Math.max(1, Number(opts.speed) || 1);
             const allowStillMerge =
               fps < 18 - 0.01 && effSpanForMerge > V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
+            const chunkTarget =
+              chunkFrames > 0 ? effSpanForMerge * (n / Math.max(1, chunkFrames)) : effSpanForMerge;
+            const expectRatio = chunkFrames > 0 ? n / chunkFrames : 1;
+            const alignTarget = expectRatio >= 0.9 && chunkTarget > 0.05;
             if (allowStillMerge) {
               try {
                 const merged = mergeStaticFramesInPlace(view, n, stride, fps);
                 if (merged && merged.count >= 2) {
                   encodedFrames = merged.count;
-                  durations = merged.durations;
+                  // 合并后仍对准本段目标时长，避免少帧+静止合并后成片再短一截
+                  durations = alignTarget
+                    ? scaleGifDurationsToTargetMs(merged.durations, chunkTarget)
+                    : merged.durations;
                   vbbLog(`[vbb-phase] gifski 静止帧合并 ${n} → ${merged.count} 帧（省 ${merged.saved} 帧）`);
                 }
               } catch (_) {}
             }
             // 无合并时按「本段应占成片时长」均分 delay，避免少帧却仍用标称 fps 打点 → 成片偏短
             if (!durations) {
-              const chunkTarget =
-                chunkFrames > 0 ? effSpanForMerge * (n / Math.max(1, chunkFrames)) : effSpanForMerge;
-              const expectRatio = chunkFrames > 0 ? n / chunkFrames : 1;
-              if (expectRatio >= 0.9 && chunkTarget > 0.05) {
+              if (alignTarget) {
                 durations = buildGifDurationsForTargetSpanMs(encodedFrames, chunkTarget);
               } else {
                 durations = buildUniformGifDurationsMs(encodedFrames, fps);
@@ -2303,10 +2349,19 @@
             `[vbb-phase] gifski编码 ${Math.round(performance.now() - tPhase)}ms(累计) · ${formatKb(blob.size)} q=${gifskiQuality}${chunkCount > 1 ? ` · ${chunkCount}段` : ""}`
           );
           const playbackFps = gifEffectivePlaybackFps(fps);
+          const frameRatio = frameCount > 0 ? actualFrames / frameCount : 1;
+          // 明显少帧且未拉满 delay 时，成片 span 按比例如实报，避免 UI 写 30s 实际 20s
+          const outSpan =
+            frameRatio >= 0.9 ? effSpan : Math.max(0.05, effSpan * Math.max(0.05, frameRatio));
+          if (frameRatio < 0.9) {
+            vbbLog(
+              `[vbb-phase] gifski 少帧 ${actualFrames}/${frameCount} → 成片按 ${(outSpan).toFixed(1)}s 计（目标 ${effSpan.toFixed(1)}s）`
+            );
+          }
           return {
             blob,
             frameCount: actualFrames,
-            span: effSpan,
+            span: outSpan,
             fps,
             playbackFps,
             speed,
@@ -3282,10 +3337,9 @@
         const srcH = clipOpts.srcH;
         // 目标时长（秒，0=不压缩时长）：源比目标长则加速到目标时长内
         const speedLimitSec = Math.max(0, Number(clipOpts.speedLimitSec) || 0);
-        const speed =
-          speedLimitSec > 0 && span > speedLimitSec
-            ? Math.max(1, Math.min(16, span / speedLimitSec))
-            : 1;
+        const speedPlan = resolveBlackboxSpeed(span, speedLimitSec);
+        const speed = speedPlan.speed;
+        const speedCapped = speedPlan.capped;
         const qualityFirst = !!(clipOpts && clipOpts.qualityFirst);
         const isAborted = clipOpts.isAborted || (() => abortV2g);
         const onProgress = clipOpts.onProgress || (() => {});
@@ -4335,6 +4389,20 @@
           });
           tried.push(candidate);
         }
+        const tagSpeedMeta = (enc) => {
+          if (!enc) return enc;
+          return {
+            ...enc,
+            speed: Math.max(1, Number(enc.speed) || speed),
+            speedCapped: Boolean(speedCapped),
+            speedLimitSec: speedLimitSec || 0,
+          };
+        };
+        if (speedCapped) {
+          vbbLog(
+            `[vbb-phase] 压缩时长倍速封顶 ×${speed.toFixed(1)}（源 ${Number(span).toFixed(1)}s → 目标 ${speedLimitSec}s，成片约 ${speedPlan.effSpan.toFixed(1)}s）`
+          );
+        }
         if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
           const qKeep = blackboxLadderQuality(candidate);
           const gqKeep = Number.isFinite(Number(candidate.gifskiQuality))
@@ -4355,16 +4423,18 @@
             },
             srcCap
           );
-          return finished
-            ? {
-                ...finished,
-                srcFps,
-                quality: blackboxLadderQuality(finished),
-                vbbPickNote: candidate.vbbPickNote || finished.vbbPickNote,
-              }
-            : finished;
+          return tagSpeedMeta(
+            finished
+              ? {
+                  ...finished,
+                  srcFps,
+                  quality: blackboxLadderQuality(finished),
+                  vbbPickNote: candidate.vbbPickNote || finished.vbbPickNote,
+                }
+              : finished
+          );
         }
         const fallback = tried.slice().sort((a, b) => a.blob.size - b.blob.size)[0] || null;
-        return fallback ? { ...fallback, srcFps } : null;
+        return tagSpeedMeta(fallback ? { ...fallback, srcFps } : null);
       }
   

@@ -1663,8 +1663,11 @@
       /** 当前「压缩时长」对应的加速倍率（相对该段 span） */
       function vbbSpeedFactorForSpan(span) {
         const lim = vbbSpeedLimitSec();
+        if (typeof resolveBlackboxSpeed === "function") {
+          return resolveBlackboxSpeed(span, lim).speed;
+        }
         const s = Number(span) || 0;
-        if (lim > 0 && s > lim) return Math.max(1, Math.min(16, s / lim));
+        if (lim > 0 && s > lim) return Math.max(1, Math.min(48, s / lim));
         return 1;
       }
   
@@ -2979,6 +2982,10 @@
         if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
         if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
         if (encoded.framesCapped && encoded.frameCount) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
+        if (encoded.speedCapped) {
+          const sec = Number(encoded.span) || 0;
+          bits.push(sec > 0 ? `加速达上限·约${sec >= 10 ? Math.round(sec) : sec.toFixed(1)}s` : "加速达上限");
+        }
         clip.gifNote = bits.filter(Boolean).join(" · ");
       }
   

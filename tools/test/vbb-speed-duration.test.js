@@ -73,7 +73,42 @@ t("桥版本已递增（gifski-core 变更）", () => {
   const ver = adb.match(/const BRIDGE_VERSION = "([^"]+)"/);
   assert.ok(ver, "missing BRIDGE_VERSION");
   const parts = ver[1].split(".").map(Number);
-  assert.ok(parts[2] >= 86, `BRIDGE_VERSION=${ver[1]}`);
+  assert.ok(parts[2] >= 87, `BRIDGE_VERSION=${ver[1]}`);
+});
+
+t("resolveBlackboxSpeed：30s 目标；超上限标记 capped", () => {
+  assert.ok(shared.includes("V2G_BLACKBOX_MAX_SPEED = 48"));
+  assert.ok(shared.includes("function resolveBlackboxSpeed"));
+  const m = shared.match(/function resolveBlackboxSpeed\([\s\S]*?\n      \}/);
+  assert.ok(m, "missing resolveBlackboxSpeed");
+  const box = {};
+  vm.runInNewContext(
+    `const V2G_BLACKBOX_MAX_SPEED = 48;\n${m[0]}\nthis.fn = resolveBlackboxSpeed;`,
+    box
+  );
+  const resolve = box.fn;
+  const a = resolve(60, 30);
+  assert.ok(Math.abs(a.speed - 2) < 0.01 && !a.capped && Math.abs(a.effSpan - 30) < 0.01);
+  const b = resolve(25, 30);
+  assert.strictEqual(b.speed, 1);
+  assert.ok(!b.capped);
+  const c = resolve(60 * 60, 30); // 1h → 需 ×120，封顶 48
+  assert.ok(c.capped);
+  assert.ok(Math.abs(c.speed - 48) < 0.01);
+  assert.ok(c.effSpan > 30);
+});
+
+t("静止合并 delay 可比例拉到目标秒数", () => {
+  assert.ok(shared.includes("scaleGifDurationsToTargetMs"));
+  const scale = loadFn(shared, "scaleGifDurationsToTargetMs");
+  const src = Uint32Array.from([70, 70, 140, 70]); // 0.35s
+  const out = scale(src, 1.0);
+  const sum = [...out].reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(sum - 1000) <= 20, `sum=${sum}`);
+});
+
+t("结果卡会提示加速达上限", () => {
+  assert.ok(vbb.includes("加速达上限"));
 });
 
 console.log(`ok ${n}`);
