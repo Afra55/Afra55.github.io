@@ -8972,12 +8972,50 @@
         if (!item) return;
         item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
         if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
+        try {
+          saveVbbEditDraftsSync();
+        } catch (_) {}
         syncVbbEditUi();
         syncVbbEditPreview();
         applyVbbSeek(0, { keepPlaying: false });
         renderVbbBatchList({ keepSelection: true });
         syncVbbBatchMeta();
         toast("已重置该视频的编辑");
+      }
+
+      /**
+       * 清掉本机自动保存的编辑草稿（localStorage）。
+       * resetCurrent=true 时同时把当前已选视频的裁剪/打点还原成未编辑。
+       */
+      function clearVbbStoredEditDrafts({ resetCurrent = true } = {}) {
+        try {
+          localStorage.removeItem(VBB_EDIT_DRAFT_LS_KEY);
+        } catch (_) {}
+        if (resetCurrent) {
+          if (isVbbBatchMode() && vbbBatchFiles.length) {
+            vbbBatchFiles.forEach((item) => {
+              if (!item) return;
+              item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
+              item.marks = [];
+              item.draftStart = null;
+            });
+          } else if (vbbSourceFile || vbbSingleEdit) {
+            const item = getActiveVbbEditItem();
+            const d = Number(item?.duration) || Number(vbbVideo?.duration) || 0;
+            const w = Number(item?.srcW) || Number(vbbVideo?.videoWidth) || 0;
+            const h = Number(item?.srcH) || Number(vbbVideo?.videoHeight) || 0;
+            vbbSingleEdit = makeVbbEditState(d, w, h);
+            if (item) item.edit = vbbSingleEdit;
+            clearVbbMarks();
+          }
+          syncVbbEditUi();
+          syncVbbEditPreview();
+          renderVbbBatchList({ keepSelection: true });
+          syncVbbBatchMeta();
+          applyVbbSeek(0, { keepPlaying: false });
+        }
+        toast(resetCurrent ? "已清除本机草稿，并重置当前编辑" : "已清除本机草稿");
+        return true;
       }
 
       function clearVbbEditPreviewStyles() {
@@ -14689,6 +14727,30 @@
           setError(vbbError, err?.message || String(err));
           toast(err?.message || "导入失败");
         });
+      });
+      $("#vbb-clear-drafts")?.addEventListener("click", () => {
+        const hasStored = Boolean(readVbbEditDraftPayload()?.items?.length);
+        const dirtyNow = (() => {
+          if (isVbbBatchMode()) {
+            return vbbBatchFiles.some((it) =>
+              it?.edit ? vbbEditIsDirty(it.edit, it.duration, it.srcW, it.srcH) : false
+            );
+          }
+          const it = getActiveVbbEditItem();
+          return it?.edit ? vbbEditIsDirty(it.edit, it.duration, it.srcW, it.srcH) : false;
+        })();
+        if (!hasStored && !dirtyNow) {
+          toast("没有可清除的草稿");
+          return;
+        }
+        if (
+          !window.confirm(
+            "清除本机自动保存的编辑草稿？当前视频的裁剪也会重置。此操作不可撤销。"
+          )
+        ) {
+          return;
+        }
+        clearVbbStoredEditDrafts({ resetCurrent: true });
       });
       // 手机 Safari 常不走 beforeunload：切后台/杀页用 pagehide/visibility 落盘
       const persistVbbDraftsOnLeave = () => {

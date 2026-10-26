@@ -14,6 +14,13 @@
   const MIN_KEEP_GAP = 0.25;
   /** 仅贴片头/片尾时吸附；过大易在抬手时「跳一下」 */
   const SNAP_EDGE_SEC = 0.06;
+  /**
+   * 手机送手抖动：抬手瞬间触点常再偏一点。
+   * 用抬手前约 LIFT_LAG_MS 的位置定黄/红柄，再对齐解码器所见帧。
+   */
+  const LIFT_LAG_MS = 55;
+  /** 帧格吸附（约 30fps），抬手时给「咔」一下的手感 */
+  const FRAME_SNAP_SEC = 1 / 30;
   /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
   const DRAG_SEEK_MS = 72;
   /** 半开片尾：预览与成片共用，约 1 帧（勿只靠 timeupdate，否则会多播） */
@@ -103,7 +110,7 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
-      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">拖到哪一帧，预览/GIF 就对准哪一帧 · 底部播放</p>
+      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">拖到哪一帧，松手吸附对齐 · 预览/GIF 同帧 · 底部播放</p>
     </header>
     <div class="vtrim-editor-body">
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
@@ -355,8 +362,8 @@
     if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
     if (subEl) {
       subEl.textContent = coarseUi()
-        ? "拖到哪一帧，预览/GIF 就对准哪一帧 · 点底部播放"
-        : "拖到哪一帧成片就哪一帧 · 底部/空格播放 · ←/→ 微调 · Delete 删选中段";
+        ? "拖到哪一帧，松手吸附对齐 · 预览/GIF 同帧 · 点底部播放"
+        : "拖到哪一帧成片就哪一帧 · 松手吸附 · 底部/空格播放 · ←/→ 微调 · Delete 删选中段";
       subEl.hidden = false;
     }
 
@@ -918,6 +925,37 @@
       return Math.round(clamp(t, 0, duration) * 1000) / 1000;
     }
 
+    /** 抬手帧格吸附：给手机「咔」一下，且与解码器帧更近 */
+    function snapToFrameGrid(t) {
+      const raw = clamp(t, 0, duration);
+      if (!(duration > 0) || !(FRAME_SNAP_SEC > 0)) return raw;
+      const snapped = Math.round(raw / FRAME_SNAP_SEC) * FRAME_SNAP_SEC;
+      return clamp(snapped, 0, duration);
+    }
+
+    /** 记录拖拽采样，供送手时回看抬手前稳定位置 */
+    function pushDragSample(t) {
+      if (!drag) return;
+      if (!Array.isArray(drag.samples)) drag.samples = [];
+      const at = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+      drag.samples.push({ t: Number(t) || 0, at });
+      if (drag.samples.length > 16) drag.samples.shift();
+    }
+
+    /**
+     * 送手瞬间触点常再偏几像素；取抬手前 LIFT_LAG_MS 的采样，避免黄柄偏移。
+     */
+    function dragSecBeforeLift(fallback) {
+      const samples = drag?.samples;
+      if (!Array.isArray(samples) || !samples.length) return fallback;
+      const now = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+      const targetAt = now - LIFT_LAG_MS;
+      for (let i = samples.length - 1; i >= 0; i--) {
+        if (samples[i].at <= targetAt) return samples[i].t;
+      }
+      return samples[0].t;
+    }
+
     function setStart(t, { preview = true, immediateSeek = false } = {}) {
       const prev = startSec;
       startSec = clamp(t, 0, endSec - MIN_SPAN);
@@ -967,10 +1005,13 @@
       if (!drag) return;
       const kind = drag.kind;
       const cutIndex = drag.cutIndex;
-      // 抬手只用已提交的 start/end，再对齐到浏览器实际显示帧（防预览/成片偏差）
+      // 抬手：先去掉送手抖动 → 帧格吸附 → 再对齐浏览器实际显示帧
       if (kind === "start") {
-        const want = quantizeTrimSec(snapEdgeOnly(startSec, "start"));
+        const preLift = dragSecBeforeLift(startSec);
+        const before = startSec;
+        const want = quantizeTrimSec(snapEdgeOnly(snapToFrameGrid(preLift), "start"));
         startSec = want;
+        if (Math.abs(before - want) > FRAME_SNAP_SEC * 0.4) hapticLight();
         try {
           video.pause();
         } catch (_) {}
@@ -992,18 +1033,41 @@
         paintTimeline();
         updateLabels();
       } else if (kind === "end") {
-        setEnd(quantizeTrimSec(snapEdgeOnly(endSec, "end")), {
+        const preLift = dragSecBeforeLift(endSec);
+        const before = endSec;
+        const want = quantizeTrimSec(snapEdgeOnly(snapToFrameGrid(preLift), "end"));
+        if (Math.abs(before - want) > FRAME_SNAP_SEC * 0.4) hapticLight();
+        setEnd(want, {
           preview: false,
           immediateSeek: false,
         });
+        try {
+          video.pause();
+        } catch (_) {}
+        scrubSeekWanted = null;
+        if (dragSeekTimer) {
+          clearTimeout(dragSeekTimer);
+          dragSeekTimer = 0;
+        }
+        const keep = endKeepSec();
+        try {
+          video.currentTime = keep;
+        } catch (_) {}
+        await waitSeek(video);
+        const shown = Number(video.currentTime) || keep;
+        // 所见对齐片尾半开；偏早则收紧 end，避免成片多出尾帧
+        endSec = quantizeTrimSec(
+          clamp(Math.max(want, shown + END_KEEP_SEC), startSec + MIN_SPAN, duration)
+        );
+        clipCutoutsToWindow();
         await seekPlayheadExact(endKeepSec());
         paintTimeline();
         updateLabels();
       } else if (kind === "window") {
         const span = Math.max(MIN_SPAN, endSec - startSec);
-        startSec = quantizeTrimSec(snapEdgeOnly(startSec, "start"));
+        startSec = quantizeTrimSec(snapEdgeOnly(snapToFrameGrid(startSec), "start"));
         endSec = clamp(startSec + span, startSec + MIN_SPAN, duration);
-        endSec = quantizeTrimSec(snapEdgeOnly(endSec, "end"));
+        endSec = quantizeTrimSec(snapEdgeOnly(snapToFrameGrid(endSec), "end"));
         if (endSec - startSec < MIN_SPAN) endSec = Math.min(duration, startSec + MIN_SPAN);
         clipCutoutsToWindow();
         await seekPlayheadExact(startSec);
@@ -1012,18 +1076,30 @@
       } else if (kind === "cut-start" || kind === "cut-end") {
         const idx = Number(cutIndex);
         if (idx >= 0 && idx < cutouts.length) {
+          const c = cutouts[idx];
+          const live = kind === "cut-end" ? c.end : c.start;
+          const preLift = snapToFrameGrid(dragSecBeforeLift(live));
+          setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", preLift);
           try {
             video.pause();
           } catch (_) {}
+          scrubSeekWanted = null;
+          if (dragSeekTimer) {
+            clearTimeout(dragSeekTimer);
+            dragSeekTimer = 0;
+          }
+          try {
+            video.currentTime = preLift;
+          } catch (_) {}
           await waitSeek(video);
           const shown = Number(video.currentTime);
-          const c = cutouts[idx];
-          const want = kind === "cut-end" ? c.end : c.start;
+          const want = kind === "cut-end" ? cutouts[idx].end : cutouts[idx].start;
           const snapped = Number.isFinite(shown)
             ? kind === "cut-end"
               ? Math.max(want, shown)
               : Math.min(want, shown)
             : want;
+          if (Math.abs(snapped - live) > FRAME_SNAP_SEC * 0.4) hapticLight();
           setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", snapped);
           // 红柄抬手：停在接点保留侧最后一帧（与 GIF 跳切所见一致）
           selectedCutout = idx;
@@ -1539,12 +1615,14 @@
       const kind = hit.kind;
       timeline?.classList.add("is-dragging");
       if (kind === "start") {
-        drag = { kind: "start", pointerId: e.pointerId };
+        drag = { kind: "start", pointerId: e.pointerId, samples: [] };
         handleStart?.setPointerCapture?.(e.pointerId);
+        pushDragSample(t);
         setStart(t);
       } else if (kind === "end") {
-        drag = { kind: "end", pointerId: e.pointerId };
+        drag = { kind: "end", pointerId: e.pointerId, samples: [] };
         handleEnd?.setPointerCapture?.(e.pointerId);
+        pushDragSample(t);
         setEnd(t);
       } else if (kind === "window") {
         drag = {
@@ -1553,6 +1631,7 @@
           originX: e.clientX,
           originStart: startSec,
           originEnd: endSec,
+          samples: [],
         };
         timeline?.classList.add("is-dragging-window");
         windowEl?.setPointerCapture?.(e.pointerId);
@@ -1564,12 +1643,13 @@
         timeline?.classList.remove("is-dragging");
       } else if (kind === "cut-start" || kind === "cut-end") {
         selectedCutout = Number(hit.cutIndex) || 0;
-        drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout };
+        drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout, samples: [] };
         timeline?.setPointerCapture?.(e.pointerId);
+        pushDragSample(t);
         setCutoutEdge(selectedCutout, kind === "cut-end" ? "end" : "start", t);
       } else {
         previewSeek(clamp(t, startSec, endKeepSec()));
-        drag = { kind: "seek", pointerId: e.pointerId };
+        drag = { kind: "seek", pointerId: e.pointerId, samples: [] };
       }
       e.preventDefault();
     }
@@ -1581,10 +1661,12 @@
         startSec = drag.originStart;
         endSec = drag.originEnd;
         shiftWindow(deltaSec);
+        pushDragSample(startSec);
         syncHandleTips();
         return;
       }
       const t = ratioFromClientX(e.clientX) * duration;
+      pushDragSample(t);
       if (drag.kind === "start") setStart(t);
       else if (drag.kind === "end") setEnd(t);
       else if (drag.kind === "cut-start" || drag.kind === "cut-end") {
