@@ -1330,47 +1330,11 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            // 时长不加正垫：半开 [start, start+span)，避免片尾多吃编辑没预览到的帧
+            // 时长不加正垫：半开 [start, start+span)；倍速时必须精确切，禁止 copy 关键帧少切
             const cutDur = span;
-            const cutArgs =
-              startSec > 0.05
-                ? [
-                    "-i",
-                    inName,
-                    "-ss",
-                    String(startSec),
-                    "-t",
-                    String(cutDur),
-                    "-an",
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    "ultrafast",
-                    "-crf",
-                    "18",
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-movflags",
-                    "+faststart",
-                    "-y",
-                    segName,
-                  ]
-                : [
-                    "-i",
-                    inName,
-                    "-ss",
-                    String(startSec),
-                    "-t",
-                    String(cutDur),
-                    "-c",
-                    "copy",
-                    "-avoid_negative_ts",
-                    "make_zero",
-                    "-movflags",
-                    "+faststart",
-                    "-y",
-                    segName,
-                  ];
+            const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
+              accurate: speed > 1.01,
+            });
             const cutCode = await ffmpeg.exec(cutArgs);
             if (aborted()) throw new Error("已取消");
             if (cutCode === 0) {
@@ -1581,6 +1545,73 @@
         const durations = new Uint32Array(n);
         durations.fill(ms);
         return durations;
+      }
+
+      /**
+       * 按目标成片时长（秒）均分逐帧 delay，使 Σdelay ≈ targetSpan。
+       * 用于「压缩时长」：抽帧略少时仍对准目标秒数，避免 30s 设定却播成 20s。
+       */
+      function buildGifDurationsForTargetSpanMs(frameCount, targetSpanSec) {
+        const n = Math.max(1, Math.floor(Number(frameCount) || 1));
+        const target = Math.max(0.05, Number(targetSpanSec) || 0);
+        if (!(target > 0)) return buildUniformGifDurationsMs(n, n / target || 15);
+        const totalCs = Math.max(n, Math.round(target * 100));
+        const durations = new Uint32Array(n);
+        let prev = 0;
+        for (let i = 0; i < n; i += 1) {
+          const at = Math.round((totalCs * (i + 1)) / n);
+          durations[i] = Math.max(1, at - prev) * 10;
+          prev = at;
+        }
+        return durations;
+      }
+
+      /**
+       * 大文件预切段：开了倍速时禁止 -c copy（关键帧会少切，再按原 span 算倍速会多加速）。
+       * 例：要 60s→30s，copy 只出 ~40s，仍按 ×2 → 成片 ~20s。
+       */
+      function buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, { accurate = false } = {}) {
+        const ss = Math.max(0, Number(startSec) || 0);
+        const dur = Math.max(0.05, Number(cutDur) || 0.05);
+        if (accurate || ss > 0.05) {
+          return [
+            "-i",
+            inName,
+            "-ss",
+            String(ss),
+            "-t",
+            String(dur),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-y",
+            segName,
+          ];
+        }
+        return [
+          "-i",
+          inName,
+          "-ss",
+          String(ss),
+          "-t",
+          String(dur),
+          "-c",
+          "copy",
+          "-avoid_negative_ts",
+          "make_zero",
+          "-movflags",
+          "+faststart",
+          "-y",
+          segName,
+        ];
       }
 
       /**
@@ -2105,45 +2136,9 @@
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
             const cutDur = span;
-            const cutArgs =
-              startSec > 0.05
-                ? [
-                    "-i",
-                    inName,
-                    "-ss",
-                    String(startSec),
-                    "-t",
-                    String(cutDur),
-                    "-an",
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    "ultrafast",
-                    "-crf",
-                    "18",
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-movflags",
-                    "+faststart",
-                    "-y",
-                    segName,
-                  ]
-                : [
-                    "-i",
-                    inName,
-                    "-ss",
-                    String(startSec),
-                    "-t",
-                    String(cutDur),
-                    "-c",
-                    "copy",
-                    "-avoid_negative_ts",
-                    "make_zero",
-                    "-movflags",
-                    "+faststart",
-                    "-y",
-                    segName,
-                  ];
+            const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
+              accurate: speed > 1.01,
+            });
             const cutCode = await ffmpeg.exec(cutArgs);
             if (aborted()) throw new Error("已取消");
             if (cutCode === 0) {
@@ -2276,8 +2271,17 @@
                 }
               } catch (_) {}
             }
-            // 一律显式写 delay（毫秒→厘秒）：20→50ms / 15→70ms / 12→80ms 固定均匀
-            if (!durations) durations = buildUniformGifDurationsMs(encodedFrames, fps);
+            // 无合并时按「本段应占成片时长」均分 delay，避免少帧却仍用标称 fps 打点 → 成片偏短
+            if (!durations) {
+              const chunkTarget =
+                chunkFrames > 0 ? effSpanForMerge * (n / Math.max(1, chunkFrames)) : effSpanForMerge;
+              const expectRatio = chunkFrames > 0 ? n / chunkFrames : 1;
+              if (expectRatio >= 0.9 && chunkTarget > 0.05) {
+                durations = buildGifDurationsForTargetSpanMs(encodedFrames, chunkTarget);
+              } else {
+                durations = buildUniformGifDurationsMs(encodedFrames, fps);
+              }
+            }
             const mergedView = view.subarray(0, encodedFrames * stride);
             // gifski.encode 是同步 wasm：先让出一帧给滚动，再编码（此间主线程会卡住，无法刷新 UI）
             report(0.72, `${stageLabel}gifski 编码 ${encodedFrames}帧（手机可能短暂无响应）`);
@@ -10277,14 +10281,28 @@
         return `${m}:${String(r).padStart(2, "0")}${tail}`;
       }
   
-      /** GIF 实际播放时长（秒）：优先按帧数/帧率，否则用编码 span */
+      /** GIF 实际播放时长（秒）：优先编码目标 span（含压缩时长后的成片秒数） */
       function vbbEncodedGifDurationSec(encoded) {
         if (!encoded) return 0;
-        const fps = Math.max(1, Number(encoded.fps) || 15);
+        const span = Number(encoded.span) || 0;
+        const play =
+          Number(encoded.playbackFps) ||
+          (typeof gifEffectivePlaybackFps === "function"
+            ? gifEffectivePlaybackFps(encoded.fps)
+            : 0) ||
+          Number(encoded.fps) ||
+          15;
+        const fps = Math.max(1, play);
         const frames = Number(encoded.frameCount) || 0;
-        if (frames > 1) return (frames - 1) / fps;
-        const span = Number(encoded.span);
-        return span > 0 ? span : 0;
+        // 一圈 ≈ 帧数 × 每帧 delay；与 GIF 厘秒量化后的有效 fps 对齐
+        const byFrames = frames > 0 ? frames / fps : 0;
+        if (span > 0.05 && byFrames > 0) {
+          // 与目标相差不大时用目标（压缩时长到 N 秒）；差太多说明少帧，如实报
+          if (Math.abs(byFrames - span) / span <= 0.14) return span;
+          return byFrames;
+        }
+        if (span > 0.05) return span;
+        return byFrames || 0;
       }
   
       function attachVbbEncodedMeta(clip, encoded) {

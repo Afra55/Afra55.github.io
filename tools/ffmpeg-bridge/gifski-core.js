@@ -297,8 +297,9 @@ function buildFfmpegInputArgs(inputPath, opts) {
     args.push("-ss", String(opts.startSec));
   }
   if (opts.span > 0.05) {
-    const srcSpan = opts.speed > 1.01 ? opts.span * opts.speed : opts.span;
-    args.push("-t", String(srcSpan));
+    // 面板约定：span=片源窗长（秒），speed=倍速。-t 限制读取的片源时长，禁止再 ×speed
+    // （否则 60s×2 去读 → 再 setpts/2，若文件不够长会少读，成片短于「压缩时长到」目标）
+    args.push("-t", String(opts.span));
   }
   return args;
 }

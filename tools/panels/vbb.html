@@ -209,7 +209,7 @@
             <div class="field-row vbb-compact-row" id="vbb-speed-row">
               <span class="vbb-opt-inline">
                 <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
-                <select id="vbb-speed-sec" class="mono meta-input num-choice" title="点击选择压缩目标秒数" aria-label="压缩时长到秒">
+                <select id="vbb-speed-sec" class="mono meta-input num-choice" title="源片超过该秒数则加速播放，使成片约为该时长；更短的不减速拉长" aria-label="压缩时长到秒">
                   <option value="10">10</option>
                   <option value="12">12</option>
                   <option value="15">15</option>
@@ -218,7 +218,7 @@
                   <option value="24">24</option>
                   <option value="30">30</option>
                 </select>
-                <span class="hint tight">秒</span>
+                <span class="hint tight">秒（加速）</span>
               </span>
             </div>
             <div class="field-row vbb-chunk-row vbb-compact-row only-coarse" id="vbb-chunk-row">

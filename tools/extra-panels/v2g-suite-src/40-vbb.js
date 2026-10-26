@@ -2784,14 +2784,28 @@
         return `${m}:${String(r).padStart(2, "0")}${tail}`;
       }
   
-      /** GIF 实际播放时长（秒）：优先按帧数/帧率，否则用编码 span */
+      /** GIF 实际播放时长（秒）：优先编码目标 span（含压缩时长后的成片秒数） */
       function vbbEncodedGifDurationSec(encoded) {
         if (!encoded) return 0;
-        const fps = Math.max(1, Number(encoded.fps) || 15);
+        const span = Number(encoded.span) || 0;
+        const play =
+          Number(encoded.playbackFps) ||
+          (typeof gifEffectivePlaybackFps === "function"
+            ? gifEffectivePlaybackFps(encoded.fps)
+            : 0) ||
+          Number(encoded.fps) ||
+          15;
+        const fps = Math.max(1, play);
         const frames = Number(encoded.frameCount) || 0;
-        if (frames > 1) return (frames - 1) / fps;
-        const span = Number(encoded.span);
-        return span > 0 ? span : 0;
+        // 一圈 ≈ 帧数 × 每帧 delay；与 GIF 厘秒量化后的有效 fps 对齐
+        const byFrames = frames > 0 ? frames / fps : 0;
+        if (span > 0.05 && byFrames > 0) {
+          // 与目标相差不大时用目标（压缩时长到 N 秒）；差太多说明少帧，如实报
+          if (Math.abs(byFrames - span) / span <= 0.14) return span;
+          return byFrames;
+        }
+        if (span > 0.05) return span;
+        return byFrames || 0;
       }
   
       function attachVbbEncodedMeta(clip, encoded) {
