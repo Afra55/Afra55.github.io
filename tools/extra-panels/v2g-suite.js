@@ -8374,10 +8374,30 @@
             span = Math.max(VBB_MIN_SPAN, end - startSec);
             if (startSec + span > duration) span = Math.max(VBB_MIN_SPAN, duration - startSec);
           } else {
-            span = keepRanges.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
+            span = vbbKeepSpanSec(keepRanges);
           }
         }
         return { startSec, span, edit, keepRanges, previewKeeps };
+      }
+
+      /** 多段 keep 总时长（秒）；压缩时长倍速必须按此算，禁止回退原片整段。 */
+      function vbbKeepSpanSec(keeps) {
+        if (!Array.isArray(keeps) || !keeps.length) return 0;
+        return keeps.reduce((s, k) => s + Math.max(0, (Number(k.end) || 0) - (Number(k.start) || 0)), 0);
+      }
+
+      /**
+       * 拼接后上报时长：优先 export 返回值，缺/离谱（≈原片整段）时用 keep 总和。
+       * 若误用原片 duration 算倍速，成片会明显短于「压缩时长」目标。
+       */
+      function vbbMaterializedKeepDuration(reported, keepSpan, fullDuration) {
+        const keep = Math.max(0.05, Number(keepSpan) || 0.05);
+        const rep = Number(reported);
+        const full = Math.max(0, Number(fullDuration) || 0);
+        if (rep > 0.05 && rep <= keep * 1.25 + 1) return rep;
+        // 禁止：缺 duration / 回退成原片整段 → 倍速按长片算、短拼接片被压得过短
+        if (full > 0 && Math.abs(rep - full) < 0.05 && keep < full * 0.9) return keep;
+        return keep;
       }
 
       /**
@@ -8386,6 +8406,7 @@
        */
       async function materializeVbbKeepVideo(file, edit, srcW, srcH, duration, onProgress, ffmpegLease) {
         const keeps = vbbKeepRangesForEncode(edit, duration);
+        const keepSpan = vbbKeepSpanSec(keeps);
         if (keeps.length <= 1) {
           return { file, duration, srcW, srcH, materialized: false };
         }
@@ -8406,7 +8427,7 @@
           } catch (_) {}
           return {
             file: outFile,
-            duration: Number(out.duration) || duration,
+            duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
             srcW: out.srcW || srcW,
             srcH: out.srcH || srcH,
             materialized: true,
@@ -8519,7 +8540,6 @@
             outFile = await pinLocalMediaFile(outFile, () => {});
           }
         } catch (_) {}
-        const totalSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
         for (const p of parts) {
           try {
             await ffmpeg.deleteFile(p);
@@ -8528,7 +8548,13 @@
         try {
           await ffmpeg.deleteFile(merged);
         } catch (_) {}
-        return { file: outFile, duration: totalSpan, srcW: W, srcH: H, materialized: true };
+        return {
+          file: outFile,
+          duration: vbbMaterializedKeepDuration(keepSpan, keepSpan, duration),
+          srcW: W,
+          srcH: H,
+          materialized: true,
+        };
       }
 
       /**
@@ -8690,6 +8716,7 @@
         const fullDur = Math.max(0, Number(duration) || 0);
         if (!fromMark && edit) {
           const keeps = vbbKeepRangesForEncode(edit, duration);
+          const keepSpan = vbbKeepSpanSec(keeps);
           const cuts = vbbNormalizeCutouts(edit.cutouts, edit.trimStart, edit.trimEnd);
           if (keeps.length > 1) {
             const mat = await materializeVbbKeepVideo(
@@ -8703,7 +8730,11 @@
             );
             outFile = mat.file;
             startSec = 0;
-            span = Math.max(VBB_MIN_SPAN, Number(mat.duration) || span);
+            // 片头片尾 + 多段删中间后：span=keep 总和，再交给 speedLimitSec；勿用原片整段
+            span = Math.max(
+              VBB_MIN_SPAN,
+              vbbMaterializedKeepDuration(mat.duration, keepSpan || span, fullDur)
+            );
             outW = mat.srcW;
             outH = mat.srcH;
             cutNote = cuts.length ? `删${cuts.length}段` : "删中间";
@@ -12343,7 +12374,11 @@
                   )
               );
               startSec = 0;
-              span = mat.duration;
+              span = vbbMaterializedKeepDuration(
+                mat.duration,
+                vbbKeepSpanSec(win.keepRanges),
+                item.duration
+              );
               const extM = v2gSourceExt(mat.file);
               const nmM = `mj${i}.${extM}`;
               await ffmpeg.writeFile(nmM, await fetchFileBytes(mat.file));
