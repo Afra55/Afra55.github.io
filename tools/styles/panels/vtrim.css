@@ -230,6 +230,17 @@
 }
 
 .vtrim-timeline.is-dragging-window .vtrim-window { cursor: grabbing; }
+@keyframes vtrim-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.015); }
+  100% { transform: scale(1); }
+}
+.vtrim-timeline.is-pulse {
+  animation: vtrim-pulse 0.28s ease;
+}
+.vtrim-timeline.is-snap .vtrim-handle.is-active {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #6ea8fe) 55%, transparent);
+}
 
 .vtrim-handle {
   position: absolute;

@@ -73,6 +73,16 @@ t("未完成才进草稿，全部成功则清空 localStorage 键", () => {
   assert.ok(src.includes("localStorage.removeItem(VBB_EDIT_DRAFT_LS_KEY)"));
 });
 
+t("无实质编辑不写草稿，避免清除后被 pagehide 复活", () => {
+  assert.ok(src.includes("vbbDraftPayloadWorthSaving"));
+  assert.ok(src.includes("确有编辑内容"));
+  const start = src.indexOf("function collectVbbEditDraftItems");
+  const end = src.indexOf("function saveVbbEditDraftsSync");
+  assert.ok(start > 0 && end > start);
+  const body = src.slice(start, end);
+  assert.ok(body.includes("vbbDraftPayloadWorthSaving"));
+});
+
 t("手机草稿：软匹配名+大小，且 pagehide/visibility 落盘", () => {
   assert.ok(src.includes("vbbFileDraftSoftKey"));
   assert.ok(src.includes("findVbbEditDraftForItem"));
