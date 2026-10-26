@@ -19,8 +19,36 @@
    * 用抬手前约 LIFT_LAG_MS 的位置定黄/红柄，再对齐解码器所见帧。
    */
   const LIFT_LAG_MS = 55;
-  /** 帧格吸附（约 30fps），抬手时给「咔」一下的手感 */
-  const FRAME_SNAP_SEC = 1 / 30;
+  /** 拿不到片源 fps 时的回退帧率 */
+  const DEFAULT_FRAME_FPS = 30;
+  /** 默认帧格（约 30fps）；编辑器内会按真实源 fps 覆盖 */
+  const FRAME_SNAP_SEC = 1 / DEFAULT_FRAME_FPS;
+
+  /**
+   * 规整片源帧率：贴近常见档（24/25/30/60…），异常值丢弃。
+   * @param {number} raw
+   * @returns {number} 0=不可用
+   */
+  function normalizeSourceFps(raw) {
+    const f = Number(raw) || 0;
+    if (!(f >= 5 && f <= 120)) return 0;
+    if (f >= 23.5 && f < 24.5) return 24;
+    if (f >= 24.5 && f <= 25.8) return 25;
+    if (f >= 29.2 && f <= 30.8) return 30;
+    if (f >= 49.5 && f <= 50.5) return 50;
+    if (f >= 59 && f <= 61) return 60;
+    if (Math.abs(f - 12.5) <= 0.35) return 12.5;
+    if (Math.abs(f - 15) <= 0.4) return 15;
+    if (Math.abs(f - 20) <= 0.4) return 20;
+    if (Math.abs(f - 12) <= 0.35) return 12;
+    return Math.round(f * 1000) / 1000;
+  }
+
+  /** @param {number} fps @returns {number} 单帧秒数 */
+  function frameSnapSecFromFps(fps) {
+    const f = normalizeSourceFps(fps) || DEFAULT_FRAME_FPS;
+    return 1 / f;
+  }
   /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
   const DRAG_SEEK_MS = 72;
   /** 半开片尾：预览与成片共用，约 1 帧（勿只靠 timeupdate，否则会多播） */
@@ -331,6 +359,9 @@
 
     let objectUrl = "";
     let duration = 0;
+    /** 松手帧格：默认 30fps，打开后按片源真实 fps 更新 */
+    let sourceFps = DEFAULT_FRAME_FPS;
+    let frameSnapSec = FRAME_SNAP_SEC;
     let startSec = 0;
     let endSec = 0;
     let muted = true;
@@ -934,12 +965,100 @@
       return Math.round(clamp(t, 0, duration) * 1000) / 1000;
     }
 
-    /** 抬手帧格吸附：给手机「咔」一下，且与解码器帧更近 */
+    function applySourceFps(fps) {
+      const n = normalizeSourceFps(fps);
+      if (!(n >= 5)) return false;
+      sourceFps = n;
+      frameSnapSec = frameSnapSecFromFps(n);
+      return true;
+    }
+
+    /** 抬手帧格吸附：按片源真实 fps（拿不到则 30），给「咔」一下 */
     function snapToFrameGrid(t) {
       const raw = clamp(t, 0, duration);
-      if (!(duration > 0) || !(FRAME_SNAP_SEC > 0)) return raw;
-      const snapped = Math.round(raw / FRAME_SNAP_SEC) * FRAME_SNAP_SEC;
+      const step = frameSnapSec > 0 ? frameSnapSec : FRAME_SNAP_SEC;
+      if (!(duration > 0) || !(step > 0)) return raw;
+      const snapped = Math.round(raw / step) * step;
       return clamp(snapped, 0, duration);
+    }
+
+    /**
+     * 后台探测片源 fps（优先共用 detectSourceFps；否则本页 rVFC 轻量估）。
+     * 不阻塞打开；探测到后更新 frameSnapSec，后续松手即用真实格。
+     */
+    async function detectAndApplySourceFps(srcFile) {
+      if (closed) return;
+      let fps = 0;
+      // 优先共用 detectSourceFps（独立 video 探测，不搅乱编辑预览）
+      if (typeof detectSourceFps === "function" && srcFile) {
+        try {
+          fps = Number(await detectSourceFps(srcFile).catch(() => 0)) || 0;
+        } catch (_) {
+          fps = 0;
+        }
+      } else if (video && typeof video.requestVideoFrameCallback === "function") {
+        // 无共用探测时才用编辑器 video 轻量估（会短暂 play，结束后停并回到黄柄）
+        try {
+          const times = [];
+          const wasMuted = video.muted;
+          video.muted = true;
+          await new Promise((resolve) => {
+            const to = setTimeout(resolve, 1800);
+            const onFrame = (_now, meta) => {
+              if (closed) {
+                clearTimeout(to);
+                resolve();
+                return;
+              }
+              times.push(Number(meta?.mediaTime) || 0);
+              if (times.length >= 2 && times[times.length - 1] - times[0] >= 0.45) {
+                clearTimeout(to);
+                resolve();
+                return;
+              }
+              if (times.length >= 180) {
+                clearTimeout(to);
+                resolve();
+                return;
+              }
+              try {
+                video.requestVideoFrameCallback(onFrame);
+              } catch (_) {
+                clearTimeout(to);
+                resolve();
+              }
+            };
+            try {
+              video.requestVideoFrameCallback(onFrame);
+            } catch (_) {
+              clearTimeout(to);
+              resolve();
+              return;
+            }
+            video.play().catch(() => {
+              clearTimeout(to);
+              resolve();
+            });
+          });
+          try {
+            video.pause();
+          } catch (_) {}
+          video.muted = wasMuted;
+          if (times.length >= 3) {
+            const spanT = times[times.length - 1] - times[0];
+            if (spanT > 0.12) {
+              const est = (times.length - 1) / spanT;
+              if (Number.isFinite(est) && est >= 5 && est <= 120) fps = est;
+            }
+          }
+          try {
+            await seekPlayheadExact(startSec);
+          } catch (_) {
+            previewSeek(startSec);
+          }
+        } catch (_) {}
+      }
+      if (!closed) applySourceFps(fps);
     }
 
     /** 靠近红段边也吸一下（删中间接点好对齐） */
@@ -1082,7 +1201,7 @@
         await seekPlayheadExact(startSec);
         paintTimeline();
         updateLabels();
-        flashSnapFeedback("start", Math.abs(before - startSec) > FRAME_SNAP_SEC * 0.35);
+        flashSnapFeedback("start", Math.abs(before - startSec) > frameSnapSec * 0.35);
       } else if (kind === "end") {
         const preLift = dragSecBeforeLift(endSec);
         const before = endSec;
@@ -1113,7 +1232,7 @@
         await seekPlayheadExact(endKeepSec());
         paintTimeline();
         updateLabels();
-        flashSnapFeedback("end", Math.abs(before - endSec) > FRAME_SNAP_SEC * 0.35);
+        flashSnapFeedback("end", Math.abs(before - endSec) > frameSnapSec * 0.35);
       } else if (kind === "window") {
         const beforeStart = startSec;
         const span = Math.max(MIN_SPAN, endSec - startSec);
@@ -1126,7 +1245,7 @@
         await seekPlayheadExact(startSec);
         paintTimeline();
         updateLabels();
-        flashSnapFeedback("window", Math.abs(beforeStart - startSec) > FRAME_SNAP_SEC * 0.35);
+        flashSnapFeedback("window", Math.abs(beforeStart - startSec) > frameSnapSec * 0.35);
       } else if (kind === "cut-start" || kind === "cut-end") {
         const idx = Number(cutIndex);
         if (idx >= 0 && idx < cutouts.length) {
@@ -1168,7 +1287,7 @@
               : Math.max(startSec, Number(cut.start) - 0.05);
             await seekPlayheadExact(joinAt);
           }
-          flashSnapFeedback(kind === "cut-end" ? "end" : "start", Math.abs(snapped - live) > FRAME_SNAP_SEC * 0.35);
+          flashSnapFeedback(kind === "cut-end" ? "end" : "start", Math.abs(snapped - live) > frameSnapSec * 0.35);
         } else {
           clipCutoutsToWindow();
           paintCutouts();
@@ -1941,6 +2060,11 @@
         const srcW = video.videoWidth || 1;
         const srcH = video.videoHeight || 1;
         const initial = opts.initial || {};
+        // 优先用调用方传入的片源 fps；否则后台探测，拿不到保持 30
+        const knownFps = Number(opts.srcFps) || Number(initial.srcFps) || 0;
+        if (!applySourceFps(knownFps)) {
+          detectAndApplySourceFps(file).catch(() => {});
+        }
         startSec = clamp(Number(initial.trimStart) || 0, 0, Math.max(0, duration - MIN_SPAN));
         endSec = clamp(Number(initial.trimEnd) || duration, startSec + MIN_SPAN, duration || MIN_SPAN);
         cutouts = normalizeCutoutsList(initial.cutouts || [], startSec, endSec);
@@ -2229,8 +2353,12 @@
     keepRangesForEncode,
     previewSeekForKeepRanges,
     exportKeepVideo,
+    normalizeSourceFps,
+    frameSnapSecFromFps,
+    DEFAULT_FRAME_FPS,
     END_KEEP_SEC,
     START_KEEP_SEC,
     ENCODE_BOUND_PAD_SEC,
+    FRAME_SNAP_SEC,
   };
 })();
