@@ -35,8 +35,8 @@ t("快捷键：空格播放、Delete 删段、方向键微调进度", () => {
 });
 
 t("删中间模式提示可核对接点", () => {
-  assert.ok(vtrim.includes("播放核对接点（与成片一致）"));
-  assert.ok(vtrim.includes("预览=成片"));
+  assert.ok(vtrim.includes("播放接点") || vtrim.includes("播放核对接点"));
+  assert.ok(vtrim.includes("与成片一致") || vtrim.includes("预览=成片"));
 });
 
 console.log(`vbb-editor-ux.test.js: ${n} passed`);

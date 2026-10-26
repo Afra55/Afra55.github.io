@@ -313,6 +313,11 @@
   .vtrim-preview-wrap { height: min(72vw, 360px); min-height: 200px; }
   .vtrim-timeline, .vtrim-filmstrip { height: 72px; }
   .vtrim-handle { width: 32px; margin-left: -16px; }
+  .vtrim-handle::before { inset: -12px -10px; }
+  .vtrim-cutout-handle {
+    width: 18px;
+    margin-left: -9px;
+  }
 }
 
 .vtrim-tap-play {
@@ -418,8 +423,31 @@
   z-index: 5;
   border-radius: 3px;
 }
+/* 手机扩大红柄命中区（视觉仍细，点按≥44px） */
+.vtrim-cutout-handle::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: 50%;
+  width: 44px;
+  margin-left: -22px;
+}
 .vtrim-cutout-handle-start { left: 0; }
 .vtrim-cutout-handle-end { left: 100%; }
+.vtrim-cut-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: 0.35rem;
+  touch-action: manipulation;
+}
+.vtrim-cut-tools .secondary-btn,
+.vtrim-cut-tools .ghost-btn {
+  min-height: 2.6rem;
+  flex: 1 1 auto;
+}
 .vtrim-stage.is-mode-cut .vtrim-window { cursor: grab; }
 .vtrim-stage.is-mode-crop .vtrim-preview-wrap { cursor: default; }
 .vtrim-stage.is-mode-trim .vtrim-preview-wrap,
@@ -650,12 +678,32 @@ body.vtrim-editor-open {
   }
   .vtrim-editor-body .vtrim-timeline,
   .vtrim-editor-body .vtrim-filmstrip {
-    height: 52px;
+    /* 手机编辑层加高胶片，黄柄/红段更好拖 */
+    height: 68px;
+  }
+  .vtrim-editor-body .vtrim-cut-tools .secondary-btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-height: 2.85rem;
+    font-size: 0.92rem;
+  }
+  .vtrim-editor-body .vtrim-cut-tools .ghost-btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-height: 2.6rem;
+  }
+  .vtrim-editor-body .vtrim-nudge .ghost-btn {
+    min-height: 2.5rem;
+    font-size: 0.82rem;
+    padding: 0.45rem 0.15rem;
   }
   .vtrim-transport {
     flex-wrap: wrap;
     gap: 0.3rem 0.45rem;
     align-items: center;
+  }
+  .vtrim-transport .secondary-btn,
+  .vtrim-transport .ghost-btn {
+    min-height: 2.5rem;
+    min-width: 4.5rem;
   }
   .vtrim-transport .mono,
   .vtrim-transport .hint {

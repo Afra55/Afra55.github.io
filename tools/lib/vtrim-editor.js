@@ -103,7 +103,7 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
-      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">预览与成片对齐 · 空格播放 · Delete 删选中段</p>
+      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">预览与成片对齐 · 点画面播放 · 拖黄柄/红段</p>
     </header>
     <div class="vtrim-editor-body">
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
@@ -160,6 +160,7 @@
           </div>
           <div class="btn-row tool-actions vtrim-cut-tools" id="${p("cut-tools")}" hidden aria-label="删中间">
             <button type="button" class="secondary-btn" id="${p("cut-add")}" title="从进度条当前位置起添加删除区（当前帧=删除起点；红柄两端所见帧都会删）">添加删除段</button>
+            <button type="button" class="secondary-btn" id="${p("cut-play-join")}" title="跳到删段接点前并播放，核对是否与成片一致">播放接点</button>
             <button type="button" class="ghost-btn" id="${p("cut-del")}" title="删除当前选中的删除段" disabled>删选中段</button>
             <button type="button" class="ghost-btn" id="${p("cut-clear")}" title="清空全部删除段">清空</button>
           </div>
@@ -295,8 +296,16 @@
     const trimNudge = $("trim-nudge");
     const cutTools = $("cut-tools");
     const cutAddBtn = $("cut-add");
+    const cutPlayJoinBtn = $("cut-play-join");
     const cutDelBtn = $("cut-del");
     const cutClearBtn = $("cut-clear");
+    const coarseUi = () => {
+      try {
+        return window.matchMedia("(pointer: coarse), (max-width: 640px)").matches;
+      } catch (_) {
+        return true;
+      }
+    };
     const downloadBtn = $("download");
     const exportProgress = $("export-progress");
     const exportFill = $("export-fill");
@@ -346,7 +355,9 @@
     const fileName = String(opts.title || file.name || "视频");
     if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
     if (subEl) {
-      subEl.textContent = "预览与成片对齐 · 空格播放 · ←/→ 微调 · Delete 删选中段";
+      subEl.textContent = coarseUi()
+        ? "预览与成片对齐 · 点画面播放 · 拖黄柄/红段"
+        : "预览与成片对齐 · 空格播放 · ←/→ 微调 · Delete 删选中段";
       subEl.hidden = false;
     }
 
@@ -365,12 +376,19 @@
       if (trimNudge) trimNudge.hidden = editMode !== "trim";
       if (cutTools) cutTools.hidden = editMode !== "cut";
       if (modeHint) {
+        const phone = coarseUi();
         modeHint.textContent =
           editMode === "crop"
-            ? "拖绿框 · 双击重置 · 空格播放"
+            ? phone
+              ? "拖绿框裁切 · 双击重置 · 点画面播放"
+              : "拖绿框 · 双击重置 · 空格播放"
             : editMode === "cut"
-              ? "拖进度到起点 → 添加删除段 → 拖红柄 · 播放核对接点（与成片一致）· Delete 删选中"
-              : "拖黄柄裁片头片尾 · 空格播放 · ←/→ 微调进度";
+              ? phone
+                ? "拖进度到起点 → 添加删除段 → 拖红柄 · 点「播放接点」核对"
+                : "拖进度到起点 → 添加删除段 → 拖红柄 · 播放核对接点 · Delete 删选中"
+              : phone
+                ? "拖黄柄裁片头片尾 · 点画面播放 · 下方可微调"
+                : "拖黄柄裁片头片尾 · 空格播放 · ←/→ 微调进度";
       }
       syncCropBoxVisibility();
       stage?.classList.toggle("is-mode-crop", editMode === "crop");
@@ -476,14 +494,36 @@
       if (selectedCutout < 0) selectedCutout = cutouts.length - 1;
       syncCutoutUi();
       updateLabels();
-      // 落到删段前约 0.4s，空格播放即可核对接点（与成片同一套 keep）
+      // 落到删段前约 0.4s，方便点「播放接点」/点画面核对接点（与成片同一套 keep）
       const keeps = keepRangesLocal();
       const prevKeep = [...keeps].reverse().find((k) => Number(k.end) <= a + 0.08);
       const joinAt = prevKeep
         ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.4)
         : Math.max(startSec, a - 0.4);
       previewSeek(joinAt, { throttle: false });
-      toast("已添加删除段 · 拖红柄精调 · 空格播放核对接点");
+      hapticLight();
+      toast(coarseUi() ? "已添加 · 拖红柄精调 · 可点「播放接点」" : "已添加删除段 · 拖红柄精调 · 空格播放核对接点");
+    }
+
+    /** 手机主路径：跳到选中/首个删段接点前并播放，核对预览=成片 */
+    async function playCutJoinPreview() {
+      const cuts = normalizeCutoutsList(cutouts, startSec, endSec);
+      if (!cuts.length) {
+        toast("还没有删除段");
+        return;
+      }
+      const keeps = keepRangesLocal();
+      const cut =
+        selectedCutout >= 0 && selectedCutout < cuts.length ? cuts[selectedCutout] : cuts[0];
+      const prevKeep = [...keeps].reverse().find((k) => Number(k.end) <= Number(cut.start) + 0.08);
+      const joinAt = prevKeep
+        ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.45)
+        : Math.max(startSec, Number(cut.start) - 0.45);
+      playWindowLooping = false;
+      await seekPlayheadExact(joinAt);
+      hapticLight();
+      await video.play().catch(() => {});
+      toast("正在播放接点（与成片一致）");
     }
 
     function deleteSelectedCutout() {
@@ -1451,6 +1491,9 @@
     bindNudgeHold($("nudge-end-m"), () => setEnd(endSec - 0.1, { immediateSeek: true }), "end");
     bindNudgeHold($("nudge-end-p"), () => setEnd(endSec + 0.1, { immediateSeek: true }), "end");
     cutAddBtn?.addEventListener("click", () => addCutoutAtPlayhead());
+    cutPlayJoinBtn?.addEventListener("click", () => {
+      playCutJoinPreview().catch((err) => toast(err?.message || String(err) || "播放失败"));
+    });
     cutDelBtn?.addEventListener("click", () => deleteSelectedCutout());
     cutClearBtn?.addEventListener("click", () => {
       clearAllCutouts();
