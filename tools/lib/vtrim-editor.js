@@ -103,7 +103,7 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
-      <p class="hint tight vtrim-editor-sub" id="${p("sub")}" hidden>裁切画面 · 修剪时长 · 删中间</p>
+      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">预览与成片对齐 · 空格播放 · Delete 删选中段</p>
     </header>
     <div class="vtrim-editor-body">
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
@@ -345,7 +345,10 @@
 
     const fileName = String(opts.title || file.name || "视频");
     if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
-    if (subEl) subEl.textContent = "裁切画面 · 修剪时长 · 删中间（可反复改，互相融合）";
+    if (subEl) {
+      subEl.textContent = "预览与成片对齐 · 空格播放 · ←/→ 微调 · Delete 删选中段";
+      subEl.hidden = false;
+    }
 
     function syncActiveHandleUi() {
       handleStart?.classList.toggle("is-active", activeHandle === "start" && editMode !== "cut");
@@ -364,10 +367,10 @@
       if (modeHint) {
         modeHint.textContent =
           editMode === "crop"
-            ? "拖绿框 · 双击重置"
+            ? "拖绿框 · 双击重置 · 空格播放"
             : editMode === "cut"
-              ? "拖进度到要删的起点 · 点「添加删除段」· 红柄两端所见帧及其之间都会删"
-              : "拖黄柄裁片头片尾";
+              ? "拖进度到起点 → 添加删除段 → 拖红柄 · 播放核对接点（与成片一致）· Delete 删选中"
+              : "拖黄柄裁片头片尾 · 空格播放 · ←/→ 微调进度";
       }
       syncCropBoxVisibility();
       stage?.classList.toggle("is-mode-crop", editMode === "crop");
@@ -473,8 +476,14 @@
       if (selectedCutout < 0) selectedCutout = cutouts.length - 1;
       syncCutoutUi();
       updateLabels();
-      previewSeek(a, { throttle: false });
-      toast("已从当前进度添加删除段 · 拖红柄；两端所见帧都会删");
+      // 落到删段前约 0.4s，空格播放即可核对接点（与成片同一套 keep）
+      const keeps = keepRangesLocal();
+      const prevKeep = [...keeps].reverse().find((k) => Number(k.end) <= a + 0.08);
+      const joinAt = prevKeep
+        ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.4)
+        : Math.max(startSec, a - 0.4);
+      previewSeek(joinAt, { throttle: false });
+      toast("已添加删除段 · 拖红柄精调 · 空格播放核对接点");
     }
 
     function deleteSelectedCutout() {
@@ -1273,9 +1282,42 @@
     }
 
     function onKeyDown(e) {
+      const tag = String(e.target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
       if (e.key === "Escape") {
         e.preventDefault();
         finish(false);
+        return;
+      }
+      // 空格：播放/暂停（视频编辑器习惯）
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        togglePlay().catch(() => {});
+        return;
+      }
+      // Delete / Backspace：删选中删除段
+      if ((e.key === "Delete" || e.key === "Backspace") && editMode === "cut") {
+        if (selectedCutout >= 0 && selectedCutout < cutouts.length) {
+          e.preventDefault();
+          deleteSelectedCutout();
+          toast("已删除选中段");
+        }
+        return;
+      }
+      // ←/→：微调播放进度；Shift 步进 1s，默认 0.1s（不改黄/红柄，避免误触）
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        if (!duration) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 1 : 0.1;
+        const dir = e.key === "ArrowLeft" ? -1 : 1;
+        const cur = Number(video.currentTime) || startSec;
+        const next = clamp(cur + dir * step, startSec, endKeepSec());
+        try {
+          video.pause();
+        } catch (_) {}
+        previewSeek(next, { throttle: false });
+        updateLabels();
+        paintTimeline();
       }
     }
 
