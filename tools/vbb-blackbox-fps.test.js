@@ -132,17 +132,19 @@ assert(
   assert(/from currentTime|a = t|当前进度/.test(vtrimEd) && /addCutoutAtPlayhead/.test(vtrimEd), "删中间从播放头起");
   assert(/cutStart\s*-\s*END_KEEP_SEC/.test(vtrimEd) && /END_KEEP_SEC\s*\+\s*START_KEEP_SEC/.test(vtrimEd), "删中间须用 END/START_KEEP 对齐红柄");
   assert(/trimStart:\s*quantizeTrimSec\(startSec\)/.test(vtrimEd), "完成编辑须提交黄柄所见 trimStart，勿预加 START_KEEP");
-  assert(/function keepRangesForEncode/.test(vtrimEd), "成片须有 keepRangesForEncode（可略多删）");
+  assert(/function keepRangesForEncode/.test(vtrimEd), "成片须有 keepRangesForEncode（≡预览所见）");
   assert(/下载编辑后的视频/.test(vtrimEd) && /function exportKeepVideo/.test(vtrimEd), "编辑层须能下载编辑后 mp4");
   assert(/正在导出/.test(vtrimEd) && /export-progress/.test(vtrimEd), "下载编辑后视频须有进度反馈");
   assert(/keepRangesForEncode\(edit, duration\)/.test(vtrimEd), "exportKeepVideo 须按成片 keep 切片");
   {
     const n = vtrimEd.match(/function normalizeCutouts\([\s\S]*?return merged;\s*\}/);
     const k = vtrimEd.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?return keeps;\s*\}/);
-    const ke = vtrimEd.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?return keeps;\s*\}/);
+    const ke = vtrimEd.match(
+      /function keepRangesForEncode\(edit, duration\) \{[\s\S]*?return keepRangesFromEdit\(edit, duration\);\s*\}/
+    );
     assert(n && k && ke, "须能抽出 keepRangesFromEdit / keepRangesForEncode");
     const fns = new Function(`
-      const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2, END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 3 / 30;
+      const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2, END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 0;
       ${n[0]}
       ${k[0]}
       ${ke[0]}
@@ -156,12 +158,11 @@ assert(
     assert(ks[1].end <= 10 - 1 / 25 + 1e-6, "末段仍半开片尾");
     const enc = fns.keepRangesForEncode({ trimStart: 0, trimEnd: 10, cutouts: [{ start: 2, end: 4 }] }, 10);
     assert(enc.length === 2, "成片 keep 仍两段");
-    assert(enc[0].start >= ks[0].start + 1 / 50 - 1e-6, "成片片头须 ≥ 预览 + START_KEEP（略多删）");
-    assert(enc[0].end <= ks[0].end + 1e-6, "成片上一段终点不得越过预览（不可少删）");
-    assert(enc[1].start >= ks[1].start - 1e-6, "成片下一段起点不得早于预览（不可少删）");
-    // 边界垫 ≥ 3/30，删段接点不易多带帧
-    assert(enc[0].end <= 2 - 1 / 25 - 3 / 30 + 1e-6, "成片上一段须含 bound pad");
-    assert(enc[1].start >= 4 + 1 / 25 + 1 / 50 + 3 / 30 - 1e-6, "成片下一段须含 bound pad");
+    assert(Math.abs(enc[0].start - ks[0].start) < 1e-9, "成片片头 ≡ 预览（所见即所得）");
+    assert(Math.abs(enc[0].end - ks[0].end) < 1e-9, "成片上一段终点 ≡ 预览");
+    assert(Math.abs(enc[1].start - ks[1].start) < 1e-9, "成片下一段起点 ≡ 预览");
+    assert(Math.abs(enc[0].start - 0) < 1e-9, "片头对齐黄柄 0");
+
     const p = vtrimEd.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start;\s*\}/);
     assert(p, "须能抽出 previewSeekForKeepRanges");
     const seekFn = new Function(`

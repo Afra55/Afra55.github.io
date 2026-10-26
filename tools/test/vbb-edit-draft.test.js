@@ -33,15 +33,18 @@ t("取消后解锁 UI，且用任务世代避免旧 finally 误清", () => {
   assert.ok(/abortVbb \|\| String\(err/.test(src));
 });
 
-t("含编辑草稿保存/恢复/导出", () => {
+t("含编辑草稿保存/恢复/导出/清除", () => {
   assert.ok(src.includes("saveVbbEditDraftsSync"));
   assert.ok(src.includes("restoreVbbEditDrafts"));
   assert.ok(src.includes("downloadVbbEditDraftsJson"));
+  assert.ok(src.includes("clearVbbStoredEditDrafts"));
   assert.ok(src.includes("devtools-vbb-edit-drafts-json-v1"));
   assert.ok(panel.includes('id="vbb-export-edits"'));
   assert.ok(panel.includes("备份编辑"));
   assert.ok(panel.includes('id="vbb-import-edits"'));
   assert.ok(panel.includes("导入备份"));
+  assert.ok(panel.includes('id="vbb-clear-drafts"'));
+  assert.ok(panel.includes("清除草稿"));
 });
 
 t("含 JSON 备份导入还原", () => {
@@ -78,8 +81,9 @@ t("手机草稿：软匹配名+大小，且 pagehide/visibility 落盘", () => {
   assert.ok(src.includes("别刷新，直接再点「一键黑盒」"));
 });
 
-t("DevToolsVbb 暴露紧急导出与强制取消", () => {
+t("DevToolsVbb 暴露紧急导出/清除与强制取消", () => {
   assert.ok(src.includes("exportEditDrafts:"));
+  assert.ok(src.includes("clearEditDrafts:"));
   assert.ok(src.includes("forceAbort:"));
   assert.ok(src.includes("getEditDraftPayload:"));
 });

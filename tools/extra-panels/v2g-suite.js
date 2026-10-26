@@ -8234,38 +8234,12 @@
       }
 
       /**
-       * 成片/拼接/外预览播放共用：可比黄柄略多删，避免 ffmpeg 少删。
-       * 外预览必须与此一致，否则会出现「预览已跳过、GIF 接点多几帧」。
+       * 成片/拼接/外预览播放共用 ≡ 黄/红柄所见（所见即所得，不多删垫）。
        */
       function vbbKeepRangesForEncode(edit, duration) {
         const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
         if (typeof fn === "function") return fn(edit, duration);
-        const preview = vbbKeepRangesFromEdit(edit, duration);
-        if (!preview.length) return preview;
-        const startKeep =
-          Number(window.DevToolsVtrimEditor?.START_KEEP_SEC) > 0
-            ? window.DevToolsVtrimEditor.START_KEEP_SEC
-            : 1 / 50;
-        const endKeep =
-          Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
-            ? window.DevToolsVtrimEditor.END_KEEP_SEC
-            : 1 / 25;
-        const boundPad =
-          Number(window.DevToolsVtrimEditor?.ENCODE_BOUND_PAD_SEC) > 0
-            ? window.DevToolsVtrimEditor.ENCODE_BOUND_PAD_SEC
-            : 3 / 30;
-        const padStart = Math.max(startKeep, boundPad / 2);
-        const padCut = Math.max(endKeep, boundPad);
-        return preview.map((k, i) => {
-          let start = Number(k.start) || 0;
-          let end = Number(k.end) || 0;
-          if (i === 0) start = Math.min(end - 0.05, start + padStart);
-          if (i > 0) start = Math.min(end - 0.05, start + padCut * 0.5);
-          if (i === preview.length - 1) {
-            end = Math.max(start + 0.05, end - Math.max(0, padCut - endKeep));
-          }
-          return { start, end };
-        });
+        return vbbKeepRangesFromEdit(edit, duration);
       }
 
       function vbbEditIsDirty(edit, duration, srcW, srcH) {
@@ -8998,12 +8972,50 @@
         if (!item) return;
         item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
         if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
+        try {
+          saveVbbEditDraftsSync();
+        } catch (_) {}
         syncVbbEditUi();
         syncVbbEditPreview();
         applyVbbSeek(0, { keepPlaying: false });
         renderVbbBatchList({ keepSelection: true });
         syncVbbBatchMeta();
         toast("已重置该视频的编辑");
+      }
+
+      /**
+       * 清掉本机自动保存的编辑草稿（localStorage）。
+       * resetCurrent=true 时同时把当前已选视频的裁剪/打点还原成未编辑。
+       */
+      function clearVbbStoredEditDrafts({ resetCurrent = true } = {}) {
+        try {
+          localStorage.removeItem(VBB_EDIT_DRAFT_LS_KEY);
+        } catch (_) {}
+        if (resetCurrent) {
+          if (isVbbBatchMode() && vbbBatchFiles.length) {
+            vbbBatchFiles.forEach((item) => {
+              if (!item) return;
+              item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
+              item.marks = [];
+              item.draftStart = null;
+            });
+          } else if (vbbSourceFile || vbbSingleEdit) {
+            const item = getActiveVbbEditItem();
+            const d = Number(item?.duration) || Number(vbbVideo?.duration) || 0;
+            const w = Number(item?.srcW) || Number(vbbVideo?.videoWidth) || 0;
+            const h = Number(item?.srcH) || Number(vbbVideo?.videoHeight) || 0;
+            vbbSingleEdit = makeVbbEditState(d, w, h);
+            if (item) item.edit = vbbSingleEdit;
+            clearVbbMarks();
+          }
+          syncVbbEditUi();
+          syncVbbEditPreview();
+          renderVbbBatchList({ keepSelection: true });
+          syncVbbBatchMeta();
+          applyVbbSeek(0, { keepPlaying: false });
+        }
+        toast(resetCurrent ? "已清除本机草稿，并重置当前编辑" : "已清除本机草稿");
+        return true;
       }
 
       function clearVbbEditPreviewStyles() {
@@ -14715,6 +14727,30 @@
           setError(vbbError, err?.message || String(err));
           toast(err?.message || "导入失败");
         });
+      });
+      $("#vbb-clear-drafts")?.addEventListener("click", () => {
+        const hasStored = Boolean(readVbbEditDraftPayload()?.items?.length);
+        const dirtyNow = (() => {
+          if (isVbbBatchMode()) {
+            return vbbBatchFiles.some((it) =>
+              it?.edit ? vbbEditIsDirty(it.edit, it.duration, it.srcW, it.srcH) : false
+            );
+          }
+          const it = getActiveVbbEditItem();
+          return it?.edit ? vbbEditIsDirty(it.edit, it.duration, it.srcW, it.srcH) : false;
+        })();
+        if (!hasStored && !dirtyNow) {
+          toast("没有可清除的草稿");
+          return;
+        }
+        if (
+          !window.confirm(
+            "清除本机自动保存的编辑草稿？当前视频的裁剪也会重置。此操作不可撤销。"
+          )
+        ) {
+          return;
+        }
+        clearVbbStoredEditDrafts({ resetCurrent: true });
       });
       // 手机 Safari 常不走 beforeunload：切后台/杀页用 pagehide/visibility 落盘
       const persistVbbDraftsOnLeave = () => {
