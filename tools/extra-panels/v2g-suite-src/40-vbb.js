@@ -1327,11 +1327,22 @@
           const editor = await ensureVbbVtrimEditor();
           pauseVbbPreview();
           // open 同步挂上真正编辑层后再撤 boot，中间不露底层
+          // 不阻塞打开：已有 srcFps 立刻用；否则后台探测写入 item，编辑器内也会自探
+          const openSrcFps = Number(item.srcFps) || 0;
+          if (!(openSrcFps >= 5) && typeof detectSourceFps === "function" && item.file) {
+            detectSourceFps(item.file)
+              .then((f) => {
+                const n = Number(f) || 0;
+                if (n >= 5) item.srcFps = n;
+              })
+              .catch(() => {});
+          }
           const openP = editor.open({
             file: item.file,
             title: item.file.name || "视频",
             initial: draft,
             initialMode: "trim",
+            srcFps: openSrcFps,
           });
           editorOpened = true;
           boot.remove();
