@@ -20,6 +20,11 @@
   const END_KEEP_SEC = 1 / 25;
   /** 半开片头：成片少收约半帧，避免预览落点后 ffmpeg 又多吸前几帧 */
   const START_KEEP_SEC = 1 / 50;
+  /**
+   * 成片/预览播放共用边界垫：约 2 帧@30fps。
+   * 旧 pad（1/25）在 30fps 源上不够稳，删段接点易多带几帧进 GIF。
+   */
+  const ENCODE_BOUND_PAD_SEC = 2 / 30;
   let uidSeq = 0;
 
   function toast(msg) {
@@ -401,8 +406,12 @@
       return merged;
     }
 
+    /**
+     * 编辑内播放/跳切与成片同一套 keep（keepRangesForEncode），
+     * 避免「预览已跳过、GIF 接点又多几帧」。
+     */
     function keepRangesLocal() {
-      return keepRangesFromEdit(
+      return keepRangesForEncode(
         { trimStart: startSec, trimEnd: endSec, cutouts },
         duration || endSec
       );
@@ -1767,14 +1776,15 @@
   }
 
   /**
-   * 成片/导出用 keep：在预览 keep 上再略收片头、略扩删段，宁可多删一帧不可偏后少删。
+   * 成片/导出/编辑预览播放共用 keep：比黄/红柄所见再略收，宁可多删不可少删。
+   * 预览播放也走这套，保证拖片头片尾 + 多段删中间所见即所得。
    */
   function keepRangesForEncode(edit, duration) {
     const preview = keepRangesFromEdit(edit, duration);
     if (!preview.length) return preview;
-    // 成片比预览再多收约半帧片头 + 删段两侧各多 ~半帧（对抗 -ss/关键帧少删）
-    const padStart = START_KEEP_SEC;
-    const padCut = END_KEEP_SEC;
+    // 片头至少 START_KEEP；删段两侧至少 ~2 帧@30fps（对抗 trim/-ss 边界多带帧）
+    const padStart = Math.max(START_KEEP_SEC, ENCODE_BOUND_PAD_SEC / 2);
+    const padCut = Math.max(END_KEEP_SEC, ENCODE_BOUND_PAD_SEC);
     const d = Math.max(0, Number(duration) || 0);
     const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
     const trimEnd = Math.min(d, Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || d));
@@ -1782,7 +1792,9 @@
     if (!cuts.length) {
       const k0 = preview[0];
       const start = Math.min(k0.end - 0.05, k0.start + padStart);
-      return [{ start, end: k0.end }];
+      // 片尾再收一丁点，与有删段路径一致，避免成片多吃黄柄后 1～2 帧
+      const end = Math.max(start + 0.05, k0.end - Math.max(0, padCut - END_KEEP_SEC));
+      return [{ start, end }];
     }
     const keeps = [];
     let cursor = Math.min(trimEnd - 0.05, trimStart + padStart);
@@ -1875,8 +1887,14 @@
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
     const parts = [];
     const trySlice = async (k, i, useTrim) => {
-      const start = Math.max(0, Number(k.start) || 0);
-      const end = Math.max(start + 0.05, Number(k.end) || 0);
+      let start = Math.max(0, Number(k.start) || 0);
+      let end = Math.max(start + 0.05, Number(k.end) || 0);
+      if (!useTrim) {
+        // -ss/-t 回退不如 trim 准：两端再收约 1 帧，避免删段接点少删
+        const bias = 1 / 30;
+        start = Math.min(end - 0.05, start + bias);
+        end = Math.max(start + 0.05, end - bias);
+      }
       const dur = Math.max(0.05, end - start);
       const out = `keep${i}.mp4`;
       // trim=start:end 半开 [start,end)，与 keep 一致；失败再退 -ss/-t
@@ -1980,5 +1998,6 @@
     exportKeepVideo,
     END_KEEP_SEC,
     START_KEEP_SEC,
+    ENCODE_BOUND_PAD_SEC,
   };
 })();

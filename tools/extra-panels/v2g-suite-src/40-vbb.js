@@ -654,7 +654,10 @@
         return keeps;
       }
 
-      /** 成片/拼接用：可比预览略多删，避免 ffmpeg 少删 */
+      /**
+       * 成片/拼接/外预览播放共用：可比黄柄略多删，避免 ffmpeg 少删。
+       * 外预览必须与此一致，否则会出现「预览已跳过、GIF 接点多几帧」。
+       */
       function vbbKeepRangesForEncode(edit, duration) {
         const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
         if (typeof fn === "function") return fn(edit, duration);
@@ -668,11 +671,20 @@
           Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
             ? window.DevToolsVtrimEditor.END_KEEP_SEC
             : 1 / 25;
+        const boundPad =
+          Number(window.DevToolsVtrimEditor?.ENCODE_BOUND_PAD_SEC) > 0
+            ? window.DevToolsVtrimEditor.ENCODE_BOUND_PAD_SEC
+            : 2 / 30;
+        const padStart = Math.max(startKeep, boundPad / 2);
+        const padCut = Math.max(endKeep, boundPad);
         return preview.map((k, i) => {
           let start = Number(k.start) || 0;
           let end = Number(k.end) || 0;
-          if (i === 0) start = Math.min(end - 0.05, start + startKeep);
-          if (i > 0) start = Math.min(end - 0.05, start + endKeep * 0.5);
+          if (i === 0) start = Math.min(end - 0.05, start + padStart);
+          if (i > 0) start = Math.min(end - 0.05, start + padCut * 0.5);
+          if (i === preview.length - 1) {
+            end = Math.max(start + 0.05, end - Math.max(0, padCut - endKeep));
+          }
           return { start, end };
         });
       }
@@ -872,17 +884,16 @@
           if (abortVbb || abortV2g) throw new Error("已取消");
           onProgress?.(0.08 + (i / keeps.length) * 0.5, `应用删中间 ${i + 1}/${keeps.length}`);
           const k = keeps[i];
-          const start = Math.max(0, Number(k.start) || 0);
-          const end = Math.max(start + 0.05, Number(k.end) || 0);
-          const dur = Math.max(0.05, end - start);
+          const start0 = Math.max(0, Number(k.start) || 0);
+          const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // 优先 trim 半开；失败再 -ss/-t
+          // 优先 trim 半开；失败再 -ss/-t（回退路径两端再收 1 帧，防少删）
           let args = [
             "-i",
             inName,
             "-an",
             "-vf",
-            `trim=start=${start}:end=${end},setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`,
+            `trim=start=${start0}:end=${end0},setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`,
             "-c:v",
             "libx264",
             "-preset",
@@ -898,6 +909,10 @@
           ];
           let code = await ffmpeg.exec(args).catch(() => 1);
           if (code !== 0) {
+            const bias = 1 / 30;
+            const start = Math.min(end0 - 0.05, start0 + bias);
+            const end = Math.max(start + 0.05, end0 - bias);
+            const dur = Math.max(0.05, end - start);
             args = [
               "-i",
               inName,
@@ -1365,9 +1380,9 @@
             clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
             if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
             saveVbbEditDraftsSync();
-            // 外预览落点与编辑内 keep 首帧一致（预览 keep，非成片加垫）
-            const previewKeeps = vbbKeepRangesFromEdit(item.edit, item.duration);
-            const seekTo = Number(previewKeeps[0]?.start);
+            // 外预览落点与成片 keep 首帧一致（所见即所得）
+            const encodeKeeps = vbbKeepRangesForEncode(item.edit, item.duration);
+            const seekTo = Number(encodeKeeps[0]?.start);
             applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
               keepPlaying: false,
             });
@@ -1468,7 +1483,8 @@
         if (isVbbManualMode() || vbbBusy || !vbbVideo?.src || vbbEditSkipBusy) return;
         const item = getActiveVbbEditItem();
         if (!item?.edit || !vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) return;
-        const keeps = vbbKeepRangesFromEdit(item.edit, item.duration);
+        // 与成片同一套 keep，预览接点才不会比 GIF 少跳/多带帧
+        const keeps = vbbKeepRangesForEncode(item.edit, item.duration);
         if (!keeps.length) return;
         const t = Number.isFinite(mediaTime) ? mediaTime : Number(vbbVideo.currentTime) || 0;
         const next = vbbPreviewSeekForKeepRanges(keeps, t, { paused: vbbVideo.paused });
@@ -1542,8 +1558,8 @@
               ? vbbDraftStart
               : completeVbbMarks()[0]?.start ?? 0;
         } else {
-          const previewKeeps = vbbKeepRangesFromEdit(edit, item.duration);
-          seekTo = Number(previewKeeps[0]?.start);
+          const encodeKeeps = vbbKeepRangesForEncode(edit, item.duration);
+          seekTo = Number(encodeKeeps[0]?.start);
           if (!Number.isFinite(seekTo)) seekTo = Number(edit.trimStart) || 0;
         }
         applyVbbSeek(seekTo, { keepPlaying: false });
@@ -7068,8 +7084,8 @@
           };
           clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
           if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
-          const previewKeeps = vbbKeepRangesFromEdit(item.edit, item.duration);
-          const seekTo = Number(previewKeeps[0]?.start);
+          const encodeKeeps = vbbKeepRangesForEncode(item.edit, item.duration);
+          const seekTo = Number(encodeKeeps[0]?.start);
           applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
             keepPlaying: false,
           });
