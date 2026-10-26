@@ -29,7 +29,7 @@ function loadKeepFns() {
   vm.runInNewContext(
     `
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
-    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 3 / 30;
+    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 0;
     ${norm[0]}
     ${fromEdit[0]}
     ${forEnc[0]}
@@ -61,7 +61,7 @@ t("外预览播放/落点走 vbbKeepRangesForEncode", () => {
   assert.ok(/vbbKeepRangesForEncode\(item\.edit,\s*item\.duration\)/.test(vbb));
 });
 
-t("成片 keep ⊆ 预览 keep：多段删中间两端更紧，不越过预览", () => {
+t("成片 keep ≡ 预览 keep（所见即所得）", () => {
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = {
     trimStart: 5,
@@ -75,24 +75,22 @@ t("成片 keep ⊆ 预览 keep：多段删中间两端更紧，不越过预览",
   const preview = keepRangesFromEdit(edit, 100);
   const enc = keepRangesForEncode(edit, 100);
   assert.ok(preview.length >= 3 && enc.length === preview.length);
-  assert.ok(enc[0].start >= preview[0].start - 1e-9, "成片片头不得早于预览");
   for (let i = 0; i < enc.length; i++) {
-    assert.ok(enc[i].start >= preview[i].start - 1e-9, `段${i} 起点`);
-    assert.ok(enc[i].end <= preview[i].end + 1e-9, `段${i} 终点不得越过预览`);
+    assert.ok(Math.abs(enc[i].start - preview[i].start) < 1e-9, `段${i} 起点一致`);
+    assert.ok(Math.abs(enc[i].end - preview[i].end) < 1e-9, `段${i} 终点一致`);
   }
-  // 边界垫加严后，接点应比旧 1/25 更收（约 3 帧@30fps）
-  assert.ok(enc[0].end <= 20 - 1 / 25 - 3 / 30 + 1e-6, "上一段终点须含 bound pad");
-  assert.ok(enc[1].start >= 30 + 1 / 25 + 1 / 50 + 3 / 30 - 1e-6, "下一段起点须含 bound pad");
+  assert.ok(Math.abs(enc[0].start - 5) < 1e-9, "片头=黄柄");
 });
 
-t("仅裁片头片尾：成片片头加垫且片尾不越过预览半开", () => {
+t("仅裁片头片尾：成片起点=黄柄，片尾半开与预览一致", () => {
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = { trimStart: 10, trimEnd: 40, cutouts: [] };
   const preview = keepRangesFromEdit(edit, 60);
   const enc = keepRangesForEncode(edit, 60);
   assert.strictEqual(enc.length, 1);
-  assert.ok(enc[0].start >= preview[0].start + 1 / 50 - 1e-6);
-  assert.ok(enc[0].end <= preview[0].end + 1e-6);
+  assert.ok(Math.abs(enc[0].start - preview[0].start) < 1e-9);
+  assert.ok(Math.abs(enc[0].end - preview[0].end) < 1e-9);
+  assert.ok(Math.abs(enc[0].start - 10) < 1e-9);
 });
 
 t("exportKeepVideo -ss 回退须两端再收，防少删", () => {
@@ -103,10 +101,8 @@ t("exportKeepVideo -ss 回退须两端再收，防少删", () => {
   assert.ok(/bias\s*=\s*1\s*\/\s*30/.test(exp));
 });
 
-t("暴露 ENCODE_BOUND_PAD_SEC 供外层 fallback", () => {
-  assert.ok(vtrim.includes("ENCODE_BOUND_PAD_SEC"));
-  const api = vtrim.slice(vtrim.indexOf("window.DevToolsVtrimEditor ="));
-  assert.ok(api.includes("ENCODE_BOUND_PAD_SEC"));
+t("ENCODE_BOUND_PAD_SEC=0（取消成片多删垫）", () => {
+  assert.ok(/ENCODE_BOUND_PAD_SEC\s*=\s*0/.test(vtrim));
 });
 
 console.log(`vbb-preview-encode-align.test.js: ${n} passed`);

@@ -45,7 +45,7 @@ function loadVtrimKeepFns() {
     const MIN_CUTOUT = 0.2;
     const END_KEEP_SEC = 1 / 25;
     const START_KEEP_SEC = 1 / 50;
-    const ENCODE_BOUND_PAD_SEC = 3 / 30;
+    const ENCODE_BOUND_PAD_SEC = 0;
     ${norm[0]}
     ${fromEdit[0]}
     ${forEnc[0]}

@@ -16,8 +16,8 @@ function t(name, fn) {
 
 t("粗指针/窄屏用触控文案，不主推键盘", () => {
   assert.ok(vtrim.includes("pointer: coarse"));
-  assert.ok(vtrim.includes("点底部播放"));
-  assert.ok(vtrim.includes("拖黄柄/红段"));
+  assert.ok(vtrim.includes("点底部播放") || vtrim.includes("底部播放"));
+  assert.ok(vtrim.includes("拖到哪一帧") || vtrim.includes("拖黄柄"));
 });
 
 t("预览轻点不 toggle 播放（只用底部按钮）", () => {

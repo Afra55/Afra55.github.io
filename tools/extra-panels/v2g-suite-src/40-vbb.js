@@ -655,38 +655,12 @@
       }
 
       /**
-       * 成片/拼接/外预览播放共用：可比黄柄略多删，避免 ffmpeg 少删。
-       * 外预览必须与此一致，否则会出现「预览已跳过、GIF 接点多几帧」。
+       * 成片/拼接/外预览播放共用 ≡ 黄/红柄所见（所见即所得，不多删垫）。
        */
       function vbbKeepRangesForEncode(edit, duration) {
         const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
         if (typeof fn === "function") return fn(edit, duration);
-        const preview = vbbKeepRangesFromEdit(edit, duration);
-        if (!preview.length) return preview;
-        const startKeep =
-          Number(window.DevToolsVtrimEditor?.START_KEEP_SEC) > 0
-            ? window.DevToolsVtrimEditor.START_KEEP_SEC
-            : 1 / 50;
-        const endKeep =
-          Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
-            ? window.DevToolsVtrimEditor.END_KEEP_SEC
-            : 1 / 25;
-        const boundPad =
-          Number(window.DevToolsVtrimEditor?.ENCODE_BOUND_PAD_SEC) > 0
-            ? window.DevToolsVtrimEditor.ENCODE_BOUND_PAD_SEC
-            : 3 / 30;
-        const padStart = Math.max(startKeep, boundPad / 2);
-        const padCut = Math.max(endKeep, boundPad);
-        return preview.map((k, i) => {
-          let start = Number(k.start) || 0;
-          let end = Number(k.end) || 0;
-          if (i === 0) start = Math.min(end - 0.05, start + padStart);
-          if (i > 0) start = Math.min(end - 0.05, start + padCut * 0.5);
-          if (i === preview.length - 1) {
-            end = Math.max(start + 0.05, end - Math.max(0, padCut - endKeep));
-          }
-          return { start, end };
-        });
+        return vbbKeepRangesFromEdit(edit, duration);
       }
 
       function vbbEditIsDirty(edit, duration, srcW, srcH) {

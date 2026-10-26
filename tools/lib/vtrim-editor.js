@@ -16,15 +16,15 @@
   const SNAP_EDGE_SEC = 0.06;
   /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
   const DRAG_SEEK_MS = 72;
-  /** 半开片尾：拖拽预览与停播共用，约 1 帧（勿只靠 timeupdate，否则会多播） */
+  /** 半开片尾：预览与成片共用，约 1 帧（勿只靠 timeupdate，否则会多播） */
   const END_KEEP_SEC = 1 / 25;
-  /** 半开片头：成片少收约半帧，避免预览落点后 ffmpeg 又多吸前几帧 */
-  const START_KEEP_SEC = 1 / 50;
   /**
-   * 成片/预览播放共用边界垫：约 3 帧@30fps。
-   * 对抗 HTML5 解码落点与 ffmpeg fps 抽帧在接点多带 1～2 帧。
+   * 删段后下一段片头半开：预览与成片共用（红柄终点所见帧已删干净再开播）。
+   * 不做「再多删几帧」——手机拖到哪一帧，预览/GIF 就对准哪一帧。
    */
-  const ENCODE_BOUND_PAD_SEC = 3 / 30;
+  const START_KEEP_SEC = 1 / 50;
+  /** @deprecated 已取消「成片多删垫」；保留导出字段以免旧调用报错 */
+  const ENCODE_BOUND_PAD_SEC = 0;
   let uidSeq = 0;
 
   function toast(msg) {
@@ -103,7 +103,7 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
-      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">预览与成片对齐 · 底部播放 · 拖黄柄/红段</p>
+      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">拖到哪一帧，预览/GIF 就对准哪一帧 · 底部播放</p>
     </header>
     <div class="vtrim-editor-body">
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
@@ -355,8 +355,8 @@
     if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
     if (subEl) {
       subEl.textContent = coarseUi()
-        ? "预览与成片对齐 · 点底部播放 · 拖黄柄/红段"
-        : "预览与成片对齐 · 底部/空格播放 · ←/→ 微调 · Delete 删选中段";
+        ? "拖到哪一帧，预览/GIF 就对准哪一帧 · 点底部播放"
+        : "拖到哪一帧成片就哪一帧 · 底部/空格播放 · ←/→ 微调 · Delete 删选中段";
       subEl.hidden = false;
     }
 
@@ -427,8 +427,7 @@
     }
 
     /**
-     * 编辑内播放/跳切与成片同一套 keep（keepRangesForEncode），
-     * 避免「预览已跳过、GIF 接点又多几帧」。
+     * 编辑内播放/跳切 = 成片 keep = 黄/红柄所见（所见即所得，不多删垫）。
      */
     function keepRangesLocal() {
       return keepRangesForEncode(
@@ -723,11 +722,11 @@
       const keepSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
       const cutN = normalizeCutoutsList(cutouts, startSec, endSec).length;
       if (rangeLabel) {
-        // keepSpan 已是成片 keep（与 GIF 同源），标明「成片」避免和外框黄柄混淆
+        // keepSpan 与 GIF 同源；黄柄即成片外框（所见即所得）
         if (cutN > 0) {
-          rangeLabel.textContent = `成片 ${formatClock(keepSpan)}（外框 ${formatClock(startSec)}–${formatClock(endSec)} · 删 ${cutN} 段）`;
+          rangeLabel.textContent = `保留 ${formatClock(keepSpan)}（${formatClock(startSec)}–${formatClock(endSec)} · 删 ${cutN} 段）`;
         } else {
-          rangeLabel.textContent = `成片 ${formatClock(keepSpan)}（外框 ${formatClock(startSec)}–${formatClock(endSec)}）`;
+          rangeLabel.textContent = `保留 ${formatClock(keepSpan)}（${formatClock(startSec)}–${formatClock(endSec)}）`;
         }
       }
       syncHandleTips();
@@ -988,7 +987,7 @@
         const shown = Number(video.currentTime) || want;
         startSec = quantizeTrimSec(clamp(Math.max(want, shown), 0, endSec - MIN_SPAN));
         clipCutoutsToWindow();
-        // 抬手后落到成片 keep 起点（与 GIF 首帧对齐），勿停在黄柄裸 trimStart
+        // 抬手停在黄柄所见帧（= GIF 首帧），所见即所得
         await seekPlayheadExact(startSec);
         paintTimeline();
         updateLabels();
@@ -1026,7 +1025,7 @@
               : Math.min(want, shown)
             : want;
           setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", snapped);
-          // 红柄抬手：停在接点保留侧（成片 keep），便于核对 GIF 跳切
+          // 红柄抬手：停在接点保留侧最后一帧（与 GIF 跳切所见一致）
           selectedCutout = idx;
           const keeps = keepRangesLocal();
           const cut = normalizeCutoutsList(cutouts, startSec, endSec)[idx];
@@ -1187,8 +1186,7 @@
         Math.abs(crop.h - srcH) < 2;
       const cuts = normalizeCutoutsList(cutouts, startSec, endSec);
       return {
-        // 提交黄/红柄所见时间（勿在此加 START_KEEP，否则外预览/成片比编辑内偏后）
-        // 片头半开只在 keepRangesForEncode / 切片时施加，成片可略多删不可少删
+        // 提交黄/红柄所见时间：预览与 GIF 都按此精确对齐（所见即所得）
         trimStart: quantizeTrimSec(startSec),
         trimEnd: quantizeTrimSec(endSec),
         cutouts: cuts.map((c) => ({
@@ -1801,7 +1799,7 @@
         syncMuteUi();
         syncAspectUi();
         syncModeUi();
-        // 首帧落到成片 keep 起点，与 GIF 对齐（勿停在未加垫的 trimStart）
+        // 首帧 = 黄柄所见 = GIF 首帧
         seekPlayheadExact(startSec).catch(() => previewSeek(startSec));
         paintTimeline();
         updateLabels();
@@ -1849,8 +1847,9 @@
   }
 
   /**
-   * 预览用 keep：与黄/红柄所见对齐（编辑内 = 外预览）。
-   * 成片请用 keepRangesForEncode（可略多删一帧，避免 ffmpeg seek 少删）。
+   * 预览/成片共用 keep：严格按黄柄 trim + 红柄 cutouts。
+   * 手机拖到哪一帧，预览播哪一帧，GIF 就切哪一帧（所见即所得）。
+   * 半开 END_KEEP/START_KEEP 仅表达「红柄所见帧闭区间删除」，预览与成片同一套。
    */
   function keepRangesFromEdit(edit, duration) {
     const d = Math.max(0, Number(duration) || 0);
@@ -1862,7 +1861,7 @@
     for (const c of cuts) {
       // 闭区间：红柄 cut.start / cut.end 所见帧都要删。
       // 上一段按片尾半开在 start 前收掉 END_KEEP，避免 HTML5 播到 start 仍画出该帧；
-      // 下一段从 end+END_KEEP 起再加 START_KEEP 片头半开，避免 seek 回退少删。
+      // 下一段从 end+END_KEEP 起再加 START_KEEP 片头半开，与成片一致。
       const cutStart = Math.max(trimStart, Number(c.start) || 0);
       const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
       const keepEnd = Math.max(cursor + 0.05, cutStart - END_KEEP_SEC);
@@ -1880,43 +1879,11 @@
   }
 
   /**
-   * 成片/导出/编辑预览播放共用 keep：比黄/红柄所见再略收，宁可多删不可少删。
-   * 预览播放也走这套，保证拖片头片尾 + 多段删中间所见即所得。
+   * 成片/导出 keep ≡ 预览 keep（黄/红柄所见）。
+   * 禁止再叠「多删几帧」垫，否则手机拖拽位置与 GIF 对不齐。
    */
   function keepRangesForEncode(edit, duration) {
-    const preview = keepRangesFromEdit(edit, duration);
-    if (!preview.length) return preview;
-    // 片头至少 START_KEEP；删段两侧至少 ~3 帧@30fps（对抗 trim/-ss / fps 抽帧多带）
-    const padStart = Math.max(START_KEEP_SEC, ENCODE_BOUND_PAD_SEC / 2);
-    const padCut = Math.max(END_KEEP_SEC, ENCODE_BOUND_PAD_SEC);
-    const d = Math.max(0, Number(duration) || 0);
-    const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
-    const trimEnd = Math.min(d, Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || d));
-    const cuts = normalizeCutouts(edit?.cutouts, trimStart, trimEnd);
-    if (!cuts.length) {
-      const k0 = preview[0];
-      const start = Math.min(k0.end - 0.05, k0.start + padStart);
-      // 片尾再收一丁点，与有删段路径一致，避免成片多吃黄柄后 1～2 帧
-      const end = Math.max(start + 0.05, k0.end - Math.max(0, padCut - END_KEEP_SEC));
-      return [{ start, end }];
-    }
-    const keeps = [];
-    let cursor = Math.min(trimEnd - 0.05, trimStart + padStart);
-    for (const c of cuts) {
-      const cutStart = Math.max(trimStart, Number(c.start) || 0);
-      const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
-      const keepEnd = Math.max(cursor + 0.05, cutStart - END_KEEP_SEC - padCut);
-      const resumeAt = Math.min(trimEnd, cutEnd + END_KEEP_SEC + START_KEEP_SEC + padCut);
-      if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
-      cursor = Math.max(cursor, resumeAt);
-    }
-    if (trimEnd > cursor + 0.02) keeps.push({ start: cursor, end: trimEnd });
-    if (!keeps.length) keeps.push({ start: cursor, end: Math.max(cursor + 0.05, trimEnd - END_KEEP_SEC) });
-    const last = keeps[keeps.length - 1];
-    if (last && last.end >= trimEnd - 0.001) {
-      last.end = Math.max(last.start + 0.05, last.end - END_KEEP_SEC);
-    }
-    return keeps;
+    return keepRangesFromEdit(edit, duration);
   }
 
   /**
@@ -1993,11 +1960,8 @@
     const trySlice = async (k, i, useTrim) => {
       let start = Math.max(0, Number(k.start) || 0);
       let end = Math.max(start + 0.05, Number(k.end) || 0);
-      // trim 与 -ss 均再收尾约半帧，避免抽帧踩到 keep.end 边界帧
-      const endBias = 1 / 60;
-      end = Math.max(start + 0.05, end - endBias);
+      // trim 路径严格按 keep（所见即所得）；仅 -ss 回退时两端略收，对抗关键帧
       if (!useTrim) {
-        // -ss/-t 回退不如 trim 准：两端再收约 1 帧，避免删段接点少删
         const bias = 1 / 30;
         start = Math.min(end - 0.05, start + bias);
         end = Math.max(start + 0.05, end - bias);
