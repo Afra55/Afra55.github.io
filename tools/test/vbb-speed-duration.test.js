@@ -111,4 +111,25 @@ t("结果卡会提示加速达上限", () => {
   assert.ok(vbb.includes("加速达上限"));
 });
 
+t("无倍速不强制对准目标秒数（避免均匀 delay 被拆成 60/70 顿挫）", () => {
+  assert.ok(shared.includes("forceAlignSpan = alignTarget && speed > 1.01"));
+  assert.ok(shared.includes("仍用均匀，保流畅"));
+  assert.ok(shared.includes("buildUniformGifDurationsMs(encodedFrames, fps)"));
+});
+
+t("无倍速大文件预切仍可用 copy（行为与改前一致）", () => {
+  // accurate 仅 speed>1.01；startSec≈0 且无倍速 → copy
+  const fn = loadFn(shared, "buildVbbSegmentCutArgs");
+  const args = fn("in.mp4", "seg.mp4", 0, 90, { accurate: false });
+  assert.ok(args.includes("copy"));
+  assert.ok(!args.includes("libx264"));
+});
+
+t("均匀 fps delay 全帧等长（可走 canPassFps）", () => {
+  const fn = loadFn(shared, "buildUniformGifDurationsMs");
+  const d = fn(450, 15);
+  assert.ok(d.every((x) => x === d[0]), "须全等 delay");
+  assert.strictEqual(d[0], 70);
+});
+
 console.log(`ok ${n}`);

@@ -1594,7 +1594,7 @@
       }
 
       /** 压缩时长 → 倍速；超上限则封顶并标记 capped */
-      function resolveBlackboxSpeed(spanSec, speedLimitSec, maxSpeed = V2G_BLACKBOX_MAX_SPEED) {
+      function resolveBlackboxSpeed(spanSec, speedLimitSec, maxSpeed) {
         const span = Math.max(0, Number(spanSec) || 0);
         const lim = Math.max(0, Number(speedLimitSec) || 0);
         const cap = Math.max(1, Number(maxSpeed) || V2G_BLACKBOX_MAX_SPEED);
@@ -2307,25 +2307,34 @@
               chunkFrames > 0 ? effSpanForMerge * (n / Math.max(1, chunkFrames)) : effSpanForMerge;
             const expectRatio = chunkFrames > 0 ? n / chunkFrames : 1;
             const alignTarget = expectRatio >= 0.9 && chunkTarget > 0.05;
+            // 仅「压缩时长」倍速时才强行对准目标秒数；无倍速保持均匀 fps delay（可走 canPassFps，避免 60/70 交替顿挫）
+            const forceAlignSpan = alignTarget && speed > 1.01;
             if (allowStillMerge) {
               try {
                 const merged = mergeStaticFramesInPlace(view, n, stride, fps);
                 if (merged && merged.count >= 2) {
                   encodedFrames = merged.count;
-                  // 合并后仍对准本段目标时长，避免少帧+静止合并后成片再短一截
-                  durations = alignTarget
-                    ? scaleGifDurationsToTargetMs(merged.durations, chunkTarget)
-                    : merged.durations;
+                  durations =
+                    forceAlignSpan
+                      ? scaleGifDurationsToTargetMs(merged.durations, chunkTarget)
+                      : merged.durations;
                   vbbLog(`[vbb-phase] gifski 静止帧合并 ${n} → ${merged.count} 帧（省 ${merged.saved} 帧）`);
                 }
               } catch (_) {}
             }
-            // 无合并时按「本段应占成片时长」均分 delay，避免少帧却仍用标称 fps 打点 → 成片偏短
             if (!durations) {
-              if (alignTarget) {
-                durations = buildGifDurationsForTargetSpanMs(encodedFrames, chunkTarget);
+              const uniform = buildUniformGifDurationsMs(encodedFrames, fps);
+              if (!forceAlignSpan) {
+                durations = uniform;
               } else {
-                durations = buildUniformGifDurationsMs(encodedFrames, fps);
+                const uniformSum = [...uniform].reduce((a, b) => a + b, 0);
+                const targetMs = chunkTarget * 1000;
+                // 均匀 delay 已接近目标：仍用均匀，保流畅；偏差大才按目标秒数重切 delay
+                if (Math.abs(uniformSum - targetMs) / Math.max(targetMs, 1) <= 0.1) {
+                  durations = uniform;
+                } else {
+                  durations = buildGifDurationsForTargetSpanMs(encodedFrames, chunkTarget);
+                }
               }
             }
             const mergedView = view.subarray(0, encodedFrames * stride);
