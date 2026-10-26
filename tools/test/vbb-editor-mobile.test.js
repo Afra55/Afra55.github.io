@@ -16,8 +16,17 @@ function t(name, fn) {
 
 t("粗指针/窄屏用触控文案，不主推键盘", () => {
   assert.ok(vtrim.includes("pointer: coarse"));
-  assert.ok(vtrim.includes("点画面播放") || vtrim.includes("点底部播放"));
+  assert.ok(vtrim.includes("点底部播放"));
   assert.ok(vtrim.includes("拖黄柄/红段"));
+});
+
+t("预览轻点不 toggle 播放（只用底部按钮）", () => {
+  const block = vtrim.slice(
+    vtrim.indexOf("previewWrap?.addEventListener(\"pointerup\""),
+    vtrim.indexOf("previewWrap?.addEventListener(\"pointercancel\"")
+  );
+  assert.ok(block.includes("不 toggle") || block.includes("不 toggle 播放"));
+  assert.ok(!block.includes("togglePlay"));
 });
 
 t("删中间「跳到接点」只 seek、不 video.play", () => {

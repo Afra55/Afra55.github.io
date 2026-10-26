@@ -139,6 +139,13 @@
   align-items: center;
   gap: 0.55rem 0.75rem;
 }
+.vtrim-transport .secondary-btn.is-attn {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #6ea8ff) 75%, transparent);
+  animation: vtrim-play-attn 0.9s ease-in-out 2;
+}
+@keyframes vtrim-play-attn {
+  50% { transform: scale(1.04); }
+}
 
 .vtrim-clock { font-size: 0.92rem; }
 .vtrim-nudge {

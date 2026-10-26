@@ -103,7 +103,7 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
-      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">预览与成片对齐 · 点画面播放 · 拖黄柄/红段</p>
+      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">预览与成片对齐 · 底部播放 · 拖黄柄/红段</p>
     </header>
     <div class="vtrim-editor-body">
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
@@ -355,8 +355,8 @@
     if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
     if (subEl) {
       subEl.textContent = coarseUi()
-        ? "预览与成片对齐 · 点画面播放 · 拖黄柄/红段"
-        : "预览与成片对齐 · 空格播放 · ←/→ 微调 · Delete 删选中段";
+        ? "预览与成片对齐 · 点底部播放 · 拖黄柄/红段"
+        : "预览与成片对齐 · 底部/空格播放 · ←/→ 微调 · Delete 删选中段";
       subEl.hidden = false;
     }
 
@@ -379,15 +379,15 @@
         modeHint.textContent =
           editMode === "crop"
             ? phone
-              ? "拖绿框裁切 · 双击重置 · 点画面播放"
-              : "拖绿框 · 双击重置 · 空格播放"
+              ? "拖绿框裁切 · 双击重置 · 点底部播放"
+              : "拖绿框 · 双击重置 · 底部/空格播放"
             : editMode === "cut"
               ? phone
                 ? "拖进度到起点 → 添加删除段 → 拖红柄 · 「跳到接点」后点底部播放"
                 : "拖进度到起点 → 添加删除段 → 拖红柄 · 「跳到接点」后点播放核对"
               : phone
-                ? "拖黄柄裁片头片尾 · 点画面播放 · 下方可微调"
-                : "拖黄柄裁片头片尾 · 空格播放 · ←/→ 微调进度";
+                ? "拖黄柄裁片头片尾 · 点底部播放 · 下方可微调"
+                : "拖黄柄裁片头片尾 · 底部/空格播放 · ←/→ 微调进度";
       }
       syncCropBoxVisibility();
       stage?.classList.toggle("is-mode-crop", editMode === "crop");
@@ -524,6 +524,9 @@
       } catch (_) {}
       await seekPlayheadExact(joinAt);
       hapticLight();
+      // 提醒点底部播放（不自动播）
+      playBtn?.classList.add("is-attn");
+      window.setTimeout(() => playBtn?.classList.remove("is-attn"), 1600);
       toast("已跳到接点前 · 点底部播放核对");
     }
 
@@ -1668,7 +1671,7 @@
     window.addEventListener("pointercancel", onCropPointerUp);
 
     previewWrap?.addEventListener("pointerdown", (e) => {
-      // 拖绿框/把手时不触发播放切换；点按再 toggle，左右滑才 scrub
+      // 预览只负责左右滑 scrub；播放/暂停只用底部按钮（手机误触点画面不再开播）
       if (!duration || e.target?.closest?.(".vtrim-crop-box")) return;
       previewScrub = {
         pointerId: e.pointerId,
@@ -1699,9 +1702,8 @@
     });
     previewWrap?.addEventListener("pointerup", (e) => {
       if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
-      const wasMove = previewScrub.moved;
       previewScrub = null;
-      if (!wasMove) togglePlay().catch(() => {});
+      // 轻点画面不 toggle 播放——与「只点底部播放」一致
     });
     previewWrap?.addEventListener("pointercancel", () => {
       previewScrub = null;
