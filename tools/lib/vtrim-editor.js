@@ -21,10 +21,10 @@
   /** 半开片头：成片少收约半帧，避免预览落点后 ffmpeg 又多吸前几帧 */
   const START_KEEP_SEC = 1 / 50;
   /**
-   * 成片/预览播放共用边界垫：约 2 帧@30fps。
-   * 旧 pad（1/25）在 30fps 源上不够稳，删段接点易多带几帧进 GIF。
+   * 成片/预览播放共用边界垫：约 3 帧@30fps。
+   * 对抗 HTML5 解码落点与 ffmpeg fps 抽帧在接点多带 1～2 帧。
    */
-  const ENCODE_BOUND_PAD_SEC = 2 / 30;
+  const ENCODE_BOUND_PAD_SEC = 3 / 30;
   let uidSeq = 0;
 
   function toast(msg) {
@@ -723,10 +723,11 @@
       const keepSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
       const cutN = normalizeCutoutsList(cutouts, startSec, endSec).length;
       if (rangeLabel) {
+        // keepSpan 已是成片 keep（与 GIF 同源），标明「成片」避免和外框黄柄混淆
         if (cutN > 0) {
-          rangeLabel.textContent = `保留 ${formatClock(keepSpan)}（外框 ${formatClock(startSec)}–${formatClock(endSec)} · 删 ${cutN} 段）`;
+          rangeLabel.textContent = `成片 ${formatClock(keepSpan)}（外框 ${formatClock(startSec)}–${formatClock(endSec)} · 删 ${cutN} 段）`;
         } else {
-          rangeLabel.textContent = `保留 ${formatClock(Math.max(0, endSec - startSec))}（${formatClock(startSec)}–${formatClock(endSec)}）`;
+          rangeLabel.textContent = `成片 ${formatClock(keepSpan)}（外框 ${formatClock(startSec)}–${formatClock(endSec)}）`;
         }
       }
       syncHandleTips();
@@ -987,14 +988,18 @@
         const shown = Number(video.currentTime) || want;
         startSec = quantizeTrimSec(clamp(Math.max(want, shown), 0, endSec - MIN_SPAN));
         clipCutoutsToWindow();
-        previewSeek(startSec, { throttle: false });
+        // 抬手后落到成片 keep 起点（与 GIF 首帧对齐），勿停在黄柄裸 trimStart
+        await seekPlayheadExact(startSec);
         paintTimeline();
         updateLabels();
       } else if (kind === "end") {
         setEnd(quantizeTrimSec(snapEdgeOnly(endSec, "end")), {
-          preview: true,
-          immediateSeek: true,
+          preview: false,
+          immediateSeek: false,
         });
+        await seekPlayheadExact(endKeepSec());
+        paintTimeline();
+        updateLabels();
       } else if (kind === "window") {
         const span = Math.max(MIN_SPAN, endSec - startSec);
         startSec = quantizeTrimSec(snapEdgeOnly(startSec, "start"));
@@ -1002,7 +1007,7 @@
         endSec = quantizeTrimSec(snapEdgeOnly(endSec, "end"));
         if (endSec - startSec < MIN_SPAN) endSec = Math.min(duration, startSec + MIN_SPAN);
         clipCutoutsToWindow();
-        previewSeek(startSec, { throttle: false });
+        await seekPlayheadExact(startSec);
         paintTimeline();
         updateLabels();
       } else if (kind === "cut-start" || kind === "cut-end") {
@@ -1021,6 +1026,17 @@
               : Math.min(want, shown)
             : want;
           setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", snapped);
+          // 红柄抬手：停在接点保留侧（成片 keep），便于核对 GIF 跳切
+          selectedCutout = idx;
+          const keeps = keepRangesLocal();
+          const cut = normalizeCutoutsList(cutouts, startSec, endSec)[idx];
+          if (cut && keeps.length) {
+            const prevKeep = [...keeps].reverse().find((k) => Number(k.end) <= Number(cut.start) + 0.08);
+            const joinAt = prevKeep
+              ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.05)
+              : Math.max(startSec, Number(cut.start) - 0.05);
+            await seekPlayheadExact(joinAt);
+          }
         } else {
           clipCutoutsToWindow();
           paintCutouts();
@@ -1785,7 +1801,8 @@
         syncMuteUi();
         syncAspectUi();
         syncModeUi();
-        previewSeek(startSec);
+        // 首帧落到成片 keep 起点，与 GIF 对齐（勿停在未加垫的 trimStart）
+        seekPlayheadExact(startSec).catch(() => previewSeek(startSec));
         paintTimeline();
         updateLabels();
         layoutCropBox();
@@ -1869,7 +1886,7 @@
   function keepRangesForEncode(edit, duration) {
     const preview = keepRangesFromEdit(edit, duration);
     if (!preview.length) return preview;
-    // 片头至少 START_KEEP；删段两侧至少 ~2 帧@30fps（对抗 trim/-ss 边界多带帧）
+    // 片头至少 START_KEEP；删段两侧至少 ~3 帧@30fps（对抗 trim/-ss / fps 抽帧多带）
     const padStart = Math.max(START_KEEP_SEC, ENCODE_BOUND_PAD_SEC / 2);
     const padCut = Math.max(END_KEEP_SEC, ENCODE_BOUND_PAD_SEC);
     const d = Math.max(0, Number(duration) || 0);
@@ -1976,6 +1993,9 @@
     const trySlice = async (k, i, useTrim) => {
       let start = Math.max(0, Number(k.start) || 0);
       let end = Math.max(start + 0.05, Number(k.end) || 0);
+      // trim 与 -ss 均再收尾约半帧，避免抽帧踩到 keep.end 边界帧
+      const endBias = 1 / 60;
+      end = Math.max(start + 0.05, end - endBias);
       if (!useTrim) {
         // -ss/-t 回退不如 trim 准：两端再收约 1 帧，避免删段接点少删
         const bias = 1 / 30;

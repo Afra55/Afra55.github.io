@@ -674,7 +674,7 @@
         const boundPad =
           Number(window.DevToolsVtrimEditor?.ENCODE_BOUND_PAD_SEC) > 0
             ? window.DevToolsVtrimEditor.ENCODE_BOUND_PAD_SEC
-            : 2 / 30;
+            : 3 / 30;
         const padStart = Math.max(startKeep, boundPad / 2);
         const padCut = Math.max(endKeep, boundPad);
         return preview.map((k, i) => {
@@ -5198,6 +5198,7 @@
                   seed: seedForItem,
                   speedLimitSec: vbbSpeedLimitSec(),
                   crop: vbbCrop,
+                  forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
                   ffmpeg: ffmpegLease || null,
                   isAborted: itemAborted,
                   onProgress: (local, text) => {
@@ -5472,6 +5473,7 @@
             qualityFirst: vbbQualityFirstOn(),
             speedLimitSec: vbbSpeedLimitSec(),
             crop: vbbCrop,
+            forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
             isAborted: () => abortVbb,
             onProgress: (local, text) => {
               const p = Math.min(0.98, 0.12 + Math.min(0.86, local) * 0.86);

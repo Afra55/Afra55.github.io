@@ -29,7 +29,7 @@ function loadKeepFns() {
   vm.runInNewContext(
     `
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
-    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 2 / 30;
+    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 3 / 30;
     ${norm[0]}
     ${fromEdit[0]}
     ${forEnc[0]}
@@ -80,9 +80,9 @@ t("成片 keep ⊆ 预览 keep：多段删中间两端更紧，不越过预览",
     assert.ok(enc[i].start >= preview[i].start - 1e-9, `段${i} 起点`);
     assert.ok(enc[i].end <= preview[i].end + 1e-9, `段${i} 终点不得越过预览`);
   }
-  // 边界垫加严后，接点应比旧 1/25 更收
-  assert.ok(enc[0].end <= 20 - 1 / 25 - 2 / 30 + 1e-6, "上一段终点须含 bound pad");
-  assert.ok(enc[1].start >= 30 + 1 / 25 + 1 / 50 + 2 / 30 - 1e-6, "下一段起点须含 bound pad");
+  // 边界垫加严后，接点应比旧 1/25 更收（约 3 帧@30fps）
+  assert.ok(enc[0].end <= 20 - 1 / 25 - 3 / 30 + 1e-6, "上一段终点须含 bound pad");
+  assert.ok(enc[1].start >= 30 + 1 / 25 + 1 / 50 + 3 / 30 - 1e-6, "下一段起点须含 bound pad");
 });
 
 t("仅裁片头片尾：成片片头加垫且片尾不越过预览半开", () => {

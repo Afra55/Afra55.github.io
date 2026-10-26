@@ -1337,8 +1337,9 @@
             mapProgress(0.18, `${stageLabel}抽取片段…`);
             // 时长不加正垫：半开 [start, start+span)；倍速时必须精确切，禁止 copy 关键帧少切
             const cutDur = span;
+            // 编辑对齐 / 倍速 / 非片头：禁止 copy，避免关键帧多带片头或接点帧
             const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
-              accurate: speed > 1.01,
+              accurate: speed > 1.01 || Boolean(opts.forceAccurateCut),
             });
             const cutCode = await ffmpeg.exec(cutArgs);
             if (aborted()) throw new Error("已取消");
@@ -2179,7 +2180,7 @@
             mapProgress(0.18, `${stageLabel}抽取片段…`);
             const cutDur = span;
             const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
-              accurate: speed > 1.01,
+              accurate: speed > 1.01 || Boolean(opts.forceAccurateCut),
             });
             const cutCode = await ffmpeg.exec(cutArgs);
             if (aborted()) throw new Error("已取消");
@@ -3445,6 +3446,8 @@
           allowWide: true, // 一键黑盒允许超过 720px（预算用不完时换清晰度）
           chunkCount: clipOpts.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
           ffmpeg: clipOpts.ffmpeg || null,
+          // 编辑裁剪后强制精确切段，预览/GIF 接点才不易因 copy 关键帧错位
+          forceAccurateCut: Boolean(clipOpts.forceAccurateCut),
         };
 
         /**
@@ -8250,7 +8253,7 @@
         const boundPad =
           Number(window.DevToolsVtrimEditor?.ENCODE_BOUND_PAD_SEC) > 0
             ? window.DevToolsVtrimEditor.ENCODE_BOUND_PAD_SEC
-            : 2 / 30;
+            : 3 / 30;
         const padStart = Math.max(startKeep, boundPad / 2);
         const padCut = Math.max(endKeep, boundPad);
         return preview.map((k, i) => {
@@ -12774,6 +12777,7 @@
                   seed: seedForItem,
                   speedLimitSec: vbbSpeedLimitSec(),
                   crop: vbbCrop,
+                  forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
                   ffmpeg: ffmpegLease || null,
                   isAborted: itemAborted,
                   onProgress: (local, text) => {
@@ -13048,6 +13052,7 @@
             qualityFirst: vbbQualityFirstOn(),
             speedLimitSec: vbbSpeedLimitSec(),
             crop: vbbCrop,
+            forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
             isAborted: () => abortVbb,
             onProgress: (local, text) => {
               const p = Math.min(0.98, 0.12 + Math.min(0.86, local) * 0.86);
