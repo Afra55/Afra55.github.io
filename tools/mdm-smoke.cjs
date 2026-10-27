@@ -347,13 +347,19 @@ async function browserChecks() {
       btn.click();
       const dlg = document.getElementById("mdm-lightbox");
       const open = Boolean(dlg && dlg.open);
+      if (!open) return { ok: false, reason: "lightbox not open from badge" };
+      // 双 rAF 灌入：等活 SVG 出现
+      const host = dlg.querySelector("#mdm-lightbox-svghost");
+      const waitStart = Date.now();
+      while (Date.now() - waitStart < 5000) {
+        if (host && !host.hidden && host.querySelector("svg")) break;
+        await new Promise((r) => setTimeout(r, 16));
+      }
       const hasDl = Boolean(dlg?.querySelector("#mdm-lightbox-dl"));
       const svgBtn = dlg?.querySelector("#mdm-lightbox-dl-svg");
       const svgOk = Boolean(svgBtn && !svgBtn.hidden);
-      if (!open) return { ok: false, reason: "lightbox not open from badge" };
       if (!hasDl || !svgOk) return { ok: false, reason: "download/svg missing", hasDl, svgOk };
 
-      const host = dlg.querySelector("#mdm-lightbox-svghost");
       const liveSvg = host?.querySelector("svg");
       if (!host || host.hidden || !liveSvg) {
         return { ok: false, reason: "live svg host missing" };

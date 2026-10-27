@@ -48,7 +48,8 @@ t("lightbox 支持滚轮/拖拽且提供 SVG/PNG/JPEG/WebP 下载", () => {
 });
 
 t("图表弹层用活 SVG：可划词，空白处才拖", () => {
-  assert.ok(src.includes("openSvgPreview"));
+  assert.ok(src.includes("openSvgPreviewShell"));
+  assert.ok(src.includes("fillSvgPreview"));
   assert.ok(src.includes("mdm-lightbox-svghost"));
   assert.ok(src.includes("isSvgTextTarget"));
   assert.ok(src.includes("isMermaidSvgTextHit"));
@@ -64,6 +65,24 @@ t("关闭弹层幂等复位，避免图表/图片模式串台", () => {
   assert.ok(src.includes("function resetLightboxContent"));
   assert.ok(src.includes('addEventListener("close"'));
   assert.ok(src.includes("markupSnapshot"));
+});
+
+t("放大先开壳再灌入；导出高清有进度反馈且保持 scale:2", () => {
+  assert.ok(src.includes("正在打开图表"));
+  assert.ok(src.includes("mermaidExportCache"));
+  assert.ok(src.includes("queueMermaidExportCache"));
+  assert.ok(src.includes("正在导出高清图"));
+  assert.ok(src.includes("setLightboxExportUi"));
+  assert.ok(src.includes("导出中"));
+  assert.ok(/rasterizeSvgMarkupHtml2Canvas\([^)]*mime\s*\)/.test(src) || src.includes("rasterizeSvgMarkupHtml2Canvas(markupSnapshot, mime)"));
+  // 默认最佳质量：html2canvas scale 默认 2
+  const rast = src.slice(
+    src.indexOf("async function rasterizeSvgMarkupHtml2Canvas"),
+    src.indexOf("async function rasterizeImgElement")
+  );
+  assert.ok(/scale\s*=\s*2/.test(rast));
+  assert.ok(css.includes("content-visibility: auto"));
+  assert.ok(css.includes("max-height: min(70vh, 960px)"));
 });
 
 t("导出尺寸走纯函数，避免 width=100% 压成屏上缩略", () => {

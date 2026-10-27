@@ -593,6 +593,11 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
   margin: 0.6rem 0;
   overflow: auto;
   text-align: center;
+  /* 大图：限制正文占位高度，减轻整页滚动重绘；角标仍可看全图 */
+  max-height: min(70vh, 960px);
+  contain: layout style;
+  content-visibility: auto;
+  contain-intrinsic-size: 100% 480px;
 }
 .markdown-body .mdm-mermaid svg { max-width: 100%; height: auto; }
 /* 角标放大：不占双击/划词；导出长图时忽略 */
