@@ -328,6 +328,45 @@
   gap: 0.45rem;
   flex-wrap: wrap;
 }
+.mdm-lightbox-dl {
+  position: relative;
+}
+.mdm-lightbox-dl > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.mdm-lightbox-dl > summary::-webkit-details-marker { display: none; }
+.mdm-lightbox-dl-menu {
+  position: absolute;
+  bottom: calc(100% + 0.35rem);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 7.5rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong, var(--bg-0));
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  z-index: 3;
+}
+.mdm-lightbox-dl-menu button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: left;
+}
+.mdm-lightbox-dl-menu button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.mdm-lightbox-dl-menu button[hidden] { display: none; }
 
 /* 沉浸（全屏）：隐藏站点外壳，让工具铺满屏幕；只有编辑器 / 预览自己滚 */
 .mdm-max-btn { padding: 0.15rem 0.5rem; line-height: 1.2; }
@@ -523,8 +562,31 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
 .markdown-body a { color: var(--accent); }
 .markdown-body li.mdm-task { list-style: none; margin-left: -1.1em; }
 .markdown-body .mdm-task-cb { margin-right: 0.4em; accent-color: var(--accent); vertical-align: middle; }
-.markdown-body .mdm-mermaid { margin: 0.6rem 0; overflow: auto; text-align: center; }
+.markdown-body .mdm-mermaid {
+  position: relative;
+  margin: 0.6rem 0;
+  overflow: auto;
+  text-align: center;
+}
 .markdown-body .mdm-mermaid svg { max-width: 100%; height: auto; }
+/* 角标放大：不占双击/划词；导出长图时忽略 */
+.mdm-mermaid-zoom {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 2;
+  padding: 0.12rem 0.45rem;
+  line-height: 1.2;
+  font-size: 0.75rem;
+  opacity: 0.92;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.mdm-mermaid-zoom:hover,
+.mdm-mermaid-zoom:focus-visible {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent);
+}
 .markdown-body .mdm-mermaid-error {
   border: 1px solid var(--line);
   border-left: 3px solid #e06c75;

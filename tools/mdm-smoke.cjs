@@ -47,6 +47,8 @@ function staticChecks() {
   assert(lazy.includes("doc-quality-router.js"), "lazy docquality");
   assert(js.includes("capturePreviewAsOnePng"), "png one-shot stitch");
   assert(js.includes("bindPreviewImgLightbox") && js.includes("mdm-lightbox"), "preview img lightbox");
+  assert(js.includes("mdm-mermaid-zoom") && js.includes("openMermaidLightbox"), "mermaid zoom badge");
+  assert(js.includes("exportLightbox") && js.includes("rasterizeSvgMarkup"), "lightbox multi-format download");
   assert(js.includes("e.detail > 1"), "dblclick should not reopen img tools");
   assert(js.includes("ensureDirPathGuided") && js.includes("pickAndRememberAbsDir"), "path remember guide");
   assert(js.includes("pickLocalDir"), "bridge pickLocalDir wired");
@@ -58,6 +60,7 @@ function staticChecks() {
   assert(manifest.panels.some((p) => p.id === "mdm"), "manifest");
   const css = fs.readFileSync(path.join(TOOLS, "styles/panels/mdm.css"), "utf8");
   assert(css.includes(".mdm-lightbox"), "lightbox css");
+  assert(css.includes(".mdm-mermaid-zoom") && css.includes(".mdm-lightbox-dl"), "mermaid zoom + download css");
   assert(css.includes(".mdm-path-banner"), "path banner css");
   assert(!/#mdm \.markdown-body img:not\(\.mdm-img-missing\)\s*\{\s*cursor:\s*zoom-in/.test(css), "no zoom-in cursor");
   const bridgeTok = fs.readFileSync(path.join(TOOLS, "lib/bridge-token.js"), "utf8");
@@ -324,6 +327,28 @@ async function browserChecks() {
     await page.waitForFunction(() => Boolean(document.querySelector("#mdm-preview .mdm-mermaid svg")), {
       timeout: 60000,
     });
+    const mermaidZoom = await page.evaluate(() => {
+      const wrap = document.querySelector("#mdm-preview .mdm-mermaid");
+      const btn = wrap?.querySelector(".mdm-mermaid-zoom");
+      if (!wrap || !btn) return { ok: false, reason: "zoom badge missing" };
+      btn.click();
+      const dlg = document.getElementById("mdm-lightbox");
+      const open = Boolean(dlg && dlg.open);
+      const hasDl = Boolean(dlg?.querySelector("#mdm-lightbox-dl"));
+      const svgBtn = dlg?.querySelector("#mdm-lightbox-dl-svg");
+      const svgOk = Boolean(svgBtn && !svgBtn.hidden);
+      if (dlg) {
+        try {
+          dlg.close();
+        } catch (_) {
+          dlg.removeAttribute("open");
+        }
+      }
+      if (!open) return { ok: false, reason: "lightbox not open from badge" };
+      if (!hasDl || !svgOk) return { ok: false, reason: "download/svg missing", hasDl, svgOk };
+      return { ok: true };
+    });
+    assert(mermaidZoom.ok, `mermaid zoom: ${mermaidZoom.reason || "fail"}`);
     console.log("STEP mermaid-ok");
 
     // 7b) 预览图片：单击尺寸条；双击放大；Esc 关闭后单击仍可用（互不破坏）

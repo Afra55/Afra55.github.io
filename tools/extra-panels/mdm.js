@@ -2020,6 +2020,27 @@
       if (tip?.classList?.contains("mdm-mermaid-err-tip")) tip.remove();
     }
 
+    /** 图表角标「放大」：不抢正文双击选词 / 划词复制 */
+    function decorateMermaidDiv(div) {
+      if (!div || div.querySelector(".mdm-mermaid-zoom")) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ghost-btn mdm-mermaid-zoom";
+      btn.setAttribute("data-html2canvas-ignore", "true");
+      btn.setAttribute("aria-label", "放大图表");
+      btn.textContent = "放大";
+      div.appendChild(btn);
+    }
+
+    function mountMermaidFigure(pre, svgHtml) {
+      const div = document.createElement("div");
+      div.className = "mdm-mermaid";
+      div.innerHTML = svgHtml;
+      decorateMermaidDiv(div);
+      pre.replaceWith(div);
+      return div;
+    }
+
     async function renderMermaidBlocks() {
       if (!els.preview) return;
       const codes = [...els.preview.querySelectorAll("pre > code.language-mermaid, code.language-mermaid")];
@@ -2035,10 +2056,7 @@
         const pre = code.closest("pre") || code.parentElement;
         if (cached && !/Syntax error in text/i.test(cached)) {
           clearMermaidBlockError(pre);
-          const div = document.createElement("div");
-          div.className = "mdm-mermaid";
-          div.innerHTML = cached;
-          pre.replaceWith(div);
+          mountMermaidFigure(pre, cached);
         } else {
           pending.push({ pre, src });
         }
@@ -2076,10 +2094,7 @@
             state.mermaidCache.delete(first);
           }
           clearMermaidBlockError(pre);
-          const div = document.createElement("div");
-          div.className = "mdm-mermaid";
-          div.innerHTML = svg;
-          pre.replaceWith(div);
+          mountMermaidFigure(pre, svg);
         } catch (err) {
           scrubMermaidErrorArtifacts(id);
           markMermaidBlockError(pre, err);
@@ -7363,8 +7378,98 @@ a{color:${v.accent}}
       }, 0);
     }
 
+    /** 量 SVG 导出尺寸（百分比宽高时回退到屏幕占位） */
+    function measureSvgSize(svg) {
+      let w = 0;
+      let h = 0;
+      const attrW = String(svg.getAttribute("width") || "");
+      const attrH = String(svg.getAttribute("height") || "");
+      try {
+        const vb = svg.viewBox?.baseVal;
+        if (vb && vb.width && vb.height) {
+          w = vb.width;
+          h = vb.height;
+        }
+      } catch (_) {}
+      if (!w || !h) {
+        try {
+          w = svg.width?.baseVal?.value || 0;
+          h = svg.height?.baseVal?.value || 0;
+        } catch (_) {}
+      }
+      if (!w || !h || /%/.test(attrW) || /%/.test(attrH)) {
+        const r = svg.getBoundingClientRect();
+        if (r.width && r.height) {
+          w = r.width;
+          h = r.height;
+        }
+      }
+      if (!w || !h || !Number.isFinite(w) || !Number.isFinite(h)) {
+        w = 800;
+        h = 600;
+      }
+      return { w: Math.max(1, w), h: Math.max(1, h) };
+    }
+
+    /** 序列化图表 SVG，并写入明确像素宽高，便于 <img> / canvas 栅格化 */
+    function mermaidSvgForExport(svg) {
+      const clone = svg.cloneNode(true);
+      if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      const { w, h } = measureSvgSize(svg);
+      clone.setAttribute("width", String(Math.round(w)));
+      clone.setAttribute("height", String(Math.round(h)));
+      clone.style.maxWidth = "none";
+      clone.style.height = "auto";
+      return new XMLSerializer().serializeToString(clone);
+    }
+
+    async function rasterizeSvgMarkup(svgMarkup, mime, scale = 2) {
+      const url = URL.createObjectURL(new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" }));
+      try {
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("SVG 无法栅格化"));
+          img.src = url;
+        });
+        const nw = Math.max(1, img.naturalWidth || 800);
+        const nh = Math.max(1, img.naturalHeight || 600);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(nw * scale);
+        canvas.height = Math.round(nh * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("无法创建画布");
+        if (mime === "image/jpeg") {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const quality = mime === "image/png" ? undefined : 0.92;
+        return await new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    async function rasterizeImgElement(img, mime, scale = 2) {
+      const nw = Math.max(1, img.naturalWidth || 1);
+      const nh = Math.max(1, img.naturalHeight || 1);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(nw * scale);
+      canvas.height = Math.round(nh * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("无法创建画布");
+      if (mime === "image/jpeg") {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const quality = mime === "image/png" ? undefined : 0.92;
+      return await new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
+    }
+
     /**
-     * 双击预览图片 → 全屏放大（与单击尺寸条互不干扰）。
+     * 双击预览图片 / 图表角标「放大」→ 全屏预览（滚轮缩放 · 拖拽平移 · 多格式下载）。
      * lightbox 挂 body + html2canvas-ignore，不影响导出 PNG / 复制预览。
      */
     function bindPreviewImgLightbox() {
@@ -7392,6 +7497,14 @@ a{color:${v.accent}}
           `<span class="mono" id="mdm-lightbox-zoom-pct">100%</span>` +
           `<button type="button" class="ghost-btn" id="mdm-lightbox-zoom-in" aria-label="放大">＋</button>` +
           `<button type="button" class="ghost-btn" id="mdm-lightbox-zoom-reset">还原</button>` +
+          `<details class="mdm-lightbox-dl" id="mdm-lightbox-dl">` +
+          `<summary class="ghost-btn" id="mdm-lightbox-dl-sum">下载</summary>` +
+          `<div class="mdm-lightbox-dl-menu" role="menu">` +
+          `<button type="button" data-fmt="svg" id="mdm-lightbox-dl-svg">SVG</button>` +
+          `<button type="button" data-fmt="png">PNG</button>` +
+          `<button type="button" data-fmt="jpeg">JPEG</button>` +
+          `<button type="button" data-fmt="webp">WebP</button>` +
+          `</div></details>` +
           `</div></div>`;
         document.body.appendChild(dlg);
       }
@@ -7404,9 +7517,14 @@ a{color:${v.accent}}
       const zoomInBtn = dlg.querySelector("#mdm-lightbox-zoom-in");
       const zoomOutBtn = dlg.querySelector("#mdm-lightbox-zoom-out");
       const zoomResetBtn = dlg.querySelector("#mdm-lightbox-zoom-reset");
+      const dlWrap = dlg.querySelector("#mdm-lightbox-dl");
+      const dlSvgBtn = dlg.querySelector("#mdm-lightbox-dl-svg");
       if (!stage || !imgEl) return;
 
       const view = { scale: 1, x: 0, y: 0, dragging: false, lastX: 0, lastY: 0 };
+      let objectUrlToRevoke = null;
+      let exportSvgMarkup = null;
+      let exportBaseName = "image";
 
       function syncTransform() {
         imgEl.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
@@ -7439,6 +7557,13 @@ a{color:${v.accent}}
         syncTransform();
       }
 
+      function syncDownloadUi() {
+        if (dlSvgBtn) dlSvgBtn.hidden = !exportSvgMarkup;
+        if (dlWrap) {
+          dlWrap.open = false;
+        }
+      }
+
       function closePreview() {
         try {
           if (dlg.open) dlg.close();
@@ -7449,6 +7574,13 @@ a{color:${v.accent}}
         imgEl.removeAttribute("src");
         imgEl.alt = "";
         if (cap) cap.textContent = "";
+        if (objectUrlToRevoke) {
+          URL.revokeObjectURL(objectUrlToRevoke);
+          objectUrlToRevoke = null;
+        }
+        exportSvgMarkup = null;
+        exportBaseName = "image";
+        syncDownloadUi();
         view.scale = 1;
         view.x = 0;
         view.y = 0;
@@ -7456,10 +7588,18 @@ a{color:${v.accent}}
         syncTransform();
       }
 
-      function openPreview(src, alt) {
+      function openPreview(src, alt, opts = {}) {
         if (!src) return;
         // 关掉尺寸条，避免叠在 lightbox 上
         document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
+        if (objectUrlToRevoke) {
+          URL.revokeObjectURL(objectUrlToRevoke);
+          objectUrlToRevoke = null;
+        }
+        if (opts.objectUrl) objectUrlToRevoke = opts.objectUrl;
+        exportSvgMarkup = opts.svgMarkup || null;
+        exportBaseName = String(opts.baseName || "image").replace(/[^\w\u4e00-\u9fff.-]+/g, "_") || "image";
+        syncDownloadUi();
         view.scale = 1;
         view.x = 0;
         view.y = 0;
@@ -7471,7 +7611,13 @@ a{color:${v.accent}}
         };
         imgEl.src = src;
         imgEl.alt = alt || "";
-        if (cap) cap.textContent = alt || "图片预览 · 滚轮缩放 · 拖拽平移";
+        if (cap) {
+          cap.textContent =
+            alt ||
+            (exportSvgMarkup
+              ? "图表预览 · 滚轮缩放 · 拖拽平移 · 可下载"
+              : "图片预览 · 滚轮缩放 · 拖拽平移 · 可下载");
+        }
         try {
           if (typeof dlg.showModal === "function") dlg.showModal();
           else dlg.setAttribute("open", "");
@@ -7481,16 +7627,76 @@ a{color:${v.accent}}
         if (imgEl.complete && imgEl.naturalWidth) fitImage();
       }
 
+      function openMermaidLightbox(div) {
+        const svg = div?.querySelector?.("svg");
+        if (!svg) {
+          toast("图表尚未渲染");
+          return;
+        }
+        let markup;
+        try {
+          markup = mermaidSvgForExport(svg);
+        } catch (err) {
+          toast(`无法导出图表：${err.message || err}`);
+          return;
+        }
+        const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        openPreview(url, "图表预览 · 滚轮缩放 · 拖拽平移 · 可下载", {
+          objectUrl: url,
+          svgMarkup: markup,
+          baseName: "mermaid-chart",
+        });
+      }
+
+      async function exportLightbox(fmt) {
+        const ext = fmt === "jpeg" ? "jpg" : fmt;
+        const name = `${exportBaseName}.${ext}`;
+        try {
+          if (fmt === "svg") {
+            if (!exportSvgMarkup) {
+              toast("当前预览无 SVG");
+              return;
+            }
+            downloadBlob(new Blob([exportSvgMarkup], { type: "image/svg+xml;charset=utf-8" }), name);
+            toast(`已下载 ${name}`);
+            if (dlWrap) dlWrap.open = false;
+            return;
+          }
+          const mime = fmt === "jpeg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png";
+          let blob = null;
+          if (exportSvgMarkup) blob = await rasterizeSvgMarkup(exportSvgMarkup, mime);
+          else if (imgEl.naturalWidth) blob = await rasterizeImgElement(imgEl, mime);
+          if (!blob) throw new Error("浏览器无法编码该格式");
+          downloadBlob(blob, name);
+          toast(`已下载 ${name}`);
+          if (dlWrap) dlWrap.open = false;
+        } catch (err) {
+          toast(`下载失败：${err.message || err}`);
+        }
+      }
+
+      els.preview.addEventListener("click", (e) => {
+        const btn = e.target.closest?.(".mdm-mermaid-zoom");
+        if (!btn || !els.preview.contains(btn)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const div = btn.closest(".mdm-mermaid");
+        if (div) openMermaidLightbox(div);
+      });
+
       els.preview.addEventListener("dblclick", (e) => {
         const img = e.target.closest?.("img");
         if (!img || !els.preview.contains(img)) return;
         // 缺图占位 / 无可用 src 不打开
         if (img.classList.contains("mdm-img-missing")) return;
+        // 图表内不应有可双击放大的 img；角标负责图表
+        if (img.closest?.(".mdm-mermaid")) return;
         const src = img.currentSrc || img.src || "";
         if (!src || src === window.location.href) return;
         e.preventDefault();
         e.stopPropagation();
-        openPreview(src, img.getAttribute("alt") || "");
+        openPreview(src, img.getAttribute("alt") || "", { baseName: "image" });
       });
 
       closeBtn?.addEventListener("click", (e) => {
@@ -7514,6 +7720,13 @@ a{color:${v.accent}}
         zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, clampScale(view.scale / 1.2));
       });
       zoomResetBtn?.addEventListener("click", fitImage);
+
+      dlWrap?.querySelector(".mdm-lightbox-dl-menu")?.addEventListener("click", (e) => {
+        const b = e.target.closest?.("button[data-fmt]");
+        if (!b) return;
+        e.preventDefault();
+        void exportLightbox(b.getAttribute("data-fmt") || "png");
+      });
 
       stage.addEventListener(
         "wheel",

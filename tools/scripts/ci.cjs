@@ -29,6 +29,8 @@ const STEPS = [
   { name: "mdm smoke", cmd: "node", args: ["mdm-smoke.cjs"] },
   { name: "mdm tests", cmd: "node", args: ["test/mdm.test.js"] },
   { name: "mdm find-doc tests", cmd: "node", args: ["test/mdm-find-doc.test.js"] },
+  { name: "mdm mermaid zoom", cmd: "node", args: ["test/mdm-mermaid-zoom.test.js"] },
+  { name: "mdm mermaid error", cmd: "node", args: ["test/mdm-mermaid-error.test.js"] },
   { name: "mineru image-min tokens", cmd: "node", args: ["test/mineru-image-min-tokens.test.js"] },
   { name: "bridge busy relaunch", cmd: "node", args: ["test/bridge-busy-relaunch.test.js"] },
   { name: "qrcode long text", cmd: "node", args: ["test/qrcode-long-text.test.js"] },
