@@ -60,6 +60,12 @@ t("图表弹层用活 SVG：可划词，空白处才拖", () => {
   assert.ok(bind.includes('previewMode === "svg" && isSvgTextTarget'));
 });
 
+t("关闭弹层幂等复位，避免图表/图片模式串台", () => {
+  assert.ok(src.includes("function resetLightboxContent"));
+  assert.ok(src.includes('addEventListener("close"'));
+  assert.ok(src.includes("markupSnapshot"));
+});
+
 t("导出尺寸走纯函数，避免 width=100% 压成屏上缩略", () => {
   assert.ok(src.includes("MP.measureSvgExportSize"));
   const pure = fs.readFileSync(path.join(__dirname, "..", "lib", "mdm-pure.js"), "utf8");

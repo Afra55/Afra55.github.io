@@ -308,9 +308,13 @@
   cursor: grab;
 }
 .mdm-lightbox-stage:active { cursor: grabbing; }
+/* 活 SVG：划词时勿被 :active 抢成 grabbing */
 .mdm-lightbox-stage.is-svg-mode { cursor: grab; }
-.mdm-lightbox-stage.is-svg-mode.is-dragging { cursor: grabbing; }
-.mdm-lightbox-stage.is-svg-mode.is-over-text { cursor: text; }
+.mdm-lightbox-stage.is-svg-mode:active { cursor: grab; }
+.mdm-lightbox-stage.is-svg-mode.is-dragging,
+.mdm-lightbox-stage.is-svg-mode.is-dragging:active { cursor: grabbing; }
+.mdm-lightbox-stage.is-svg-mode.is-over-text,
+.mdm-lightbox-stage.is-svg-mode.is-over-text:active { cursor: text; }
 .mdm-lightbox-img {
   position: absolute;
   left: 50%;

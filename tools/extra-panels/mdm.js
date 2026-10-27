@@ -7657,13 +7657,8 @@ a{color:${v.accent}}
         }
       }
 
-      function closePreview() {
-        try {
-          if (dlg.open) dlg.close();
-          else dlg.removeAttribute("open");
-        } catch (_) {
-          dlg.removeAttribute("open");
-        }
+      /** 幂等清理：Esc/关闭按钮/backdrop 与原生 close 都走到这里，避免模式残留 */
+      function resetLightboxContent() {
         imgEl.removeAttribute("src");
         imgEl.alt = "";
         imgEl.hidden = false;
@@ -7684,6 +7679,16 @@ a{color:${v.accent}}
         view.dragging = false;
         syncStageCursor(false);
         syncTransform();
+      }
+
+      function closePreview() {
+        try {
+          if (dlg.open) dlg.close();
+          else dlg.removeAttribute("open");
+        } catch (_) {
+          dlg.removeAttribute("open");
+        }
+        resetLightboxContent();
       }
 
       function openPreview(src, alt, opts = {}) {
@@ -7765,27 +7770,30 @@ a{color:${v.accent}}
 
       async function exportLightbox(fmt) {
         const ext = fmt === "jpeg" ? "jpg" : fmt;
-        const name = `${exportBaseName}.${ext}`;
+        const base = exportBaseName;
+        const name = `${base}.${ext}`;
+        // 关闭弹层会清空 exportSvgMarkup；异步导出前先快照，避免下到一半被 reset
+        const markupSnapshot = exportSvgMarkup;
         try {
           if (fmt === "svg") {
-            if (!exportSvgMarkup) {
+            if (!markupSnapshot) {
               toast("当前预览无 SVG");
               return;
             }
-            downloadBlob(new Blob([exportSvgMarkup], { type: "image/svg+xml;charset=utf-8" }), name);
+            downloadBlob(new Blob([markupSnapshot], { type: "image/svg+xml;charset=utf-8" }), name);
             toast(`已下载 ${name}`);
             if (dlWrap) dlWrap.open = false;
             return;
           }
           const mime = fmt === "jpeg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png";
           let blob = null;
-          if (exportSvgMarkup) {
+          if (markupSnapshot) {
             try {
-              blob = await rasterizeSvgMarkupHtml2Canvas(exportSvgMarkup, mime);
+              blob = await rasterizeSvgMarkupHtml2Canvas(markupSnapshot, mime);
             } catch (_) {
               try {
                 if (imgEl.naturalWidth) blob = await rasterizeImgElement(imgEl, mime);
-                if (!blob) blob = await rasterizeSvgMarkup(exportSvgMarkup, mime);
+                if (!blob) blob = await rasterizeSvgMarkup(markupSnapshot, mime);
               } catch (err2) {
                 throw err2;
               }
@@ -7833,6 +7841,10 @@ a{color:${v.accent}}
       dlg.addEventListener("cancel", (e) => {
         e.preventDefault();
         closePreview();
+      });
+      // 仅 dlg.close()（未走 closePreview）时也复位，避免图表→图片模式串台
+      dlg.addEventListener("close", () => {
+        resetLightboxContent();
       });
 
       zoomInBtn?.addEventListener("click", () => {
