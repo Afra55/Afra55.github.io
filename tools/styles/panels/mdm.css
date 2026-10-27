@@ -308,6 +308,9 @@
   cursor: grab;
 }
 .mdm-lightbox-stage:active { cursor: grabbing; }
+.mdm-lightbox-stage.is-svg-mode { cursor: grab; }
+.mdm-lightbox-stage.is-svg-mode.is-dragging { cursor: grabbing; }
+.mdm-lightbox-stage.is-svg-mode.is-over-text { cursor: text; }
 .mdm-lightbox-img {
   position: absolute;
   left: 50%;
@@ -321,6 +324,25 @@
   user-select: none;
   -webkit-user-drag: none;
 }
+/* 活 SVG：可划词复制；空白处拖动画布 */
+.mdm-lightbox-svghost {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  max-height: none;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.mdm-lightbox-svghost svg {
+  display: block;
+  max-width: none;
+  height: auto;
+  overflow: visible;
+}
+.mdm-lightbox-svghost[hidden] { display: none !important; }
 .mdm-lightbox-toolbar {
   display: flex;
   align-items: center;

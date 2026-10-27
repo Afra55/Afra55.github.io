@@ -7497,7 +7497,8 @@ a{color:${v.accent}}
     }
 
     /**
-     * 双击预览图片 / 图表角标「放大」→ 全屏预览（滚轮缩放 · 拖拽平移 · 多格式下载）。
+     * 双击预览图片 / 图表角标「放大」→ 全屏预览。
+     * 图表用活 SVG（可划词；空白处拖；滚轮缩放）；普通图片仍用 <img>。
      * lightbox 挂 body + html2canvas-ignore，不影响导出 PNG / 复制预览。
      */
     function bindPreviewImgLightbox() {
@@ -7519,6 +7520,7 @@ a{color:${v.accent}}
           `</div>` +
           `<div class="mdm-lightbox-stage" id="mdm-lightbox-stage">` +
           `<img id="mdm-lightbox-img" class="mdm-lightbox-img" alt="" draggable="false" />` +
+          `<div id="mdm-lightbox-svghost" class="mdm-lightbox-svghost" hidden></div>` +
           `</div>` +
           `<div class="mdm-lightbox-toolbar">` +
           `<button type="button" class="ghost-btn" id="mdm-lightbox-zoom-out" aria-label="缩小">－</button>` +
@@ -7539,6 +7541,14 @@ a{color:${v.accent}}
 
       const stage = dlg.querySelector("#mdm-lightbox-stage");
       const imgEl = dlg.querySelector("#mdm-lightbox-img");
+      let svgHost = dlg.querySelector("#mdm-lightbox-svghost");
+      if (stage && !svgHost) {
+        svgHost = document.createElement("div");
+        svgHost.id = "mdm-lightbox-svghost";
+        svgHost.className = "mdm-lightbox-svghost";
+        svgHost.hidden = true;
+        stage.appendChild(svgHost);
+      }
       const cap = dlg.querySelector("#mdm-lightbox-cap");
       const pctEl = dlg.querySelector("#mdm-lightbox-zoom-pct");
       const closeBtn = dlg.querySelector("#mdm-lightbox-close");
@@ -7547,23 +7557,69 @@ a{color:${v.accent}}
       const zoomResetBtn = dlg.querySelector("#mdm-lightbox-zoom-reset");
       const dlWrap = dlg.querySelector("#mdm-lightbox-dl");
       const dlSvgBtn = dlg.querySelector("#mdm-lightbox-dl-svg");
-      if (!stage || !imgEl) return;
+      if (!stage || !imgEl || !svgHost) return;
 
       const view = { scale: 1, x: 0, y: 0, dragging: false, lastX: 0, lastY: 0 };
       let objectUrlToRevoke = null;
       let exportSvgMarkup = null;
       let exportBaseName = "image";
+      /** @type {"img"|"svg"} */
+      let previewMode = "img";
+
+      function activeLayer() {
+        return previewMode === "svg" ? svgHost : imgEl;
+      }
+
+      function isSvgTextTarget(el) {
+        let n = el;
+        while (n && n !== stage) {
+          if (n.nodeType === 1) {
+            const tag = n.tagName || "";
+            const insideFo = Boolean(
+              typeof n.closest === "function" && n.closest("foreignObject, foreignobject")
+            );
+            if (typeof MP.isMermaidSvgTextHit === "function") {
+              if (MP.isMermaidSvgTextHit(tag, insideFo)) return true;
+            } else {
+              const t = String(tag).toLowerCase();
+              if (t === "text" || t === "tspan" || t === "textpath" || t === "foreignobject" || insideFo) {
+                return true;
+              }
+            }
+          }
+          n = n.parentNode;
+        }
+        return false;
+      }
+
+      function syncStageCursor(overText) {
+        stage.classList.toggle("is-svg-mode", previewMode === "svg");
+        stage.classList.toggle("is-dragging", Boolean(view.dragging));
+        stage.classList.toggle("is-over-text", previewMode === "svg" && Boolean(overText));
+      }
 
       function syncTransform() {
-        imgEl.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
+        const el = activeLayer();
+        el.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
         if (pctEl) pctEl.textContent = `${Math.round(view.scale * 100)}%`;
       }
 
       function fitImage() {
         const sw = stage.clientWidth || 1;
         const sh = stage.clientHeight || 1;
-        const nw = imgEl.naturalWidth || 1;
-        const nh = imgEl.naturalHeight || 1;
+        let nw = 1;
+        let nh = 1;
+        if (previewMode === "svg") {
+          const svg = svgHost.querySelector("svg");
+          if (svg) {
+            const sz = measureSvgSize(svg);
+            nw = sz.w;
+            nh = sz.h;
+          }
+        } else {
+          nw = imgEl.naturalWidth || 1;
+          nh = imgEl.naturalHeight || 1;
+        }
         view.scale = Math.min(1, sw / nw, sh / nh);
         view.x = 0;
         view.y = 0;
@@ -7592,6 +7648,15 @@ a{color:${v.accent}}
         }
       }
 
+      function showModal() {
+        try {
+          if (typeof dlg.showModal === "function") dlg.showModal();
+          else dlg.setAttribute("open", "");
+        } catch (_) {
+          dlg.setAttribute("open", "");
+        }
+      }
+
       function closePreview() {
         try {
           if (dlg.open) dlg.close();
@@ -7601,6 +7666,9 @@ a{color:${v.accent}}
         }
         imgEl.removeAttribute("src");
         imgEl.alt = "";
+        imgEl.hidden = false;
+        svgHost.innerHTML = "";
+        svgHost.hidden = true;
         if (cap) cap.textContent = "";
         if (objectUrlToRevoke) {
           URL.revokeObjectURL(objectUrlToRevoke);
@@ -7608,17 +7676,18 @@ a{color:${v.accent}}
         }
         exportSvgMarkup = null;
         exportBaseName = "image";
+        previewMode = "img";
         syncDownloadUi();
         view.scale = 1;
         view.x = 0;
         view.y = 0;
         view.dragging = false;
+        syncStageCursor(false);
         syncTransform();
       }
 
       function openPreview(src, alt, opts = {}) {
         if (!src) return;
-        // 关掉尺寸条，避免叠在 lightbox 上
         document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
         if (objectUrlToRevoke) {
           URL.revokeObjectURL(objectUrlToRevoke);
@@ -7627,11 +7696,16 @@ a{color:${v.accent}}
         if (opts.objectUrl) objectUrlToRevoke = opts.objectUrl;
         exportSvgMarkup = opts.svgMarkup || null;
         exportBaseName = String(opts.baseName || "image").replace(/[^\w\u4e00-\u9fff.-]+/g, "_") || "image";
+        previewMode = "img";
+        svgHost.innerHTML = "";
+        svgHost.hidden = true;
+        imgEl.hidden = false;
         syncDownloadUi();
         view.scale = 1;
         view.x = 0;
         view.y = 0;
         view.dragging = false;
+        syncStageCursor(false);
         imgEl.onload = () => fitImage();
         imgEl.onerror = () => {
           toast("图片无法放大预览");
@@ -7639,20 +7713,38 @@ a{color:${v.accent}}
         };
         imgEl.src = src;
         imgEl.alt = alt || "";
+        if (cap) cap.textContent = alt || "图片预览 · 滚轮缩放 · 拖拽平移 · 可下载";
+        showModal();
+        if (imgEl.complete && imgEl.naturalWidth) fitImage();
+      }
+
+      function openSvgPreview(markup, alt) {
+        if (!markup) return;
+        document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
+        if (objectUrlToRevoke) {
+          URL.revokeObjectURL(objectUrlToRevoke);
+          objectUrlToRevoke = null;
+        }
+        exportSvgMarkup = markup;
+        exportBaseName = "mermaid-chart";
+        previewMode = "svg";
+        imgEl.removeAttribute("src");
+        imgEl.alt = "";
+        imgEl.hidden = true;
+        svgHost.hidden = false;
+        svgHost.innerHTML = markup;
+        syncDownloadUi();
+        view.scale = 1;
+        view.x = 0;
+        view.y = 0;
+        view.dragging = false;
+        syncStageCursor(false);
         if (cap) {
           cap.textContent =
-            alt ||
-            (exportSvgMarkup
-              ? "图表预览 · 滚轮缩放 · 拖拽平移 · 可下载"
-              : "图片预览 · 滚轮缩放 · 拖拽平移 · 可下载");
+            alt || "图表预览 · 滚轮缩放 · 空白处拖动 · 可划词复制 · 可下载";
         }
-        try {
-          if (typeof dlg.showModal === "function") dlg.showModal();
-          else dlg.setAttribute("open", "");
-        } catch (_) {
-          dlg.setAttribute("open", "");
-        }
-        if (imgEl.complete && imgEl.naturalWidth) fitImage();
+        showModal();
+        fitImage();
       }
 
       function openMermaidLightbox(div) {
@@ -7668,13 +7760,7 @@ a{color:${v.accent}}
           toast(`无法导出图表：${err.message || err}`);
           return;
         }
-        const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        openPreview(url, "图表预览 · 滚轮缩放 · 拖拽平移 · 可下载", {
-          objectUrl: url,
-          svgMarkup: markup,
-          baseName: "mermaid-chart",
-        });
+        openSvgPreview(markup, "图表预览 · 滚轮缩放 · 空白处拖动 · 可划词复制 · 可下载");
       }
 
       async function exportLightbox(fmt) {
@@ -7694,7 +7780,6 @@ a{color:${v.accent}}
           const mime = fmt === "jpeg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png";
           let blob = null;
           if (exportSvgMarkup) {
-            // 图表：优先 html2canvas（避开 foreignObject 污染）；失败再试 drawImage
             try {
               blob = await rasterizeSvgMarkupHtml2Canvas(exportSvgMarkup, mime);
             } catch (_) {
@@ -7729,9 +7814,7 @@ a{color:${v.accent}}
       els.preview.addEventListener("dblclick", (e) => {
         const img = e.target.closest?.("img");
         if (!img || !els.preview.contains(img)) return;
-        // 缺图占位 / 无可用 src 不打开
         if (img.classList.contains("mdm-img-missing")) return;
-        // 图表内不应有可双击放大的 img；角标负责图表
         if (img.closest?.(".mdm-mermaid")) return;
         const src = img.currentSrc || img.src || "";
         if (!src || src === window.location.href) return;
@@ -7782,25 +7865,42 @@ a{color:${v.accent}}
 
       stage.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
+        // 活 SVG：点在文字上不拖，留给划词 / 双击选词
+        if (previewMode === "svg" && isSvgTextTarget(e.target)) {
+          view.dragging = false;
+          syncStageCursor(true);
+          return;
+        }
         view.dragging = true;
         view.lastX = e.clientX;
         view.lastY = e.clientY;
+        syncStageCursor(false);
         stage.setPointerCapture?.(e.pointerId);
+        // 空白/图形上拖动时避免误选中文字
+        if (previewMode === "svg") e.preventDefault();
       });
       stage.addEventListener("pointermove", (e) => {
-        if (!view.dragging) return;
-        view.x += e.clientX - view.lastX;
-        view.y += e.clientY - view.lastY;
-        view.lastX = e.clientX;
-        view.lastY = e.clientY;
-        syncTransform();
+        if (view.dragging) {
+          view.x += e.clientX - view.lastX;
+          view.y += e.clientY - view.lastY;
+          view.lastX = e.clientX;
+          view.lastY = e.clientY;
+          syncTransform();
+          return;
+        }
+        if (previewMode === "svg" && dlg.open) {
+          syncStageCursor(isSvgTextTarget(e.target));
+        }
       });
       const endDrag = () => {
         view.dragging = false;
+        syncStageCursor(false);
       };
       stage.addEventListener("pointerup", endDrag);
       stage.addEventListener("pointercancel", endDrag);
       stage.addEventListener("dblclick", (e) => {
+        // 活 SVG 上双击文字 = 选词，不缩放
+        if (previewMode === "svg" && isSvgTextTarget(e.target)) return;
         e.preventDefault();
         if (view.scale > 1.05) fitImage();
         else zoomAt(e.clientX, e.clientY, clampScale(Math.max(view.scale * 1.8, 1.5)));

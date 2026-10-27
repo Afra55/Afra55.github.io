@@ -353,23 +353,31 @@ async function browserChecks() {
       if (!open) return { ok: false, reason: "lightbox not open from badge" };
       if (!hasDl || !svgOk) return { ok: false, reason: "download/svg missing", hasDl, svgOk };
 
-      const img = dlg.querySelector("#mdm-lightbox-img");
-      await new Promise((resolve) => {
-        if (img?.complete && img.naturalWidth) resolve();
-        else if (img) {
-          img.addEventListener("load", () => resolve(), { once: true });
-          img.addEventListener("error", () => resolve(), { once: true });
-          setTimeout(resolve, 4000);
-        } else resolve();
-      });
-      if (!img?.naturalWidth) return { ok: false, reason: "lightbox img failed to load" };
+      const host = dlg.querySelector("#mdm-lightbox-svghost");
+      const liveSvg = host?.querySelector("svg");
+      if (!host || host.hidden || !liveSvg) {
+        return { ok: false, reason: "live svg host missing" };
+      }
+      const cs = getComputedStyle(host);
+      if (!/text/.test(cs.userSelect || cs.webkitUserSelect || "")) {
+        return { ok: false, reason: "svg host not user-selectable", userSelect: cs.userSelect };
+      }
+      // 文字命中：不应进入拖拽（isMermaidSvgTextHit）
+      if (!P.isMermaidSvgTextHit("text") || P.isMermaidSvgTextHit("rect")) {
+        return { ok: false, reason: "text-hit helper wrong" };
+      }
+      const textEl =
+        liveSvg.querySelector("text, tspan, foreignObject, foreignobject") ||
+        liveSvg.querySelector("[id]");
+      // 至少有可点目标；双击文字路径不强制（mermaid 结构因版本而异）
 
       let vbW = 0;
       try {
-        vbW = svg.viewBox?.baseVal?.width || 0;
+        vbW = liveSvg.viewBox?.baseVal?.width || 0;
       } catch (_) {}
-      if (vbW > 400 && img.naturalWidth < vbW * 0.5) {
-        return { ok: false, reason: "export shrunk to screen", natural: img.naturalWidth, vbW };
+      const attrW = Number(liveSvg.getAttribute("width")) || 0;
+      if (vbW > 400 && attrW > 0 && attrW < vbW * 0.5) {
+        return { ok: false, reason: "live svg shrunk to screen", attrW, vbW };
       }
 
       const downloads = [];
@@ -385,7 +393,6 @@ async function browserChecks() {
           b.click();
           const expectExt = fmt === "jpeg" ? "jpg" : fmt;
           const start = Date.now();
-          // 首个位图可能要懒加载 html2canvas，给足时间
           const budget = fmt === "svg" ? 3000 : 20000;
           while (!downloads.some((d) => d.endsWith(`.${expectExt}`)) && Date.now() - start < budget) {
             await new Promise((r) => setTimeout(r, 50));
@@ -404,7 +411,7 @@ async function browserChecks() {
       } catch (_) {
         dlg.removeAttribute("open");
       }
-      return { ok: true, downloads, natural: img.naturalWidth, vbW };
+      return { ok: true, downloads, vbW, attrW, hasText: Boolean(textEl) };
     });
     assert(mermaidZoom.ok, `mermaid zoom: ${JSON.stringify(mermaidZoom)}`);
     console.log("STEP mermaid-ok");

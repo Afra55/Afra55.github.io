@@ -47,6 +47,19 @@ t("lightbox 支持滚轮/拖拽且提供 SVG/PNG/JPEG/WebP 下载", () => {
   assert.ok(css.includes(".mdm-lightbox-dl-menu"));
 });
 
+t("图表弹层用活 SVG：可划词，空白处才拖", () => {
+  assert.ok(src.includes("openSvgPreview"));
+  assert.ok(src.includes("mdm-lightbox-svghost"));
+  assert.ok(src.includes("isSvgTextTarget"));
+  assert.ok(src.includes("isMermaidSvgTextHit"));
+  assert.ok(src.includes("可划词复制"));
+  assert.ok(css.includes(".mdm-lightbox-svghost"));
+  assert.ok(css.includes("user-select: text"));
+  // 点在文字上不启动拖拽
+  const bind = src.slice(src.indexOf("function bindPreviewImgLightbox"), src.indexOf("bindPreviewImgLightbox();"));
+  assert.ok(bind.includes('previewMode === "svg" && isSvgTextTarget'));
+});
+
 t("导出尺寸走纯函数，避免 width=100% 压成屏上缩略", () => {
   assert.ok(src.includes("MP.measureSvgExportSize"));
   const pure = fs.readFileSync(path.join(__dirname, "..", "lib", "mdm-pure.js"), "utf8");
