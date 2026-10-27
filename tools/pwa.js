@@ -1,12 +1,9 @@
 /**
- * DevTools PWA：注册 Service Worker，并在可安装时露出「安装应用」按钮。
- * 已作为独立窗口 / 桌面应用打开时不显示安装入口。
+ * DevTools PWA：注册 Service Worker。
+ * 不在页面底部挂「安装应用」大按钮（挡内容）；需要时仅顶栏「更多」里露出入口。
  */
 (function () {
-  const btn = document.getElementById("pwa-install");
   let deferredPrompt = null;
-
-  if (btn && !btn.textContent.trim()) btn.textContent = "安装应用";
 
   function isStandalone() {
     try {
@@ -21,10 +18,7 @@
   }
 
   function setInstallVisible(on) {
-    if (!btn) return;
     const show = Boolean(on) && !isStandalone();
-    btn.hidden = !show;
-    btn.setAttribute("aria-hidden", show ? "false" : "true");
     const menuPwa = document.getElementById("header-more-pwa");
     if (menuPwa) {
       menuPwa.hidden = !show;
@@ -70,9 +64,6 @@
     return true;
   }
 
-  btn?.addEventListener("click", () => {
-    promptInstall();
-  });
   document.getElementById("header-more-pwa")?.addEventListener("click", () => {
     promptInstall();
   });
