@@ -1974,7 +1974,6 @@
 
     // ---- Mermaid（按需懒加载，5MB+ 只在出现 mermaid 代码块时加载） ----
     let mermaidLoading = null;
-    let mermaidInited = false;
 
     /** Mermaid 失败时会往 body 塞超大「Syntax error…」SVG；关掉并清掉残留 */
     function scrubMermaidErrorArtifacts(renderId) {
@@ -1985,7 +1984,7 @@
         }
       } catch (_) {}
       try {
-        document.querySelectorAll('svg[aria-roledescription="error"], svg[aria-roledescription="error"]').forEach((el) => {
+        document.querySelectorAll('svg[aria-roledescription="error"]').forEach((el) => {
           if (els.preview?.contains(el)) return;
           el.remove();
         });
@@ -2061,7 +2060,6 @@
           suppressErrorRendering: true,
           theme: document.documentElement.dataset.themeScheme === "light" ? "default" : "dark",
         });
-        mermaidInited = true;
       } catch (_) {}
       for (const { pre, src } of pending) {
         const id = `mmd${Math.random().toString(36).slice(2, 9)}`;
