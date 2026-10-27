@@ -63,7 +63,15 @@ t("UI 支持架子分组筛选", () => {
   assert.ok(js.includes("function renderFrameFilters"));
   assert.ok(js.includes("activeFrameGroup"));
   assert.ok(html.includes("enspeak-frame-filters"));
-  assert.ok(html.includes("固定架子") || html.includes("固定框架"));
+});
+
+t("架子变体走 fill 库、带中文，今日闭环文案落地", () => {
+  assert.ok(js.includes("DevToolsEnspeakFill") || js.includes("fillApi"));
+  assert.ok(js.includes("variantZhFor"));
+  assert.ok(js.includes("无稿开口"));
+  assert.ok(html.includes("听跟 → 裂变换词 → 接话 → 无稿开口") || html.includes("听跟 → 裂变"));
+  const fillSrc = fs.readFileSync(path.join(root, "lib/enspeak-fill.js"), "utf8");
+  assert.ok(fillSrc.includes("fillEnTemplate"));
 });
 
 console.log(`enspeak-content.test.js: ${n} passed`);

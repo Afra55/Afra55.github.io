@@ -84,6 +84,10 @@
       src: "./lib/doc-quality-router.js",
       probe: () => typeof globalThis.DevToolsDocQualityRouter === "object",
     },
+    enspeakfill: {
+      src: "./lib/enspeak-fill.js",
+      probe: () => typeof globalThis.DevToolsEnspeakFill?.fillEnTemplate === "function",
+    },
   };
 
   const EXTERNAL_SITE_TOOLS = new Set([]);
@@ -218,6 +222,7 @@
     ipgeo: ["leaflet"],
     mdm: ["markdownit", "purify", "hljs", "cm6", "mdext", "mdmpure", "docquality"],
     docfmt: ["docquality"],
+    enspeak: ["enspeakfill"],
   };
 
   /** 独立脚本，不走 extra 面板栈 */

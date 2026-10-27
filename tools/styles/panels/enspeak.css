@@ -287,8 +287,108 @@
   background: var(--accent, #5b8cff);
 }
 
-@media (max-width: 600px) {
+.enspeak-variant-acts {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+}
+
+.enspeak-sent-list.is-blind .enspeak-sent-en {
+  filter: blur(5px);
+  user-select: none;
+  color: transparent;
+  text-shadow: 0 0 8px rgba(127, 140, 160, 0.85);
+}
+
+.enspeak-action-row {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .enspeak-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 0.15rem;
+    margin-inline: -0.15rem;
+    padding-inline: 0.15rem;
+  }
+
+  .enspeak-tab,
+  .enspeak-frame-filter {
+    flex: 0 0 auto;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.75rem;
+  }
+
   .enspeak-blocks {
+    grid-template-columns: 1fr;
+  }
+
+  .enspeak-block {
+    min-height: 3.4rem;
+    padding: 0.85rem 0.9rem;
+  }
+
+  .enspeak-island-map {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .enspeak-frame-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .enspeak-frame-btn,
+  .enspeak-island-btn,
+  .enspeak-sent {
+    min-height: 2.75rem;
+    padding: 0.8rem 0.85rem;
+  }
+
+  .enspeak-field .text-input,
+  .enspeak-dialog .text-input,
+  #enspeak-frame-slot,
+  .enspeak-mine-input {
+    font-size: 16px; /* 避免 iOS 聚焦自动放大 */
+    min-height: 2.6rem;
+  }
+
+  .enspeak-dialog {
+    width: calc(100vw - 1rem);
+    max-width: none;
+    margin: 0.5rem;
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .enspeak-dialog-inner {
+    padding: 0.85rem 0.9rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
+    overflow: auto;
+  }
+
+  .enspeak-reply-card .enspeak-sent-en {
+    font-size: 1.1rem;
+  }
+
+  .enspeak-today-meta {
+    gap: 0.4rem;
+  }
+
+  .enspeak-pill {
+    font-size: 0.78rem;
+  }
+
+  .enspeak-action-row .primary-btn,
+  .enspeak-action-row .ghost-btn,
+  .enspeak-variant-acts .primary-btn,
+  .enspeak-variant-acts .ghost-btn {
+    flex: 1 1 auto;
+    min-height: 2.5rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .enspeak-island-map {
     grid-template-columns: 1fr;
   }
 }
