@@ -524,7 +524,15 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
 .markdown-body .mdm-task-cb { margin-right: 0.4em; accent-color: var(--accent); vertical-align: middle; }
 .markdown-body .mdm-mermaid { margin: 0.6rem 0; overflow: auto; text-align: center; }
 .markdown-body .mdm-mermaid svg { max-width: 100%; height: auto; }
-.markdown-body .mdm-mermaid-error { border: 1px solid var(--line); border-left: 3px solid #e06c75; }
+.markdown-body .mdm-mermaid-error {
+  border: 1px solid var(--line);
+  border-left: 3px solid #e06c75;
+  opacity: 0.92;
+}
+.markdown-body .mdm-mermaid-err-tip {
+  margin: 0.35rem 0 0.15rem;
+  color: #e06c75;
+}
 .markdown-body img.mdm-img-missing { min-height: 28px; border: 1px dashed var(--line); }
 .markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.2rem 0; }
 
