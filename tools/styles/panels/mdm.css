@@ -595,6 +595,27 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
   text-align: center;
 }
 .markdown-body .mdm-mermaid svg { max-width: 100%; height: auto; }
+
+/*
+ * Mermaid.render 会短暂把 width:100% 的临时 SVG/容器挂到 document.body，
+ * 首屏/重渲时底部会闪全宽长条；预览区内的正式图不受影响。
+ */
+body > svg[id^="mmd"],
+body > div[id^="dmmd"],
+body > svg[aria-roledescription="error"],
+body > div:not([id]):has(> svg[aria-roledescription="error"]) {
+  position: absolute !important;
+  left: -10000px !important;
+  top: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
 /* 角标放大：不占双击/划词；导出长图时忽略 */
 .mdm-mermaid-zoom {
   position: absolute;

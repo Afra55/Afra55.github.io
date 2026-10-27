@@ -1974,6 +1974,64 @@
 
     // ---- Mermaid（按需懒加载，5MB+ 只在出现 mermaid 代码块时加载） ----
     let mermaidLoading = null;
+    let mermaidBodyGuard = null;
+
+    function isMermaidTempBodyNode(el) {
+      if (!el || el.nodeType !== 1) return false;
+      if (els.preview?.contains(el)) return false;
+      const id = String(el.id || "");
+      if (/^mmd/i.test(id) || /^dmmd/i.test(id)) return true;
+      if (el.getAttribute?.("aria-roledescription") === "error") return true;
+      if (el.querySelector?.('svg[aria-roledescription="error"]')) return true;
+      const t = el.textContent || "";
+      return /Syntax error in text/i.test(t) && /mermaid version/i.test(t);
+    }
+
+    /** 渲染瞬间挂到 body 的全宽临时节点：立刻藏掉，避免底部长条闪一下 */
+    function cloakMermaidTempNode(el) {
+      if (!isMermaidTempBodyNode(el)) return;
+      try {
+        el.setAttribute("data-mdm-mermaid-temp", "1");
+        el.style.setProperty("position", "absolute", "important");
+        el.style.setProperty("left", "-10000px", "important");
+        el.style.setProperty("top", "0", "important");
+        el.style.setProperty("width", "0", "important");
+        el.style.setProperty("height", "0", "important");
+        el.style.setProperty("opacity", "0", "important");
+        el.style.setProperty("pointer-events", "none", "important");
+        el.style.setProperty("visibility", "hidden", "important");
+        el.style.setProperty("overflow", "hidden", "important");
+      } catch (_) {}
+    }
+
+    function ensureMermaidTempCss() {
+      if (document.getElementById("mdm-mermaid-temp-css")) return;
+      try {
+        const st = document.createElement("style");
+        st.id = "mdm-mermaid-temp-css";
+        st.textContent =
+          'body > svg[id^="mmd"],body > div[id^="dmmd"],body > svg[aria-roledescription="error"]{' +
+          "position:absolute!important;left:-10000px!important;top:0!important;" +
+          "width:0!important;height:0!important;max-width:0!important;max-height:0!important;" +
+          "opacity:0!important;visibility:hidden!important;pointer-events:none!important;overflow:hidden!important;}";
+        document.head.appendChild(st);
+      } catch (_) {}
+    }
+
+    function ensureMermaidBodyGuard() {
+      ensureMermaidTempCss();
+      if (mermaidBodyGuard || typeof MutationObserver !== "function" || !document.body) return;
+      mermaidBodyGuard = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const n of m.addedNodes) cloakMermaidTempNode(n);
+        }
+      });
+      try {
+        mermaidBodyGuard.observe(document.body, { childList: true });
+      } catch (_) {
+        mermaidBodyGuard = null;
+      }
+    }
 
     /** Mermaid 失败时会往 body 塞超大「Syntax error…」SVG；关掉并清掉残留 */
     function scrubMermaidErrorArtifacts(renderId) {
@@ -1988,11 +2046,19 @@
           if (els.preview?.contains(el)) return;
           el.remove();
         });
-        // 兜底：文案匹配底部大横条
-        document.querySelectorAll("body > svg, body > div > svg").forEach((el) => {
+        // 兜底：文案匹配底部大横条 + 我们打标的临时节点
+        document.querySelectorAll("body > svg, body > div > svg, body > [data-mdm-mermaid-temp]").forEach((el) => {
           if (els.preview?.contains(el)) return;
           const t = el.textContent || "";
-          if (/Syntax error in text/i.test(t) && /mermaid version/i.test(t)) el.remove();
+          const id = String(el.id || "");
+          if (
+            el.hasAttribute?.("data-mdm-mermaid-temp") ||
+            (/Syntax error in text/i.test(t) && /mermaid version/i.test(t)) ||
+            /^mmd/i.test(id) ||
+            /^dmmd/i.test(id)
+          ) {
+            el.remove();
+          }
         });
       } catch (_) {}
     }
@@ -2077,6 +2143,7 @@
         }
       }
       if (!pending.length) return;
+      ensureMermaidBodyGuard();
       if (!window.mermaid) {
         try {
           if (!mermaidLoading) mermaidLoading = window.DevToolsLazy?.loadVendor?.("mermaid");
@@ -2095,6 +2162,7 @@
           theme: document.documentElement.dataset.themeScheme === "light" ? "default" : "dark",
         });
       } catch (_) {}
+      scrubMermaidErrorArtifacts("");
       for (const { pre, src } of pending) {
         const id = `mmd${Math.random().toString(36).slice(2, 9)}`;
         try {

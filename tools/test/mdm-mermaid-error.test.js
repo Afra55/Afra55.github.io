@@ -42,4 +42,12 @@ t("不把「Syntax error」SVG 当成功图缓存", () => {
   assert.ok(fn.includes("throw new Error"));
 });
 
+t("渲染前启用 body 守卫，防止底部全宽临时条闪烁", () => {
+  assert.ok(src.includes("function ensureMermaidBodyGuard"));
+  assert.ok(src.includes("function cloakMermaidTempNode"));
+  assert.ok(src.includes("ensureMermaidBodyGuard()"));
+  assert.ok(src.includes("mdm-mermaid-temp-css"));
+  assert.ok(css.includes('body > svg[id^="mmd"]') || css.includes("body > svg[id^=\"mmd\"]"));
+});
+
 console.log(`mdm-mermaid-error.test.js: ${n} passed`);
