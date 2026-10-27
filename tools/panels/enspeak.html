@@ -48,7 +48,17 @@
           <div class="panel-card">
             <div class="enspeak-island-toolbar btn-row tool-actions">
               <h2 class="subhead" id="enspeak-island-title" style="margin:0;flex:1">句子</h2>
+              <button type="button" class="ghost-btn" id="enspeak-chain">对话链</button>
               <button type="button" class="ghost-btn" id="enspeak-pseudo">伪对话</button>
+            </div>
+            <div class="enspeak-chain-box" id="enspeak-chain-box" hidden>
+              <p class="hint tight" id="enspeak-chain-hint">开场 → 追问 → 接话 → 收尾。先说自己的，再点「下一环」。</p>
+              <div id="enspeak-chain-steps" class="enspeak-chain-steps"></div>
+              <div class="btn-row tool-actions enspeak-action-row">
+                <button type="button" class="ghost-btn" id="enspeak-chain-hear">听这一环</button>
+                <button type="button" class="primary-btn" id="enspeak-chain-next">下一环</button>
+                <button type="button" class="ghost-btn" id="enspeak-chain-spoken">已开口</button>
+              </div>
             </div>
             <div id="enspeak-island-list" class="enspeak-sent-list"></div>
           </div>
