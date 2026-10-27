@@ -81,8 +81,10 @@ t("放大先开壳再灌入；导出高清有进度反馈且保持 scale:2", () 
     src.indexOf("async function rasterizeImgElement")
   );
   assert.ok(/scale\s*=\s*2/.test(rast));
-  assert.ok(css.includes("content-visibility: auto"));
-  assert.ok(css.includes("max-height: min(70vh, 960px)"));
+  // 正文图表不限高：完整展示优先于滚动性能
+  const mermaidCss = css.slice(css.indexOf(".markdown-body .mdm-mermaid {"), css.indexOf(".markdown-body .mdm-mermaid svg"));
+  assert.ok(!/max-height\s*:/.test(mermaidCss));
+  assert.ok(!/content-visibility\s*:/.test(mermaidCss));
 });
 
 t("导出尺寸走纯函数，避免 width=100% 压成屏上缩略", () => {
