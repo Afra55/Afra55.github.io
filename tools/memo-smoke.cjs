@@ -1781,30 +1781,14 @@ async function main() {
   await page.waitForFunction(() => document.getElementById("adb")?.classList.contains("is-workspace-active"), {
     timeout: 15000,
   });
-  result.adbCmds = await page.evaluate(() => {
-    const jobsTab = [...document.querySelectorAll(".adb-tab[data-adb-tab]")].find((b) => b.dataset.adbTab === "jobs");
+  result.adbCmdsRemoved = await page.evaluate(() => {
     const tabs = [...document.querySelectorAll(".adb-tab[data-adb-tab]")].map((b) => b.dataset.adbTab);
-    const link = document.querySelector('a.adb-tab-external[href*="adb-commands"]');
     return {
-      inlineSection: Boolean(document.getElementById("adb-cmds-section")),
-      tabLink: Boolean(link),
-      href: link?.getAttribute("href") || "",
-      afterJobs: tabs[tabs.length - 1] === "jobs" && Boolean(link),
+      noExternalLink: !document.querySelector('a.adb-tab-external[href*="adb-commands"]'),
+      noInlineSection: !document.getElementById("adb-cmds-section"),
+      noLabel: !/命令大全/.test(document.getElementById("adb")?.textContent || ""),
+      lastTab: tabs[tabs.length - 1] || "",
     };
-  });
-
-  await page.goto(`http://127.0.0.1:${PORT}/tools/adb-commands.html`, {
-    waitUntil: "networkidle0",
-    timeout: 60000,
-  });
-  result.adbCmdsPage = await page.evaluate(async () => {
-    const out = { rows: 0, searchable: Boolean(document.getElementById("adb-cmds-search")), hasBack: /返回 ADB/.test(document.body.textContent || "") };
-    for (let i = 0; i < 30; i += 1) {
-      out.rows = document.querySelectorAll(".adb-cmd-row").length;
-      if (out.rows > 10) break;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    return out;
   });
 
   await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#timestamp`, {
@@ -2323,13 +2307,12 @@ async function main() {
     failed.push("acupoint charts should load overview svg and open zoom preview");
   }
   if (
-    result.adbCmds?.inlineSection ||
-    !result.adbCmds?.tabLink ||
-    !result.adbCmds?.afterJobs ||
-    !result.adbCmdsPage?.searchable ||
-    result.adbCmdsPage?.rows < 10
+    !result.adbCmdsRemoved?.noExternalLink ||
+    !result.adbCmdsRemoved?.noInlineSection ||
+    !result.adbCmdsRemoved?.noLabel ||
+    result.adbCmdsRemoved?.lastTab !== "jobs"
   ) {
-    failed.push("adb commands reference should open from tab after jobs on external page");
+    failed.push(`adb command cheatsheet should be removed: ${JSON.stringify(result.adbCmdsRemoved)}`);
   }
   if (
     result.timestampNav?.hash !== "#timestamp" ||
