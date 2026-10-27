@@ -458,7 +458,24 @@ async function browserChecks() {
       if (!lightboxOpen) return { ok: false, reason: "lightbox not open after dblclick", toolsMid, toolsDuring };
       if (toolsDuring) return { ok: false, reason: "img tools still open with lightbox" };
 
+      // 图表活 SVG 不得污染图片模式：img 可见、svghost 隐藏
+      const host = dlg.querySelector("#mdm-lightbox-svghost");
+      const imgEl = dlg.querySelector("#mdm-lightbox-img");
+      if (host && !host.hidden) return { ok: false, reason: "svg host still visible in img mode" };
+      if (imgEl?.hidden) return { ok: false, reason: "img hidden in img lightbox" };
+      if (!(imgEl?.currentSrc || imgEl?.src)) return { ok: false, reason: "img has no src in img lightbox" };
+      if (dlg.classList.contains("is-svg-mode") || dlg.querySelector(".is-svg-mode")) {
+        // stage 上不应残留 svg 模式（关闭/切换后应清）
+      }
+      if (dlg.querySelector("#mdm-lightbox-stage")?.classList.contains("is-svg-mode")) {
+        return { ok: false, reason: "stage still is-svg-mode in img lightbox" };
+      }
+
       try { dlg.close(); } catch (_) { dlg.removeAttribute("open"); }
+      // close 后应复位：svghost 空且隐藏（即使只调 dlg.close）
+      if (host && (!host.hidden || host.innerHTML.trim())) {
+        return { ok: false, reason: "close did not reset svg host", hidden: host.hidden, html: host.innerHTML.slice(0, 40) };
+      }
       document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
 
       // 关闭后再单击，尺寸条应仍可用
