@@ -169,6 +169,16 @@
   margin-bottom: 0.15rem;
 }
 
+.enspeak-frame-filters {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.enspeak-frame-filter.is-active {
+  border-color: var(--accent, #5b8cff);
+  color: var(--accent, #5b8cff);
+}
+
 .enspeak-frame-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
