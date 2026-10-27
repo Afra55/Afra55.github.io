@@ -1232,7 +1232,9 @@ async function main() {
     out.pwa = {
       hasManifestLink: Boolean(document.querySelector('link[rel="manifest"]')),
       manifestHref: document.querySelector('link[rel="manifest"]')?.getAttribute("href") || "",
-      hasInstallBtn: Boolean(document.getElementById("pwa-install")),
+      // 底部悬浮「安装应用」已移除；仅保留顶栏更多里的桌面安装入口
+      hasFabInstallBtn: Boolean(document.getElementById("pwa-install")),
+      hasHeaderInstall: Boolean(document.getElementById("header-more-pwa")),
       hasPwaScript: [...document.scripts].some((s) => /pwa\.js/.test(s.src)),
       hasAppleIcon: Boolean(document.querySelector('link[rel="apple-touch-icon"]')),
       hasThemeColor: Boolean(document.querySelector('meta[name="theme-color"]')),
@@ -1484,15 +1486,9 @@ async function main() {
       }
     }
 
-    const installBtn = document.getElementById("pwa-install");
     out.pwa.standaloneApi = typeof window.DevToolsPwa?.isStandalone === "function";
-    if (installBtn) {
-      installBtn.hidden = false;
-      document.documentElement.classList.add("is-pwa-standalone");
-      out.pwa.cssHidesInstall = getComputedStyle(installBtn).display === "none";
-      document.documentElement.classList.remove("is-pwa-standalone");
-      window.DevToolsPwa?.setInstallVisible?.(false);
-    }
+    out.pwa.noBottomInstallFab = !document.getElementById("pwa-install");
+    out.pwa.setInstallVisibleApi = typeof window.DevToolsPwa?.setInstallVisible === "function";
 
     try {
       await window.DevToolsPanels?.ensure?.("about");
@@ -2161,14 +2157,17 @@ async function main() {
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");
   }
-  if (!result.pwa?.hasInstallBtn || !result.pwa?.hasPwaScript || !result.pwa?.hasAppleIcon || !result.pwa?.hasThemeColor) {
-    failed.push("PWA install UI / icons / theme-color missing");
+  if (result.pwa?.hasFabInstallBtn || !result.pwa?.noBottomInstallFab) {
+    failed.push("bottom PWA install FAB should be removed");
+  }
+  if (!result.pwa?.hasHeaderInstall || !result.pwa?.hasPwaScript || !result.pwa?.hasAppleIcon || !result.pwa?.hasThemeColor) {
+    failed.push("PWA header install / icons / theme-color missing");
   }
   if (!result.pwa?.swApi || !result.pwa?.registered) {
     failed.push("service worker should register for PWA");
   }
-  if (!result.pwa?.standaloneApi || !result.pwa?.cssHidesInstall) {
-    failed.push("standalone/PWA window should hide the install button");
+  if (!result.pwa?.standaloneApi || !result.pwa?.setInstallVisibleApi) {
+    failed.push("PWA standalone / setInstallVisible API missing");
   }
   if (
     !result.cacheMeta?.inAbout ||
