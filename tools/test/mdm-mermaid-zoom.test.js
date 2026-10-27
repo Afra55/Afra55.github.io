@@ -40,9 +40,17 @@ t("lightbox 支持滚轮/拖拽且提供 SVG/PNG/JPEG/WebP 下载", () => {
   assert.ok(src.includes('data-fmt="webp"'));
   assert.ok(src.includes("function exportLightbox"));
   assert.ok(src.includes("rasterizeSvgMarkup"));
+  assert.ok(src.includes("rasterizeSvgMarkupHtml2Canvas"));
+  assert.ok(src.includes("foreignObject"));
   assert.ok(src.includes('"wheel"'));
   assert.ok(src.includes("pointerdown"));
   assert.ok(css.includes(".mdm-lightbox-dl-menu"));
+});
+
+t("导出尺寸走纯函数，避免 width=100% 压成屏上缩略", () => {
+  assert.ok(src.includes("MP.measureSvgExportSize"));
+  const pure = fs.readFileSync(path.join(__dirname, "..", "lib", "mdm-pure.js"), "utf8");
+  assert.ok(pure.includes("function measureSvgExportSize"));
 });
 
 t("角标导出长图时忽略", () => {

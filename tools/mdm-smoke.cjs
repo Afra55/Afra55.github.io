@@ -48,7 +48,7 @@ function staticChecks() {
   assert(js.includes("capturePreviewAsOnePng"), "png one-shot stitch");
   assert(js.includes("bindPreviewImgLightbox") && js.includes("mdm-lightbox"), "preview img lightbox");
   assert(js.includes("mdm-mermaid-zoom") && js.includes("openMermaidLightbox"), "mermaid zoom badge");
-  assert(js.includes("exportLightbox") && js.includes("rasterizeSvgMarkup"), "lightbox multi-format download");
+  assert(js.includes("exportLightbox") && js.includes("rasterizeSvgMarkupHtml2Canvas"), "lightbox multi-format download");
   assert(js.includes("e.detail > 1"), "dblclick should not reopen img tools");
   assert(js.includes("ensureDirPathGuided") && js.includes("pickAndRememberAbsDir"), "path remember guide");
   assert(js.includes("pickLocalDir"), "bridge pickLocalDir wired");
@@ -327,28 +327,86 @@ async function browserChecks() {
     await page.waitForFunction(() => Boolean(document.querySelector("#mdm-preview .mdm-mermaid svg")), {
       timeout: 60000,
     });
-    const mermaidZoom = await page.evaluate(() => {
+    const mermaidZoom = await page.evaluate(async () => {
+      const P = window.DevToolsMdmPure;
+      if (!P?.measureSvgExportSize) return { ok: false, reason: "no measureSvgExportSize" };
+      const sized = P.measureSvgExportSize({
+        viewBoxW: 1200,
+        viewBoxH: 800,
+        attrW: "100%",
+        attrH: "100%",
+        rectW: 320,
+        rectH: 200,
+      });
+      if (sized.w !== 1200 || sized.h !== 800) return { ok: false, reason: "size prefers screen", sized };
+
       const wrap = document.querySelector("#mdm-preview .mdm-mermaid");
+      const svg = wrap?.querySelector("svg");
       const btn = wrap?.querySelector(".mdm-mermaid-zoom");
-      if (!wrap || !btn) return { ok: false, reason: "zoom badge missing" };
+      if (!wrap || !btn || !svg) return { ok: false, reason: "zoom badge missing" };
       btn.click();
       const dlg = document.getElementById("mdm-lightbox");
       const open = Boolean(dlg && dlg.open);
       const hasDl = Boolean(dlg?.querySelector("#mdm-lightbox-dl"));
       const svgBtn = dlg?.querySelector("#mdm-lightbox-dl-svg");
       const svgOk = Boolean(svgBtn && !svgBtn.hidden);
-      if (dlg) {
-        try {
-          dlg.close();
-        } catch (_) {
-          dlg.removeAttribute("open");
-        }
-      }
       if (!open) return { ok: false, reason: "lightbox not open from badge" };
       if (!hasDl || !svgOk) return { ok: false, reason: "download/svg missing", hasDl, svgOk };
-      return { ok: true };
+
+      const img = dlg.querySelector("#mdm-lightbox-img");
+      await new Promise((resolve) => {
+        if (img?.complete && img.naturalWidth) resolve();
+        else if (img) {
+          img.addEventListener("load", () => resolve(), { once: true });
+          img.addEventListener("error", () => resolve(), { once: true });
+          setTimeout(resolve, 4000);
+        } else resolve();
+      });
+      if (!img?.naturalWidth) return { ok: false, reason: "lightbox img failed to load" };
+
+      let vbW = 0;
+      try {
+        vbW = svg.viewBox?.baseVal?.width || 0;
+      } catch (_) {}
+      if (vbW > 400 && img.naturalWidth < vbW * 0.5) {
+        return { ok: false, reason: "export shrunk to screen", natural: img.naturalWidth, vbW };
+      }
+
+      const downloads = [];
+      const aProto = HTMLAnchorElement.prototype;
+      const origClick = aProto.click;
+      aProto.click = function patchedClick() {
+        downloads.push(String(this.download || ""));
+      };
+      try {
+        for (const fmt of ["svg", "png", "jpeg", "webp"]) {
+          const b = dlg.querySelector(`.mdm-lightbox-dl-menu button[data-fmt="${fmt}"]`);
+          if (!b || b.hidden) return { ok: false, reason: `missing ${fmt} btn` };
+          b.click();
+          const expectExt = fmt === "jpeg" ? "jpg" : fmt;
+          const start = Date.now();
+          // 首个位图可能要懒加载 html2canvas，给足时间
+          const budget = fmt === "svg" ? 3000 : 20000;
+          while (!downloads.some((d) => d.endsWith(`.${expectExt}`)) && Date.now() - start < budget) {
+            await new Promise((r) => setTimeout(r, 50));
+          }
+          if (!downloads.some((d) => d.endsWith(`.${expectExt}`))) {
+            const tip = document.querySelector(".devtools-toast, .toast, [data-toast]")?.textContent || "";
+            return { ok: false, reason: `download ${fmt} missing`, downloads, tip };
+          }
+        }
+      } finally {
+        aProto.click = origClick;
+      }
+
+      try {
+        dlg.close();
+      } catch (_) {
+        dlg.removeAttribute("open");
+      }
+      return { ok: true, downloads, natural: img.naturalWidth, vbW };
     });
-    assert(mermaidZoom.ok, `mermaid zoom: ${mermaidZoom.reason || "fail"}`);
+    assert(mermaidZoom.ok, `mermaid zoom: ${JSON.stringify(mermaidZoom)}`);
     console.log("STEP mermaid-ok");
 
     // 7b) 预览图片：单击尺寸条；双击放大；Esc 关闭后单击仍可用（互不破坏）

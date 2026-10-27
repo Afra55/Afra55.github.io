@@ -7378,37 +7378,43 @@ a{color:${v.accent}}
       }, 0);
     }
 
-    /** 量 SVG 导出尺寸（百分比宽高时回退到屏幕占位） */
+    /** 量 SVG 导出尺寸：优先 viewBox，勿被 width=100% 的屏上缩略尺寸压扁 */
     function measureSvgSize(svg) {
-      let w = 0;
-      let h = 0;
+      let viewBoxW = 0;
+      let viewBoxH = 0;
+      let baseW = 0;
+      let baseH = 0;
       const attrW = String(svg.getAttribute("width") || "");
       const attrH = String(svg.getAttribute("height") || "");
       try {
         const vb = svg.viewBox?.baseVal;
         if (vb && vb.width && vb.height) {
-          w = vb.width;
-          h = vb.height;
+          viewBoxW = vb.width;
+          viewBoxH = vb.height;
         }
       } catch (_) {}
-      if (!w || !h) {
-        try {
-          w = svg.width?.baseVal?.value || 0;
-          h = svg.height?.baseVal?.value || 0;
-        } catch (_) {}
+      try {
+        baseW = svg.width?.baseVal?.value || 0;
+        baseH = svg.height?.baseVal?.value || 0;
+      } catch (_) {}
+      const r = svg.getBoundingClientRect?.() || { width: 0, height: 0 };
+      if (typeof MP.measureSvgExportSize === "function") {
+        return MP.measureSvgExportSize({
+          viewBoxW,
+          viewBoxH,
+          attrW,
+          attrH,
+          baseW,
+          baseH,
+          rectW: r.width,
+          rectH: r.height,
+        });
       }
-      if (!w || !h || /%/.test(attrW) || /%/.test(attrH)) {
-        const r = svg.getBoundingClientRect();
-        if (r.width && r.height) {
-          w = r.width;
-          h = r.height;
-        }
-      }
-      if (!w || !h || !Number.isFinite(w) || !Number.isFinite(h)) {
-        w = 800;
-        h = 600;
-      }
-      return { w: Math.max(1, w), h: Math.max(1, h) };
+      // 兜底：与 mdm-pure.measureSvgExportSize 同策略
+      if (viewBoxW && viewBoxH) return { w: viewBoxW, h: viewBoxH };
+      if (baseW && baseH && !/%/.test(attrW) && !/%/.test(attrH)) return { w: baseW, h: baseH };
+      if (r.width && r.height) return { w: r.width, h: r.height };
+      return { w: 800, h: 600 };
     }
 
     /** 序列化图表 SVG，并写入明确像素宽高，便于 <img> / canvas 栅格化 */
@@ -7420,34 +7426,45 @@ a{color:${v.accent}}
       clone.setAttribute("height", String(Math.round(h)));
       clone.style.maxWidth = "none";
       clone.style.height = "auto";
-      return new XMLSerializer().serializeToString(clone);
+      const body = new XMLSerializer().serializeToString(clone);
+      return body.startsWith("<?xml") ? body : `<?xml version="1.0" encoding="UTF-8"?>${body}`;
     }
 
     async function rasterizeSvgMarkup(svgMarkup, mime, scale = 2) {
-      const url = URL.createObjectURL(new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" }));
+      // data URL 比 blob URL 在部分环境下二次解码 SVG 更稳
+      const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("SVG 无法栅格化"));
+        img.src = url;
+      });
+      return rasterizeImgElement(img, mime, scale);
+    }
+
+    /**
+     * Mermaid 常用 foreignObject，drawImage(SVG→img) 会污染 canvas；
+     * 离屏挂 DOM 后走 html2canvas（站内已有 vendor）。
+     */
+    async function rasterizeSvgMarkupHtml2Canvas(svgMarkup, mime, scale = 2) {
+      await ensureVendor("html2canvas");
+      if (typeof window.html2canvas !== "function") throw new Error("截图库加载失败");
+      const holder = document.createElement("div");
+      holder.style.cssText =
+        "position:fixed;left:-100000px;top:0;pointer-events:none;background:#ffffff;";
+      holder.innerHTML = svgMarkup;
+      document.body.appendChild(holder);
       try {
-        const img = new Image();
-        await new Promise((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = () => reject(new Error("SVG 无法栅格化"));
-          img.src = url;
+        const canvas = await window.html2canvas(holder, {
+          backgroundColor: mime === "image/jpeg" ? "#ffffff" : null,
+          scale,
+          logging: false,
+          useCORS: true,
         });
-        const nw = Math.max(1, img.naturalWidth || 800);
-        const nh = Math.max(1, img.naturalHeight || 600);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(nw * scale);
-        canvas.height = Math.round(nh * scale);
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("无法创建画布");
-        if (mime === "image/jpeg") {
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         const quality = mime === "image/png" ? undefined : 0.92;
         return await new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
       } finally {
-        URL.revokeObjectURL(url);
+        holder.remove();
       }
     }
 
@@ -7463,9 +7480,20 @@ a{color:${v.accent}}
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // foreignObject SVG→img 再 drawImage 常抛 SecurityError
+      try {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      } catch (err) {
+        throw new Error(`画布绘制失败：${err.message || err}`);
+      }
       const quality = mime === "image/png" ? undefined : 0.92;
-      return await new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
+      return await new Promise((resolve, reject) => {
+        try {
+          canvas.toBlob((b) => resolve(b), mime, quality);
+        } catch (err) {
+          reject(err);
+        }
+      });
     }
 
     /**
@@ -7665,8 +7693,21 @@ a{color:${v.accent}}
           }
           const mime = fmt === "jpeg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png";
           let blob = null;
-          if (exportSvgMarkup) blob = await rasterizeSvgMarkup(exportSvgMarkup, mime);
-          else if (imgEl.naturalWidth) blob = await rasterizeImgElement(imgEl, mime);
+          if (exportSvgMarkup) {
+            // 图表：优先 html2canvas（避开 foreignObject 污染）；失败再试 drawImage
+            try {
+              blob = await rasterizeSvgMarkupHtml2Canvas(exportSvgMarkup, mime);
+            } catch (_) {
+              try {
+                if (imgEl.naturalWidth) blob = await rasterizeImgElement(imgEl, mime);
+                if (!blob) blob = await rasterizeSvgMarkup(exportSvgMarkup, mime);
+              } catch (err2) {
+                throw err2;
+              }
+            }
+          } else if (imgEl.naturalWidth) {
+            blob = await rasterizeImgElement(imgEl, mime);
+          }
           if (!blob) throw new Error("浏览器无法编码该格式");
           downloadBlob(blob, name);
           toast(`已下载 ${name}`);

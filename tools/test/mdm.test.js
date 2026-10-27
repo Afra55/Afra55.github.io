@@ -221,4 +221,33 @@ t("mdm.js 导入文件夹自动打文件夹名标签", () => {
   assert.ok(!/导入不自动建标签/.test(ingest));
 });
 
+t("measureSvgExportSize 优先 viewBox，不被 100% 屏宽压扁", () => {
+  assert.deepStrictEqual(
+    P.measureSvgExportSize({
+      viewBoxW: 1200,
+      viewBoxH: 800,
+      attrW: "100%",
+      attrH: "100%",
+      rectW: 320,
+      rectH: 200,
+    }),
+    { w: 1200, h: 800 }
+  );
+  assert.deepStrictEqual(
+    P.measureSvgExportSize({ attrW: "400", attrH: "300", baseW: 400, baseH: 300, rectW: 120, rectH: 90 }),
+    { w: 400, h: 300 }
+  );
+  assert.deepStrictEqual(
+    P.measureSvgExportSize({ attrW: "100%", attrH: "100%", rectW: 320, rectH: 200 }),
+    { w: 320, h: 200 }
+  );
+  assert.deepStrictEqual(P.measureSvgExportSize({}), { w: 800, h: 600 });
+});
+
+t("mdm.js 图表导出走 measureSvgExportSize", () => {
+  const src = require("fs").readFileSync(path.join(__dirname, "..", "extra-panels", "mdm.js"), "utf8");
+  assert.ok(src.includes("MP.measureSvgExportSize"));
+  assert.ok(src.includes("function measureSvgSize"));
+});
+
 console.log(`mdm.test: ${n} passed`);
