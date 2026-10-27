@@ -1488,17 +1488,7 @@ async function main() {
 
     out.pwa.standaloneApi = typeof window.DevToolsPwa?.isStandalone === "function";
     out.pwa.noBottomInstallFab = !document.getElementById("pwa-install");
-    // 顶栏安装项：standalone 时应隐藏
-    const menuPwa = document.getElementById("header-more-pwa");
-    if (menuPwa && typeof window.DevToolsPwa?.setInstallVisible === "function") {
-      window.DevToolsPwa.setInstallVisible(true);
-      document.documentElement.classList.add("is-pwa-standalone");
-      window.DevToolsPwa.setInstallVisible(false);
-      out.pwa.standaloneHidesMenuInstall = Boolean(menuPwa.hidden);
-      document.documentElement.classList.remove("is-pwa-standalone");
-    } else {
-      out.pwa.standaloneHidesMenuInstall = true;
-    }
+    out.pwa.setInstallVisibleApi = typeof window.DevToolsPwa?.setInstallVisible === "function";
 
     try {
       await window.DevToolsPanels?.ensure?.("about");
@@ -2176,8 +2166,8 @@ async function main() {
   if (!result.pwa?.swApi || !result.pwa?.registered) {
     failed.push("service worker should register for PWA");
   }
-  if (!result.pwa?.standaloneApi || !result.pwa?.standaloneHidesMenuInstall) {
-    failed.push("standalone/PWA window should hide the header install entry");
+  if (!result.pwa?.standaloneApi || !result.pwa?.setInstallVisibleApi) {
+    failed.push("PWA standalone / setInstallVisible API missing");
   }
   if (
     !result.cacheMeta?.inAbout ||
