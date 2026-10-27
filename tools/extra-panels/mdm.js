@@ -1974,66 +1974,38 @@
 
     // ---- Mermaid（按需懒加载，5MB+ 只在出现 mermaid 代码块时加载） ----
     let mermaidLoading = null;
-    let mermaidBodyGuard = null;
+    /** 离屏测量容器：传给 mermaid.render 第三参，避免临时 SVG 挂到 document.body（底部闪条根因） */
+    let mermaidStage = null;
 
-    function isMermaidTempBodyNode(el) {
-      if (!el || el.nodeType !== 1) return false;
-      if (els.preview?.contains(el)) return false;
-      const id = String(el.id || "");
-      if (/^mmd/i.test(id) || /^dmmd/i.test(id)) return true;
-      if (el.getAttribute?.("aria-roledescription") === "error") return true;
-      if (el.querySelector?.('svg[aria-roledescription="error"]')) return true;
-      const t = el.textContent || "";
-      return /Syntax error in text/i.test(t) && /mermaid version/i.test(t);
-    }
-
-    /** 渲染瞬间挂到 body 的全宽临时节点：立刻藏掉，避免底部长条闪一下 */
-    function cloakMermaidTempNode(el) {
-      if (!isMermaidTempBodyNode(el)) return;
-      try {
-        el.setAttribute("data-mdm-mermaid-temp", "1");
-        el.style.setProperty("position", "absolute", "important");
-        el.style.setProperty("left", "-10000px", "important");
-        el.style.setProperty("top", "0", "important");
-        el.style.setProperty("width", "0", "important");
-        el.style.setProperty("height", "0", "important");
-        el.style.setProperty("opacity", "0", "important");
-        el.style.setProperty("pointer-events", "none", "important");
-        el.style.setProperty("visibility", "hidden", "important");
-        el.style.setProperty("overflow", "hidden", "important");
-      } catch (_) {}
-    }
-
-    function ensureMermaidTempCss() {
-      if (document.getElementById("mdm-mermaid-temp-css")) return;
-      try {
-        const st = document.createElement("style");
-        st.id = "mdm-mermaid-temp-css";
-        st.textContent =
-          'body > svg[id^="mmd"],body > div[id^="dmmd"],body > svg[aria-roledescription="error"]{' +
-          "position:absolute!important;left:-10000px!important;top:0!important;" +
-          "width:0!important;height:0!important;max-width:0!important;max-height:0!important;" +
-          "opacity:0!important;visibility:hidden!important;pointer-events:none!important;overflow:hidden!important;}";
-        document.head.appendChild(st);
-      } catch (_) {}
-    }
-
-    function ensureMermaidBodyGuard() {
-      ensureMermaidTempCss();
-      if (mermaidBodyGuard || typeof MutationObserver !== "function" || !document.body) return;
-      mermaidBodyGuard = new MutationObserver((mutations) => {
-        for (const m of mutations) {
-          for (const n of m.addedNodes) cloakMermaidTempNode(n);
-        }
-      });
-      try {
-        mermaidBodyGuard.observe(document.body, { childList: true });
-      } catch (_) {
-        mermaidBodyGuard = null;
+    function ensureMermaidStage() {
+      if (!document.body) return null;
+      if (mermaidStage?.isConnected) {
+        const pw = els.preview?.clientWidth || 0;
+        if (pw > 40) mermaidStage.style.width = `${pw}px`;
+        return mermaidStage;
       }
+      const el = document.createElement("div");
+      el.id = "mdm-mermaid-stage";
+      el.setAttribute("aria-hidden", "true");
+      el.setAttribute("data-mdm-mermaid-stage", "1");
+      const pw = els.preview?.clientWidth || 0;
+      el.style.cssText =
+        "position:absolute;left:-10000px;top:0;width:" +
+        (pw > 40 ? pw : 960) +
+        "px;overflow:hidden;opacity:0;pointer-events:none;";
+      document.body.appendChild(el);
+      mermaidStage = el;
+      return el;
     }
 
-    /** Mermaid 失败时会往 body 塞超大「Syntax error…」SVG；关掉并清掉残留 */
+    function clearMermaidStage() {
+      if (!mermaidStage) return;
+      try {
+        mermaidStage.innerHTML = "";
+      } catch (_) {}
+    }
+
+    /** Mermaid 失败时偶发往 body 塞「Syntax error…」SVG；清掉残留（正式图在预览区内不动） */
     function scrubMermaidErrorArtifacts(renderId) {
       try {
         if (renderId) {
@@ -2046,13 +2018,12 @@
           if (els.preview?.contains(el)) return;
           el.remove();
         });
-        // 兜底：文案匹配底部大横条 + 我们打标的临时节点
-        document.querySelectorAll("body > svg, body > div > svg, body > [data-mdm-mermaid-temp]").forEach((el) => {
+        document.querySelectorAll("body > svg, body > div > svg").forEach((el) => {
           if (els.preview?.contains(el)) return;
+          if (el.closest?.("[data-mdm-mermaid-stage]")) return;
           const t = el.textContent || "";
           const id = String(el.id || "");
           if (
-            el.hasAttribute?.("data-mdm-mermaid-temp") ||
             (/Syntax error in text/i.test(t) && /mermaid version/i.test(t)) ||
             /^mmd/i.test(id) ||
             /^dmmd/i.test(id)
@@ -2061,6 +2032,7 @@
           }
         });
       } catch (_) {}
+      clearMermaidStage();
     }
 
     function markMermaidBlockError(pre, err) {
@@ -2143,7 +2115,6 @@
         }
       }
       if (!pending.length) return;
-      ensureMermaidBodyGuard();
       if (!window.mermaid) {
         try {
           if (!mermaidLoading) mermaidLoading = window.DevToolsLazy?.loadVendor?.("mermaid");
@@ -2162,11 +2133,15 @@
           theme: document.documentElement.dataset.themeScheme === "light" ? "default" : "dark",
         });
       } catch (_) {}
+      const stage = ensureMermaidStage();
       scrubMermaidErrorArtifacts("");
       for (const { pre, src } of pending) {
         const id = `mmd${Math.random().toString(36).slice(2, 9)}`;
         try {
-          const { svg } = await window.mermaid.render(id, src);
+          // 第三参 container：在离屏 stage 内测量，根治 body 全宽临时 SVG 闪底栏
+          const { svg } = stage
+            ? await window.mermaid.render(id, src, stage)
+            : await window.mermaid.render(id, src);
           scrubMermaidErrorArtifacts(id);
           if (!svg || /Syntax error in text/i.test(svg)) {
             throw new Error("图表语法有误");
@@ -2183,6 +2158,7 @@
           markMermaidBlockError(pre, err);
         }
       }
+      clearMermaidStage();
       scrubMermaidErrorArtifacts("");
     }
 
