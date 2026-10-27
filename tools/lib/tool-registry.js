@@ -1295,7 +1295,7 @@
     "minigames": "摸鱼 & 解压：2048、贪吃蛇、Flappy、打地鼠、泡泡纸、Pop-it、升空气泡、键盘敲击音；纯本地 Canvas。",
     "sandspiel": "落沙沙盒：沙子/水/火/植物等元胞自动机，本地 WASM+WebGL。移植自 MaxBittker/sandspiel 并中文化，无登录无广告。",
     "ambient": "环境音库：89 条单轨环境音，分类浏览、搜索、收藏与下载；封面为 Openverse 实景图，音效参考 remvze/moodist。",
-    "enspeak": "日常开口：按「架子换词 + 话题岛 + 听跟 + 当天说出口」练生活英语。内置约 20 架子、起步四岛与扩展岛句库；进度与录音仅存本机。",
+    "enspeak": "日常开口：先记固定架子（日常对话/自我/提问/软着陆），再换词练生活英语。内置 30+ 架子、日常闲聊岛与多话题句库，可慢慢补；进度与录音仅存本机。",
     "animalearn": "幼儿认动物：中英闪卡，点读先中文再英文；玩玩看含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
     "insectearn": "幼儿认昆虫：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
     "plantearn": "幼儿认植物：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",

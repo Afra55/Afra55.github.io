@@ -13,6 +13,7 @@
   let state = defaultState();
   let activeIsland = "who";
   let activeSentenceId = "";
+  let activeFrameGroup = "chat";
   let mediaRecorder = null;
   let recordedChunks = [];
   let recordedUrl = "";
@@ -620,10 +621,47 @@
       .join("");
   }
 
+  function frameGroups() {
+    const fallback = [
+      { id: "chat", name: "日常对话", blurb: "寒暄开场、澄清、道谢、收尾" },
+      { id: "self", name: "自我表达", blurb: "身份、今天、喜好" },
+      { id: "ask", name: "提问架子", blurb: "问对方、请求帮助" },
+      { id: "soft", name: "软着陆", blurb: "抱歉、想法、拖延、同感" },
+    ];
+    const list = CONTENT.frameGroups?.length ? CONTENT.frameGroups : fallback;
+    return [{ id: "all", name: "全部", blurb: "所有架子" }, ...list];
+  }
+
+  function renderFrameFilters() {
+    const wrap = $("#enspeak-frame-filters");
+    if (!wrap) return;
+    const groups = frameGroups();
+    if (!groups.some((g) => g.id === activeFrameGroup)) activeFrameGroup = groups[0]?.id || "all";
+    wrap.innerHTML = groups
+      .map((g) => {
+        const n =
+          g.id === "all"
+            ? (CONTENT.frames || []).length
+            : (CONTENT.frames || []).filter((f) => (f.group || "self") === g.id).length;
+        const on = g.id === activeFrameGroup;
+        return `<button type="button" class="ghost-btn enspeak-frame-filter${on ? " is-active" : ""}" data-fgroup="${escapeAttr(g.id)}" role="tab" aria-selected="${on ? "true" : "false"}" title="${escapeAttr(g.blurb || "")}">${escapeHtml(g.name)} · ${n}</button>`;
+      })
+      .join("");
+  }
+
   function renderFrames() {
     const grid = $("#enspeak-frame-grid");
     if (!grid) return;
-    grid.innerHTML = (CONTENT.frames || [])
+    renderFrameFilters();
+    const frames = (CONTENT.frames || []).filter((f) => {
+      if (activeFrameGroup === "all") return true;
+      return (f.group || "self") === activeFrameGroup;
+    });
+    if (!frames.length) {
+      grid.innerHTML = `<p class="hint tight">这一组还没有架子，可在句库里继续补。</p>`;
+      return;
+    }
+    grid.innerHTML = frames
       .map((f) => {
         return `<button type="button" class="enspeak-frame-btn" data-fid="${f.id}">
           <div class="enspeak-sent-en">${escapeHtml(f.en)}</div>
@@ -970,6 +1008,13 @@
     });
 
     $("#enspeak-pseudo")?.addEventListener("click", runPseudoDialogue);
+
+    $("#enspeak-frame-filters")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-fgroup]");
+      if (!b) return;
+      activeFrameGroup = b.dataset.fgroup || "all";
+      renderFrames();
+    });
 
     $("#enspeak-frame-grid")?.addEventListener("click", (e) => {
       const b = e.target.closest("[data-fid]");

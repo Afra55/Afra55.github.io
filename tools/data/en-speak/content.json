@@ -1,7 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "title": "日常开口",
-  "tagline": "尽快能聊自己的生活 · 没说出口，不算会",
+  "tagline": "先记架子，再换词开口 · 句库可慢慢补 · 没说出口，不算会",
   "profileFields": [
     {
       "key": "name",
@@ -67,7 +67,8 @@
         "self-employed",
         "a parent"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f02",
@@ -86,7 +87,8 @@
         "with my parents",
         "alone"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f03",
@@ -105,7 +107,8 @@
         "university",
         "remotely"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f04",
@@ -124,7 +127,8 @@
         "call my family",
         "eat lunch at my desk"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f05",
@@ -143,7 +147,8 @@
         "sleep early",
         "study English"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f06",
@@ -162,7 +167,8 @@
         "learned something new",
         "talked with friends"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f07",
@@ -181,7 +187,8 @@
         "stayed up late",
         "felt better"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f08",
@@ -200,7 +207,8 @@
         "short videos",
         "talking with friends"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f09",
@@ -219,7 +227,8 @@
         "crowds",
         "overtime"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f10",
@@ -238,7 +247,8 @@
         "okay",
         "not bad"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "self"
     },
     {
       "id": "f11",
@@ -257,7 +267,8 @@
         "need a break",
         "have time"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "ask"
     },
     {
       "id": "f12",
@@ -276,7 +287,8 @@
         "recommend",
         "do for fun"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "ask"
     },
     {
       "id": "f13",
@@ -295,7 +307,8 @@
         "give me a minute",
         "say it another way"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "ask"
     },
     {
       "id": "f14",
@@ -314,7 +327,8 @@
         "open the window",
         "come with me"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "ask"
     },
     {
       "id": "f15",
@@ -333,7 +347,8 @@
         "I can't today",
         "I forgot"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "soft"
     },
     {
       "id": "f16",
@@ -352,7 +367,8 @@
         "it'll be fine",
         "I need a break"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "soft"
     },
     {
       "id": "f17",
@@ -371,7 +387,8 @@
         "if that's right",
         "how long"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "soft"
     },
     {
       "id": "f18",
@@ -390,7 +407,8 @@
         "okay",
         "perfect"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "soft"
     },
     {
       "id": "f19",
@@ -409,7 +427,8 @@
         "Same",
         "Totally"
       ],
-      "role": "frame"
+      "role": "frame",
+      "group": "soft"
     },
     {
       "id": "f20",
@@ -427,6 +446,247 @@
         "... hmm",
         "... wait",
         "... I got it"
+      ],
+      "role": "frame",
+      "group": "soft"
+    },
+    {
+      "id": "f21",
+      "en": "How's it going{extra}?",
+      "zh": "最近怎么样？",
+      "slot": "extra",
+      "group": "chat",
+      "examples": [
+        "",
+        " with you",
+        " these days",
+        " at work",
+        " lately",
+        " today",
+        " this week",
+        ", buddy",
+        " over there",
+        " with everything"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f22",
+      "en": "What are you up to{extra}?",
+      "zh": "你在忙什么？",
+      "slot": "extra",
+      "group": "chat",
+      "examples": [
+        "",
+        " now",
+        " today",
+        " this weekend",
+        " after work",
+        " lately",
+        " these days",
+        " tonight",
+        " tomorrow",
+        " right now"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f23",
+      "en": "How was your {period}?",
+      "zh": "你的……怎么样？",
+      "slot": "period",
+      "group": "chat",
+      "examples": [
+        "weekend",
+        "day",
+        "morning",
+        "trip",
+        "meeting",
+        "lunch",
+        "holiday",
+        "week",
+        "flight",
+        "exam"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f24",
+      "en": "By the way, {aside}.",
+      "zh": "对了，……",
+      "slot": "aside",
+      "group": "chat",
+      "examples": [
+        "I almost forgot",
+        "have you eaten",
+        "nice jacket",
+        "congrats on that",
+        "I saw your message",
+        "are you free later",
+        "that place is closed",
+        "I like your idea",
+        "don't forget the key",
+        "say hi to them for me"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f25",
+      "en": "Thanks for {thanks}.",
+      "zh": "谢谢你……",
+      "slot": "thanks",
+      "group": "chat",
+      "examples": [
+        "your help",
+        "coming",
+        "the update",
+        "waiting",
+        "the coffee",
+        "picking me up",
+        "explaining that",
+        "today",
+        "everything",
+        "being patient"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f26",
+      "en": "{welcome}.",
+      "zh": "不客气 / 没事",
+      "slot": "welcome",
+      "group": "chat",
+      "examples": [
+        "You're welcome",
+        "No problem",
+        "No worries",
+        "Anytime",
+        "Sure thing",
+        "Of course",
+        "Happy to help",
+        "Don't mention it",
+        "My pleasure",
+        "Glad I could help"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f27",
+      "en": "Sorry, what do you mean by {clarify}?",
+      "zh": "不好意思，你说的……是什么意思？",
+      "slot": "clarify",
+      "group": "chat",
+      "examples": [
+        "that",
+        "this word",
+        "deadline",
+        "ASAP",
+        "flexible",
+        "catch up",
+        "that plan",
+        "next steps",
+        "\"soon\"",
+        "the last part"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f28",
+      "en": "Hold on{hold}.",
+      "zh": "等一下……",
+      "slot": "hold",
+      "group": "chat",
+      "examples": [
+        "",
+        " a second",
+        " one moment",
+        ", please",
+        " — I'm almost done",
+        " — let me check",
+        " — I'll be right back",
+        ", I'm on a call",
+        " — writing this down",
+        " — opening the link"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f29",
+      "en": "Talk to you {bye}.",
+      "zh": "……再聊",
+      "slot": "bye",
+      "group": "chat",
+      "examples": [
+        "later",
+        "soon",
+        "tomorrow",
+        "tonight",
+        "next week",
+        "after lunch",
+        "on Monday",
+        "when you're free",
+        "after the meeting",
+        "this weekend"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f30",
+      "en": "It's been a while{extra}!",
+      "zh": "好久没见！",
+      "slot": "extra",
+      "group": "chat",
+      "examples": [
+        "",
+        " — how have you been",
+        " since last year",
+        " since the party",
+        " — you look great",
+        " — I missed this",
+        " — crazy how time flies",
+        " — good to see you",
+        " — what's new",
+        " — where have you been"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f31",
+      "en": "I was wondering if {wonder}.",
+      "zh": "想问问……行不行？",
+      "slot": "wonder",
+      "group": "chat",
+      "examples": [
+        "you're free tonight",
+        "this still works",
+        "we could meet tomorrow",
+        "you got my email",
+        "I could join",
+        "that's okay with you",
+        "you need help",
+        "we can reschedule",
+        "there's a quieter place",
+        "I said that right"
+      ],
+      "role": "frame"
+    },
+    {
+      "id": "f32",
+      "en": "That reminds me of {remind}.",
+      "zh": "这让我想起……",
+      "slot": "remind",
+      "group": "chat",
+      "examples": [
+        "last weekend",
+        "a similar story",
+        "my coworker",
+        "that restaurant",
+        "something funny",
+        "what you said earlier",
+        "a show I watched",
+        "our trip",
+        "a bug we fixed",
+        "another idea"
       ],
       "role": "frame"
     }
@@ -463,6 +723,14 @@
       "starter": true,
       "week": 3,
       "blurb": "同意、追问、换话题"
+    },
+    {
+      "id": "chat",
+      "name": "日常闲聊",
+      "nameEn": "Small talk",
+      "starter": true,
+      "week": 1,
+      "blurb": "寒暄、开场、收尾、澄清"
     },
     {
       "id": "shop",
@@ -2524,6 +2792,150 @@
       "slots": [],
       "tags": [],
       "difficulty": 2
+    },
+    {
+      "id": "chat01",
+      "island": "chat",
+      "role": "line",
+      "en": "Hey! How's it going?",
+      "zh": "嗨！最近怎么样？",
+      "slots": [],
+      "tags": [
+        "opener"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat02",
+      "island": "chat",
+      "role": "line",
+      "en": "Long time no see!",
+      "zh": "好久不见！",
+      "slots": [],
+      "tags": [
+        "opener"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat03",
+      "island": "chat",
+      "role": "line",
+      "en": "What are you up to today?",
+      "zh": "你今天在忙什么？",
+      "slots": [],
+      "tags": [
+        "ask"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat04",
+      "island": "chat",
+      "role": "line",
+      "en": "How was your weekend?",
+      "zh": "周末过得怎么样？",
+      "slots": [],
+      "tags": [
+        "ask"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat05",
+      "island": "chat",
+      "role": "line",
+      "en": "Not much — just the usual.",
+      "zh": "没什么特别的，就和平时一样。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat06",
+      "island": "chat",
+      "role": "line",
+      "en": "Same here. Busy but okay.",
+      "zh": "我也是，挺忙但还行。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat07",
+      "island": "chat",
+      "role": "line",
+      "en": "By the way, are you free later?",
+      "zh": "对了，你晚点有空吗？",
+      "slots": [],
+      "tags": [
+        "aside"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat08",
+      "island": "chat",
+      "role": "line",
+      "en": "Sorry — what do you mean by that?",
+      "zh": "不好意思，你说的是什么意思？",
+      "slots": [],
+      "tags": [
+        "clarify"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat09",
+      "island": "chat",
+      "role": "line",
+      "en": "Hold on a second, please.",
+      "zh": "请稍等一下。",
+      "slots": [],
+      "tags": [
+        "pause"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat10",
+      "island": "chat",
+      "role": "line",
+      "en": "Thanks for your help!",
+      "zh": "谢谢你帮忙！",
+      "slots": [],
+      "tags": [
+        "thanks"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat11",
+      "island": "chat",
+      "role": "line",
+      "en": "No problem. Happy to help.",
+      "zh": "没事，乐意帮忙。",
+      "slots": [],
+      "tags": [
+        "thanks"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat12",
+      "island": "chat",
+      "role": "line",
+      "en": "Talk to you later!",
+      "zh": "晚点再聊！",
+      "slots": [],
+      "tags": [
+        "closer"
+      ],
+      "difficulty": 1
     }
   ],
   "weekPlans": [
@@ -2668,6 +3080,32 @@
         "speaker": "B",
         "text": "Sure. By the way, how was your lunch?"
       }
+    ],
+    "chat": [
+      {
+        "speaker": "A",
+        "text": "Hey! How's it going?"
+      },
+      {
+        "speaker": "B",
+        "text": "Pretty good. What about you?"
+      },
+      {
+        "speaker": "A",
+        "text": "Busy but okay. How was your weekend?"
+      },
+      {
+        "speaker": "B",
+        "text": "Not much — just stayed home. By the way, are you free later?"
+      },
+      {
+        "speaker": "A",
+        "text": "Maybe after six. Talk to you later!"
+      },
+      {
+        "speaker": "B",
+        "text": "Sounds good. Talk soon!"
+      }
     ]
   },
   "method": {
@@ -2676,5 +3114,27 @@
     "mustSpeak": 2,
     "listenLockDays": 3,
     "unlockFlexibleRatio": 0.7
-  }
+  },
+  "frameGroups": [
+    {
+      "id": "chat",
+      "name": "日常对话",
+      "blurb": "寒暄开场、澄清、道谢、收尾"
+    },
+    {
+      "id": "self",
+      "name": "自我表达",
+      "blurb": "身份、今天、喜好"
+    },
+    {
+      "id": "ask",
+      "name": "提问架子",
+      "blurb": "问对方、请求帮助"
+    },
+    {
+      "id": "soft",
+      "name": "软着陆",
+      "blurb": "抱歉、想法、拖延、同感"
+    }
+  ]
 }
