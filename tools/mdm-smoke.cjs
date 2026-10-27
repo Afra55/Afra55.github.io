@@ -48,6 +48,9 @@ function staticChecks() {
   assert(js.includes("capturePreviewAsOnePng"), "png one-shot stitch");
   assert(js.includes("bindPreviewImgLightbox") && js.includes("mdm-lightbox"), "preview img lightbox");
   assert(js.includes("mdm-mermaid-zoom") && js.includes("openMermaidLightbox"), "mermaid zoom badge");
+  assert(js.includes("function ensureMermaidStage"), "mermaid offscreen stage");
+  assert(/mermaid\.render\(\s*id\s*,\s*src\s*,\s*stage\s*\)/.test(js), "mermaid.render must pass stage container");
+  assert(!js.includes("ensureMermaidBodyGuard") && !js.includes("cloakMermaidTempNode"), "no flash-hide body guard");
   assert(js.includes("exportLightbox") && js.includes("rasterizeSvgMarkupHtml2Canvas"), "lightbox multi-format download");
   assert(js.includes("e.detail > 1"), "dblclick should not reopen img tools");
   assert(js.includes("ensureDirPathGuided") && js.includes("pickAndRememberAbsDir"), "path remember guide");
