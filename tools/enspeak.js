@@ -18,6 +18,11 @@
   let recordedChunks = [];
   let recordedUrl = "";
   let bound = false;
+  /** @type {ReturnType<typeof setInterval>|null} */
+  let blindTimer = null;
+  let activeFrameId = "";
+  let islandChainIds = [];
+  let islandChainIdx = 0;
 
   function defaultState() {
     return {
@@ -161,14 +166,18 @@
     });
   }
 
-  function variantZhFor(frameZh, fillEn) {
+  function variantZhFor(frameZh, fillEn, fillZh) {
     const api = fillApi();
-    if (api?.variantZhLine) return api.variantZhLine(frameZh, fillEn);
+    if (api?.variantZhLine) return api.variantZhLine(frameZh, fillEn, fillZh);
     const zh = String(frameZh || "").trim();
-    const fill = String(fillEn || "").trim();
-    if (!zh) return fill ? `（${fill}）` : "";
-    if (!fill) return zh;
-    return `${zh}（${fill}）`;
+    const zf = String(fillZh || "").trim();
+    if (!zh) return zf || "";
+    if (!zf) return zh;
+    if (/……|\.\.\.|…/.test(zh)) return zh.replace(/……|\.\.\.|…/g, zf).replace(/\s{2,}/g, " ").trim();
+    if (zh.includes(zf)) return zh;
+    const m = zh.match(/^(.*?)([？?。！!]*)$/);
+    if (m) return `${m[1]}（${zf}）${m[2] || ""}`;
+    return `${zh}（${zf}）`;
   }
 
   function displayEn(sent) {
@@ -698,28 +707,105 @@
     });
   }
 
+  function frameExampleZhFills(f) {
+    const ex = f.examples || [];
+    const ez = Array.isArray(f.examplesZh) ? f.examplesZh : [];
+    return ex.map((_, i) => String(ez[i] || "").trim());
+  }
+
+  function clearBlindTimer() {
+    if (blindTimer) {
+      clearInterval(blindTimer);
+      blindTimer = null;
+    }
+  }
+
+  function framesInActiveGroup() {
+    return (CONTENT.frames || []).filter((fr) => {
+      if (activeFrameGroup === "all") return true;
+      return (fr.group || "self") === activeFrameGroup;
+    });
+  }
+
   function openFrame(id) {
     const f = (CONTENT.frames || []).find((x) => x.id === id);
     const box = $("#enspeak-frame-detail");
     const title = $("#enspeak-frame-detail-title");
     const body = $("#enspeak-frame-detail-body");
     if (!f || !box || !body) return;
+    clearBlindTimer();
+    activeFrameId = f.id;
     box.hidden = false;
     title.textContent = f.en;
     const slotVal = state.profile[f.slot] || "";
-    const ph = frameExampleFills(f)[0] || "";
+    const fillsEn = frameExampleFills(f);
+    const fillsZh = frameExampleZhFills(f);
+    const ph = fillsEn[0] || "";
+    const groupFrames = framesInActiveGroup();
+    const idxInGroup = Math.max(0, groupFrames.findIndex((x) => x.id === f.id));
     body.innerHTML = `
       <p class="hint">${escapeHtml(f.zh)}</p>
-      <p class="hint tight">方法：听示范 → 换槽位裂变 → 无稿说一句（说出口才算）</p>
+      <p class="hint tight">方法：听示范 → 换槽位裂变 → 无稿开口（倒计时后再揭晓）</p>
       <label class="enspeak-field">槽位「${escapeHtml(f.slot)}」
         <input class="text-input" id="enspeak-frame-slot" value="${escapeAttr(slotVal)}" placeholder="${escapeAttr(ph)}" autocomplete="off" />
       </label>
-      <div class="btn-row tool-actions enspeak-action-row">
-        <button type="button" class="primary-btn" id="enspeak-frame-gen">生成变体</button>
-        <button type="button" class="ghost-btn" id="enspeak-frame-blind" hidden>无稿开口（藏英文）</button>
-      </div>
       <div id="enspeak-frame-variants" class="enspeak-sent-list"></div>
+      <p class="hint tight enspeak-blind-status" id="enspeak-blind-status" hidden></p>
+      <div class="enspeak-frame-dock" id="enspeak-frame-dock">
+        <div class="btn-row tool-actions enspeak-action-row">
+          <button type="button" class="primary-btn" id="enspeak-frame-gen">生成变体</button>
+          <button type="button" class="ghost-btn" id="enspeak-frame-blind" hidden>无稿开口</button>
+          <button type="button" class="ghost-btn" id="enspeak-frame-reveal" hidden>立刻揭晓</button>
+          <button type="button" class="primary-btn" id="enspeak-frame-next">下一句</button>
+        </div>
+        <p class="hint tight enspeak-frame-dock-meta">${idxInGroup + 1}/${groupFrames.length || 1} · ${escapeHtml(f.group || "")}</p>
+      </div>
     `;
+    const zhForFill = (fill) => {
+      const i = fillsEn.findIndex((x) => x === fill);
+      if (i >= 0 && fillsZh[i]) return fillsZh[i];
+      return "";
+    };
+    const setBlindUi = (on, leftSec) => {
+      const wrap = $("#enspeak-frame-variants");
+      const blindBtn = $("#enspeak-frame-blind");
+      const revealBtn = $("#enspeak-frame-reveal");
+      const status = $("#enspeak-blind-status");
+      if (wrap) wrap.classList.toggle("is-blind", !!on);
+      if (blindBtn) blindBtn.textContent = on ? "显示英文" : "无稿开口";
+      if (revealBtn) revealBtn.hidden = !on;
+      if (status) {
+        if (on && leftSec != null) {
+          status.hidden = false;
+          status.textContent = leftSec > 0 ? `先自己说 · ${leftSec} 秒后揭晓英文` : "时间到 · 对照英文";
+        } else {
+          status.hidden = true;
+          status.textContent = "";
+        }
+      }
+    };
+    const stopBlind = (reveal) => {
+      clearBlindTimer();
+      setBlindUi(false);
+      if (reveal) toast("已揭晓，对照听一遍");
+    };
+    const startBlindCountdown = () => {
+      clearBlindTimer();
+      const secs = 5 + Math.floor(Math.random() * 4); // 5～8
+      let left = secs;
+      setBlindUi(true, left);
+      toast(`先看中文意图，自己开口 · ${secs} 秒后揭晓`);
+      blindTimer = setInterval(() => {
+        left -= 1;
+        if (left <= 0) {
+          clearBlindTimer();
+          setBlindUi(false);
+          toast("时间到 · 对照英文，点「听」校对");
+          return;
+        }
+        setBlindUi(true, left);
+      }, 1000);
+    };
     const renderVariants = (preferFill) => {
       const val = $("#enspeak-frame-slot")?.value?.trim() || preferFill || "";
       if (val) {
@@ -728,7 +814,7 @@
       }
       const fills = [];
       if (val) fills.push(val);
-      for (const ex of frameExampleFills(f)) {
+      for (const ex of fillsEn) {
         if (ex && !fills.includes(ex)) fills.push(ex);
         if (fills.length >= 10) break;
       }
@@ -739,13 +825,13 @@
         const en = fillTemplate(f.en, { [f.slot]: fill });
         if (!en || seen.has(en)) continue;
         seen.add(en);
-        pairs.push({ en, zh: variantZhFor(f.zh, fill), fill });
+        pairs.push({ en, zh: variantZhFor(f.zh, fill, zhForFill(fill)), fill });
       }
       const wrap = $("#enspeak-frame-variants");
       const blindBtn = $("#enspeak-frame-blind");
       if (blindBtn) blindBtn.hidden = pairs.length === 0;
+      stopBlind(false);
       if (wrap) {
-        wrap.classList.remove("is-blind");
         wrap.innerHTML = pairs
           .map(
             (p, i) => `<div class="enspeak-sent enspeak-variant" data-say="${escapeAttr(p.en)}" data-idx="${i}">
@@ -784,16 +870,111 @@
     $("#enspeak-frame-blind")?.addEventListener("click", () => {
       const wrap = $("#enspeak-frame-variants");
       if (!wrap) return;
-      wrap.classList.toggle("is-blind");
-      const on = wrap.classList.contains("is-blind");
-      $("#enspeak-frame-blind").textContent = on ? "显示英文" : "无稿开口（藏英文）";
-      if (on) toast("先看中文意图，自己说出英文，再点「听」对照");
+      if (wrap.classList.contains("is-blind")) {
+        stopBlind(true);
+        return;
+      }
+      startBlindCountdown();
+    });
+    $("#enspeak-frame-reveal")?.addEventListener("click", () => stopBlind(true));
+    $("#enspeak-frame-next")?.addEventListener("click", () => {
+      const list = framesInActiveGroup();
+      if (!list.length) return;
+      const i = list.findIndex((x) => x.id === f.id);
+      const next = list[(i + 1) % list.length];
+      if (next) openFrame(next.id);
     });
     // 打开即出一版变体，方便手机少点一次
     renderVariants(slotVal);
     try {
       box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } catch (_) {}
+  }
+
+  /** 开场→追问→接话→收尾；无标签时退回伪对话 / 前几句 */
+  function buildIslandChain(islandId) {
+    const lines = sentencesForIsland(islandId).filter((s) => s.role !== "prompt");
+    const roles = ["opener", "ask", "reply", "closer"];
+    const labels = { opener: "开场", ask: "追问", reply: "接话", closer: "收尾" };
+    const picked = [];
+    const used = new Set();
+    for (const tag of roles) {
+      const pool = lines.filter((s) => (s.tags || []).includes(tag) && !used.has(s.id));
+      if (pool.length) {
+        const s = pool[Math.floor(Math.random() * pool.length)];
+        used.add(s.id);
+        picked.push({ tag, label: labels[tag], sent: s });
+      }
+    }
+    if (picked.length >= 3) return picked;
+    const dlg = CONTENT.dialogues?.[islandId] || [];
+    if (dlg.length >= 3) {
+      return dlg.slice(0, 4).map((line, i) => ({
+        tag: roles[Math.min(i, roles.length - 1)],
+        label: labels[roles[Math.min(i, roles.length - 1)]],
+        sent: {
+          id: `dlg-${islandId}-${i}`,
+          en: fillTemplate(line.text),
+          zh: line.zh || `伪对话 · ${line.speaker || "A/B"}`,
+          island: islandId,
+        },
+        synthetic: true,
+      }));
+    }
+    return lines.slice(0, 4).map((s, i) => ({
+      tag: roles[Math.min(i, roles.length - 1)],
+      label: labels[roles[Math.min(i, roles.length - 1)]],
+      sent: s,
+    }));
+  }
+
+  function renderIslandChain() {
+    const box = $("#enspeak-chain-box");
+    const steps = $("#enspeak-chain-steps");
+    const hint = $("#enspeak-chain-hint");
+    if (!box || !steps) return;
+    if (!islandChainIds.length) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    const cur = islandChainIds[islandChainIdx];
+    if (hint) {
+      hint.textContent = `对话链 · ${islandName(activeIsland)} · 第 ${islandChainIdx + 1}/${islandChainIds.length} 环（${cur.label}）`;
+    }
+    steps.innerHTML = islandChainIds
+      .map((step, i) => {
+        const on = i === islandChainIdx;
+        const en = step.synthetic ? step.sent.en : displayEn(step.sent);
+        const zh = step.sent.zh || "";
+        return `<button type="button" class="enspeak-chain-step ${on ? "is-active" : ""}" data-cidx="${i}">
+          <span class="enspeak-chain-kicker">${escapeHtml(step.label)}</span>
+          <span class="enspeak-sent-zh">${escapeHtml(zh)}</span>
+          <span class="enspeak-sent-en enspeak-chain-en">${escapeHtml(en)}</span>
+        </button>`;
+      })
+      .join("");
+  }
+
+  function startIslandChain() {
+    const chain = buildIslandChain(activeIsland);
+    if (!chain.length) {
+      toast("当前岛句子太少，先练单句或换岛");
+      return;
+    }
+    islandChainIds = chain;
+    islandChainIdx = 0;
+    renderIslandChain();
+    try {
+      $("#enspeak-chain-box")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (_) {}
+    toast("对话链已就绪：先说中文意图对应的英文");
+  }
+
+  function currentChainLine() {
+    const step = islandChainIds[islandChainIdx];
+    if (!step) return "";
+    return step.synthetic ? step.sent.en : displayEn(step.sent);
   }
 
   function renderReplyTab() {
@@ -1078,12 +1259,55 @@
         return;
       }
       activeIsland = b.dataset.island;
+      islandChainIds = [];
+      islandChainIdx = 0;
+      const chainBox = $("#enspeak-chain-box");
+      if (chainBox) chainBox.hidden = true;
       renderIslands();
     });
 
     $("#enspeak-island-list")?.addEventListener("click", (e) => {
       const b = e.target.closest("[data-sid]");
       if (b) openSentenceDialog(b.dataset.sid);
+    });
+
+    $("#enspeak-chain")?.addEventListener("click", startIslandChain);
+    $("#enspeak-chain-steps")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-cidx]");
+      if (!b) return;
+      islandChainIdx = Number(b.dataset.cidx) || 0;
+      renderIslandChain();
+    });
+    $("#enspeak-chain-hear")?.addEventListener("click", () => {
+      const line = currentChainLine();
+      if (line) speakText(line);
+    });
+    $("#enspeak-chain-next")?.addEventListener("click", () => {
+      if (!islandChainIds.length) {
+        startIslandChain();
+        return;
+      }
+      if (islandChainIdx >= islandChainIds.length - 1) {
+        toast("本轮对话链走完了 · 可再抽一串或换岛");
+        startIslandChain();
+        return;
+      }
+      islandChainIdx += 1;
+      renderIslandChain();
+    });
+    $("#enspeak-chain-spoken")?.addEventListener("click", () => {
+      const step = islandChainIds[islandChainIdx];
+      if (!step) return;
+      if (!step.synthetic && step.sent?.id) {
+        markSpoken(step.sent.id);
+        toast("这一环已记开口");
+      } else {
+        toast("伪对话环已记开口（不计句库进度）");
+      }
+      if (islandChainIdx < islandChainIds.length - 1) {
+        islandChainIdx += 1;
+        renderIslandChain();
+      }
     });
 
     $("#enspeak-pseudo")?.addEventListener("click", runPseudoDialogue);

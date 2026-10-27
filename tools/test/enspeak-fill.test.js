@@ -36,9 +36,14 @@ t("示例自带前导空格时不叠成双空格", () => {
   );
 });
 
-t("变体中文：省略号替换或括号标注", () => {
-  assert.strictEqual(variantZhLine("我是……", "a teacher"), "我是 a teacher");
-  assert.strictEqual(variantZhLine("最近怎么样？", "these days"), "最近怎么样？（these days）");
+t("变体中文：有 fillZh 时填省略号或括号；无 fillZh 只保留意图", () => {
+  assert.strictEqual(variantZhLine("我是……", "a teacher", "老师"), "我是老师");
+  assert.strictEqual(variantZhLine("我是……", "a teacher"), "我是……");
+  assert.strictEqual(
+    variantZhLine("最近怎么样？", "these days", "最近这段时间"),
+    "最近怎么样（最近这段时间）？"
+  );
+  assert.strictEqual(variantZhLine("最近怎么样？", "these days"), "最近怎么样？");
   assert.strictEqual(variantZhLine("保重……", ""), "保重……");
 });
 

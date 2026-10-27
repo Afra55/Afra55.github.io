@@ -304,6 +304,71 @@
   flex-wrap: wrap;
 }
 
+.enspeak-frame-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--line, rgba(127, 140, 160, 0.35)) 70%, transparent);
+}
+
+.enspeak-frame-dock-meta {
+  margin: 0;
+}
+
+.enspeak-blind-status {
+  margin: 0.15rem 0 0;
+  color: var(--accent, #5b8cff);
+  font-weight: 600;
+}
+
+.enspeak-chain-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px dashed var(--line, rgba(127, 140, 160, 0.4));
+}
+
+.enspeak-chain-box[hidden] {
+  display: none !important;
+}
+
+.enspeak-chain-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.enspeak-chain-step {
+  text-align: left;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid var(--line, rgba(127, 140, 160, 0.3));
+  background: color-mix(in srgb, var(--bg-1, #121a28) 90%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+
+.enspeak-chain-step.is-active {
+  border-color: var(--accent, #5b8cff);
+  box-shadow: inset 3px 0 0 var(--accent, #5b8cff);
+}
+
+.enspeak-chain-kicker {
+  font-size: 0.72rem;
+  opacity: 0.75;
+  font-weight: 650;
+}
+
+.enspeak-chain-step:not(.is-active) .enspeak-chain-en {
+  opacity: 0.55;
+}
+
 @media (max-width: 720px) {
   .enspeak-tabs {
     flex-wrap: nowrap;
@@ -384,6 +449,38 @@
   .enspeak-variant-acts .ghost-btn {
     flex: 1 1 auto;
     min-height: 2.5rem;
+  }
+
+  #enspeak-frame-detail {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .enspeak-frame-dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    margin: 0.5rem -0.15rem 0;
+    padding: 0.65rem 0.55rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--line, rgba(127, 140, 160, 0.35));
+    background: color-mix(in srgb, var(--panel-strong, var(--bg-0, #0b1320)) 92%, transparent);
+    backdrop-filter: blur(8px);
+  }
+
+  .enspeak-frame-dock .primary-btn,
+  .enspeak-frame-dock .ghost-btn {
+    flex: 1 1 42%;
+    min-height: 2.75rem;
+    font-size: 1rem;
+  }
+
+  #enspeak-frame-next {
+    flex: 1 1 100%;
+    min-height: 3rem;
+    font-weight: 700;
+  }
+
+  .enspeak-chain-step {
+    min-height: 3rem;
   }
 }
 

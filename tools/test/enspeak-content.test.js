@@ -74,4 +74,29 @@ t("架子变体走 fill 库、带中文，今日闭环文案落地", () => {
   assert.ok(fillSrc.includes("fillEnTemplate"));
 });
 
+t("架子 examplesZh 与 examples 对齐，非空槽位尽量有中文", () => {
+  let slots = 0;
+  let zh = 0;
+  for (const f of content.frames) {
+    assert.ok(Array.isArray(f.examplesZh), `examplesZh ${f.id}`);
+    assert.strictEqual(f.examplesZh.length, f.examples.length, `zh len ${f.id}`);
+    for (let i = 0; i < f.examples.length; i++) {
+      const en = String(f.examples[i] ?? "").trim();
+      if (!en) continue;
+      slots += 1;
+      if (String(f.examplesZh[i] || "").trim()) zh += 1;
+    }
+  }
+  assert.ok(slots >= 500, `slot fills ${slots}`);
+  assert.ok(zh / slots >= 0.9, `examplesZh cover ${(zh / slots).toFixed(2)}`);
+});
+
+t("对话链 / 无稿倒计时 / 手机吸底下一句", () => {
+  assert.ok(js.includes("buildIslandChain"));
+  assert.ok(js.includes("startBlindCountdown") || js.includes("blindTimer"));
+  assert.ok(js.includes("enspeak-frame-dock") || js.includes("enspeak-frame-next"));
+  assert.ok(html.includes("enspeak-chain"));
+  assert.ok(html.includes("对话链"));
+});
+
 console.log(`enspeak-content.test.js: ${n} passed`);
