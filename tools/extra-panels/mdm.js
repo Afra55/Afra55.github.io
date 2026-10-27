@@ -1974,17 +1974,66 @@
 
     // ---- Mermaid（按需懒加载，5MB+ 只在出现 mermaid 代码块时加载） ----
     let mermaidLoading = null;
+
+    /** Mermaid 失败时会往 body 塞超大「Syntax error…」SVG；关掉并清掉残留 */
+    function scrubMermaidErrorArtifacts(renderId) {
+      try {
+        if (renderId) {
+          document.getElementById(`d${renderId}`)?.remove();
+          document.getElementById(renderId)?.remove();
+        }
+      } catch (_) {}
+      try {
+        document.querySelectorAll('svg[aria-roledescription="error"]').forEach((el) => {
+          if (els.preview?.contains(el)) return;
+          el.remove();
+        });
+        // 兜底：文案匹配底部大横条
+        document.querySelectorAll("body > svg, body > div > svg").forEach((el) => {
+          if (els.preview?.contains(el)) return;
+          const t = el.textContent || "";
+          if (/Syntax error in text/i.test(t) && /mermaid version/i.test(t)) el.remove();
+        });
+      } catch (_) {}
+    }
+
+    function markMermaidBlockError(pre, err) {
+      if (!pre) return;
+      pre.classList.add("mdm-mermaid-error");
+      let tip = pre.querySelector(".mdm-mermaid-err-tip");
+      if (!tip) {
+        tip = document.createElement("p");
+        tip.className = "hint tight mdm-mermaid-err-tip";
+        pre.insertAdjacentElement("beforebegin", tip);
+      }
+      const msg = String(err?.message || err || "").trim();
+      tip.textContent = msg
+        ? `Mermaid 语法未就绪：${msg.replace(/\s+/g, " ").slice(0, 120)}`
+        : "Mermaid 语法未就绪（编辑完整后会自动出图）";
+    }
+
+    function clearMermaidBlockError(pre) {
+      if (!pre) return;
+      pre.classList.remove("mdm-mermaid-error");
+      const tip = pre.previousElementSibling;
+      if (tip?.classList?.contains("mdm-mermaid-err-tip")) tip.remove();
+    }
+
     async function renderMermaidBlocks() {
       if (!els.preview) return;
       const codes = [...els.preview.querySelectorAll("pre > code.language-mermaid, code.language-mermaid")];
-      if (!codes.length) return;
+      if (!codes.length) {
+        scrubMermaidErrorArtifacts("");
+        return;
+      }
       // 先看缓存：源码没变就直接用缓存 SVG，避免每次编辑重渲所有图表
       const pending = [];
       for (const code of codes) {
         const src = code.textContent || "";
         const cached = state.mermaidCache.get(src);
         const pre = code.closest("pre") || code.parentElement;
-        if (cached) {
+        if (cached && !/Syntax error in text/i.test(cached)) {
+          clearMermaidBlockError(pre);
           const div = document.createElement("div");
           div.className = "mdm-mermaid";
           div.innerHTML = cached;
@@ -2004,28 +2053,38 @@
       }
       if (!window.mermaid) return;
       try {
+        // suppressErrorRendering：禁止把「Syntax error… mermaid version」大图插到页面底部
         window.mermaid.initialize({
           startOnLoad: false,
           securityLevel: "strict",
+          suppressErrorRendering: true,
           theme: document.documentElement.dataset.themeScheme === "light" ? "default" : "dark",
         });
       } catch (_) {}
       for (const { pre, src } of pending) {
+        const id = `mmd${Math.random().toString(36).slice(2, 9)}`;
         try {
-          const { svg } = await window.mermaid.render(`mmd${Math.random().toString(36).slice(2, 9)}`, src);
+          const { svg } = await window.mermaid.render(id, src);
+          scrubMermaidErrorArtifacts(id);
+          if (!svg || /Syntax error in text/i.test(svg)) {
+            throw new Error("图表语法有误");
+          }
           state.mermaidCache.set(src, svg);
           if (state.mermaidCache.size > 80) {
             const first = state.mermaidCache.keys().next().value;
             state.mermaidCache.delete(first);
           }
+          clearMermaidBlockError(pre);
           const div = document.createElement("div");
           div.className = "mdm-mermaid";
           div.innerHTML = svg;
           pre.replaceWith(div);
-        } catch (_) {
-          pre.classList.add("mdm-mermaid-error");
+        } catch (err) {
+          scrubMermaidErrorArtifacts(id);
+          markMermaidBlockError(pre, err);
         }
       }
+      scrubMermaidErrorArtifacts("");
     }
 
     // ---- 编辑器内插入资源：图片/视频/音频/任意文件 → 存到 assets/ → 插入对应 Markdown ----
