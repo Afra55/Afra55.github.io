@@ -2020,6 +2020,9 @@
       if (tip?.classList?.contains("mdm-mermaid-err-tip")) tip.remove();
     }
 
+    /** 图表导出 SVG 串缓存：放大时少一次同步 clone+serialize */
+    const mermaidExportCache = new WeakMap();
+
     /** 图表角标「放大」：不抢正文双击选词 / 划词复制 */
     function decorateMermaidDiv(div) {
       if (!div || div.querySelector(".mdm-mermaid-zoom")) return;
@@ -2032,12 +2035,24 @@
       div.appendChild(btn);
     }
 
+    function queueMermaidExportCache(div) {
+      if (!div) return;
+      window.requestAnimationFrame(() => {
+        try {
+          const svg = div.querySelector("svg");
+          if (!svg || !div.isConnected) return;
+          mermaidExportCache.set(div, mermaidSvgForExport(svg));
+        } catch (_) {}
+      });
+    }
+
     function mountMermaidFigure(pre, svgHtml) {
       const div = document.createElement("div");
       div.className = "mdm-mermaid";
       div.innerHTML = svgHtml;
       decorateMermaidDiv(div);
       pre.replaceWith(div);
+      queueMermaidExportCache(div);
       return div;
     }
 
@@ -7565,6 +7580,9 @@ a{color:${v.accent}}
       let exportBaseName = "image";
       /** @type {"img"|"svg"} */
       let previewMode = "img";
+      let lightboxExporting = false;
+      let mermaidOpenToken = 0;
+      const SVG_PREVIEW_CAP = "图表预览 · 滚轮缩放 · 空白处拖动 · 可划词复制 · 可下载";
 
       function activeLayer() {
         return previewMode === "svg" ? svgHost : imgEl;
@@ -7659,6 +7677,9 @@ a{color:${v.accent}}
 
       /** 幂等清理：Esc/关闭按钮/backdrop 与原生 close 都走到这里，避免模式残留 */
       function resetLightboxContent() {
+        mermaidOpenToken += 1; // 取消进行中的「打开图表」灌入
+        lightboxExporting = false;
+        setLightboxExportUi(false);
         imgEl.removeAttribute("src");
         imgEl.alt = "";
         imgEl.hidden = false;
@@ -7723,18 +7744,36 @@ a{color:${v.accent}}
         if (imgEl.complete && imgEl.naturalWidth) fitImage();
       }
 
-      function openSvgPreview(markup, alt) {
-        if (!markup) return;
+      /** 先弹出壳，避免大图同步序列化卡住点击 */
+      function openSvgPreviewShell() {
         document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
         if (objectUrlToRevoke) {
           URL.revokeObjectURL(objectUrlToRevoke);
           objectUrlToRevoke = null;
         }
-        exportSvgMarkup = markup;
+        exportSvgMarkup = null;
         exportBaseName = "mermaid-chart";
         previewMode = "svg";
         imgEl.removeAttribute("src");
         imgEl.alt = "";
+        imgEl.hidden = true;
+        svgHost.hidden = false;
+        svgHost.innerHTML = "";
+        syncDownloadUi();
+        view.scale = 1;
+        view.x = 0;
+        view.y = 0;
+        view.dragging = false;
+        syncStageCursor(false);
+        if (cap) cap.textContent = "正在打开图表…";
+        showModal();
+      }
+
+      function fillSvgPreview(markup, alt) {
+        if (!markup) return;
+        exportSvgMarkup = markup;
+        exportBaseName = "mermaid-chart";
+        previewMode = "svg";
         imgEl.hidden = true;
         svgHost.hidden = false;
         svgHost.innerHTML = markup;
@@ -7744,11 +7783,7 @@ a{color:${v.accent}}
         view.y = 0;
         view.dragging = false;
         syncStageCursor(false);
-        if (cap) {
-          cap.textContent =
-            alt || "图表预览 · 滚轮缩放 · 空白处拖动 · 可划词复制 · 可下载";
-        }
-        showModal();
+        if (cap) cap.textContent = alt || SVG_PREVIEW_CAP;
         fitImage();
       }
 
@@ -7758,17 +7793,46 @@ a{color:${v.accent}}
           toast("图表尚未渲染");
           return;
         }
-        let markup;
-        try {
-          markup = mermaidSvgForExport(svg);
-        } catch (err) {
-          toast(`无法导出图表：${err.message || err}`);
-          return;
+        const token = ++mermaidOpenToken;
+        openSvgPreviewShell();
+        const finish = () => {
+          if (token !== mermaidOpenToken || !dlg.open) return;
+          try {
+            let markup = mermaidExportCache.get(div);
+            if (!markup) {
+              markup = mermaidSvgForExport(svg);
+              mermaidExportCache.set(div, markup);
+            }
+            fillSvgPreview(markup, SVG_PREVIEW_CAP);
+          } catch (err) {
+            toast(`无法打开图表：${err.message || err}`);
+            closePreview();
+          }
+        };
+        // 双 rAF：先让弹层上屏，再做序列化/灌入，点击体感不「假死」
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(finish);
+        });
+      }
+
+      function setLightboxExportUi(busy, label) {
+        const sum = dlWrap?.querySelector("summary");
+        const buttons = dlWrap?.querySelectorAll(".mdm-lightbox-dl-menu button");
+        if (sum) {
+          sum.textContent = busy ? label || "导出中…" : "下载";
+          sum.setAttribute("aria-busy", busy ? "true" : "false");
         }
-        openSvgPreview(markup, "图表预览 · 滚轮缩放 · 空白处拖动 · 可划词复制 · 可下载");
+        buttons?.forEach((b) => {
+          b.disabled = Boolean(busy);
+        });
+        if (dlWrap && busy) dlWrap.open = true;
       }
 
       async function exportLightbox(fmt) {
+        if (lightboxExporting) {
+          toast("正在导出，请稍候…");
+          return;
+        }
         const ext = fmt === "jpeg" ? "jpg" : fmt;
         const base = exportBaseName;
         const name = `${base}.${ext}`;
@@ -7785,6 +7849,10 @@ a{color:${v.accent}}
             if (dlWrap) dlWrap.open = false;
             return;
           }
+          lightboxExporting = true;
+          setLightboxExportUi(true, "导出中…");
+          // 最佳质量（scale:2）可能要几秒：立刻给反馈，避免以为卡死
+          toast("正在导出高清图，大图可能需要几秒…");
           const mime = fmt === "jpeg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png";
           let blob = null;
           if (markupSnapshot) {
@@ -7807,6 +7875,9 @@ a{color:${v.accent}}
           if (dlWrap) dlWrap.open = false;
         } catch (err) {
           toast(`下载失败：${err.message || err}`);
+        } finally {
+          lightboxExporting = false;
+          setLightboxExportUi(false);
         }
       }
 
