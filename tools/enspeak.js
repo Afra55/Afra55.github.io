@@ -145,13 +145,30 @@
     return (CONTENT?.sentences || []).filter((s) => s.role === "reply" || s.island === "reply");
   }
 
+  function fillApi() {
+    return window.DevToolsEnspeakFill || null;
+  }
+
   function fillTemplate(text, extra = {}) {
     const map = { ...(state.profile || {}), ...extra };
+    const api = fillApi();
+    if (api?.fillEnTemplate) return api.fillEnTemplate(text, map);
+    // 兜底（fill 库未加载时）：至少 trim，避免残留 {slot}
     return String(text || "").replace(/\{([a-z0-9_]+)\}/gi, (_, key) => {
       const v = map[key];
       if (v != null && String(v).trim()) return String(v).trim();
-      return `{${key}}`;
+      return "";
     });
+  }
+
+  function variantZhFor(frameZh, fillEn) {
+    const api = fillApi();
+    if (api?.variantZhLine) return api.variantZhLine(frameZh, fillEn);
+    const zh = String(frameZh || "").trim();
+    const fill = String(fillEn || "").trim();
+    if (!zh) return fill ? `（${fill}）` : "";
+    if (!fill) return zh;
+    return `${zh}（${fill}）`;
   }
 
   function displayEn(sent) {
@@ -316,17 +333,20 @@
       <span class="enspeak-pill">听跟第 ${state.today.listen.day || 1} 天</span>
     `;
     const hint = $("#enspeak-today-hint");
-    if (hint) hint.textContent = plan?.hint || "把句子换成自己的真实情况，并说出口。";
+    if (hint) {
+      hint.textContent =
+        plan?.hint || "今日按 听→裂变→接话→无稿开口；架子换词时变体带中文，说出口再勾完成。";
+    }
   }
 
   function renderBlocks() {
     const box = $("#enspeak-blocks");
     if (!box) return;
     const items = [
-      { id: "listen", title: "听跟", time: "10′", desc: "同一段对话反复听跟" },
-      { id: "reword", title: "换词", time: "10′", desc: "5 句改成自己的话" },
-      { id: "reply", title: "接话", time: "10′", desc: "Really? / Same here…" },
-      { id: "output", title: "输出", time: "5～10′", desc: "至少 2 句真实开口" },
+      { id: "listen", title: "①听跟", time: "8′", desc: "输入：听清再跟读" },
+      { id: "reword", title: "②裂变", time: "10′", desc: "加工：架子换词成自己的" },
+      { id: "reply", title: "③接话", time: "8′", desc: "加工：Really? / Same here" },
+      { id: "output", title: "④无稿开口", time: "5～8′", desc: "输出：真实情况说出口" },
     ];
     box.innerHTML = items
       .map((it) => {
@@ -351,15 +371,15 @@
       body.innerHTML = renderListenDrill();
       bindListenDrill(body);
     } else if (block === "reword") {
-      title.textContent = "换词 · 改成自己的话";
+      title.textContent = "裂变 · 词块换词（会一个→会一类）";
       body.innerHTML = renderRewordDrill();
       bindRewordDrill(body);
     } else if (block === "reply") {
-      title.textContent = "接话专项";
+      title.textContent = "接话 · 软着陆短句";
       body.innerHTML = renderReplyDrill();
       bindReplyDrill(body);
     } else if (block === "output") {
-      title.textContent = "输出 · 必须说出口";
+      title.textContent = "无稿开口 · 说出口才算会";
       body.innerHTML = renderOutputDrill();
       bindOutputDrill(body);
     }
@@ -671,6 +691,13 @@
       .join("");
   }
 
+  function frameExampleFills(f) {
+    return (f.examples || []).map((ex) => {
+      if (ex && typeof ex === "object") return String(ex.en ?? ex.fill ?? "").trim();
+      return String(ex ?? "").trim();
+    });
+  }
+
   function openFrame(id) {
     const f = (CONTENT.frames || []).find((x) => x.id === id);
     const box = $("#enspeak-frame-detail");
@@ -680,41 +707,93 @@
     box.hidden = false;
     title.textContent = f.en;
     const slotVal = state.profile[f.slot] || "";
+    const ph = frameExampleFills(f)[0] || "";
     body.innerHTML = `
       <p class="hint">${escapeHtml(f.zh)}</p>
+      <p class="hint tight">方法：听示范 → 换槽位裂变 → 无稿说一句（说出口才算）</p>
       <label class="enspeak-field">槽位「${escapeHtml(f.slot)}」
-        <input class="text-input" id="enspeak-frame-slot" value="${escapeAttr(slotVal)}" placeholder="${escapeAttr((f.examples || [])[0] || "")}" />
+        <input class="text-input" id="enspeak-frame-slot" value="${escapeAttr(slotVal)}" placeholder="${escapeAttr(ph)}" autocomplete="off" />
       </label>
-      <div class="btn-row tool-actions">
-        <button type="button" class="primary-btn" id="enspeak-frame-gen">生成变体并朗读</button>
+      <div class="btn-row tool-actions enspeak-action-row">
+        <button type="button" class="primary-btn" id="enspeak-frame-gen">生成变体</button>
+        <button type="button" class="ghost-btn" id="enspeak-frame-blind" hidden>无稿开口（藏英文）</button>
       </div>
       <div id="enspeak-frame-variants" class="enspeak-sent-list"></div>
     `;
-    $("#enspeak-frame-gen")?.addEventListener("click", () => {
-      const val = $("#enspeak-frame-slot")?.value?.trim() || "";
+    const renderVariants = (preferFill) => {
+      const val = $("#enspeak-frame-slot")?.value?.trim() || preferFill || "";
       if (val) {
         state.profile[f.slot] = val;
         saveState();
       }
-      const variants = (f.examples || []).slice(0, 10).map((ex) => fillTemplate(f.en, { [f.slot]: val || ex }));
-      if (val) variants.unshift(fillTemplate(f.en, { [f.slot]: val }));
-      const uniq = [...new Set(variants)].slice(0, 10);
+      const fills = [];
+      if (val) fills.push(val);
+      for (const ex of frameExampleFills(f)) {
+        if (ex && !fills.includes(ex)) fills.push(ex);
+        if (fills.length >= 10) break;
+      }
+      if (!fills.length) fills.push("");
+      const pairs = [];
+      const seen = new Set();
+      for (const fill of fills) {
+        const en = fillTemplate(f.en, { [f.slot]: fill });
+        if (!en || seen.has(en)) continue;
+        seen.add(en);
+        pairs.push({ en, zh: variantZhFor(f.zh, fill), fill });
+      }
       const wrap = $("#enspeak-frame-variants");
+      const blindBtn = $("#enspeak-frame-blind");
+      if (blindBtn) blindBtn.hidden = pairs.length === 0;
       if (wrap) {
-        wrap.innerHTML = uniq
+        wrap.classList.remove("is-blind");
+        wrap.innerHTML = pairs
           .map(
-            (line) => `<button type="button" class="enspeak-sent" data-say="${escapeAttr(line)}">
-              <div class="enspeak-sent-en">${escapeHtml(line)}</div>
-            </button>`
+            (p, i) => `<div class="enspeak-sent enspeak-variant" data-say="${escapeAttr(p.en)}" data-idx="${i}">
+              <div class="enspeak-sent-en">${escapeHtml(p.en)}</div>
+              <div class="enspeak-sent-zh">${escapeHtml(p.zh)}</div>
+              <div class="btn-row tool-actions enspeak-variant-acts">
+                <button type="button" class="ghost-btn" data-vact="hear">听</button>
+                <button type="button" class="ghost-btn" data-vact="shadow">跟读</button>
+                <button type="button" class="primary-btn" data-vact="spoken">已开口</button>
+              </div>
+            </div>`
           )
           .join("");
         wrap.onclick = (e) => {
-          const b = e.target.closest("[data-say]");
-          if (b) speakText(b.dataset.say);
+          const actBtn = e.target.closest("[data-vact]");
+          const card = e.target.closest(".enspeak-variant");
+          if (!card) return;
+          const line = card.dataset.say || "";
+          const act = actBtn?.dataset.vact;
+          if (act === "spoken") {
+            toast("裂变句已记开口（继续换词再说一句）");
+            return;
+          }
+          if (act === "shadow" || act === "hear" || !actBtn) {
+            if (line) speakText(line);
+          }
         };
       }
-      if (uniq[0]) speakText(uniq[0]);
+      return pairs;
+    };
+
+    $("#enspeak-frame-gen")?.addEventListener("click", () => {
+      const pairs = renderVariants();
+      if (pairs[0]?.en) speakText(pairs[0].en);
     });
+    $("#enspeak-frame-blind")?.addEventListener("click", () => {
+      const wrap = $("#enspeak-frame-variants");
+      if (!wrap) return;
+      wrap.classList.toggle("is-blind");
+      const on = wrap.classList.contains("is-blind");
+      $("#enspeak-frame-blind").textContent = on ? "显示英文" : "无稿开口（藏英文）";
+      if (on) toast("先看中文意图，自己说出英文，再点「听」对照");
+    });
+    // 打开即出一版变体，方便手机少点一次
+    renderVariants(slotVal);
+    try {
+      box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (_) {}
   }
 
   function renderReplyTab() {
