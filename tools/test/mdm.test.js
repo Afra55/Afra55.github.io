@@ -221,6 +221,16 @@ t("mdm.js 导入文件夹自动打文件夹名标签", () => {
   assert.ok(!/导入不自动建标签/.test(ingest));
 });
 
+t("isMermaidSvgTextHit：文字节点不拖动画布", () => {
+  assert.strictEqual(P.isMermaidSvgTextHit("text"), true);
+  assert.strictEqual(P.isMermaidSvgTextHit("tspan"), true);
+  assert.strictEqual(P.isMermaidSvgTextHit("foreignObject"), true);
+  assert.strictEqual(P.isMermaidSvgTextHit("rect"), false);
+  assert.strictEqual(P.isMermaidSvgTextHit("path"), false);
+  assert.strictEqual(P.isMermaidSvgTextHit("div", true), true);
+  assert.strictEqual(P.isMermaidSvgTextHit("div", false), false);
+});
+
 t("measureSvgExportSize 优先 viewBox，不被 100% 屏宽压扁", () => {
   assert.deepStrictEqual(
     P.measureSvgExportSize({

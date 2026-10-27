@@ -347,6 +347,17 @@
   }
 
   /**
+   * lightbox 活 SVG：点在文字相关节点上则不拖动画布（留给划词/双击选词）。
+   * @param {string} tagName
+   * @param {boolean} [insideForeignObject]
+   */
+  function isMermaidSvgTextHit(tagName, insideForeignObject) {
+    const tag = String(tagName || "").toLowerCase();
+    if (tag === "text" || tag === "tspan" || tag === "textpath" || tag === "foreignobject") return true;
+    return Boolean(insideForeignObject);
+  }
+
+  /**
    * Mermaid/SVG 导出尺寸：优先 viewBox / 绝对宽高，勿被 width=100% 的屏上缩略尺寸压扁。
    * @param {{viewBoxW?:number,viewBoxH?:number,attrW?:string,attrH?:string,baseW?:number,baseH?:number,rectW?:number,rectH?:number}} input
    */
@@ -386,6 +397,7 @@
     replaceDocRefs,
     parseSearch,
     joinDocPath,
+    isMermaidSvgTextHit,
     measureSvgExportSize,
   };
   if (typeof window !== "undefined") window.DevToolsMdmPure = api;
