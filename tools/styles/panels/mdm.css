@@ -264,13 +264,14 @@
 .mdm-lightbox {
   border: 0;
   padding: 0;
-  max-width: min(94vw, 1400px);
-  width: min(94vw, 1400px);
-  height: min(92vh, 960px);
-  max-height: min(92vh, 960px);
+  /* 近全屏：只留一点外边距，仍看得出是弹框（去掉 1400/960 上限） */
+  max-width: 96vw;
+  width: 96vw;
+  height: 94vh;
+  max-height: 94vh;
   background: var(--panel-strong, var(--bg-0));
   color: var(--ink);
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow: 0 22px 64px rgba(0, 0, 0, 0.45);
 }
 .mdm-lightbox::backdrop {
