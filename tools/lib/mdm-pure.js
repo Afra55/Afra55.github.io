@@ -346,6 +346,32 @@
     return `${base}${sep}${name}`;
   }
 
+  /**
+   * Mermaid/SVG 导出尺寸：优先 viewBox / 绝对宽高，勿被 width=100% 的屏上缩略尺寸压扁。
+   * @param {{viewBoxW?:number,viewBoxH?:number,attrW?:string,attrH?:string,baseW?:number,baseH?:number,rectW?:number,rectH?:number}} input
+   */
+  function measureSvgExportSize(input) {
+    const o = input || {};
+    let w = Number(o.viewBoxW) || 0;
+    let h = Number(o.viewBoxH) || 0;
+    const attrW = String(o.attrW || "");
+    const attrH = String(o.attrH || "");
+    const pct = /%/.test(attrW) || /%/.test(attrH);
+    if ((!w || !h) && !pct) {
+      w = Number(o.baseW) || 0;
+      h = Number(o.baseH) || 0;
+    }
+    if (!w || !h) {
+      w = Number(o.rectW) || 0;
+      h = Number(o.rectH) || 0;
+    }
+    if (!w || !h || !Number.isFinite(w) || !Number.isFinite(h)) {
+      w = 800;
+      h = 600;
+    }
+    return { w: Math.max(1, w), h: Math.max(1, h) };
+  }
+
   const api = {
     slugify,
     normalizeImportFolderTagName,
@@ -360,6 +386,7 @@
     replaceDocRefs,
     parseSearch,
     joinDocPath,
+    measureSvgExportSize,
   };
   if (typeof window !== "undefined") window.DevToolsMdmPure = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
