@@ -2000,8 +2000,9 @@
     function markMermaidBlockError(pre, err) {
       if (!pre) return;
       pre.classList.add("mdm-mermaid-error");
-      let tip = pre.querySelector(".mdm-mermaid-err-tip");
-      if (!tip) {
+      // tip 插在 pre 前面，不要用 pre.querySelector（会找不到并叠多层）
+      let tip = pre.previousElementSibling;
+      if (!tip?.classList?.contains("mdm-mermaid-err-tip")) {
         tip = document.createElement("p");
         tip.className = "hint tight mdm-mermaid-err-tip";
         pre.insertAdjacentElement("beforebegin", tip);

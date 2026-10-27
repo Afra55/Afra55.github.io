@@ -28,6 +28,12 @@ t("错误提示留在代码块旁，不占页面底部", () => {
   assert.ok(src.includes("function markMermaidBlockError"));
   assert.ok(src.includes("mdm-mermaid-err-tip"));
   assert.ok(css.includes(".mdm-mermaid-err-tip"));
+  const mark = src.slice(
+    src.indexOf("function markMermaidBlockError"),
+    src.indexOf("function clearMermaidBlockError")
+  );
+  assert.ok(mark.includes("previousElementSibling"), "tip 在 pre 前，须复用 previousSibling");
+  assert.ok(!/let tip = pre\.querySelector/.test(mark), "勿在 pre 内找 tip（会叠多层）");
 });
 
 t("不把「Syntax error」SVG 当成功图缓存", () => {
