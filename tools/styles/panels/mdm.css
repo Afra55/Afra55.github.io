@@ -597,8 +597,8 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
 .markdown-body .mdm-mermaid svg { max-width: 100%; height: auto; }
 
 /*
- * Mermaid.render 会短暂把 width:100% 的临时 SVG/容器挂到 document.body，
- * 首屏/重渲时底部会闪全宽长条；预览区内的正式图不受影响。
+ * 根治：render 走离屏 #mdm-mermaid-stage（见 mdm.js ensureMermaidStage）。
+ * 下列规则仅兜底——异常仍把临时节点挂到 body 时不闪底栏；勿把 stage 压成 width:0（要靠它测宽）。
  */
 body > svg[id^="mmd"],
 body > div[id^="dmmd"],

@@ -1,6 +1,6 @@
 "use strict";
 
-/** Mermaid 语法错误不得在页面底部画出大横条 */
+/** Mermaid 语法错误不得在页面底部画出大横条；渲染须走离屏 container */
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
@@ -42,12 +42,16 @@ t("不把「Syntax error」SVG 当成功图缓存", () => {
   assert.ok(fn.includes("throw new Error"));
 });
 
-t("渲染前启用 body 守卫，防止底部全宽临时条闪烁", () => {
-  assert.ok(src.includes("function ensureMermaidBodyGuard"));
-  assert.ok(src.includes("function cloakMermaidTempNode"));
-  assert.ok(src.includes("ensureMermaidBodyGuard()"));
-  assert.ok(src.includes("mdm-mermaid-temp-css"));
-  assert.ok(css.includes('body > svg[id^="mmd"]') || css.includes("body > svg[id^=\"mmd\"]"));
+t("根治：mermaid.render 传入离屏 stage，不依赖监听藏节点", () => {
+  assert.ok(src.includes("function ensureMermaidStage"));
+  assert.ok(src.includes("function clearMermaidStage"));
+  assert.ok(src.includes('data-mdm-mermaid-stage'));
+  const fn = src.slice(src.indexOf("async function renderMermaidBlocks"), src.indexOf("async function saveAsset"));
+  assert.ok(fn.includes("ensureMermaidStage()"));
+  assert.ok(/mermaid\.render\(\s*id\s*,\s*src\s*,\s*stage\s*\)/.test(fn), "须传第三参 container");
+  assert.ok(!src.includes("ensureMermaidBodyGuard"), "勿再依赖 MutationObserver 闪藏");
+  assert.ok(!src.includes("cloakMermaidTempNode"), "勿再依赖节点闪藏");
+  assert.ok(css.includes('body > svg[id^="mmd"]') || css.includes("body > svg[id^=\"mmd\"]"), "CSS 兜底仍保留");
 });
 
 console.log(`mdm-mermaid-error.test.js: ${n} passed`);
