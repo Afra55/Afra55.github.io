@@ -1,7 +1,7 @@
 {
-  "version": 2,
+  "version": 3,
   "title": "日常开口",
-  "tagline": "先记架子，再换词开口 · 句库可慢慢补 · 没说出口，不算会",
+  "tagline": "尽量覆盖日常对话：架子换词 + 多场景岛 · 句库可持续补 · 没说出口，不算会",
   "profileFields": [
     {
       "key": "name",
@@ -689,9 +689,677 @@
         "another idea"
       ],
       "role": "frame"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "",
+        ", there",
+        ", everyone",
+        " everyone",
+        ", friend",
+        ", guys",
+        ", folks",
+        " again",
+        ", stranger",
+        ", buddy"
+      ],
+      "id": "f33",
+      "en": "Hi{name_tag}!",
+      "zh": "嗨……！",
+      "slot": "name_tag",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "morning",
+        "afternoon",
+        "evening",
+        "night",
+        "morning everyone",
+        "afternoon team",
+        "evening folks",
+        "morning again",
+        "afternoon — long time",
+        "evening — how's it going"
+      ],
+      "id": "f34",
+      "en": "Good {tod}!",
+      "zh": "……好！",
+      "slot": "tod",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "meet you",
+        "see you",
+        "see you again",
+        "finally meet you",
+        "catch up",
+        "hear from you",
+        "talk with you",
+        "be here",
+        "join you",
+        "run into you"
+      ],
+      "id": "f35",
+      "en": "Nice to {meet}.",
+      "zh": "很高兴……",
+      "slot": "meet",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "",
+        " lately",
+        " these days",
+        " since last time",
+        " since the trip",
+        " since we met",
+        " at work",
+        " with the family",
+        " after the move",
+        " this month"
+      ],
+      "id": "f36",
+      "en": "How have you been{extra}?",
+      "zh": "你最近过得怎么样？",
+      "slot": "extra",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "good",
+        "tired",
+        "a bit busy",
+        "okay",
+        "great",
+        "stressed",
+        "relaxed",
+        "hungry",
+        "excited",
+        "under the weather"
+      ],
+      "id": "f37",
+      "en": "I'm feeling {mood}.",
+      "zh": "我感觉……",
+      "slot": "mood",
+      "group": "self"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "busy at work",
+        "pretty well",
+        "traveling a lot",
+        "stuck at home",
+        "learning English",
+        "working late",
+        "feeling better",
+        "catching up on sleep",
+        "helping my parents",
+        "looking for a place"
+      ],
+      "id": "f38",
+      "en": "I've been {status}.",
+      "zh": "我一直……",
+      "slot": "status",
+      "group": "self"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "happy",
+        "nervous",
+        "curious",
+        "relieved",
+        "worried",
+        "proud",
+        "confused",
+        "grateful",
+        "annoyed",
+        "hopeful"
+      ],
+      "id": "f39",
+      "en": "That makes me {feel}.",
+      "zh": "这让我感到……",
+      "slot": "feel",
+      "group": "self"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "nice",
+        "cold",
+        "hot",
+        "rainy",
+        "windy",
+        "cloudy",
+        "perfect",
+        "awful",
+        "a bit chilly",
+        "super humid"
+      ],
+      "id": "f40",
+      "en": "The weather is {weather_adj} today.",
+      "zh": "今天天气……",
+      "slot": "weather_adj",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "you're doing well",
+        "it works out",
+        "you feel better",
+        "we can meet soon",
+        "the rain stops",
+        "that's okay",
+        "you get some rest",
+        "everything goes smoothly",
+        "you enjoy it",
+        "it's not too late"
+      ],
+      "id": "f41",
+      "en": "I hope {hope}.",
+      "zh": "我希望……",
+      "slot": "hope",
+      "group": "soft"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "grab coffee",
+        "have lunch",
+        "go for a walk",
+        "watch a movie",
+        "hang out this weekend",
+        "try that place",
+        "join us",
+        "come over",
+        "play a game",
+        "take a break"
+      ],
+      "id": "f42",
+      "en": "Do you want to {invite}?",
+      "zh": "你想不想……？",
+      "slot": "invite",
+      "group": "ask"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "tonight",
+        "this weekend",
+        "after work",
+        "tomorrow",
+        "on Saturday",
+        "around noon",
+        "later today",
+        "next week",
+        "this evening",
+        "after lunch"
+      ],
+      "id": "f43",
+      "en": "Are you free {when}?",
+      "zh": "你……有空吗？",
+      "slot": "when",
+      "group": "ask"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "tomorrow",
+        "6 pm",
+        "this cafe",
+        "a quick call",
+        "meeting online",
+        "Saturday morning",
+        "somewhere quieter",
+        "rescheduling",
+        "splitting the bill",
+        "taking a taxi"
+      ],
+      "id": "f44",
+      "en": "How about {suggest}?",
+      "zh": "……怎么样？",
+      "slot": "suggest",
+      "group": "ask"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "I'm busy tonight",
+        "I already have plans",
+        "I'm a bit tired",
+        "I have to work late",
+        "I need to stay home",
+        "I can't make it",
+        "maybe next time",
+        "I'm not feeling well",
+        "I have a deadline",
+        "I'm out of town"
+      ],
+      "id": "f45",
+      "en": "I'd love to, but {but}.",
+      "zh": "我很想去，但是……",
+      "slot": "but",
+      "group": "soft"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "",
+        "!",
+        " — sorry",
+        " — for sure",
+        " — I'd love that",
+        " — keep me posted",
+        " — rain check?",
+        " — thanks for asking",
+        " — let's plan ahead",
+        " — I'll text you"
+      ],
+      "id": "f46",
+      "en": "Maybe next time{extra}.",
+      "zh": "下次吧……",
+      "slot": "extra",
+      "group": "soft"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "later",
+        "tonight",
+        "in 10 minutes",
+        "after work",
+        "tomorrow morning",
+        "around noon",
+        "when you're free",
+        "this evening",
+        "on the weekend",
+        "right now"
+      ],
+      "id": "f47",
+      "en": "Can I call you {when}?",
+      "zh": "我可以……给你打电话吗？",
+      "slot": "when",
+      "group": "ask"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "call",
+        "message",
+        "text",
+        "email",
+        "WeChat",
+        "voice note",
+        "invitation",
+        "reminder",
+        "update",
+        "ping"
+      ],
+      "id": "f48",
+      "en": "Sorry I missed your {missed}.",
+      "zh": "抱歉没接到你的……",
+      "slot": "missed",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "soon",
+        "ASAP",
+        "tonight",
+        "after the meeting",
+        "in a bit",
+        "tomorrow",
+        "once I check",
+        "this afternoon",
+        "before noon",
+        "when I know more"
+      ],
+      "id": "f49",
+      "en": "I'll get back to you {soon}.",
+      "zh": "我会……回复你",
+      "slot": "soon",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "",
+        " okay",
+        " now",
+        " clearly",
+        " on your end",
+        " — the signal is bad",
+        " — I'm outside",
+        " — my mic might be off",
+        " — sorry about the noise",
+        " — one second"
+      ],
+      "id": "f50",
+      "en": "Can you hear me{extra}?",
+      "zh": "你听得到吗……？",
+      "slot": "extra",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "a bit slower",
+        "more slowly",
+        "a little louder",
+        "more clearly",
+        "one more time",
+        "in simpler words",
+        "again, please",
+        "slower, please",
+        "louder please",
+        "that part again"
+      ],
+      "id": "f51",
+      "en": "Could you speak {slower}?",
+      "zh": "你能……说吗？",
+      "slot": "slower",
+      "group": "ask"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "is it tomorrow",
+        "is it at 3",
+        "should I bring anything",
+        "is this the right place",
+        "do we meet online",
+        "is the address correct",
+        "are we still on",
+        "is cash okay",
+        "should I wait here",
+        "is that the final plan"
+      ],
+      "id": "f52",
+      "en": "Just to confirm, {confirm}?",
+      "zh": "确认一下，……？",
+      "slot": "confirm",
+      "group": "ask"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "you want me to wait",
+        "we're canceling",
+        "it's optional",
+        "I should arrive early",
+        "you'll handle it",
+        "we need more time",
+        "it's not urgent",
+        "I misunderstood",
+        "we're good",
+        "that's the plan"
+      ],
+      "id": "f53",
+      "en": "In other words, {rephrase}.",
+      "zh": "换句话说，……",
+      "slot": "rephrase",
+      "group": "soft"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "I'm not sure",
+        "maybe later",
+        "it might be hard",
+        "I need to check first",
+        "I feel differently",
+        "we could try another way",
+        "the timing is tight",
+        "budget is limited",
+        "I'd rather wait",
+        "let's ask them first"
+      ],
+      "id": "f54",
+      "en": "I see what you mean, but {however}.",
+      "zh": "我明白你的意思，但是……",
+      "slot": "however",
+      "group": "soft"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "I'm a bit tired",
+        "I don't know",
+        "I'm not ready",
+        "I need help",
+        "I'm excited",
+        "I'm nervous",
+        "I forgot",
+        "I'm not great at this",
+        "I prefer staying in",
+        "I need more time"
+      ],
+      "id": "f55",
+      "en": "To be honest, {honest}.",
+      "zh": "说实话，……",
+      "slot": "honest",
+      "group": "self"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "your help",
+        "your time",
+        "the update",
+        "you coming",
+        "your patience",
+        "the recommendation",
+        "the ride",
+        "your advice",
+        "everything",
+        "you checking in"
+      ],
+      "id": "f56",
+      "en": "I really appreciate {appreciate}.",
+      "zh": "真的很感谢……",
+      "slot": "appreciate",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "the delay",
+        "being late",
+        "the confusion",
+        "interrupting",
+        "the short notice",
+        "the noise",
+        "forgetting",
+        "the mess",
+        "not replying sooner",
+        "the inconvenience"
+      ],
+      "id": "f57",
+      "en": "Sorry for {apology}.",
+      "zh": "抱歉……",
+      "slot": "apology",
+      "group": "soft"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "good one",
+        "nice day",
+        "good weekend",
+        "safe trip",
+        "good night",
+        "great week",
+        "lovely evening",
+        "smooth flight",
+        "good rest",
+        "fun time"
+      ],
+      "id": "f58",
+      "en": "Have a {wish}!",
+      "zh": "祝你……！",
+      "slot": "wish",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "",
+        "!",
+        " of yourself",
+        " — see you",
+        " — text me",
+        " — and rest well",
+        " — safe home",
+        " — talk soon",
+        " — bye for now",
+        " — don't work too late"
+      ],
+      "id": "f59",
+      "en": "Take care{extra}.",
+      "zh": "保重……",
+      "slot": "extra",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "",
+        "!",
+        " — I'll message you",
+        " — don't be a stranger",
+        " — send me updates",
+        " — when you're free",
+        " — after you arrive",
+        " — about the plan",
+        " — this week",
+        " — okay?"
+      ],
+      "id": "f60",
+      "en": "Let's keep in touch{extra}.",
+      "zh": "保持联系……",
+      "slot": "extra",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "",
+        " now",
+        " — 5 minutes",
+        " — almost there",
+        " — stuck in traffic",
+        " — just left",
+        " — grabbing a taxi",
+        " — walking over",
+        " — see you soon",
+        " — sorry for the wait"
+      ],
+      "id": "f61",
+      "en": "I'm on my way{extra}.",
+      "zh": "我在路上了……",
+      "slot": "extra",
+      "group": "chat"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "meet",
+        "wait",
+        "sit",
+        "park",
+        "get off",
+        "eat",
+        "start",
+        "line up",
+        "take photos",
+        "drop you off"
+      ],
+      "id": "f62",
+      "en": "Where should we {meet_place}?",
+      "zh": "我们在哪儿……？",
+      "slot": "meet_place",
+      "group": "ask"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "this",
+        "that",
+        "the total",
+        "the ticket",
+        "delivery",
+        "a bottle of water",
+        "the set meal",
+        "shipping",
+        "one night",
+        "per person"
+      ],
+      "id": "f63",
+      "en": "How much is {price}?",
+      "zh": "……多少钱？",
+      "slot": "price",
+      "group": "ask"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "card",
+        "cash",
+        "WeChat",
+        "Alipay",
+        "phone",
+        "Apple Pay",
+        "transfer",
+        "QR code",
+        "credit card",
+        "splitting it"
+      ],
+      "id": "f64",
+      "en": "Can I pay by {pay}?",
+      "zh": "可以用……付吗？",
+      "slot": "pay",
+      "group": "ask"
+    },
+    {
+      "role": "frame",
+      "examples": [
+        "this bag",
+        "the directions",
+        "my order",
+        "the Wi-Fi",
+        "carrying this",
+        "finding the gate",
+        "a photo",
+        "the translation",
+        "booking a table",
+        "checking the time"
+      ],
+      "id": "f65",
+      "en": "Could you help me with {help}?",
+      "zh": "你能帮我……吗？",
+      "slot": "help",
+      "group": "ask"
     }
   ],
   "islands": [
+    {
+      "id": "chat",
+      "name": "日常闲聊",
+      "nameEn": "Small talk",
+      "starter": true,
+      "week": 1,
+      "blurb": "寒暄、开场、收尾、澄清"
+    },
     {
       "id": "who",
       "name": "我是谁",
@@ -707,6 +1375,14 @@
       "starter": true,
       "week": 2,
       "blurb": "一天里的事"
+    },
+    {
+      "id": "mood",
+      "name": "情绪感受",
+      "nameEn": "Feelings",
+      "starter": true,
+      "week": 2,
+      "blurb": "累、忙、开心、不舒服怎么说"
     },
     {
       "id": "likes",
@@ -725,12 +1401,47 @@
       "blurb": "同意、追问、换话题"
     },
     {
-      "id": "chat",
-      "name": "日常闲聊",
-      "nameEn": "Small talk",
+      "id": "invite",
+      "name": "邀请改约",
+      "nameEn": "Invites",
       "starter": true,
-      "week": 1,
-      "blurb": "寒暄、开场、收尾、澄清"
+      "week": 3,
+      "blurb": "约人、改期、礼貌拒绝"
+    },
+    {
+      "id": "phone",
+      "name": "电话短信",
+      "nameEn": "Phone & text",
+      "starter": true,
+      "blurb": "打电话、回消息、信号差"
+    },
+    {
+      "id": "commute",
+      "name": "通勤路上",
+      "nameEn": "Commute",
+      "starter": true,
+      "blurb": "地铁公交打车堵车"
+    },
+    {
+      "id": "weather",
+      "name": "天气闲聊",
+      "nameEn": "Weather",
+      "starter": true,
+      "blurb": "天气开场与接话"
+    },
+    {
+      "id": "home",
+      "name": "居家邻里",
+      "nameEn": "Home",
+      "starter": true,
+      "blurb": "在家、访客、快递邻居"
+    },
+    {
+      "id": "pay",
+      "name": "付钱结账",
+      "nameEn": "Paying",
+      "starter": true,
+      "blurb": "价格、支付、AA"
     },
     {
       "id": "shop",
@@ -780,6 +1491,34 @@
       "nameEn": "Travel",
       "starter": false,
       "blurb": "出行常用"
+    },
+    {
+      "id": "hotel",
+      "name": "住宿入住",
+      "nameEn": "Hotel",
+      "starter": false,
+      "blurb": "入住退房与房间问题"
+    },
+    {
+      "id": "gym",
+      "name": "运动健身",
+      "nameEn": "Fitness",
+      "starter": false,
+      "blurb": "跑步、健身房短句"
+    },
+    {
+      "id": "study",
+      "name": "学习上课",
+      "nameEn": "Study",
+      "starter": false,
+      "blurb": "课程、作业、请教"
+    },
+    {
+      "id": "online",
+      "name": "线上聊天",
+      "nameEn": "Online chat",
+      "starter": false,
+      "blurb": "语音视频、网络卡顿"
     }
   ],
   "sentences": [
@@ -2936,44 +3675,3685 @@
         "closer"
       ],
       "difficulty": 1
+    },
+    {
+      "id": "chat13",
+      "island": "chat",
+      "role": "line",
+      "en": "Good morning!",
+      "zh": "早上好！",
+      "slots": [],
+      "tags": [
+        "opener"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat14",
+      "island": "chat",
+      "role": "line",
+      "en": "Good afternoon!",
+      "zh": "下午好！",
+      "slots": [],
+      "tags": [
+        "opener"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat15",
+      "island": "chat",
+      "role": "line",
+      "en": "Good evening!",
+      "zh": "晚上好！",
+      "slots": [],
+      "tags": [
+        "opener"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat16",
+      "island": "chat",
+      "role": "line",
+      "en": "Nice to meet you.",
+      "zh": "很高兴认识你。",
+      "slots": [],
+      "tags": [
+        "opener"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat17",
+      "island": "chat",
+      "role": "line",
+      "en": "Nice to see you again.",
+      "zh": "再次见到你真好。",
+      "slots": [],
+      "tags": [
+        "opener"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat18",
+      "island": "chat",
+      "role": "line",
+      "en": "How have you been lately?",
+      "zh": "你最近过得怎么样？",
+      "slots": [],
+      "tags": [
+        "ask"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat19",
+      "island": "chat",
+      "role": "line",
+      "en": "I've been pretty well, thanks.",
+      "zh": "我还不错，谢谢。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat20",
+      "island": "chat",
+      "role": "line",
+      "en": "What's new with you?",
+      "zh": "你有什么新鲜事吗？",
+      "slots": [],
+      "tags": [
+        "ask"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat21",
+      "island": "chat",
+      "role": "line",
+      "en": "Nothing special, really.",
+      "zh": "其实没什么特别的。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat22",
+      "island": "chat",
+      "role": "line",
+      "en": "That sounds great!",
+      "zh": "听起来真棒！",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat23",
+      "island": "chat",
+      "role": "line",
+      "en": "Oh, really?",
+      "zh": "哦，真的吗？",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat24",
+      "island": "chat",
+      "role": "line",
+      "en": "No way!",
+      "zh": "不会吧！",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat25",
+      "island": "chat",
+      "role": "line",
+      "en": "I know what you mean.",
+      "zh": "我懂你的意思。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat26",
+      "island": "chat",
+      "role": "line",
+      "en": "Tell me more.",
+      "zh": "再多说一点。",
+      "slots": [],
+      "tags": [
+        "ask"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat27",
+      "island": "chat",
+      "role": "line",
+      "en": "Where have you been?",
+      "zh": "你去哪儿了？",
+      "slots": [],
+      "tags": [
+        "ask"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat28",
+      "island": "chat",
+      "role": "line",
+      "en": "I was just about to message you.",
+      "zh": "我正打算给你发消息。",
+      "slots": [],
+      "tags": [
+        "aside"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat29",
+      "island": "chat",
+      "role": "line",
+      "en": "Small world!",
+      "zh": "世界真小！",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat30",
+      "island": "chat",
+      "role": "line",
+      "en": "It was good catching up.",
+      "zh": "聊得真开心。",
+      "slots": [],
+      "tags": [
+        "closer"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat31",
+      "island": "chat",
+      "role": "line",
+      "en": "Take care!",
+      "zh": "保重！",
+      "slots": [],
+      "tags": [
+        "closer"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat32",
+      "island": "chat",
+      "role": "line",
+      "en": "Have a nice day!",
+      "zh": "祝你今天愉快！",
+      "slots": [],
+      "tags": [
+        "closer"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat33",
+      "island": "chat",
+      "role": "line",
+      "en": "See you soon!",
+      "zh": "回头见！",
+      "slots": [],
+      "tags": [
+        "closer"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat34",
+      "island": "chat",
+      "role": "line",
+      "en": "Let's keep in touch.",
+      "zh": "保持联系。",
+      "slots": [],
+      "tags": [
+        "closer"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat35",
+      "island": "chat",
+      "role": "line",
+      "en": "Sorry, I didn't catch that.",
+      "zh": "抱歉，我没听清。",
+      "slots": [],
+      "tags": [
+        "clarify"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat36",
+      "island": "chat",
+      "role": "line",
+      "en": "Could you say that again?",
+      "zh": "你能再说一遍吗？",
+      "slots": [],
+      "tags": [
+        "clarify"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat37",
+      "island": "chat",
+      "role": "line",
+      "en": "What does that mean?",
+      "zh": "那是什么意思？",
+      "slots": [],
+      "tags": [
+        "clarify"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat38",
+      "island": "chat",
+      "role": "line",
+      "en": "In other words…?",
+      "zh": "换句话说……？",
+      "slots": [],
+      "tags": [
+        "clarify"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat39",
+      "island": "chat",
+      "role": "line",
+      "en": "Just to confirm — is that tomorrow?",
+      "zh": "确认一下——是明天吗？",
+      "slots": [],
+      "tags": [
+        "clarify"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "chat40",
+      "island": "chat",
+      "role": "line",
+      "en": "I really appreciate it.",
+      "zh": "真的很感谢。",
+      "slots": [],
+      "tags": [
+        "thanks"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "mood01",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm feeling good today.",
+      "zh": "我今天感觉不错。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood02",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm a bit tired.",
+      "zh": "我有点累。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood03",
+      "island": "mood",
+      "role": "line",
+      "en": "I've been so busy lately.",
+      "zh": "我最近特别忙。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood04",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm stressed about work.",
+      "zh": "我工作压力有点大。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood05",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm actually pretty relaxed.",
+      "zh": "其实我挺放松的。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood06",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm hungry — want to eat?",
+      "zh": "我饿了——要不要吃饭？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood07",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm not feeling well.",
+      "zh": "我身体不太舒服。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood08",
+      "island": "mood",
+      "role": "line",
+      "en": "I feel a lot better now.",
+      "zh": "我现在好多了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood09",
+      "island": "mood",
+      "role": "line",
+      "en": "That made me so happy.",
+      "zh": "那让我特别开心。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood10",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm a little nervous.",
+      "zh": "我有点紧张。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood11",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm worried about that.",
+      "zh": "我有点担心那件事。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood12",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm excited for the weekend.",
+      "zh": "我很期待这个周末。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood13",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm bored at home.",
+      "zh": "我在家有点无聊。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood14",
+      "island": "mood",
+      "role": "line",
+      "en": "I need a break.",
+      "zh": "我需要休息一下。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood15",
+      "island": "mood",
+      "role": "line",
+      "en": "I slept really well.",
+      "zh": "我睡得很好。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood16",
+      "island": "mood",
+      "role": "line",
+      "en": "I couldn't sleep last night.",
+      "zh": "我昨晚睡不着。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood17",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm in a good mood.",
+      "zh": "我心情不错。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood18",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm in a bad mood — sorry.",
+      "zh": "我心情不好——抱歉。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood19",
+      "island": "mood",
+      "role": "line",
+      "en": "That was frustrating.",
+      "zh": "那真让人沮丧。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood20",
+      "island": "mood",
+      "role": "line",
+      "en": "I'm proud of you.",
+      "zh": "我为你骄傲。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood21",
+      "island": "mood",
+      "role": "line",
+      "en": "Don't worry about it.",
+      "zh": "别担心这件事。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood22",
+      "island": "mood",
+      "role": "line",
+      "en": "Cheer up!",
+      "zh": "振作一点！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood23",
+      "island": "mood",
+      "role": "line",
+      "en": "Take it easy.",
+      "zh": "放轻松。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "mood24",
+      "island": "mood",
+      "role": "line",
+      "en": "I feel the same way.",
+      "zh": "我也有同样的感觉。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv01",
+      "island": "invite",
+      "role": "line",
+      "en": "Do you want to grab coffee?",
+      "zh": "要不要一起喝咖啡？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv02",
+      "island": "invite",
+      "role": "line",
+      "en": "Are you free this weekend?",
+      "zh": "你这个周末有空吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv03",
+      "island": "invite",
+      "role": "line",
+      "en": "How about dinner tonight?",
+      "zh": "今晚一起吃饭怎么样？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv04",
+      "island": "invite",
+      "role": "line",
+      "en": "Want to hang out after work?",
+      "zh": "下班后要不要出来玩？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv05",
+      "island": "invite",
+      "role": "line",
+      "en": "Can you join us?",
+      "zh": "你能加入我们吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv06",
+      "island": "invite",
+      "role": "line",
+      "en": "I'd love to!",
+      "zh": "我很想去！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv07",
+      "island": "invite",
+      "role": "line",
+      "en": "Sounds good to me.",
+      "zh": "我觉得不错。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv08",
+      "island": "invite",
+      "role": "line",
+      "en": "I'd love to, but I'm busy tonight.",
+      "zh": "我很想去，但今晚有事。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv09",
+      "island": "invite",
+      "role": "line",
+      "en": "Maybe next time?",
+      "zh": "下次可以吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv10",
+      "island": "invite",
+      "role": "line",
+      "en": "Can we reschedule?",
+      "zh": "我们能改个时间吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv11",
+      "island": "invite",
+      "role": "line",
+      "en": "What time works for you?",
+      "zh": "你什么时间方便？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv12",
+      "island": "invite",
+      "role": "line",
+      "en": "How about 6 pm?",
+      "zh": "六点怎么样？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv13",
+      "island": "invite",
+      "role": "line",
+      "en": "Let's meet at the cafe.",
+      "zh": "我们在咖啡馆见吧。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv14",
+      "island": "invite",
+      "role": "line",
+      "en": "Where should we meet?",
+      "zh": "我们在哪儿见？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv15",
+      "island": "invite",
+      "role": "line",
+      "en": "I'll text you the address.",
+      "zh": "我把地址发给你。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv16",
+      "island": "invite",
+      "role": "line",
+      "en": "Sorry, I have to cancel.",
+      "zh": "抱歉，我得取消了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv17",
+      "island": "invite",
+      "role": "line",
+      "en": "Something came up.",
+      "zh": "突然有事。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv18",
+      "island": "invite",
+      "role": "line",
+      "en": "Rain check?",
+      "zh": "改天再约？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv19",
+      "island": "invite",
+      "role": "line",
+      "en": "Looking forward to it!",
+      "zh": "很期待！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv20",
+      "island": "invite",
+      "role": "line",
+      "en": "See you there!",
+      "zh": "到时候见！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv21",
+      "island": "invite",
+      "role": "line",
+      "en": "Is it okay if I bring a friend?",
+      "zh": "我带个朋友可以吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv22",
+      "island": "invite",
+      "role": "line",
+      "en": "Should I bring anything?",
+      "zh": "我需要带什么吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv23",
+      "island": "invite",
+      "role": "line",
+      "en": "Let's plan something soon.",
+      "zh": "我们尽快约一约吧。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "inv24",
+      "island": "invite",
+      "role": "line",
+      "en": "Keep me posted.",
+      "zh": "有消息告诉我。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph01",
+      "island": "phone",
+      "role": "line",
+      "en": "Can I call you later?",
+      "zh": "我晚点给你打电话可以吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph02",
+      "island": "phone",
+      "role": "line",
+      "en": "I'll call you in 10 minutes.",
+      "zh": "我十分钟后打给你。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph03",
+      "island": "phone",
+      "role": "line",
+      "en": "Sorry I missed your call.",
+      "zh": "抱歉没接到你的电话。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph04",
+      "island": "phone",
+      "role": "line",
+      "en": "I just got your message.",
+      "zh": "我刚看到你的消息。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph05",
+      "island": "phone",
+      "role": "line",
+      "en": "I'll get back to you soon.",
+      "zh": "我很快回复你。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph06",
+      "island": "phone",
+      "role": "line",
+      "en": "Can you hear me?",
+      "zh": "你听得到吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph07",
+      "island": "phone",
+      "role": "line",
+      "en": "The signal is bad here.",
+      "zh": "这里信号不好。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph08",
+      "island": "phone",
+      "role": "line",
+      "en": "You're breaking up.",
+      "zh": "你那边声音断断续续的。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph09",
+      "island": "phone",
+      "role": "line",
+      "en": "Let me call you back.",
+      "zh": "我回拨给你。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph10",
+      "island": "phone",
+      "role": "line",
+      "en": "I'm on the phone right now.",
+      "zh": "我正在打电话。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph11",
+      "island": "phone",
+      "role": "line",
+      "en": "Can you text me instead?",
+      "zh": "你改发短信给我好吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph12",
+      "island": "phone",
+      "role": "line",
+      "en": "Did you get my text?",
+      "zh": "你收到我的短信了吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph13",
+      "island": "phone",
+      "role": "line",
+      "en": "Please send me the link.",
+      "zh": "请把链接发给我。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph14",
+      "island": "phone",
+      "role": "line",
+      "en": "I'll forward it to you.",
+      "zh": "我转发给你。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph15",
+      "island": "phone",
+      "role": "line",
+      "en": "Who is this, please?",
+      "zh": "请问您是哪位？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph16",
+      "island": "phone",
+      "role": "line",
+      "en": "You've got the wrong number.",
+      "zh": "你打错了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph17",
+      "island": "phone",
+      "role": "line",
+      "en": "Hold on — my battery is low.",
+      "zh": "等一下——我电量快没了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph18",
+      "island": "phone",
+      "role": "line",
+      "en": "I'll message you when I arrive.",
+      "zh": "我到了就给你发消息。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph19",
+      "island": "phone",
+      "role": "line",
+      "en": "Don't call after 10, please.",
+      "zh": "请别在十点后打电话。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph20",
+      "island": "phone",
+      "role": "line",
+      "en": "Is this a good time to talk?",
+      "zh": "现在说话方便吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph21",
+      "island": "phone",
+      "role": "line",
+      "en": "I'm driving — can I call later?",
+      "zh": "我在开车——晚点打可以吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph22",
+      "island": "phone",
+      "role": "line",
+      "en": "Mute yourself for a second, please.",
+      "zh": "请先静音一下。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph23",
+      "island": "phone",
+      "role": "line",
+      "en": "I sent a voice note.",
+      "zh": "我发了一条语音。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ph24",
+      "island": "phone",
+      "role": "line",
+      "en": "Check your chat — I replied.",
+      "zh": "看下聊天——我回了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com01",
+      "island": "commute",
+      "role": "line",
+      "en": "I'm on my way.",
+      "zh": "我在路上了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com02",
+      "island": "commute",
+      "role": "line",
+      "en": "I'm stuck in traffic.",
+      "zh": "我堵车了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com03",
+      "island": "commute",
+      "role": "line",
+      "en": "I'll be 10 minutes late.",
+      "zh": "我大概晚十分钟。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com04",
+      "island": "commute",
+      "role": "line",
+      "en": "Where should I wait for you?",
+      "zh": "我在哪儿等你？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com05",
+      "island": "commute",
+      "role": "line",
+      "en": "Which subway line is this?",
+      "zh": "这是几号线？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com06",
+      "island": "commute",
+      "role": "line",
+      "en": "Where do I transfer?",
+      "zh": "我在哪儿换乘？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com07",
+      "island": "commute",
+      "role": "line",
+      "en": "Is this seat taken?",
+      "zh": "这个座位有人吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com08",
+      "island": "commute",
+      "role": "line",
+      "en": "Excuse me, this is my stop.",
+      "zh": "不好意思，我到站了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com09",
+      "island": "commute",
+      "role": "line",
+      "en": "How long does it take by subway?",
+      "zh": "坐地铁要多久？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com10",
+      "island": "commute",
+      "role": "line",
+      "en": "Let's take a taxi.",
+      "zh": "我们打车吧。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com11",
+      "island": "commute",
+      "role": "line",
+      "en": "Could you drop me off here?",
+      "zh": "能在这儿让我下车吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com12",
+      "island": "commute",
+      "role": "line",
+      "en": "Please go straight.",
+      "zh": "请直行。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com13",
+      "island": "commute",
+      "role": "line",
+      "en": "Turn left at the next light.",
+      "zh": "下个红绿灯左转。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com14",
+      "island": "commute",
+      "role": "line",
+      "en": "The bus is packed.",
+      "zh": "公交车挤爆了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com15",
+      "island": "commute",
+      "role": "line",
+      "en": "I missed the train.",
+      "zh": "我错过火车/地铁了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com16",
+      "island": "commute",
+      "role": "line",
+      "en": "Is there a faster way?",
+      "zh": "有没有更快的路？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com17",
+      "island": "commute",
+      "role": "line",
+      "en": "The road is closed.",
+      "zh": "这条路封了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com18",
+      "island": "commute",
+      "role": "line",
+      "en": "I'll walk from here.",
+      "zh": "我从这儿走过去。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com19",
+      "island": "commute",
+      "role": "line",
+      "en": "Share your location, please.",
+      "zh": "请分享一下你的位置。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com20",
+      "island": "commute",
+      "role": "line",
+      "en": "I just got off at the station.",
+      "zh": "我刚在站下了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com21",
+      "island": "commute",
+      "role": "line",
+      "en": "The elevator is broken — take the stairs.",
+      "zh": "电梯坏了——走楼梯。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com22",
+      "island": "commute",
+      "role": "line",
+      "en": "Mind the gap.",
+      "zh": "小心空隙。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com23",
+      "island": "commute",
+      "role": "line",
+      "en": "Does this bus go downtown?",
+      "zh": "这趟公交去市中心吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "com24",
+      "island": "commute",
+      "role": "line",
+      "en": "I'll meet you at Exit A.",
+      "zh": "我在 A 出口等你。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm01",
+      "island": "home",
+      "role": "line",
+      "en": "Come in, please.",
+      "zh": "请进。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm02",
+      "island": "home",
+      "role": "line",
+      "en": "Make yourself at home.",
+      "zh": "别客气，像在自己家一样。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm03",
+      "island": "home",
+      "role": "line",
+      "en": "Would you like some tea?",
+      "zh": "要喝茶吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm04",
+      "island": "home",
+      "role": "line",
+      "en": "Shoes off at the door, please.",
+      "zh": "请在门口换鞋。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm05",
+      "island": "home",
+      "role": "line",
+      "en": "The bathroom is over there.",
+      "zh": "卫生间在那边。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm06",
+      "island": "home",
+      "role": "line",
+      "en": "Feel free to use the Wi-Fi.",
+      "zh": "Wi-Fi 随便用。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm07",
+      "island": "home",
+      "role": "line",
+      "en": "The password is on the fridge.",
+      "zh": "密码在冰箱上。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm08",
+      "island": "home",
+      "role": "line",
+      "en": "I ordered delivery.",
+      "zh": "我点了外卖。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm09",
+      "island": "home",
+      "role": "line",
+      "en": "There's a package at the door.",
+      "zh": "门口有个快递。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm10",
+      "island": "home",
+      "role": "line",
+      "en": "Could you sign for the delivery?",
+      "zh": "你能帮我签收快递吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm11",
+      "island": "home",
+      "role": "line",
+      "en": "Sorry about the mess.",
+      "zh": "抱歉家里有点乱。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm12",
+      "island": "home",
+      "role": "line",
+      "en": "I'll clean up later.",
+      "zh": "我晚点再收拾。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm13",
+      "island": "home",
+      "role": "line",
+      "en": "The neighbors are a bit loud.",
+      "zh": "邻居有点吵。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm14",
+      "island": "home",
+      "role": "line",
+      "en": "Could you keep it down, please?",
+      "zh": "能小点声吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm15",
+      "island": "home",
+      "role": "line",
+      "en": "I'm heading out.",
+      "zh": "我出门了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm16",
+      "island": "home",
+      "role": "line",
+      "en": "Don't forget to lock the door.",
+      "zh": "别忘了锁门。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm17",
+      "island": "home",
+      "role": "line",
+      "en": "Did you take out the trash?",
+      "zh": "你倒垃圾了吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm18",
+      "island": "home",
+      "role": "line",
+      "en": "The lights went out.",
+      "zh": "灯灭了/停电了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm19",
+      "island": "home",
+      "role": "line",
+      "en": "Where's the remote?",
+      "zh": "遥控器在哪？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm20",
+      "island": "home",
+      "role": "line",
+      "en": "I'm staying in tonight.",
+      "zh": "我今晚宅家。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm21",
+      "island": "home",
+      "role": "line",
+      "en": "Want to come over?",
+      "zh": "要不要来我家？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm22",
+      "island": "home",
+      "role": "line",
+      "en": "Thanks for having me.",
+      "zh": "谢谢招待。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm23",
+      "island": "home",
+      "role": "line",
+      "en": "I should get going.",
+      "zh": "我该走了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "hm24",
+      "island": "home",
+      "role": "line",
+      "en": "Text me when you get home.",
+      "zh": "到家给我发消息。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx01",
+      "island": "weather",
+      "role": "line",
+      "en": "Nice weather today!",
+      "zh": "今天天气真好！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx02",
+      "island": "weather",
+      "role": "line",
+      "en": "It's so cold outside.",
+      "zh": "外面好冷。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx03",
+      "island": "weather",
+      "role": "line",
+      "en": "It's boiling hot.",
+      "zh": "热死了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx04",
+      "island": "weather",
+      "role": "line",
+      "en": "It looks like rain.",
+      "zh": "看起来要下雨。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx05",
+      "island": "weather",
+      "role": "line",
+      "en": "Bring an umbrella.",
+      "zh": "带把伞。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx06",
+      "island": "weather",
+      "role": "line",
+      "en": "It's windy today.",
+      "zh": "今天风很大。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx07",
+      "island": "weather",
+      "role": "line",
+      "en": "I love sunny days.",
+      "zh": "我喜欢晴天。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx08",
+      "island": "weather",
+      "role": "line",
+      "en": "This humidity is awful.",
+      "zh": "这湿度太难受了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx09",
+      "island": "weather",
+      "role": "line",
+      "en": "It's a bit chilly.",
+      "zh": "有点凉。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx10",
+      "island": "weather",
+      "role": "line",
+      "en": "The weather is perfect for a walk.",
+      "zh": "这天气散步正好。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx11",
+      "island": "weather",
+      "role": "line",
+      "en": "They say it will snow tomorrow.",
+      "zh": "据说明天要下雪。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx12",
+      "island": "weather",
+      "role": "line",
+      "en": "I hope the rain stops soon.",
+      "zh": "希望雨快点停。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx13",
+      "island": "weather",
+      "role": "line",
+      "en": "It's warmer than yesterday.",
+      "zh": "比昨天暖和。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx14",
+      "island": "weather",
+      "role": "line",
+      "en": "Dress warmly.",
+      "zh": "穿暖和点。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx15",
+      "island": "weather",
+      "role": "line",
+      "en": "The air quality is bad today.",
+      "zh": "今天空气质量不好。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx16",
+      "island": "weather",
+      "role": "line",
+      "en": "What a beautiful sunset!",
+      "zh": "日落真美！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx17",
+      "island": "weather",
+      "role": "line",
+      "en": "It's foggy this morning.",
+      "zh": "今早有雾。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx18",
+      "island": "weather",
+      "role": "line",
+      "en": "Stay dry!",
+      "zh": "别淋湿了！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx19",
+      "island": "weather",
+      "role": "line",
+      "en": "I got caught in the rain.",
+      "zh": "我被雨淋了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "wx20",
+      "island": "weather",
+      "role": "line",
+      "en": "Let's wait until it clears up.",
+      "zh": "等天晴一点再走吧。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay01",
+      "island": "pay",
+      "role": "line",
+      "en": "How much is this?",
+      "zh": "这个多少钱？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay02",
+      "island": "pay",
+      "role": "line",
+      "en": "How much is the total?",
+      "zh": "一共多少钱？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay03",
+      "island": "pay",
+      "role": "line",
+      "en": "Can I pay by card?",
+      "zh": "可以刷卡吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay04",
+      "island": "pay",
+      "role": "line",
+      "en": "Do you take WeChat Pay?",
+      "zh": "收微信支付吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay05",
+      "island": "pay",
+      "role": "line",
+      "en": "Cash only?",
+      "zh": "只收现金吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay06",
+      "island": "pay",
+      "role": "line",
+      "en": "Can we split the bill?",
+      "zh": "可以 AA 吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay07",
+      "island": "pay",
+      "role": "line",
+      "en": "It's on me.",
+      "zh": "我请客。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay08",
+      "island": "pay",
+      "role": "line",
+      "en": "Next time is my treat.",
+      "zh": "下次我请。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay09",
+      "island": "pay",
+      "role": "line",
+      "en": "Keep the change.",
+      "zh": "不用找了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay10",
+      "island": "pay",
+      "role": "line",
+      "en": "Is service included?",
+      "zh": "含服务费吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay11",
+      "island": "pay",
+      "role": "line",
+      "en": "Could I get a receipt, please?",
+      "zh": "可以开发票/收据吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay12",
+      "island": "pay",
+      "role": "line",
+      "en": "Is there a discount?",
+      "zh": "有折扣吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay13",
+      "island": "pay",
+      "role": "line",
+      "en": "That's a bit expensive.",
+      "zh": "有点贵。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay14",
+      "island": "pay",
+      "role": "line",
+      "en": "Any cheaper options?",
+      "zh": "有便宜一点的吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay15",
+      "island": "pay",
+      "role": "line",
+      "en": "I'll take it.",
+      "zh": "我要这个。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay16",
+      "island": "pay",
+      "role": "line",
+      "en": "Just looking, thanks.",
+      "zh": "我先看看，谢谢。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay17",
+      "island": "pay",
+      "role": "line",
+      "en": "The payment didn't go through.",
+      "zh": "支付没成功。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay18",
+      "island": "pay",
+      "role": "line",
+      "en": "Let me try again.",
+      "zh": "我再试一次。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay19",
+      "island": "pay",
+      "role": "line",
+      "en": "Please scan this QR code.",
+      "zh": "请扫这个二维码。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay20",
+      "island": "pay",
+      "role": "line",
+      "en": "I already paid online.",
+      "zh": "我已经线上付过了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay21",
+      "island": "pay",
+      "role": "line",
+      "en": "Is tip expected here?",
+      "zh": "这里需要给小费吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay22",
+      "island": "pay",
+      "role": "line",
+      "en": "Can you break a hundred?",
+      "zh": "一百块能换开吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay23",
+      "island": "pay",
+      "role": "line",
+      "en": "I'll pay for both.",
+      "zh": "两个我一起付。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "pay24",
+      "island": "pay",
+      "role": "line",
+      "en": "Refund, please.",
+      "zh": "请退款。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht01",
+      "island": "hotel",
+      "role": "line",
+      "en": "I have a reservation under {name}.",
+      "zh": "我有预订，名字是……。",
+      "slots": [
+        "name"
+      ],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht02",
+      "island": "hotel",
+      "role": "line",
+      "en": "I'd like to check in.",
+      "zh": "我想办理入住。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht03",
+      "island": "hotel",
+      "role": "line",
+      "en": "What time is check-out?",
+      "zh": "几点退房？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht04",
+      "island": "hotel",
+      "role": "line",
+      "en": "Is breakfast included?",
+      "zh": "含早餐吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht05",
+      "island": "hotel",
+      "role": "line",
+      "en": "Where is the elevator?",
+      "zh": "电梯在哪？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht06",
+      "island": "hotel",
+      "role": "line",
+      "en": "The Wi-Fi password, please?",
+      "zh": "请问 Wi-Fi 密码？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht07",
+      "island": "hotel",
+      "role": "line",
+      "en": "My room key doesn't work.",
+      "zh": "我的房卡打不开门。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht08",
+      "island": "hotel",
+      "role": "line",
+      "en": "Could I get a quieter room?",
+      "zh": "能换间更安静的吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht09",
+      "island": "hotel",
+      "role": "line",
+      "en": "There's no hot water.",
+      "zh": "没有热水。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht10",
+      "island": "hotel",
+      "role": "line",
+      "en": "The air conditioner isn't working.",
+      "zh": "空调坏了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht11",
+      "island": "hotel",
+      "role": "line",
+      "en": "Could I have extra towels?",
+      "zh": "能多给几条毛巾吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht12",
+      "island": "hotel",
+      "role": "line",
+      "en": "Please wake me up at 7.",
+      "zh": "请七点叫我起床。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht13",
+      "island": "hotel",
+      "role": "line",
+      "en": "Is there a laundry service?",
+      "zh": "有洗衣服务吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht14",
+      "island": "hotel",
+      "role": "line",
+      "en": "Where can I store my luggage?",
+      "zh": "行李可以寄存在哪？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht15",
+      "island": "hotel",
+      "role": "line",
+      "en": "How do I get to the subway from here?",
+      "zh": "从这儿怎么去地铁站？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht16",
+      "island": "hotel",
+      "role": "line",
+      "en": "I'd like a late check-out, if possible.",
+      "zh": "可以的话我想延迟退房。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht17",
+      "island": "hotel",
+      "role": "line",
+      "en": "Is there a gym in the hotel?",
+      "zh": "酒店有健身房吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht18",
+      "island": "hotel",
+      "role": "line",
+      "en": "The minibar charges — are they high?",
+      "zh": "迷你吧收费贵吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht19",
+      "island": "hotel",
+      "role": "line",
+      "en": "Can I get a taxi at the front desk?",
+      "zh": "前台能帮忙叫车吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ht20",
+      "island": "hotel",
+      "role": "line",
+      "en": "I'm checking out now.",
+      "zh": "我现在退房。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym01",
+      "island": "gym",
+      "role": "line",
+      "en": "Do you want to go for a run?",
+      "zh": "要不要去跑步？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym02",
+      "island": "gym",
+      "role": "line",
+      "en": "I'm hitting the gym later.",
+      "zh": "我晚点去健身房。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym03",
+      "island": "gym",
+      "role": "line",
+      "en": "Is this machine free?",
+      "zh": "这台器械有人用吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym04",
+      "island": "gym",
+      "role": "line",
+      "en": "How many sets are you doing?",
+      "zh": "你做几组？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym05",
+      "island": "gym",
+      "role": "line",
+      "en": "Can I work in with you?",
+      "zh": "我能和你轮流用吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym06",
+      "island": "gym",
+      "role": "line",
+      "en": "I need a spot, please.",
+      "zh": "请帮我保护一下。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym07",
+      "island": "gym",
+      "role": "line",
+      "en": "Let's stretch first.",
+      "zh": "先拉伸一下。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym08",
+      "island": "gym",
+      "role": "line",
+      "en": "I'm sore from yesterday.",
+      "zh": "我昨天练完还酸。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym09",
+      "island": "gym",
+      "role": "line",
+      "en": "Great workout!",
+      "zh": "练得真爽！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym10",
+      "island": "gym",
+      "role": "line",
+      "en": "I need some water.",
+      "zh": "我要喝点水。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym11",
+      "island": "gym",
+      "role": "line",
+      "en": "Want to play badminton?",
+      "zh": "要不要打羽毛球？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym12",
+      "island": "gym",
+      "role": "line",
+      "en": "What time is the class?",
+      "zh": "课程几点开始？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym13",
+      "island": "gym",
+      "role": "line",
+      "en": "I'm a beginner.",
+      "zh": "我是新手。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym14",
+      "island": "gym",
+      "role": "line",
+      "en": "Could you show me the form?",
+      "zh": "能教我一下动作吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym15",
+      "island": "gym",
+      "role": "line",
+      "en": "Let's cool down.",
+      "zh": "我们放松收尾吧。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym16",
+      "island": "gym",
+      "role": "line",
+      "en": "I skipped the gym today.",
+      "zh": "我今天没去健身。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym17",
+      "island": "gym",
+      "role": "line",
+      "en": "See you on the court!",
+      "zh": "球场见！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym18",
+      "island": "gym",
+      "role": "line",
+      "en": "My legs are dead.",
+      "zh": "我腿废了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym19",
+      "island": "gym",
+      "role": "line",
+      "en": "One more rep!",
+      "zh": "再来一个！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "gym20",
+      "island": "gym",
+      "role": "line",
+      "en": "Rest day tomorrow.",
+      "zh": "明天休息日。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu01",
+      "island": "study",
+      "role": "line",
+      "en": "I have class tomorrow.",
+      "zh": "我明天有课。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu02",
+      "island": "study",
+      "role": "line",
+      "en": "Did you finish the homework?",
+      "zh": "作业做完了吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu03",
+      "island": "study",
+      "role": "line",
+      "en": "Could you explain this again?",
+      "zh": "你能再讲一遍吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu04",
+      "island": "study",
+      "role": "line",
+      "en": "I don't understand this part.",
+      "zh": "这部分我不懂。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu05",
+      "island": "study",
+      "role": "line",
+      "en": "What's the deadline?",
+      "zh": "截止日期是什么时候？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu06",
+      "island": "study",
+      "role": "line",
+      "en": "Can we study together?",
+      "zh": "我们能一起学习吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu07",
+      "island": "study",
+      "role": "line",
+      "en": "I need to review tonight.",
+      "zh": "我今晚要复习。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu08",
+      "island": "study",
+      "role": "line",
+      "en": "That exam was hard.",
+      "zh": "那次考试好难。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu09",
+      "island": "study",
+      "role": "line",
+      "en": "I passed!",
+      "zh": "我过了！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu10",
+      "island": "study",
+      "role": "line",
+      "en": "I failed — I'll try again.",
+      "zh": "我挂了——我会再试。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu11",
+      "island": "study",
+      "role": "line",
+      "en": "Which book are you using?",
+      "zh": "你用的哪本书？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu12",
+      "island": "study",
+      "role": "line",
+      "en": "Is this course useful?",
+      "zh": "这门课有用吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu13",
+      "island": "study",
+      "role": "line",
+      "en": "I'm learning English every day.",
+      "zh": "我每天都在学英语。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu14",
+      "island": "study",
+      "role": "line",
+      "en": "How do you pronounce this?",
+      "zh": "这个怎么读？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu15",
+      "island": "study",
+      "role": "line",
+      "en": "Is my sentence correct?",
+      "zh": "我这句对吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu16",
+      "island": "study",
+      "role": "line",
+      "en": "Let's practice speaking.",
+      "zh": "我们练习口语吧。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu17",
+      "island": "study",
+      "role": "line",
+      "en": "I took notes.",
+      "zh": "我做了笔记。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu18",
+      "island": "study",
+      "role": "line",
+      "en": "Can you share the slides?",
+      "zh": "能分享课件吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu19",
+      "island": "study",
+      "role": "line",
+      "en": "Group project starts next week.",
+      "zh": "小组作业下周开始。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "stu20",
+      "island": "study",
+      "role": "line",
+      "en": "I'm tutoring a friend.",
+      "zh": "我在辅导一个朋友。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol01",
+      "island": "online",
+      "role": "line",
+      "en": "Can we jump on a quick call?",
+      "zh": "我们快速语音一下？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol02",
+      "island": "online",
+      "role": "line",
+      "en": "I'll start the meeting.",
+      "zh": "我来发起会议。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol03",
+      "island": "online",
+      "role": "line",
+      "en": "You're on mute.",
+      "zh": "你静音了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol04",
+      "island": "online",
+      "role": "line",
+      "en": "Please turn on your camera.",
+      "zh": "请打开摄像头。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol05",
+      "island": "online",
+      "role": "line",
+      "en": "My internet is unstable.",
+      "zh": "我网络不稳。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol06",
+      "island": "online",
+      "role": "line",
+      "en": "Can you share your screen?",
+      "zh": "能共享屏幕吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol07",
+      "island": "online",
+      "role": "line",
+      "en": "I lost you for a second.",
+      "zh": "刚才听不到你了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol08",
+      "island": "online",
+      "role": "line",
+      "en": "Let's switch to chat.",
+      "zh": "我们改用文字聊吧。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol09",
+      "island": "online",
+      "role": "line",
+      "en": "I'll drop the link here.",
+      "zh": "我把链接丢这里。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol10",
+      "island": "online",
+      "role": "line",
+      "en": "Did everyone get that?",
+      "zh": "大家都听到了吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol11",
+      "island": "online",
+      "role": "line",
+      "en": "Sorry, I was lagging.",
+      "zh": "抱歉，我这边卡了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol12",
+      "island": "online",
+      "role": "line",
+      "en": "One sec — joining from my phone.",
+      "zh": "等一下——我用手机进。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol13",
+      "island": "online",
+      "role": "line",
+      "en": "Background noise is loud.",
+      "zh": "背景噪音好大。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol14",
+      "island": "online",
+      "role": "line",
+      "en": "I'll record this, okay?",
+      "zh": "我录一下可以吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol15",
+      "island": "online",
+      "role": "line",
+      "en": "Please react if you agree.",
+      "zh": "同意的话点个反应。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol16",
+      "island": "online",
+      "role": "line",
+      "en": "I'll follow up in the group chat.",
+      "zh": "我在群里跟进。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol17",
+      "island": "online",
+      "role": "line",
+      "en": "Ping me when you're free.",
+      "zh": "你有空就 ping 我。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol18",
+      "island": "online",
+      "role": "line",
+      "en": "I'll leave a comment.",
+      "zh": "我留个评论。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol19",
+      "island": "online",
+      "role": "line",
+      "en": "The video won't load.",
+      "zh": "视频加载不出来。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "ol20",
+      "island": "online",
+      "role": "line",
+      "en": "Thanks for hopping on.",
+      "zh": "谢谢你上来聊。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx01",
+      "island": "shop",
+      "role": "line",
+      "en": "I'm just browsing.",
+      "zh": "我随便看看。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx02",
+      "island": "shop",
+      "role": "line",
+      "en": "Do you have this in another size?",
+      "zh": "有别的尺码吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx03",
+      "island": "shop",
+      "role": "line",
+      "en": "Do you have this in blue?",
+      "zh": "有蓝色的吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx04",
+      "island": "shop",
+      "role": "line",
+      "en": "Where is the fitting room?",
+      "zh": "试衣间在哪？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx05",
+      "island": "shop",
+      "role": "line",
+      "en": "Can I try this on?",
+      "zh": "我能试穿吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx06",
+      "island": "shop",
+      "role": "line",
+      "en": "It's too tight.",
+      "zh": "太紧了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx07",
+      "island": "shop",
+      "role": "line",
+      "en": "It's a bit loose.",
+      "zh": "有点松。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx08",
+      "island": "shop",
+      "role": "line",
+      "en": "Do you have a bag?",
+      "zh": "有袋子吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx09",
+      "island": "shop",
+      "role": "line",
+      "en": "Is this on sale?",
+      "zh": "这个打折吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx10",
+      "island": "shop",
+      "role": "line",
+      "en": "Where do I check out?",
+      "zh": "在哪儿结账？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx11",
+      "island": "shop",
+      "role": "line",
+      "en": "Can I return this?",
+      "zh": "可以退货吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "shopx12",
+      "island": "shop",
+      "role": "line",
+      "en": "I need a gift receipt.",
+      "zh": "我需要礼品小票。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex01",
+      "island": "dine",
+      "role": "line",
+      "en": "A table for two, please.",
+      "zh": "两位，谢谢。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex02",
+      "island": "dine",
+      "role": "line",
+      "en": "We have a reservation.",
+      "zh": "我们有预订。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex03",
+      "island": "dine",
+      "role": "line",
+      "en": "Could we see the menu?",
+      "zh": "能看下菜单吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex04",
+      "island": "dine",
+      "role": "line",
+      "en": "What do you recommend?",
+      "zh": "你推荐什么？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex05",
+      "island": "dine",
+      "role": "line",
+      "en": "I'm allergic to peanuts.",
+      "zh": "我对花生过敏。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex06",
+      "island": "dine",
+      "role": "line",
+      "en": "No spicy food, please.",
+      "zh": "请不要辣的。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex07",
+      "island": "dine",
+      "role": "line",
+      "en": "Can we get that to go?",
+      "zh": "可以打包吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex08",
+      "island": "dine",
+      "role": "line",
+      "en": "Water, please.",
+      "zh": "请给水。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex09",
+      "island": "dine",
+      "role": "line",
+      "en": "The bill, please.",
+      "zh": "买单。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex10",
+      "island": "dine",
+      "role": "line",
+      "en": "This isn't what I ordered.",
+      "zh": "这不是我点的。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex11",
+      "island": "dine",
+      "role": "line",
+      "en": "Could you heat this up?",
+      "zh": "能加热一下吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dinex12",
+      "island": "dine",
+      "role": "line",
+      "en": "Everything was delicious.",
+      "zh": "都很好吃。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dirx01",
+      "island": "dir",
+      "role": "line",
+      "en": "Excuse me, where is the subway?",
+      "zh": "请问地铁在哪？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dirx02",
+      "island": "dir",
+      "role": "line",
+      "en": "Is it within walking distance?",
+      "zh": "走路能到吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dirx03",
+      "island": "dir",
+      "role": "line",
+      "en": "How far is it from here?",
+      "zh": "离这儿多远？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dirx04",
+      "island": "dir",
+      "role": "line",
+      "en": "Can you point it on the map?",
+      "zh": "能在地图上指一下吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dirx05",
+      "island": "dir",
+      "role": "line",
+      "en": "I think I'm lost.",
+      "zh": "我好像迷路了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dirx06",
+      "island": "dir",
+      "role": "line",
+      "en": "Which way is north?",
+      "zh": "哪边是北？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dirx07",
+      "island": "dir",
+      "role": "line",
+      "en": "Is there a restroom nearby?",
+      "zh": "附近有洗手间吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "dirx08",
+      "island": "dir",
+      "role": "line",
+      "en": "I'm looking for Gate 12.",
+      "zh": "我在找 12 号门。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "docx01",
+      "island": "doc",
+      "role": "line",
+      "en": "I have a fever.",
+      "zh": "我发烧了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "docx02",
+      "island": "doc",
+      "role": "line",
+      "en": "My head hurts.",
+      "zh": "我头疼。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "docx03",
+      "island": "doc",
+      "role": "line",
+      "en": "I have a sore throat.",
+      "zh": "我嗓子疼。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "docx04",
+      "island": "doc",
+      "role": "line",
+      "en": "I've been coughing a lot.",
+      "zh": "我咳得很厉害。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "docx05",
+      "island": "doc",
+      "role": "line",
+      "en": "I'm allergic to penicillin.",
+      "zh": "我对青霉素过敏。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "docx06",
+      "island": "doc",
+      "role": "line",
+      "en": "Do I need a prescription?",
+      "zh": "需要处方吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "docx07",
+      "island": "doc",
+      "role": "line",
+      "en": "How often should I take this?",
+      "zh": "这个多久吃一次？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "docx08",
+      "island": "doc",
+      "role": "line",
+      "en": "I need to see a doctor.",
+      "zh": "我需要看医生。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "apptx01",
+      "island": "appt",
+      "role": "line",
+      "en": "Are we still on for tomorrow?",
+      "zh": "我们明天还约吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "apptx02",
+      "island": "appt",
+      "role": "line",
+      "en": "I'll be there on time.",
+      "zh": "我会准时到。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "apptx03",
+      "island": "appt",
+      "role": "line",
+      "en": "Running late — sorry!",
+      "zh": "要迟到了——抱歉！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "apptx04",
+      "island": "appt",
+      "role": "line",
+      "en": "Can we push it to 8?",
+      "zh": "能推到八点吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "apptx05",
+      "island": "appt",
+      "role": "line",
+      "en": "Let's lock in Saturday.",
+      "zh": "那就定周六吧。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "apptx06",
+      "island": "appt",
+      "role": "line",
+      "en": "I'll send a calendar invite.",
+      "zh": "我发个日历邀请。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "apptx07",
+      "island": "appt",
+      "role": "line",
+      "en": "Does 3 pm still work?",
+      "zh": "三点还行吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "apptx08",
+      "island": "appt",
+      "role": "line",
+      "en": "I'll confirm by tonight.",
+      "zh": "我今晚前确认。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx01",
+      "island": "work",
+      "role": "line",
+      "en": "How's work going?",
+      "zh": "工作怎么样？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx02",
+      "island": "work",
+      "role": "line",
+      "en": "I have a meeting in 10 minutes.",
+      "zh": "我十分钟后有会。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx03",
+      "island": "work",
+      "role": "line",
+      "en": "Can we sync later?",
+      "zh": "我们晚点同步一下？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx04",
+      "island": "work",
+      "role": "line",
+      "en": "I'll loop you in.",
+      "zh": "我把你拉进群/抄送你。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx05",
+      "island": "work",
+      "role": "line",
+      "en": "What's the priority?",
+      "zh": "优先级是什么？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx06",
+      "island": "work",
+      "role": "line",
+      "en": "I'll take care of it.",
+      "zh": "这事我来处理。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx07",
+      "island": "work",
+      "role": "line",
+      "en": "Let's take this offline.",
+      "zh": "我们会后私下聊。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx08",
+      "island": "work",
+      "role": "line",
+      "en": "Great job on that.",
+      "zh": "那件事干得漂亮。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx09",
+      "island": "work",
+      "role": "line",
+      "en": "I'm OOO tomorrow.",
+      "zh": "我明天不在办公室/请假。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "workx10",
+      "island": "work",
+      "role": "line",
+      "en": "Could you review this?",
+      "zh": "你能看一下这个吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx01",
+      "island": "trav",
+      "role": "line",
+      "en": "Where is the check-in counter?",
+      "zh": "值机柜台在哪？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx02",
+      "island": "trav",
+      "role": "line",
+      "en": "Is this the line for security?",
+      "zh": "安检是排这条吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx03",
+      "island": "trav",
+      "role": "line",
+      "en": "My flight is delayed.",
+      "zh": "我的航班延误了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx04",
+      "island": "trav",
+      "role": "line",
+      "en": "Which gate is it?",
+      "zh": "是几号登机口？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx05",
+      "island": "trav",
+      "role": "line",
+      "en": "I need a window seat.",
+      "zh": "我要靠窗座位。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx06",
+      "island": "trav",
+      "role": "line",
+      "en": "Is there a power outlet?",
+      "zh": "有电源插座吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx07",
+      "island": "trav",
+      "role": "line",
+      "en": "How do I get to the city center?",
+      "zh": "怎么去市中心？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx08",
+      "island": "trav",
+      "role": "line",
+      "en": "Is Uber available here?",
+      "zh": "这里能打 Uber 吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx09",
+      "island": "trav",
+      "role": "line",
+      "en": "I'd like a city map, please.",
+      "zh": "请给我一张城市地图。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "travx10",
+      "island": "trav",
+      "role": "line",
+      "en": "What time does it open?",
+      "zh": "几点开门？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx01",
+      "island": "reply",
+      "role": "line",
+      "en": "That makes sense.",
+      "zh": "有道理。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx02",
+      "island": "reply",
+      "role": "line",
+      "en": "Fair enough.",
+      "zh": "说得过去。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx03",
+      "island": "reply",
+      "role": "line",
+      "en": "You got a point.",
+      "zh": "你说得有道理。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx04",
+      "island": "reply",
+      "role": "line",
+      "en": "Interesting!",
+      "zh": "有意思！",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx05",
+      "island": "reply",
+      "role": "line",
+      "en": "I hadn't thought of that.",
+      "zh": "我还没想到这点。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx06",
+      "island": "reply",
+      "role": "line",
+      "en": "Same energy.",
+      "zh": "同感同频。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx07",
+      "island": "reply",
+      "role": "line",
+      "en": "Couldn't agree more.",
+      "zh": "再同意不过了。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx08",
+      "island": "reply",
+      "role": "line",
+      "en": "Let's circle back later.",
+      "zh": "我们晚点再回来聊。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx09",
+      "island": "reply",
+      "role": "line",
+      "en": "Go on.",
+      "zh": "继续说。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "rplx10",
+      "island": "reply",
+      "role": "line",
+      "en": "Wait — say that again?",
+      "zh": "等等——再说一遍？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "llx01",
+      "island": "lifeline",
+      "role": "line",
+      "en": "Sorry, my English is not perfect.",
+      "zh": "抱歉，我英语不太好。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "llx02",
+      "island": "lifeline",
+      "role": "line",
+      "en": "Can we switch to simpler words?",
+      "zh": "能用简单一点的词吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "llx03",
+      "island": "lifeline",
+      "role": "line",
+      "en": "Give me a second to think.",
+      "zh": "给我一秒想一下。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "llx04",
+      "island": "lifeline",
+      "role": "line",
+      "en": "How do you say this in English?",
+      "zh": "这个英文怎么说？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "llx05",
+      "island": "lifeline",
+      "role": "line",
+      "en": "Is this the right word?",
+      "zh": "这个词用得对吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "llx06",
+      "island": "lifeline",
+      "role": "line",
+      "en": "Please speak a bit slower.",
+      "zh": "请说慢一点。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "llx07",
+      "island": "lifeline",
+      "role": "line",
+      "en": "I need to look that up.",
+      "zh": "我得查一下。",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
+    },
+    {
+      "id": "llx08",
+      "island": "lifeline",
+      "role": "line",
+      "en": "Can you write it down?",
+      "zh": "你能写下来吗？",
+      "slots": [],
+      "tags": [],
+      "difficulty": 1
     }
   ],
   "weekPlans": [
     {
       "week": 1,
       "focus": [
+        "chat",
         "who"
       ],
-      "title": "我是谁 + 家人日常",
-      "hint": "每天开口介绍自己 2～3 句"
+      "title": "寒暄 + 我是谁",
+      "hint": "先练打招呼/收尾，再介绍自己"
     },
     {
       "week": 2,
       "focus": [
-        "today"
+        "today",
+        "mood"
       ],
-      "title": "今天做了什么",
-      "hint": "用真实今天替换槽位"
+      "title": "今天 + 感受",
+      "hint": "用真实今天和情绪换词"
     },
     {
       "week": 3,
       "focus": [
-        "likes",
-        "reply"
+        "invite",
+        "reply",
+        "likes"
       ],
-      "title": "问别人 + 接话",
-      "hint": "接话岛每天必练"
+      "title": "约人 + 接话 + 喜好",
+      "hint": "能约、能拒、能接话"
     },
     {
       "week": 4,
       "focus": [
-        "who",
-        "today",
-        "likes",
-        "reply"
+        "phone",
+        "commute",
+        "weather",
+        "pay"
       ],
-      "title": "四岛串练",
-      "hint": "伪对话来回 3～5 轮"
+      "title": "电话/路上/天气/付钱",
+      "hint": "串日常场景伪对话"
     }
   ],
   "dialogues": {
@@ -3106,6 +7486,272 @@
         "speaker": "B",
         "text": "Sounds good. Talk soon!"
       }
+    ],
+    "mood": [
+      {
+        "speaker": "A",
+        "text": "You look tired. Everything okay?"
+      },
+      {
+        "speaker": "B",
+        "text": "I'm a bit tired. I've been so busy lately."
+      },
+      {
+        "speaker": "A",
+        "text": "Take it easy. Do you need a break?"
+      },
+      {
+        "speaker": "B",
+        "text": "Yeah. I need a break. Thanks for asking."
+      },
+      {
+        "speaker": "A",
+        "text": "Cheer up — weekend is coming."
+      },
+      {
+        "speaker": "B",
+        "text": "That makes me happy. See you!"
+      }
+    ],
+    "invite": [
+      {
+        "speaker": "A",
+        "text": "Are you free this weekend?"
+      },
+      {
+        "speaker": "B",
+        "text": "I think so. What's up?"
+      },
+      {
+        "speaker": "A",
+        "text": "Do you want to grab coffee on Saturday?"
+      },
+      {
+        "speaker": "B",
+        "text": "I'd love to! What time works for you?"
+      },
+      {
+        "speaker": "A",
+        "text": "How about 3 pm at the cafe near the station?"
+      },
+      {
+        "speaker": "B",
+        "text": "Perfect. See you there!"
+      }
+    ],
+    "phone": [
+      {
+        "speaker": "A",
+        "text": "Is this a good time to talk?"
+      },
+      {
+        "speaker": "B",
+        "text": "Kind of — the signal is bad here."
+      },
+      {
+        "speaker": "A",
+        "text": "Can you hear me?"
+      },
+      {
+        "speaker": "B",
+        "text": "You're breaking up. Let me call you back."
+      },
+      {
+        "speaker": "A",
+        "text": "Okay. I'll wait."
+      },
+      {
+        "speaker": "B",
+        "text": "Sorry I missed your call earlier — just got your message."
+      }
+    ],
+    "commute": [
+      {
+        "speaker": "A",
+        "text": "Where are you?"
+      },
+      {
+        "speaker": "B",
+        "text": "I'm on my way. Stuck in traffic."
+      },
+      {
+        "speaker": "A",
+        "text": "No rush. I'll wait at Exit A."
+      },
+      {
+        "speaker": "B",
+        "text": "I'll be 10 minutes late. Sorry!"
+      },
+      {
+        "speaker": "A",
+        "text": "All good. Share your location?"
+      },
+      {
+        "speaker": "B",
+        "text": "Sent. See you soon."
+      }
+    ],
+    "home": [
+      {
+        "speaker": "A",
+        "text": "Come in, please. Make yourself at home."
+      },
+      {
+        "speaker": "B",
+        "text": "Thanks for having me. Nice place!"
+      },
+      {
+        "speaker": "A",
+        "text": "Would you like some tea?"
+      },
+      {
+        "speaker": "B",
+        "text": "Yes, please. Where's the bathroom?"
+      },
+      {
+        "speaker": "A",
+        "text": "Over there. Feel free to use the Wi-Fi."
+      },
+      {
+        "speaker": "B",
+        "text": "Awesome. I should get going after this — thanks again."
+      }
+    ],
+    "weather": [
+      {
+        "speaker": "A",
+        "text": "Nice weather today!"
+      },
+      {
+        "speaker": "B",
+        "text": "Yeah. Perfect for a walk."
+      },
+      {
+        "speaker": "A",
+        "text": "It looks like rain later though."
+      },
+      {
+        "speaker": "B",
+        "text": "I'll bring an umbrella. Stay dry!"
+      }
+    ],
+    "pay": [
+      {
+        "speaker": "A",
+        "text": "How much is the total?"
+      },
+      {
+        "speaker": "B",
+        "text": "Eighty, please."
+      },
+      {
+        "speaker": "A",
+        "text": "Can I pay by WeChat?"
+      },
+      {
+        "speaker": "B",
+        "text": "Sure. Please scan this QR code."
+      },
+      {
+        "speaker": "A",
+        "text": "Done. Could I get a receipt?"
+      },
+      {
+        "speaker": "B",
+        "text": "Here you go. Have a nice day!"
+      }
+    ],
+    "hotel": [
+      {
+        "speaker": "A",
+        "text": "I'd like to check in. Reservation under Alex."
+      },
+      {
+        "speaker": "B",
+        "text": "Welcome. Breakfast is included. Wi-Fi password is on the card."
+      },
+      {
+        "speaker": "A",
+        "text": "What time is check-out?"
+      },
+      {
+        "speaker": "B",
+        "text": "Noon. Need a wake-up call?"
+      },
+      {
+        "speaker": "A",
+        "text": "Yes — 7 am, please."
+      }
+    ],
+    "gym": [
+      {
+        "speaker": "A",
+        "text": "Do you want to go for a run?"
+      },
+      {
+        "speaker": "B",
+        "text": "I'm hitting the gym later. Join me?"
+      },
+      {
+        "speaker": "A",
+        "text": "Sure. Is this machine free?"
+      },
+      {
+        "speaker": "B",
+        "text": "Yeah. Can I work in with you?"
+      },
+      {
+        "speaker": "A",
+        "text": "Of course. Great workout!"
+      }
+    ],
+    "study": [
+      {
+        "speaker": "A",
+        "text": "Did you finish the homework?"
+      },
+      {
+        "speaker": "B",
+        "text": "Not yet. I don't understand this part."
+      },
+      {
+        "speaker": "A",
+        "text": "Want to study together tonight?"
+      },
+      {
+        "speaker": "B",
+        "text": "Yes! Could you explain this again?"
+      },
+      {
+        "speaker": "A",
+        "text": "Sure. Let's practice speaking too."
+      }
+    ],
+    "online": [
+      {
+        "speaker": "A",
+        "text": "Can we jump on a quick call?"
+      },
+      {
+        "speaker": "B",
+        "text": "Joining now — you're on mute."
+      },
+      {
+        "speaker": "A",
+        "text": "Oops. Can you hear me?"
+      },
+      {
+        "speaker": "B",
+        "text": "Yes. My internet is unstable though."
+      },
+      {
+        "speaker": "A",
+        "text": "No worries. I'll drop the link in chat."
+      },
+      {
+        "speaker": "B",
+        "text": "Thanks for hopping on."
+      }
     ]
   },
   "method": {
@@ -3113,28 +7759,28 @@
     "newPerDay": "5～8",
     "mustSpeak": 2,
     "listenLockDays": 3,
-    "unlockFlexibleRatio": 0.7
+    "unlockFlexibleRatio": 0.55
   },
   "frameGroups": [
     {
       "id": "chat",
       "name": "日常对话",
-      "blurb": "寒暄开场、澄清、道谢、收尾"
+      "blurb": "寒暄、情绪、邀请、电话、澄清、道谢收尾"
     },
     {
       "id": "self",
       "name": "自我表达",
-      "blurb": "身份、今天、喜好"
+      "blurb": "身份、今天、喜好、感受"
     },
     {
       "id": "ask",
       "name": "提问架子",
-      "blurb": "问对方、请求帮助"
+      "blurb": "问对方、请求、确认"
     },
     {
       "id": "soft",
       "name": "软着陆",
-      "blurb": "抱歉、想法、拖延、同感"
+      "blurb": "抱歉、犹豫、礼貌拒绝、同感"
     }
   ]
 }

@@ -17,9 +17,9 @@ function t(name, fn) {
 }
 
 t("句库有架子 / 岛 / 句子", () => {
-  assert.ok(content.frames?.length >= 30, `frames ${content.frames?.length}`);
-  assert.ok(content.islands?.length >= 10, `islands ${content.islands?.length}`);
-  assert.ok(content.sentences?.length >= 200, `sentences ${content.sentences?.length}`);
+  assert.ok(content.frames?.length >= 60, `frames ${content.frames?.length}`);
+  assert.ok(content.islands?.length >= 20, `islands ${content.islands?.length}`);
+  assert.ok(content.sentences?.length >= 500, `sentences ${content.sentences?.length}`);
 });
 
 t("架子带 group，且有日常对话组", () => {
@@ -29,15 +29,18 @@ t("架子带 group，且有日常对话组", () => {
     assert.ok(f.group, `missing group ${f.id}`);
     assert.ok(Array.isArray(f.examples) && f.examples.length >= 3, `examples ${f.id}`);
   }
-  assert.ok(content.frames.some((f) => f.group === "chat" && f.id === "f21"));
+  assert.ok(content.frames.filter((f) => f.group === "chat").length >= 20, "chat frames");
 });
 
-t("日常闲聊岛 + 示例句 + 伪对话", () => {
-  const chat = content.islands.find((i) => i.id === "chat");
-  assert.ok(chat?.starter, "chat should be starter island");
-  const lines = content.sentences.filter((s) => s.island === "chat");
-  assert.ok(lines.length >= 8, `chat sentences ${lines.length}`);
-  assert.ok(Array.isArray(content.dialogues?.chat) && content.dialogues.chat.length >= 4);
+t("日常核心岛齐全：闲聊/情绪/邀请/电话/通勤/天气/居家/付钱", () => {
+  const need = ["chat", "mood", "invite", "phone", "commute", "weather", "home", "pay"];
+  for (const id of need) {
+    const isl = content.islands.find((i) => i.id === id);
+    assert.ok(isl?.starter, `${id} should be starter`);
+    const lines = content.sentences.filter((s) => s.island === id);
+    assert.ok(lines.length >= 12, `${id} sentences ${lines.length}`);
+    assert.ok(Array.isArray(content.dialogues?.[id]) && content.dialogues[id].length >= 4, `${id} dialogue`);
+  }
 });
 
 t("句子 id 唯一，岛引用有效", () => {
