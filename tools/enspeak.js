@@ -173,11 +173,14 @@
     const map = { ...(state.profile || {}), ...extra };
     const api = fillApi();
     if (api?.fillEnTemplate) return api.fillEnTemplate(text, map);
-    // 兜底（fill 库未加载时）：至少 trim，避免残留 {slot}
-    return String(text || "").replace(/\{([a-z0-9_]+)\}/gi, (_, key) => {
-      const v = map[key];
-      if (v != null && String(v).trim()) return String(v).trim();
-      return "";
+    // 兜底与 fill 库同口径：独立空槽 ___，粘词可选尾巴抹掉
+    return String(text || "").replace(/\{([a-z0-9_]+)\}/gi, (match, key, offset, full) => {
+      if (!Object.prototype.hasOwnProperty.call(map, key)) return match;
+      const v = map[key] == null ? "" : String(map[key]).trim();
+      if (v) return v;
+      const before = offset > 0 ? full[offset - 1] : "";
+      if (before && /[A-Za-z0-9']/.test(before)) return "";
+      return "___";
     });
   }
 
@@ -394,7 +397,13 @@
   function speakText(text, { rate } = {}) {
     try {
       window.speechSynthesis?.cancel();
-      const u = new SpeechSynthesisUtterance(String(text || ""));
+      // 空槽 ___ / {slot} 不要读成 underscore
+      const cleaned = String(text || "")
+        .replace(/___+/g, "…")
+        .replace(/\{[a-z0-9_]+\}/gi, "…")
+        .replace(/\s+/g, " ")
+        .trim();
+      const u = new SpeechSynthesisUtterance(cleaned);
       u.lang = "en-US";
       u.rate = rate ?? state.settings.rate ?? 0.92;
       const voices = window.speechSynthesis?.getVoices?.() || [];
@@ -534,14 +543,29 @@
     return ids.slice(0, 3);
   }
 
+  function sentenceReadyToSpeak(id) {
+    const s = sentenceById(id);
+    if (!s) return false;
+    const en = displayEn(s);
+    return !!(en && !/\{\w+\}/.test(en) && !/___/.test(en));
+  }
+
   function profileSpeakTargets() {
-    const prefer = ["who01", "who03", "who05", "td02", "td03", "chat01", "mood01"];
+    // 有档案优先自我介绍；档案空则先给无槽成句，避免「Hi, I'm ___」硬练
+    const p = state.profile || {};
+    const hasSelf = !!(String(p.name || "").trim() || String(p.city || "").trim() || String(p.job || "").trim());
+    const profilePrefer = ["who01", "who03", "who05", "td03"];
+    const freePrefer = ["chat01", "mood01", "td02"];
+    const prefer = hasSelf
+      ? [...profilePrefer, ...freePrefer]
+      : [...freePrefer, ...profilePrefer];
+    const pool = [...prefer, ...reviewIds()];
     const out = [];
-    for (const id of prefer) {
+    for (const id of pool) {
       if (out.length >= 2) break;
-      if (sentenceById(id) && !out.includes(id)) out.push(id);
+      if (!out.includes(id) && sentenceReadyToSpeak(id)) out.push(id);
     }
-    for (const id of reviewIds()) {
+    for (const id of pool) {
       if (out.length >= 2) break;
       if (!out.includes(id) && sentenceById(id)) out.push(id);
     }
@@ -752,7 +776,9 @@
         } else if (act === "done") {
           state.today.blocks.listen = true;
           saveState();
+          openDrill("express");
           renderBlocks();
+          renderTodayMeta();
           toast("听跟完成");
         }
         return;
@@ -919,10 +945,15 @@
 
   async function playQueue(lines) {
     for (const line of lines) {
+      const cleaned = String(line || "")
+        .replace(/___+/g, "…")
+        .replace(/\{[a-z0-9_]+\}/gi, "…")
+        .replace(/\s+/g, " ")
+        .trim();
       await new Promise((resolve) => {
         try {
           window.speechSynthesis?.cancel();
-          const u = new SpeechSynthesisUtterance(line);
+          const u = new SpeechSynthesisUtterance(cleaned);
           u.lang = "en-US";
           u.rate = state.settings.rate || 0.92;
           u.onend = resolve;

@@ -23,10 +23,15 @@ t("贴着单词的 {slot} 替换后自动补空格", () => {
   assert.strictEqual(fillEnTemplate("I'm on my way{extra}.", { extra: "now" }), "I'm on my way now.");
 });
 
-t("空槽位不留痕迹；逗号开场不硬加空格", () => {
+t("空槽位：可选尾巴抹掉；独立词槽留 ___，逗号开场不硬加空格", () => {
   assert.strictEqual(fillEnTemplate("Let me think{pause}.", { pause: "" }), "Let me think.");
   assert.strictEqual(fillEnTemplate("Hi{name_tag}!", { name_tag: ", there" }), "Hi, there!");
   assert.strictEqual(fillEnTemplate("Take care{extra}.", { extra: "" }), "Take care.");
+  assert.strictEqual(fillEnTemplate("Hi, I'm {name}.", { name: "" }), "Hi, I'm ___.");
+  assert.strictEqual(fillEnTemplate("I live in {city}.", { city: "" }), "I live in ___.");
+  assert.strictEqual(fillEnTemplate("I'm {job}.", { job: "" }), "I'm ___.");
+  assert.strictEqual(fillEnTemplate("Today I {today_did}.", { today_did: "" }), "Today I ___.");
+  assert.strictEqual(fillEnTemplate("Hi, I'm {name}.", { name: "Alex" }), "Hi, I'm Alex.");
 });
 
 t("示例自带前导空格时不叠成双空格", () => {

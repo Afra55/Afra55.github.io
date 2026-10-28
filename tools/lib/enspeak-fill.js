@@ -28,6 +28,7 @@
 
   /**
    * 替换 {slot}；贴着单词的槽位自动补空格，避免 goingwith / thinkfor 粘连。
+   * 空值：粘在词后的可选尾巴（{extra}/{pause}）抹掉；独立词槽留 ___，避免 Hi, I'm. / I live in.
    */
   function fillEnTemplate(text, vars) {
     const map = vars && typeof vars === "object" ? vars : {};
@@ -35,9 +36,13 @@
       if (!Object.prototype.hasOwnProperty.call(map, key)) return match;
       let v = map[key] == null ? "" : String(map[key]);
       v = v.trim();
-      if (!v) return "";
       const before = offset > 0 ? full[offset - 1] : "";
       const after = full[offset + match.length] || "";
+      if (!v) {
+        // 紧贴前一字母/数字：可选尾巴，抹掉
+        if (before && /[A-Za-z0-9']/.test(before)) return "";
+        return "___";
+      }
       if (before && /[A-Za-z0-9']/.test(before) && /^[A-Za-z0-9']/.test(v)) v = ` ${v}`;
       if (after && /[A-Za-z0-9']/.test(after) && /[A-Za-z0-9']$/.test(v)) v = `${v} `;
       return v;
