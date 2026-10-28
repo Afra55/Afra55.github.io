@@ -134,4 +134,41 @@ t("开口句英文不含「A / B」二选一粘连（避免整句练错）", () 
   }
 });
 
+t("准确度门禁：禁易练错英文 / 禁中文斜杠二选一 / 问句中文要像问句", () => {
+  const { fillEnTemplate } = require("../lib/enspeak-fill.js");
+  const banEn =
+    /pretty well|\bOOO\b|Same energy|You got a point|pay by splitting|How much is per person|How much is one night|help me with a photo|going to go home|I work as a student/i;
+  for (const s of content.sentences) {
+    assert.ok(!banEn.test(s.en), `banned en ${s.id}: ${s.en}`);
+    assert.ok(!String(s.zh).includes("/") && !String(s.zh).includes("／"), `zh slash ${s.id}: ${s.zh}`);
+    assert.ok(!/^\{[a-z_]+\}\.?$/i.test(String(s.en).trim()), `slot-only ${s.id}`);
+    if (String(s.en).trim().endsWith("?")) {
+      assert.ok(
+        /[？?]|吗|呢|么|吧|哪|什么|怎么|为什么|能否|可以|要不要|有没有|是不是|行吗|好吗/.test(s.zh),
+        `q-zh ${s.id}: ${s.en} | ${s.zh}`
+      );
+    }
+  }
+  for (const f of content.frames) {
+    assert.strictEqual((f.examples || []).length, (f.examplesZh || []).length, `ex/zh len ${f.id}`);
+    for (const ex of f.examples || []) {
+      const en = fillEnTemplate(f.en, { [f.slot]: ex });
+      assert.ok(!banEn.test(en), `banned filled ${f.id}: ${en}`);
+      assert.ok(!/\?\./.test(en), `punct stack ${f.id}: ${en}`);
+    }
+  }
+  for (const [k, lines] of Object.entries(content.dialogues || {})) {
+    for (const line of lines || []) {
+      assert.ok(!/ \/ /.test(line.text), `dlg slash ${k}: ${line.text}`);
+      assert.ok(!banEn.test(line.text), `dlg banned ${k}: ${line.text}`);
+    }
+  }
+  const who5 = content.sentences.find((s) => s.id === "who05");
+  assert.ok(who5 && /^I'm \{job\}\.?$/i.test(who5.en), "who05 should be I'm {job}");
+  assert.ok(
+    (content.dialogues.who || []).some((l) => /I'm \{job\}/i.test(l.text)),
+    "who dialogue should use I'm {job}"
+  );
+});
+
 console.log(`enspeak-content.test.js: ${n} passed`);
