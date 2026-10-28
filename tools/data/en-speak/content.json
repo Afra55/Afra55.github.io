@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "title": "日常开口",
   "tagline": "尽量覆盖日常对话：架子换词 + 多场景岛 · 句库可持续补 · 没说出口，不算会",
   "profileFields": [
@@ -116,33 +116,33 @@
     },
     {
       "id": "f03",
-      "en": "I work at {workplace}.",
-      "zh": "我在……工作/上学",
+      "en": "I work {workplace}.",
+      "zh": "我……工作。",
       "slot": "workplace",
       "examples": [
-        "a tech company",
-        "a school",
-        "home",
-        "a hospital",
-        "a startup",
-        "a bank",
-        "a factory",
-        "my own shop",
-        "university",
+        "at a tech company",
+        "at a school",
+        "from home",
+        "at a hospital",
+        "at a startup",
+        "at a bank",
+        "at a factory",
+        "at my own shop",
+        "at a university",
         "remotely"
       ],
       "role": "frame",
       "group": "self",
       "examplesZh": [
-        "科技公司",
-        "学校",
-        "家里",
-        "医院",
-        "创业公司",
-        "银行",
-        "工厂",
-        "自己的店",
-        "大学",
+        "在科技公司",
+        "在学校",
+        "在家",
+        "在医院",
+        "在创业公司",
+        "在银行",
+        "在工厂",
+        "在自己店里",
+        "在大学",
         "远程"
       ]
     },
@@ -341,7 +341,7 @@
     {
       "id": "f10",
       "en": "It's {it}.",
-      "zh": "天气/情况是……",
+      "zh": "……。",
       "slot": "it",
       "examples": [
         "sunny",
@@ -358,14 +358,14 @@
       "role": "frame",
       "group": "self",
       "examplesZh": [
-        "晴朗",
-        "下雨",
+        "今天晴朗",
+        "在下雨",
         "有点冷",
         "今天很热",
         "外面天气不错",
         "多云",
         "有风",
-        "晚了",
+        "已经晚了",
         "还行",
         "还不错"
       ]
@@ -405,7 +405,7 @@
     {
       "id": "f12",
       "en": "What do you {what_do}?",
-      "zh": "你……什么？",
+      "zh": "你……？",
       "slot": "what_do",
       "examples": [
         "do",
@@ -422,16 +422,16 @@
       "role": "frame",
       "group": "ask",
       "examplesZh": [
-        "做",
+        "做什么",
         "通常吃什么",
         "周末一般做什么",
-        "觉得",
-        "意思是",
+        "怎么看",
+        "是什么意思",
         "喜欢看什么",
         "想喝什么",
         "下班后做什么",
-        "推荐",
-        "娱乐时做什么"
+        "有什么推荐",
+        "平时靠什么娱乐"
       ]
     },
     {
@@ -504,7 +504,7 @@
       "zh": "抱歉……",
       "slot": "sorry",
       "examples": [
-        "can you say that again",
+        "can you say that again?",
         "I'm a bit late",
         "I didn't catch that",
         "I'm not sure",
@@ -518,16 +518,16 @@
       "role": "frame",
       "group": "soft",
       "examplesZh": [
-        "你能再说一遍吗",
-        "我有点晚了",
-        "我没听清",
-        "我不确定",
-        "我其实是另一个意思",
-        "我刚才在想",
-        "稍等一秒",
-        "我得走了",
-        "我今天不行",
-        "我忘了"
+        "，你能再说一遍吗？",
+        "，我有点晚了",
+        "，我没听清",
+        "，我不确定",
+        "，我其实是另一个意思",
+        "，我刚才在想",
+        "，稍等一秒",
+        "，我得走了",
+        "，我今天不行",
+        "，我忘了"
       ]
     },
     {
@@ -582,15 +582,15 @@
       "role": "frame",
       "group": "soft",
       "examplesZh": [
-        "关于那件事",
-        "怎么说",
+        "对那件事",
+        "该怎么说",
         "你是什么意思",
-        "我能不能",
-        "还",
-        "怎么解释",
+        "自己行不行",
+        "呢（还不确定）",
+        "该怎么解释",
         "它在哪",
         "该怎么办",
-        "对不对",
+        "这样对不对",
         "要多久"
       ]
     },
@@ -615,21 +615,21 @@
       "group": "soft",
       "examplesZh": [
         "不错",
-        "好",
+        "挺好",
         "好玩",
-        "难",
-        "忙",
-        "很好",
-        "有意思",
+        "很难",
         "累人",
-        "还行",
+        "有意思",
+        "很棒",
+        "挺糟",
+        "耳熟",
         "完美"
       ]
     },
     {
       "id": "f19",
       "en": "{agree}.",
-      "zh": "同意/同感",
+      "zh": "……",
       "slot": "agree",
       "examples": [
         "Me too",
@@ -665,29 +665,29 @@
       "slot": "pause",
       "examples": [
         "",
-        "...",
         " for a second",
         " about it",
         "... okay",
         "... maybe",
-        "... one moment",
+        " for one moment",
         "... hmm",
         "... wait",
-        "... I got it"
+        "... I got it",
+        " out loud"
       ],
       "role": "frame",
       "group": "soft",
       "examplesZh": [
         "",
-        "……",
-        "一秒钟",
-        "一下这件事",
+        "一下",
+        "这件事",
         "……好吧",
         "……也许",
-        "……稍等",
+        "片刻",
         "……嗯",
         "……等等",
-        "……我懂了"
+        "……我懂了",
+        "（出声）"
       ]
     },
     {
@@ -711,15 +711,15 @@
       "role": "frame",
       "examplesZh": [
         "",
-        "跟你",
-        "最近这段时间",
-        "工作上",
-        "最近",
-        "今天",
-        "这周",
+        "，你呢",
+        "",
+        "，工作上还好吗",
+        "",
+        "，今天",
+        "，这周",
         "，伙计",
-        "那边",
-        "一切都还好吗那种"
+        "，那边那位",
+        "，一切都还好吗"
       ]
     },
     {
@@ -743,15 +743,15 @@
       "role": "frame",
       "examplesZh": [
         "",
-        "现在",
-        "今天",
-        "这个周末",
-        "下班后",
-        "最近",
-        "最近这段时间",
-        "今晚",
-        "明天",
-        "眼下"
+        "，现在",
+        "，今天",
+        "，这个周末",
+        "，下班后",
+        "，最近",
+        "",
+        "，今晚",
+        "，明天",
+        "，眼下"
       ]
     },
     {
@@ -794,11 +794,11 @@
       "group": "chat",
       "examples": [
         "I almost forgot",
-        "have you eaten",
+        "have you eaten?",
         "nice jacket",
         "congrats on that",
         "I saw your message",
-        "are you free later",
+        "are you free later?",
         "that place is closed",
         "I like your idea",
         "don't forget the key",
@@ -807,11 +807,11 @@
       "role": "frame",
       "examplesZh": [
         "我差点忘了",
-        "你吃了吗",
+        "你吃了吗？",
         "外套不错",
         "恭喜你",
         "我看到你的消息了",
-        "你晚点有空吗",
+        "你晚点有空吗？",
         "那地方关门了",
         "我喜欢你的想法",
         "别忘了钥匙",
@@ -821,7 +821,7 @@
     {
       "id": "f25",
       "en": "Thanks for {thanks}.",
-      "zh": "谢谢你……",
+      "zh": "谢谢……",
       "slot": "thanks",
       "group": "chat",
       "examples": [
@@ -839,21 +839,21 @@
       "role": "frame",
       "examplesZh": [
         "你的帮助",
-        "过来",
-        "这个更新",
+        "你能来",
+        "这次更新",
         "等待",
         "这杯咖啡",
         "来接我",
         "解释清楚",
         "今天",
         "这一切",
-        "耐心"
+        "你的耐心"
       ]
     },
     {
       "id": "f26",
       "en": "{welcome}.",
-      "zh": "不客气 / 没事",
+      "zh": "……",
       "slot": "welcome",
       "group": "chat",
       "examples": [
@@ -917,7 +917,7 @@
     {
       "id": "f28",
       "en": "Hold on{hold}.",
-      "zh": "等一下……",
+      "zh": "等……",
       "slot": "hold",
       "group": "chat",
       "examples": [
@@ -934,16 +934,16 @@
       ],
       "role": "frame",
       "examplesZh": [
-        "",
         "一下",
-        "片刻",
-        "，拜托",
-        "——我快好了",
-        "——我查一下",
-        "——马上回来",
-        "，我在打电话",
-        "——我记一下",
-        "——我打开链接"
+        "一秒",
+        "稍等片刻",
+        "一下，拜托",
+        "一下——我快好了",
+        "一下——我查一下",
+        "一下——马上回来",
+        "一下，我在打电话",
+        "一下——我记一下",
+        "一下——我打开链接"
       ]
     },
     {
@@ -980,40 +980,40 @@
     },
     {
       "id": "f30",
-      "en": "It's been a while{extra}!",
+      "en": "It's been a while{extra}.",
       "zh": "好久没见！",
       "slot": "extra",
       "group": "chat",
       "examples": [
         "",
-        " — how have you been",
+        " — how have you been?",
         " since last year",
         " since the party",
         " — you look great",
         " — I missed this",
         " — crazy how time flies",
         " — good to see you",
-        " — what's new",
-        " — where have you been"
+        " — what's new?",
+        " — where have you been?"
       ],
       "role": "frame",
       "examplesZh": [
         "",
-        "——你最近怎样",
-        "自从去年",
-        "自从那次聚会",
+        "——你最近怎样？",
+        "，自从去年",
+        "，自从那次聚会",
         "——你看起来不错",
-        "——我想念这个",
+        "——我挺想这个的",
         "——时间过得真快",
         "——见到你真好",
-        "——有什么新鲜事",
-        "——你去哪儿了"
+        "——有什么新鲜事？",
+        "——你去哪儿了？"
       ]
     },
     {
       "id": "f31",
       "en": "I was wondering if {wonder}.",
-      "zh": "想问问……行不行？",
+      "zh": "想问问……",
       "slot": "wonder",
       "group": "chat",
       "examples": [
@@ -1030,15 +1030,15 @@
       ],
       "role": "frame",
       "examplesZh": [
-        "你今晚有空",
-        "这个还行得通",
-        "我们明天能见面",
-        "你收到我的邮件了",
-        "我能加入",
-        "你觉得可以",
-        "你需要帮忙",
-        "我们可以改期",
-        "有更安静的地方",
+        "你今晚有没有空",
+        "这个还行不行",
+        "我们明天能不能见面",
+        "你有没有收到我的邮件",
+        "我能不能加入",
+        "你方不方便",
+        "你需不需要帮忙",
+        "我们能不能改期",
+        "有没有更安静的地方",
         "我这么说对不对"
       ]
     },
@@ -1090,19 +1090,19 @@
       ],
       "id": "f33",
       "en": "Hi{name_tag}!",
-      "zh": "嗨……！",
+      "zh": "嗨……",
       "slot": "name_tag",
       "group": "chat",
       "examplesZh": [
         "",
-        "呀",
+        "，你好",
         "，各位",
-        "各位",
+        "，大家",
         "，朋友",
         "，伙计们",
         "，各位",
         "，又见面了",
-        "，陌生人",
+        "（初次见面）",
         "，伙计"
       ]
     },
@@ -1222,15 +1222,15 @@
       "slot": "mood",
       "group": "self",
       "examplesZh": [
-        "好",
-        "累",
+        "不错",
+        "很累",
         "有点忙",
         "还行",
         "很好",
-        "压力大",
-        "放松",
+        "压力很大",
+        "很放松",
         "饿了",
-        "兴奋",
+        "很兴奋",
         "不太舒服"
       ]
     },
@@ -1513,10 +1513,10 @@
         "",
         "！",
         "——抱歉",
-        "——当然",
+        "——当然可以",
         "——我很乐意",
         "——有消息告诉我",
-        "——改天行吗",
+        "——改天行吗？",
         "——谢谢你问",
         "——我们提前规划一下",
         "——我给你发消息"
@@ -1639,10 +1639,10 @@
       "group": "chat",
       "examplesZh": [
         "",
-        "还行",
-        "现在",
-        "清楚地",
-        "在你那边",
+        "，还行吗",
+        "，现在",
+        "，听得清吗",
+        "，你那边",
         "——信号不好",
         "——我在外面",
         "——我的麦克风可能关了",
@@ -1862,16 +1862,16 @@
       "slot": "apology",
       "group": "soft",
       "examplesZh": [
-        "迟到/延误",
-        "迟到",
-        "造成的困惑",
-        "打断了你",
-        "临时通知",
-        "噪音",
+        "耽搁了",
+        "迟到了",
+        "造成困惑",
+        "打断你了",
+        "临时改通知",
+        "吵到你了",
         "忘记了",
         "弄乱了",
         "没有早点回复",
-        "带来的不便"
+        "带来不便"
       ]
     },
     {
@@ -1928,13 +1928,13 @@
       "examplesZh": [
         "",
         "！",
-        "好自己",
+        "自己",
         "——回见",
         "——给我发消息",
         "——好好休息",
-        "——一路平安回家",
+        "——一路平安",
         "——回头聊",
-        "——先再见",
+        "——先这样",
         "——别加班太晚"
       ]
     },
@@ -1991,8 +1991,8 @@
       "group": "chat",
       "examplesZh": [
         "",
-        "现在",
-        "——五分钟",
+        "，现在",
+        "——还有五分钟",
         "——快到了",
         "——堵在路上了",
         "——刚出门",
@@ -2075,7 +2075,7 @@
         "Alipay",
         "phone",
         "Apple Pay",
-        "transfer",
+        "bank transfer",
         "QR code",
         "credit card",
         "splitting it"
@@ -2090,25 +2090,25 @@
         "现金",
         "微信",
         "支付宝",
-        "手机支付",
+        "手机",
         "Apple Pay",
-        "转账",
+        "银行转账",
         "二维码",
         "信用卡",
-        "分开付"
+        "AA"
       ]
     },
     {
       "role": "frame",
       "examples": [
         "this bag",
-        "the directions",
+        "directions",
         "my order",
         "the Wi-Fi",
         "carrying this",
         "finding the gate",
         "a photo",
-        "the translation",
+        "this translation",
         "booking a table",
         "checking the time"
       ],
@@ -2118,16 +2118,16 @@
       "slot": "help",
       "group": "ask",
       "examplesZh": [
-        "这个包",
-        "怎么走",
-        "我的订单",
-        "Wi-Fi",
-        "搬这个",
-        "找登机口/门口",
+        "拿一下这个包",
+        "指个路",
+        "处理一下我的订单",
+        "连一下 Wi-Fi",
+        "搬一下这个",
+        "找一下登机口",
         "拍张照",
-        "翻译",
-        "订位",
-        "核对时间"
+        "翻译一下",
+        "订个位",
+        "对一下时间"
       ]
     }
   ],
@@ -2444,8 +2444,8 @@
       "id": "who13",
       "island": "who",
       "role": "line",
-      "en": "I have a kid. / I don't have kids.",
-      "zh": "我有孩子。/ 我没有孩子。",
+      "en": "I have a kid.",
+      "zh": "我有孩子。",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -2590,8 +2590,8 @@
       "id": "td06",
       "island": "today",
       "role": "line",
-      "en": "I went to work / I stayed home.",
-      "zh": "我去上班了 / 我待在家里。",
+      "en": "I went to work.",
+      "zh": "我去上班了。",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -2786,8 +2786,8 @@
       "id": "lk04",
       "island": "likes",
       "role": "line",
-      "en": "I often drink coffee / tea.",
-      "zh": "我常喝咖啡/茶。",
+      "en": "I often drink coffee.",
+      "zh": "我常喝咖啡。",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -3180,7 +3180,7 @@
       "island": "reply",
       "role": "reply",
       "en": "Anyway...",
-      "zh": "总之…… / 话说回来……",
+      "zh": "总之……",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -3721,10 +3721,12 @@
       "id": "dir05",
       "island": "dir",
       "role": "line",
-      "en": "Turn left / Turn right.",
-      "zh": "左转/右转。",
+      "en": "Turn left.",
+      "zh": "左转。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -8571,6 +8573,54 @@
       "slots": [],
       "tags": [],
       "difficulty": 1
+    },
+    {
+      "id": "who13b",
+      "island": "who",
+      "role": "line",
+      "en": "I don't have kids.",
+      "zh": "我没有孩子。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "td06b",
+      "island": "today",
+      "role": "line",
+      "en": "I stayed home.",
+      "zh": "我待在家里。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "lk04b",
+      "island": "likes",
+      "role": "line",
+      "en": "I often drink tea.",
+      "zh": "我常喝茶。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "dir05b",
+      "island": "dir",
+      "role": "line",
+      "en": "Turn right.",
+      "zh": "右转。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 2
     }
   ],
   "weekPlans": [

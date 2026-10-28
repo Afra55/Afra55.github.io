@@ -36,6 +36,24 @@ t("示例自带前导空格时不叠成双空格", () => {
   );
 });
 
+t("槽位自带问号时不叠成 ?.", () => {
+  assert.strictEqual(
+    fillEnTemplate("Sorry, {sorry}.", { sorry: "can you say that again?" }),
+    "Sorry, can you say that again?"
+  );
+  assert.strictEqual(
+    fillEnTemplate("By the way, {aside}.", { aside: "have you eaten?" }),
+    "By the way, have you eaten?"
+  );
+});
+
+t("英文省略号 ... 不会被收成单点", () => {
+  assert.strictEqual(
+    fillEnTemplate("Let me think{pause}.", { pause: "... okay" }),
+    "Let me think... okay."
+  );
+});
+
 t("变体中文：有 fillZh 时填省略号或括号；无 fillZh 只保留意图", () => {
   assert.strictEqual(variantZhLine("我是……", "a teacher", "老师"), "我是老师");
   assert.strictEqual(variantZhLine("我是……", "a teacher"), "我是……");
@@ -45,6 +63,16 @@ t("变体中文：有 fillZh 时填省略号或括号；无 fillZh 只保留意�
   );
   assert.strictEqual(variantZhLine("最近怎么样？", "these days"), "最近怎么样？");
   assert.strictEqual(variantZhLine("保重……", ""), "保重……");
+});
+
+t("变体中文：尾巴型 fillZh 直接拼接，不套括号", () => {
+  assert.strictEqual(variantZhLine("最近怎么样？", " with you", "，你呢"), "最近怎么样，你呢？");
+  assert.strictEqual(variantZhLine("我在路上了……", " now", "，现在"), "我在路上了，现在");
+  assert.strictEqual(variantZhLine("谢谢……", "your help", "你的帮助"), "谢谢你的帮助");
+});
+
+t("变体中文：避免 什么什么 / 你你 粘连", () => {
+  assert.strictEqual(variantZhLine("你……什么？", "usually eat", "通常吃什么"), "你通常吃什么？");
 });
 
 console.log(`enspeak-fill.test.js: ${n} passed`);
