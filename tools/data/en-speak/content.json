@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "title": "日常开口",
   "tagline": "尽量覆盖日常对话：架子换词 + 多场景岛 · 句库可持续补 · 没说出口，不算会",
   "profileFields": [
@@ -2311,7 +2311,9 @@
       "slots": [
         "name"
       ],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -2321,7 +2323,9 @@
       "en": "Nice to meet you.",
       "zh": "很高兴认识你。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -2333,7 +2337,9 @@
       "slots": [
         "city"
       ],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2355,7 +2361,9 @@
       "slots": [
         "job"
       ],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2479,7 +2487,9 @@
       "en": "English is hard, but I'm learning.",
       "zh": "英语很难，但我在学。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "aside"
+      ],
       "difficulty": 1
     },
     {
@@ -2489,7 +2499,9 @@
       "en": "I want to talk about my life in English.",
       "zh": "我想用英语聊自己的生活。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -2499,7 +2511,9 @@
       "en": "Please speak a bit slower.",
       "zh": "请说慢一点。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "clarify"
+      ],
       "difficulty": 1
     },
     {
@@ -2509,7 +2523,9 @@
       "en": "That's me in a few words.",
       "zh": "简单介绍就这些。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -2519,7 +2535,9 @@
       "en": "How was your day?",
       "zh": "你今天怎么样？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -2529,7 +2547,9 @@
       "en": "Today was okay.",
       "zh": "今天还行。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2541,7 +2561,9 @@
       "slots": [
         "today_did"
       ],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2641,7 +2663,9 @@
       "en": "Nothing special happened.",
       "zh": "没什么特别的事。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2651,7 +2675,9 @@
       "en": "It was a busy day.",
       "zh": "今天挺忙的。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2671,7 +2697,9 @@
       "en": "I'm going to rest now.",
       "zh": "我现在打算休息一下。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -2691,7 +2719,9 @@
       "en": "What about you?",
       "zh": "你呢？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -2701,7 +2731,9 @@
       "en": "I just got home.",
       "zh": "我刚到家。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -2711,7 +2743,9 @@
       "en": "I'm done for today.",
       "zh": "我今天差不多结束了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -2723,7 +2757,9 @@
       "slots": [
         "food"
       ],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2765,7 +2801,9 @@
       "slots": [
         "hobby"
       ],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2777,7 +2815,9 @@
       "slots": [
         "weekend"
       ],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2797,7 +2837,9 @@
       "en": "I like going out with friends.",
       "zh": "我喜欢和朋友出去。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2839,7 +2881,9 @@
       "en": "I like sunny days.",
       "zh": "我喜欢晴天。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -2869,7 +2913,9 @@
       "en": "My weekend was relaxing.",
       "zh": "我这个周末挺放松的。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2879,7 +2925,9 @@
       "en": "I want to try something new this weekend.",
       "zh": "这周末我想试试新东西。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -2909,7 +2957,9 @@
       "en": "I like short walks after dinner.",
       "zh": "我喜欢晚饭后散散步。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -2919,7 +2969,9 @@
       "en": "What do you like to do?",
       "zh": "你喜欢做什么？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -2929,7 +2981,9 @@
       "en": "Really?",
       "zh": "真的吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2939,7 +2993,9 @@
       "en": "Same here.",
       "zh": "我也是。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2949,7 +3005,9 @@
       "en": "Me too.",
       "zh": "我也一样。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -2969,7 +3027,9 @@
       "en": "That's nice.",
       "zh": "那挺好的。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -2989,7 +3049,9 @@
       "en": "What happened?",
       "zh": "然后呢？发生了什么？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -2999,7 +3061,9 @@
       "en": "How was it?",
       "zh": "怎么样？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -3009,7 +3073,9 @@
       "en": "Why?",
       "zh": "为什么？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -3019,7 +3085,9 @@
       "en": "And then?",
       "zh": "然后呢？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -3089,7 +3157,10 @@
       "en": "Good for you!",
       "zh": "为你高兴！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply",
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -3099,7 +3170,9 @@
       "en": "By the way...",
       "zh": "对了……",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "aside"
+      ],
       "difficulty": 1
     },
     {
@@ -3119,7 +3192,9 @@
       "en": "Let's talk about something else.",
       "zh": "我们聊点别的吧。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -3129,7 +3204,9 @@
       "en": "What about you?",
       "zh": "你呢？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -3139,7 +3216,9 @@
       "en": "Tell me more.",
       "zh": "再说细一点。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -3269,7 +3348,9 @@
       "en": "I'm looking for {thing}.",
       "zh": "我在找……。",
       "slots": "thing",
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 2
     },
     {
@@ -3279,7 +3360,9 @@
       "en": "How much is this?",
       "zh": "这个多少钱？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3289,7 +3372,9 @@
       "en": "That's a bit expensive.",
       "zh": "有点贵。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3309,7 +3394,9 @@
       "en": "Can I try this on?",
       "zh": "我能试穿吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3319,7 +3406,9 @@
       "en": "I'll take this.",
       "zh": "我要这个。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3329,7 +3418,9 @@
       "en": "Just looking, thanks.",
       "zh": "我先看看，谢谢。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -3409,7 +3500,9 @@
       "en": "Thank you, bye.",
       "zh": "谢谢，再见。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -3419,7 +3512,9 @@
       "en": "A table for two, please.",
       "zh": "两位，谢谢。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 2
     },
     {
@@ -3429,7 +3524,9 @@
       "en": "Can I see the menu?",
       "zh": "我能看菜单吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3439,7 +3536,9 @@
       "en": "What do you recommend?",
       "zh": "你推荐什么？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3449,7 +3548,9 @@
       "en": "I'd like {dish}, please.",
       "zh": "我想要……。",
       "slots": "dish",
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3479,7 +3580,9 @@
       "en": "Could we have the check?",
       "zh": "买单。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3499,7 +3602,9 @@
       "en": "This is delicious.",
       "zh": "这个很好吃。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3559,7 +3664,9 @@
       "en": "The bill, please.",
       "zh": "请结账。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -3569,7 +3676,9 @@
       "en": "Excuse me, where is the subway?",
       "zh": "不好意思，地铁在哪？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 2
     },
     {
@@ -3579,7 +3688,9 @@
       "en": "How do I get to {place}?",
       "zh": "去……怎么走？",
       "slots": "place",
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3589,7 +3700,9 @@
       "en": "Is it far from here?",
       "zh": "离这里远吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3599,7 +3712,9 @@
       "en": "Go straight.",
       "zh": "直走。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3649,7 +3764,9 @@
       "en": "I'm a bit lost.",
       "zh": "我有点迷路了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 2
     },
     {
@@ -3659,7 +3776,9 @@
       "en": "Could you show me on the map?",
       "zh": "你能在地图上指给我看吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3689,7 +3808,9 @@
       "en": "Thanks for your help.",
       "zh": "谢谢你帮忙。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -3719,7 +3840,9 @@
       "en": "I don't feel well.",
       "zh": "我感觉不舒服。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 2
     },
     {
@@ -3729,7 +3852,9 @@
       "en": "I have a headache.",
       "zh": "我头疼。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3759,7 +3884,9 @@
       "en": "It started yesterday.",
       "zh": "从昨天开始的。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3779,7 +3906,9 @@
       "en": "Do I need medicine?",
       "zh": "我需要吃药吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3799,7 +3928,9 @@
       "en": "I need an appointment.",
       "zh": "我需要预约。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3809,7 +3940,9 @@
       "en": "Is it serious?",
       "zh": "严重吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3849,7 +3982,9 @@
       "en": "Thank you, doctor.",
       "zh": "谢谢医生。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -3859,7 +3994,9 @@
       "en": "I'll rest at home.",
       "zh": "我会在家休息。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -3869,7 +4006,10 @@
       "en": "Are you free this weekend?",
       "zh": "这周末你有空吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask",
+        "opener"
+      ],
       "difficulty": 2
     },
     {
@@ -3879,7 +4019,9 @@
       "en": "What time works for you?",
       "zh": "你什么时间方便？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3889,7 +4031,9 @@
       "en": "How about Saturday afternoon?",
       "zh": "周六下午怎么样？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3899,7 +4043,9 @@
       "en": "Let's meet at {place}.",
       "zh": "我们在……见。",
       "slots": "place",
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3909,7 +4055,9 @@
       "en": "I might be a bit late.",
       "zh": "我可能会晚一点。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3919,7 +4067,9 @@
       "en": "See you then.",
       "zh": "到时候见。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -3929,7 +4079,9 @@
       "en": "Can we reschedule?",
       "zh": "我们能改时间吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -3939,7 +4091,9 @@
       "en": "Sorry, I can't make it.",
       "zh": "抱歉，我去不了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3959,7 +4113,9 @@
       "en": "I'll be there.",
       "zh": "我会到的。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -3989,7 +4145,9 @@
       "en": "Looking forward to it.",
       "zh": "很期待。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -4009,7 +4167,9 @@
       "en": "Next time then.",
       "zh": "那就下次吧。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -4019,7 +4179,10 @@
       "en": "How's work going?",
       "zh": "工作怎么样？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask",
+        "opener"
+      ],
       "difficulty": 2
     },
     {
@@ -4029,7 +4192,9 @@
       "en": "I'm in a meeting.",
       "zh": "我在开会。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -4039,7 +4204,9 @@
       "en": "I'll check and get back to you.",
       "zh": "我查一下再回复你。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -4049,7 +4216,9 @@
       "en": "Can we talk later?",
       "zh": "我们晚点再聊？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -4089,7 +4258,9 @@
       "en": "Let's sync tomorrow.",
       "zh": "我们明天同步一下。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -4129,7 +4300,9 @@
       "en": "Sounds good.",
       "zh": "听起来可以。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -4149,7 +4322,9 @@
       "en": "Thanks for the update.",
       "zh": "谢谢你的同步。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -4159,7 +4334,9 @@
       "en": "I'm heading out.",
       "zh": "我要走了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -4169,7 +4346,9 @@
       "en": "I'm traveling this week.",
       "zh": "我这周在旅行。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 2
     },
     {
@@ -4179,7 +4358,9 @@
       "en": "Where is the hotel?",
       "zh": "酒店在哪？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -4189,7 +4370,9 @@
       "en": "I have a reservation.",
       "zh": "我有预订。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -4199,7 +4382,9 @@
       "en": "What time is check-in?",
       "zh": "入住是几点？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 2
     },
     {
@@ -4249,7 +4434,9 @@
       "en": "This place is beautiful.",
       "zh": "这地方真美。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -4259,7 +4446,9 @@
       "en": "I'm just visiting.",
       "zh": "我只是来玩的。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 2
     },
     {
@@ -4309,7 +4498,9 @@
       "en": "Time to go back.",
       "zh": "该回去了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 2
     },
     {
@@ -4799,7 +4990,9 @@
       "en": "I'm feeling good today.",
       "zh": "我今天感觉不错。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -4809,7 +5002,9 @@
       "en": "I'm a bit tired.",
       "zh": "我有点累。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -4849,7 +5044,9 @@
       "en": "I'm hungry — want to eat?",
       "zh": "我饿了——要不要吃饭？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -4859,7 +5056,9 @@
       "en": "I'm not feeling well.",
       "zh": "我身体不太舒服。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -4879,7 +5078,9 @@
       "en": "That made me so happy.",
       "zh": "那让我特别开心。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -4909,7 +5110,9 @@
       "en": "I'm excited for the weekend.",
       "zh": "我很期待这个周末。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -4959,7 +5162,9 @@
       "en": "I'm in a good mood.",
       "zh": "我心情不错。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -4999,7 +5204,9 @@
       "en": "Don't worry about it.",
       "zh": "别担心这件事。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5009,7 +5216,9 @@
       "en": "Cheer up!",
       "zh": "振作一点！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5019,7 +5228,9 @@
       "en": "Take it easy.",
       "zh": "放轻松。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5029,7 +5240,9 @@
       "en": "I feel the same way.",
       "zh": "我也有同样的感觉。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5039,7 +5252,10 @@
       "en": "Do you want to grab coffee?",
       "zh": "要不要一起喝咖啡？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask",
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -5049,7 +5265,9 @@
       "en": "Are you free this weekend?",
       "zh": "你这个周末有空吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5059,7 +5277,9 @@
       "en": "How about dinner tonight?",
       "zh": "今晚一起吃饭怎么样？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5069,7 +5289,9 @@
       "en": "Want to hang out after work?",
       "zh": "下班后要不要出来玩？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5079,7 +5301,9 @@
       "en": "Can you join us?",
       "zh": "你能加入我们吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5089,7 +5313,9 @@
       "en": "I'd love to!",
       "zh": "我很想去！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5099,7 +5325,9 @@
       "en": "Sounds good to me.",
       "zh": "我觉得不错。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5109,7 +5337,9 @@
       "en": "I'd love to, but I'm busy tonight.",
       "zh": "我很想去，但今晚有事。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5119,7 +5349,9 @@
       "en": "Maybe next time?",
       "zh": "下次可以吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5129,7 +5361,9 @@
       "en": "Can we reschedule?",
       "zh": "我们能改个时间吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5139,7 +5373,9 @@
       "en": "What time works for you?",
       "zh": "你什么时间方便？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5149,7 +5385,9 @@
       "en": "How about 6 pm?",
       "zh": "六点怎么样？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5189,7 +5427,9 @@
       "en": "Sorry, I have to cancel.",
       "zh": "抱歉，我得取消了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "aside"
+      ],
       "difficulty": 1
     },
     {
@@ -5219,7 +5459,9 @@
       "en": "Looking forward to it!",
       "zh": "很期待！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5229,7 +5471,9 @@
       "en": "See you there!",
       "zh": "到时候见！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5259,7 +5503,9 @@
       "en": "Let's plan something soon.",
       "zh": "我们尽快约一约吧。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5269,7 +5515,9 @@
       "en": "Keep me posted.",
       "zh": "有消息告诉我。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5279,7 +5527,9 @@
       "en": "Can I call you later?",
       "zh": "我晚点给你打电话可以吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5299,7 +5549,9 @@
       "en": "Sorry I missed your call.",
       "zh": "抱歉没接到你的电话。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -5309,7 +5561,9 @@
       "en": "I just got your message.",
       "zh": "我刚看到你的消息。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -5319,7 +5573,9 @@
       "en": "I'll get back to you soon.",
       "zh": "我很快回复你。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5329,7 +5585,9 @@
       "en": "Can you hear me?",
       "zh": "你听得到吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5359,7 +5617,9 @@
       "en": "Let me call you back.",
       "zh": "我回拨给你。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5379,7 +5639,9 @@
       "en": "Can you text me instead?",
       "zh": "你改发短信给我好吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5449,7 +5711,9 @@
       "en": "I'll message you when I arrive.",
       "zh": "我到了就给你发消息。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5459,7 +5723,9 @@
       "en": "Don't call after 10, please.",
       "zh": "请别在十点后打电话。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5469,7 +5735,9 @@
       "en": "Is this a good time to talk?",
       "zh": "现在说话方便吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5519,7 +5787,9 @@
       "en": "I'm on my way.",
       "zh": "我在路上了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -5529,7 +5799,9 @@
       "en": "I'm stuck in traffic.",
       "zh": "我堵车了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5539,7 +5811,9 @@
       "en": "I'll be 10 minutes late.",
       "zh": "我大概晚十分钟。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5549,7 +5823,9 @@
       "en": "Where should I wait for you?",
       "zh": "我在哪儿等你？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5609,7 +5885,9 @@
       "en": "Let's take a taxi.",
       "zh": "我们打车吧。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5699,7 +5977,9 @@
       "en": "Share your location, please.",
       "zh": "请分享一下你的位置。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5709,7 +5989,9 @@
       "en": "I just got off at the station.",
       "zh": "我刚在站下了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -5749,7 +6031,9 @@
       "en": "I'll meet you at Exit A.",
       "zh": "我在 A 出口等你。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5759,7 +6043,9 @@
       "en": "Come in, please.",
       "zh": "请进。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -5769,7 +6055,9 @@
       "en": "Make yourself at home.",
       "zh": "别客气，像在自己家一样。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -5779,7 +6067,9 @@
       "en": "Would you like some tea?",
       "zh": "要喝茶吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5829,7 +6119,9 @@
       "en": "I ordered delivery.",
       "zh": "我点了外卖。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -5899,7 +6191,9 @@
       "en": "I'm heading out.",
       "zh": "我出门了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5959,7 +6253,9 @@
       "en": "Want to come over?",
       "zh": "要不要来我家？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -5969,7 +6265,9 @@
       "en": "Thanks for having me.",
       "zh": "谢谢招待。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5979,7 +6277,9 @@
       "en": "I should get going.",
       "zh": "我该走了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5989,7 +6289,9 @@
       "en": "Text me when you get home.",
       "zh": "到家给我发消息。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -5999,7 +6301,9 @@
       "en": "Nice weather today!",
       "zh": "今天天气真好！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -6009,7 +6313,9 @@
       "en": "It's so cold outside.",
       "zh": "外面好冷。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6029,7 +6335,9 @@
       "en": "It looks like rain.",
       "zh": "看起来要下雨。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6039,7 +6347,9 @@
       "en": "Bring an umbrella.",
       "zh": "带把伞。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "aside"
+      ],
       "difficulty": 1
     },
     {
@@ -6089,7 +6399,9 @@
       "en": "The weather is perfect for a walk.",
       "zh": "这天气散步正好。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6109,7 +6421,9 @@
       "en": "I hope the rain stops soon.",
       "zh": "希望雨快点停。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6169,7 +6483,9 @@
       "en": "Stay dry!",
       "zh": "别淋湿了！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -6189,7 +6505,9 @@
       "en": "Let's wait until it clears up.",
       "zh": "等天晴一点再走吧。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6199,7 +6517,9 @@
       "en": "How much is this?",
       "zh": "这个多少钱？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6209,7 +6529,9 @@
       "en": "How much is the total?",
       "zh": "一共多少钱？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6219,7 +6541,9 @@
       "en": "Can I pay by card?",
       "zh": "可以刷卡吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6249,7 +6573,9 @@
       "en": "Can we split the bill?",
       "zh": "可以 AA 吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6259,7 +6585,9 @@
       "en": "It's on me.",
       "zh": "我请客。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6279,7 +6607,9 @@
       "en": "Keep the change.",
       "zh": "不用找了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -6339,7 +6669,9 @@
       "en": "I'll take it.",
       "zh": "我要这个。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6349,7 +6681,9 @@
       "en": "Just looking, thanks.",
       "zh": "我先看看，谢谢。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -6379,7 +6713,9 @@
       "en": "Please scan this QR code.",
       "zh": "请扫这个二维码。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -6441,7 +6777,9 @@
       "slots": [
         "name"
       ],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -6451,7 +6789,9 @@
       "en": "I'd like to check in.",
       "zh": "我想办理入住。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -6461,7 +6801,9 @@
       "en": "What time is check-out?",
       "zh": "几点退房？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6471,7 +6813,9 @@
       "en": "Is breakfast included?",
       "zh": "含早餐吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6481,7 +6825,9 @@
       "en": "Where is the elevator?",
       "zh": "电梯在哪？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6491,7 +6837,9 @@
       "en": "The Wi-Fi password, please?",
       "zh": "请问 Wi-Fi 密码？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6511,7 +6859,9 @@
       "en": "Could I get a quieter room?",
       "zh": "能换间更安静的吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6521,7 +6871,9 @@
       "en": "There's no hot water.",
       "zh": "没有热水。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6541,7 +6893,9 @@
       "en": "Could I have extra towels?",
       "zh": "能多给几条毛巾吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6551,7 +6905,9 @@
       "en": "Please wake me up at 7.",
       "zh": "请七点叫我起床。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6561,7 +6917,9 @@
       "en": "Is there a laundry service?",
       "zh": "有洗衣服务吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6571,7 +6929,9 @@
       "en": "Where can I store my luggage?",
       "zh": "行李可以寄存在哪？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6581,7 +6941,9 @@
       "en": "How do I get to the subway from here?",
       "zh": "从这儿怎么去地铁站？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6601,7 +6963,9 @@
       "en": "Is there a gym in the hotel?",
       "zh": "酒店有健身房吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6611,7 +6975,9 @@
       "en": "The minibar charges — are they high?",
       "zh": "迷你吧收费贵吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6621,7 +6987,9 @@
       "en": "Can I get a taxi at the front desk?",
       "zh": "前台能帮忙叫车吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6631,7 +6999,9 @@
       "en": "I'm checking out now.",
       "zh": "我现在退房。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -6641,7 +7011,9 @@
       "en": "Do you want to go for a run?",
       "zh": "要不要去跑步？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6651,7 +7023,9 @@
       "en": "I'm hitting the gym later.",
       "zh": "我晚点去健身房。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -6661,7 +7035,9 @@
       "en": "Is this machine free?",
       "zh": "这台器械有人用吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6671,7 +7047,9 @@
       "en": "How many sets are you doing?",
       "zh": "你做几组？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6681,7 +7059,9 @@
       "en": "Can I work in with you?",
       "zh": "我能和你轮流用吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6721,7 +7101,9 @@
       "en": "Great workout!",
       "zh": "练得真爽！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6741,7 +7123,9 @@
       "en": "Want to play badminton?",
       "zh": "要不要打羽毛球？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6751,7 +7135,9 @@
       "en": "What time is the class?",
       "zh": "课程几点开始？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6761,7 +7147,9 @@
       "en": "I'm a beginner.",
       "zh": "我是新手。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6771,7 +7159,9 @@
       "en": "Could you show me the form?",
       "zh": "能教我一下动作吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6801,7 +7191,9 @@
       "en": "See you on the court!",
       "zh": "球场见！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -6831,7 +7223,9 @@
       "en": "Rest day tomorrow.",
       "zh": "明天休息日。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -6841,7 +7235,9 @@
       "en": "I have class tomorrow.",
       "zh": "我明天有课。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -6851,7 +7247,9 @@
       "en": "Did you finish the homework?",
       "zh": "作业做完了吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6861,7 +7259,9 @@
       "en": "Could you explain this again?",
       "zh": "你能再讲一遍吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6871,7 +7271,9 @@
       "en": "I don't understand this part.",
       "zh": "这部分我不懂。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6881,7 +7283,9 @@
       "en": "What's the deadline?",
       "zh": "截止日期是什么时候？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6891,7 +7295,9 @@
       "en": "Can we study together?",
       "zh": "我们能一起学习吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6921,7 +7327,9 @@
       "en": "I passed!",
       "zh": "我过了！",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6941,7 +7349,9 @@
       "en": "Which book are you using?",
       "zh": "你用的哪本书？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6951,7 +7361,9 @@
       "en": "Is this course useful?",
       "zh": "这门课有用吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6961,7 +7373,9 @@
       "en": "I'm learning English every day.",
       "zh": "我每天都在学英语。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -6971,7 +7385,9 @@
       "en": "How do you pronounce this?",
       "zh": "这个怎么读？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6981,7 +7397,9 @@
       "en": "Is my sentence correct?",
       "zh": "我这句对吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -6991,7 +7409,9 @@
       "en": "Let's practice speaking.",
       "zh": "我们练习口语吧。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7011,7 +7431,9 @@
       "en": "Can you share the slides?",
       "zh": "能分享课件吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7031,7 +7453,9 @@
       "en": "I'm tutoring a friend.",
       "zh": "我在辅导一个朋友。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -7041,7 +7465,9 @@
       "en": "Can we jump on a quick call?",
       "zh": "我们快速语音一下？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7051,7 +7477,9 @@
       "en": "I'll start the meeting.",
       "zh": "我来发起会议。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -7061,7 +7489,9 @@
       "en": "You're on mute.",
       "zh": "你静音了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "aside"
+      ],
       "difficulty": 1
     },
     {
@@ -7091,7 +7521,9 @@
       "en": "Can you share your screen?",
       "zh": "能共享屏幕吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7131,7 +7563,9 @@
       "en": "Did everyone get that?",
       "zh": "大家都听到了吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7141,7 +7575,9 @@
       "en": "Sorry, I was lagging.",
       "zh": "抱歉，我这边卡了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -7171,7 +7607,9 @@
       "en": "I'll record this, okay?",
       "zh": "我录一下可以吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7191,7 +7629,9 @@
       "en": "I'll follow up in the group chat.",
       "zh": "我在群里跟进。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -7201,7 +7641,9 @@
       "en": "Ping me when you're free.",
       "zh": "你有空就 ping 我。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7231,7 +7673,9 @@
       "en": "Thanks for hopping on.",
       "zh": "谢谢你上来聊。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -7241,7 +7685,9 @@
       "en": "I'm just browsing.",
       "zh": "我随便看看。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -7271,7 +7717,9 @@
       "en": "Where is the fitting room?",
       "zh": "试衣间在哪？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7331,7 +7779,9 @@
       "en": "Where do I check out?",
       "zh": "在哪儿结账？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7341,7 +7791,9 @@
       "en": "Can I return this?",
       "zh": "可以退货吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7371,7 +7823,9 @@
       "en": "We have a reservation.",
       "zh": "我们有预订。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -7441,7 +7895,9 @@
       "en": "The bill, please.",
       "zh": "买单。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -7471,7 +7927,9 @@
       "en": "Everything was delicious.",
       "zh": "都很好吃。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -7521,7 +7979,9 @@
       "en": "I think I'm lost.",
       "zh": "我好像迷路了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "opener"
+      ],
       "difficulty": 1
     },
     {
@@ -7581,7 +8041,9 @@
       "en": "I have a sore throat.",
       "zh": "我嗓子疼。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -7631,7 +8093,9 @@
       "en": "I need to see a doctor.",
       "zh": "我需要看医生。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7641,7 +8105,9 @@
       "en": "Are we still on for tomorrow?",
       "zh": "我们明天还约吗？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -7781,7 +8247,9 @@
       "en": "Let's take this offline.",
       "zh": "我们会后私下聊。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "closer"
+      ],
       "difficulty": 1
     },
     {
@@ -7791,7 +8259,9 @@
       "en": "Great job on that.",
       "zh": "那件事干得漂亮。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -7841,7 +8311,9 @@
       "en": "My flight is delayed.",
       "zh": "我的航班延误了。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -7921,7 +8393,9 @@
       "en": "That makes sense.",
       "zh": "有道理。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "reply"
+      ],
       "difficulty": 1
     },
     {
@@ -8001,7 +8475,9 @@
       "en": "Go on.",
       "zh": "继续说。",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "ask"
+      ],
       "difficulty": 1
     },
     {
@@ -8011,7 +8487,9 @@
       "en": "Wait — say that again?",
       "zh": "等等——再说一遍？",
       "slots": [],
-      "tags": [],
+      "tags": [
+        "clarify"
+      ],
       "difficulty": 1
     },
     {
@@ -8531,6 +9009,188 @@
       {
         "speaker": "B",
         "text": "Thanks for hopping on."
+      }
+    ],
+    "shop": [
+      {
+        "speaker": "A",
+        "text": "Excuse me — I'm looking for a jacket."
+      },
+      {
+        "speaker": "B",
+        "text": "Sure. What size do you need?"
+      },
+      {
+        "speaker": "A",
+        "text": "Medium. Can I try this on?"
+      },
+      {
+        "speaker": "B",
+        "text": "Of course. The fitting room is over there."
+      },
+      {
+        "speaker": "A",
+        "text": "This one's fine. Do you take mobile pay?"
+      },
+      {
+        "speaker": "B",
+        "text": "Yes. Checkout is at the front."
+      }
+    ],
+    "dine": [
+      {
+        "speaker": "A",
+        "text": "A table for two, please."
+      },
+      {
+        "speaker": "B",
+        "text": "Right this way. Here's the menu."
+      },
+      {
+        "speaker": "A",
+        "text": "What do you recommend?"
+      },
+      {
+        "speaker": "B",
+        "text": "The set meal is popular today."
+      },
+      {
+        "speaker": "A",
+        "text": "I'll take that — not too spicy, please."
+      },
+      {
+        "speaker": "B",
+        "text": "Got it. Anything to drink?"
+      }
+    ],
+    "dir": [
+      {
+        "speaker": "A",
+        "text": "Excuse me, where is the subway?"
+      },
+      {
+        "speaker": "B",
+        "text": "Go straight, then turn left at the light."
+      },
+      {
+        "speaker": "A",
+        "text": "Is it far from here?"
+      },
+      {
+        "speaker": "B",
+        "text": "About five minutes on foot."
+      },
+      {
+        "speaker": "A",
+        "text": "Thanks for your help!"
+      },
+      {
+        "speaker": "B",
+        "text": "No problem. Have a good one."
+      }
+    ],
+    "doc": [
+      {
+        "speaker": "A",
+        "text": "I don't feel well. I have a headache."
+      },
+      {
+        "speaker": "B",
+        "text": "When did it start?"
+      },
+      {
+        "speaker": "A",
+        "text": "Yesterday. I also have a slight fever."
+      },
+      {
+        "speaker": "B",
+        "text": "Any allergies?"
+      },
+      {
+        "speaker": "A",
+        "text": "I'm allergic to penicillin."
+      },
+      {
+        "speaker": "B",
+        "text": "Okay. Rest, drink water, and take this medicine twice a day."
+      }
+    ],
+    "appt": [
+      {
+        "speaker": "A",
+        "text": "Are you free this weekend?"
+      },
+      {
+        "speaker": "B",
+        "text": "Saturday afternoon works. What time?"
+      },
+      {
+        "speaker": "A",
+        "text": "How about 3 pm? Let's meet at the cafe."
+      },
+      {
+        "speaker": "B",
+        "text": "Sounds good. I'll be there."
+      },
+      {
+        "speaker": "A",
+        "text": "If I'm a bit late, I'll text you."
+      },
+      {
+        "speaker": "B",
+        "text": "Okay — see you then!"
+      }
+    ],
+    "work": [
+      {
+        "speaker": "A",
+        "text": "How's work going?"
+      },
+      {
+        "speaker": "B",
+        "text": "Busy — I'm in meetings all morning."
+      },
+      {
+        "speaker": "A",
+        "text": "Can we talk later about the update?"
+      },
+      {
+        "speaker": "B",
+        "text": "Sure. I'll check and get back to you."
+      },
+      {
+        "speaker": "A",
+        "text": "Thanks. No rush if you're swamped."
+      },
+      {
+        "speaker": "B",
+        "text": "I'll ping you after lunch."
+      }
+    ],
+    "trav": [
+      {
+        "speaker": "A",
+        "text": "I'm traveling this week. Where is the hotel?"
+      },
+      {
+        "speaker": "B",
+        "text": "Two blocks from the station. Do you have a reservation?"
+      },
+      {
+        "speaker": "A",
+        "text": "Yes. What time is check-in?"
+      },
+      {
+        "speaker": "B",
+        "text": "From 3 pm. Need a taxi?"
+      },
+      {
+        "speaker": "A",
+        "text": "Please — and is breakfast included?"
+      },
+      {
+        "speaker": "B",
+        "text": "It is. Enjoy your stay!"
       }
     ]
   },

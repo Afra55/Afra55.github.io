@@ -43,6 +43,21 @@ t("日常核心岛齐全：闲聊/情绪/邀请/电话/通勤/天气/居家/付�
   }
 });
 
+t("全部岛有伪对话，且开场→追问→接话→收尾链标签齐全", () => {
+  const chain = ["opener", "ask", "reply", "closer"];
+  for (const isl of content.islands) {
+    const dlg = content.dialogues?.[isl.id];
+    assert.ok(Array.isArray(dlg) && dlg.length >= 4, `dialogue ${isl.id}`);
+    const lines = content.sentences.filter((s) => s.island === isl.id);
+    for (const tag of chain) {
+      assert.ok(
+        lines.some((s) => (s.tags || []).includes(tag)),
+        `${isl.id} missing tag ${tag}`
+      );
+    }
+  }
+});
+
 t("句子 id 唯一，岛引用有效", () => {
   const ids = new Set();
   const islandIds = new Set(content.islands.map((i) => i.id));
@@ -97,6 +112,15 @@ t("对话链 / 无稿倒计时 / 手机吸底下一句", () => {
   assert.ok(js.includes("enspeak-frame-dock") || js.includes("enspeak-frame-next"));
   assert.ok(html.includes("enspeak-chain"));
   assert.ok(html.includes("对话链"));
+});
+
+t("开口打卡日历与录音自评", () => {
+  assert.ok(js.includes("renderCheckin"));
+  assert.ok(js.includes("recordSelfEval"));
+  assert.ok(js.includes("bumpHistory"));
+  assert.ok(html.includes("enspeak-checkin"));
+  assert.ok(html.includes("data-eval"));
+  assert.ok(html.includes("流畅"));
 });
 
 console.log(`enspeak-content.test.js: ${n} passed`);

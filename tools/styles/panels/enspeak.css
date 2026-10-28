@@ -261,6 +261,58 @@
   font-size: 0.92rem;
 }
 
+.enspeak-checkin {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.enspeak-checkin-head {
+  margin: 0;
+}
+
+.enspeak-checkin-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.enspeak-checkin-day {
+  aspect-ratio: 1;
+  min-height: 2rem;
+  border-radius: 8px;
+  border: 1px solid var(--line, rgba(127, 140, 160, 0.3));
+  background: color-mix(in srgb, var(--bg-1, #121a28) 88%, transparent);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0;
+}
+
+.enspeak-checkin-day.is-goal {
+  border-color: color-mix(in srgb, #34d399 55%, var(--line));
+  background: color-mix(in srgb, #34d399 22%, transparent);
+  color: #34d399;
+  font-weight: 700;
+}
+
+.enspeak-checkin-day.is-spoken {
+  border-color: color-mix(in srgb, var(--accent, #5b8cff) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent, #5b8cff) 18%, transparent);
+  color: var(--accent, #5b8cff);
+  font-weight: 650;
+}
+
+.enspeak-checkin-day.is-empty {
+  opacity: 0.65;
+}
+
+.enspeak-self-eval {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+}
+
 .enspeak-dialogue-line {
   display: grid;
   gap: 0.15rem;
