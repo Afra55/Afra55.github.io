@@ -123,4 +123,15 @@ t("开口打卡日历与录音自评", () => {
   assert.ok(html.includes("流畅"));
 });
 
+t("开口句英文不含「A / B」二选一粘连（避免整句练错）", () => {
+  for (const s of content.sentences) {
+    assert.ok(!/ \/ /.test(s.en), `slash alt ${s.id}: ${s.en}`);
+  }
+  for (const f of content.frames) {
+    for (const ex of f.examples || []) {
+      assert.ok(!/ \/ /.test(String(ex)), `frame slash ${f.id}: ${ex}`);
+    }
+  }
+});
+
 console.log(`enspeak-content.test.js: ${n} passed`);

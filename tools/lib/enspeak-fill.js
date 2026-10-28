@@ -17,6 +17,12 @@
       .replace(/([([{])\s+/g, "$1")
       .replace(/\s+([)\]}])/g, "$1")
       .replace(/\s+'/g, "'")
+      // 槽位自带 ?/! 时，架子末尾的 . 会叠成 ?. / !.（保留 ... 省略号）
+      .replace(/\?\.+/g, "?")
+      .replace(/!\.+/g, "!")
+      .replace(/\?{2,}/g, "?")
+      .replace(/!{2,}/g, "!")
+      .replace(/\.{4,}/g, "...")
       .trim();
   }
 
@@ -39,28 +45,53 @@
     return tidyEn(out);
   }
 
+  function tidyZh(text) {
+    return String(text || "")
+      .replace(/\s{2,}/g, " ")
+      .replace(/(什么){2,}/g, "什么")
+      .replace(/(一下){2,}/g, "一下")
+      .replace(/你你/g, "你")
+      .replace(/我我/g, "我")
+      .replace(/？{2,}/g, "？")
+      .replace(/！{2,}/g, "！")
+      .trim();
+  }
+
   /**
    * 变体中文：
-   * - 有 fillZh：填入省略号或接在意图句后
+   * - 有 fillZh：填入省略号，或接在意图句后
    * - 无 fillZh：只显示意图句（不把英文硬塞进括号）
+   * - fillZh 以 ，/——/！ 开头：当作尾巴拼上，不用括号
    */
   function variantZhLine(frameZh, fillEn, fillZh) {
     const zh = String(frameZh || "").trim();
     const zf = String(fillZh || "").trim();
-    if (!zh) return zf || "";
-    if (!zf) {
-      // 无中文槽位：保留意图；省略号可留作提示
-      return zh;
-    }
+    if (!zh) return tidyZh(zf || "");
+    if (!zf) return tidyZh(zh);
+
     if (/……|\.\.\.|…/.test(zh)) {
-      return zh.replace(/……|\.\.\.|…/g, zf).replace(/\s{2,}/g, " ").trim();
+      return tidyZh(zh.replace(/……|\.\.\.|…/g, zf));
     }
-    if (zh.includes(zf)) return zh;
-    // 句末标点前插入槽位意：最近怎么样？ + 最近这段时间 → 最近怎么样（最近这段时间）？
+    if (zh.includes(zf)) return tidyZh(zh);
+
     const m = zh.match(/^(.*?)([？?。！!]*)$/);
-    if (m) return `${m[1]}（${zf}）${m[2] || ""}`;
-    return `${zh}（${zf}）`;
+    if (!m) return tidyZh(`${zh}（${zf}）`);
+    const stem = m[1];
+    const punct = m[2] || "";
+
+    // 尾巴型：最近怎么样？ + ，你呢 → 最近怎么样，你呢？
+    if (/^[，,！!]/.test(zf) || zf.startsWith("——") || zf.startsWith("—")) {
+      let tail = zf;
+      let end = punct;
+      if (/[？?。！!]$/.test(tail)) {
+        end = "";
+      }
+      return tidyZh(`${stem}${tail}${end}`);
+    }
+
+    const inner = zf.replace(/[？?。！!]+$/g, "");
+    return tidyZh(`${stem}（${inner}）${punct}`);
   }
 
-  return { fillEnTemplate, variantZhLine, tidyEn };
+  return { fillEnTemplate, variantZhLine, tidyEn, tidyZh };
 });
