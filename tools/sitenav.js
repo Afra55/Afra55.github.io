@@ -11,6 +11,13 @@
       tags: ["windows", "搜索", "文件"],
     },
     {
+      id: "puter-everything",
+      title: "Everything Project",
+      desc: "HeyPuter 开源重建全球常用软件：Office / 协作 / 创意 / CAD 等到 Slack、Photoshop 等替代（单仓多应用，MIT，需 Node ≥22）。",
+      url: "https://github.com/HeyPuter/everything",
+      tags: ["开源", "办公", "协作", "github", "puter"],
+    },
+    {
       id: "myspeed",
       title: "MySpeed",
       desc: "自托管网速监控：定时测速、历史图表、多服务器；支持 LibreSpeed / Ookla / Cloudflare。需本机 Docker 或安装包（MIT）。",
