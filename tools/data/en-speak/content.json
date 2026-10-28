@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "title": "日常开口",
   "tagline": "尽量覆盖日常对话：架子换词 + 多场景岛 · 句库可持续补 · 没说出口，不算会",
   "profileFields": [
@@ -9281,11 +9281,14 @@
     ]
   },
   "method": {
-    "dailyMinutes": "30～40",
+    "dailyMinutes": "10（极简）～30",
     "newPerDay": "5～8",
     "mustSpeak": 2,
     "listenLockDays": 3,
-    "unlockFlexibleRatio": 0.55
+    "unlockFlexibleRatio": 0.55,
+    "expressMinutes": 10,
+    "expressReword": 3,
+    "expressOutput": 2
   },
   "frameGroups": [
     {

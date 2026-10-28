@@ -345,11 +345,61 @@
   margin-top: 0.2rem;
 }
 
-.enspeak-sent-list.is-blind .enspeak-sent-en {
+.enspeak-sent-list.is-blind .enspeak-sent-en,
+.enspeak-variant.is-blind .enspeak-sent-en {
   filter: blur(5px);
   user-select: none;
   color: transparent;
   text-shadow: 0 0 8px rgba(127, 140, 160, 0.85);
+}
+
+.enspeak-express-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
+}
+
+.enspeak-express-step {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line, rgba(127, 140, 160, 0.35));
+  opacity: 0.7;
+}
+
+.enspeak-express-step.is-on {
+  opacity: 1;
+  border-color: var(--accent, #5b8cff);
+  color: var(--accent, #5b8cff);
+  font-weight: 650;
+}
+
+.enspeak-express-step.is-done {
+  opacity: 0.9;
+  border-color: color-mix(in srgb, #34d399 50%, var(--line));
+  color: #34d399;
+}
+
+.enspeak-partner {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.enspeak-partner-you,
+.enspeak-partner-them,
+.enspeak-partner-back {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid var(--line, rgba(127, 140, 160, 0.3));
+  background: color-mix(in srgb, var(--bg-1, #121a28) 90%, transparent);
+}
+
+#enspeak-review-nudge:not([hidden]) {
+  color: var(--accent, #5b8cff);
+  font-weight: 600;
 }
 
 .enspeak-action-row {
