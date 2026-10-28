@@ -18,6 +18,13 @@
       tags: ["开源", "办公", "协作", "github", "puter"],
     },
     {
+      id: "how-to-live-better",
+      title: "HowToLiveBetter",
+      desc: "高性价比人生指南：长寿防病、急救、省钱理财、法律红线、失业工伤、医保社保、恋爱婚育、怀孕育儿、创业合规、出国与技能；每条写成本/收益/证据等级与出处（期刊与官方文件）。",
+      url: "https://github.com/eternity4719/HowToLiveBetter",
+      tags: ["人生", "健康", "理财", "指南", "github"],
+    },
+    {
       id: "myspeed",
       title: "MySpeed",
       desc: "自托管网速监控：定时测速、历史图表、多服务器；支持 LibreSpeed / Ookla / Cloudflare。需本机 Docker 或安装包（MIT）。",
