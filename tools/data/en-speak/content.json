@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "title": "日常开口",
   "tagline": "尽量覆盖日常对话：架子换词 + 多场景岛 · 句库可持续补 · 没说出口，不算会",
   "profileFields": [
@@ -129,7 +129,7 @@
         "at a factory",
         "at my own shop",
         "at a university",
-        "remotely"
+        "remotely from home"
       ],
       "role": "frame",
       "group": "self",
@@ -143,7 +143,7 @@
         "在工厂",
         "在自己店里",
         "在大学",
-        "远程"
+        "在家远程"
       ]
     },
     {
@@ -184,16 +184,16 @@
       "zh": "我打算……",
       "slot": "plan",
       "examples": [
-        "go home",
+        "head home",
         "meet a friend",
         "finish this",
         "cook something",
-        "watch a show",
         "take a break",
-        "go shopping",
         "exercise",
         "sleep early",
-        "study English"
+        "watch a show",
+        "get some rest",
+        "head out"
       ],
       "role": "frame",
       "group": "self",
@@ -202,12 +202,12 @@
         "见朋友",
         "把这事做完",
         "做点吃的",
-        "看剧",
         "休息一下",
-        "去买东西",
         "锻炼",
         "早睡",
-        "学英语"
+        "看剧",
+        "休息一会儿",
+        "出门"
       ]
     },
     {
@@ -647,7 +647,7 @@
       "group": "soft",
       "examplesZh": [
         "我也是",
-        "彼此彼此",
+        "我也一样",
         "我同意",
         "没错",
         "说得对",
@@ -667,7 +667,7 @@
         "",
         " for a second",
         " about it",
-        "... okay",
+        " for a moment",
         "... maybe",
         " for one moment",
         "... hmm",
@@ -681,7 +681,7 @@
         "",
         "一下",
         "这件事",
-        "……好吧",
+        "一会儿",
         "……也许",
         "片刻",
         "……嗯",
@@ -832,7 +832,7 @@
         "the coffee",
         "picking me up",
         "explaining that",
-        "today",
+        "your time",
         "everything",
         "being patient"
       ],
@@ -845,7 +845,7 @@
         "这杯咖啡",
         "来接我",
         "解释清楚",
-        "今天",
+        "你的时间",
         "这一切",
         "你的耐心"
       ]
@@ -917,7 +917,7 @@
     {
       "id": "f28",
       "en": "Hold on{hold}.",
-      "zh": "等……",
+      "zh": "……",
       "slot": "hold",
       "group": "chat",
       "examples": [
@@ -934,16 +934,16 @@
       ],
       "role": "frame",
       "examplesZh": [
-        "一下",
-        "一秒",
+        "等一下",
+        "等一秒",
         "稍等片刻",
-        "一下，拜托",
-        "一下——我快好了",
-        "一下——我查一下",
-        "一下——马上回来",
-        "一下，我在打电话",
-        "一下——我记一下",
-        "一下——我打开链接"
+        "等一下，拜托",
+        "等一下——我快好了",
+        "等一下——我查一下",
+        "等一下——马上回来",
+        "等一下，我在打电话",
+        "等一下——我记一下",
+        "等一下——我打开链接"
       ]
     },
     {
@@ -1238,7 +1238,7 @@
       "role": "frame",
       "examples": [
         "busy at work",
-        "pretty well",
+        "doing well",
         "traveling a lot",
         "stuck at home",
         "learning English",
@@ -1250,20 +1250,20 @@
       ],
       "id": "f38",
       "en": "I've been {status}.",
-      "zh": "我一直……",
+      "zh": "我……",
       "slot": "status",
       "group": "self",
       "examplesZh": [
-        "工作很忙",
-        "挺好的",
-        "经常出差/旅行",
-        "困在家里",
-        "在学英语",
-        "加班到很晚",
+        "工作一直很忙",
+        "最近还不错",
+        "最近经常出差",
+        "最近总宅在家里",
+        "一直在学英语",
+        "最近总加班到很晚",
         "感觉好多了",
-        "在补觉",
-        "在帮父母",
-        "在找住处"
+        "最近在补觉",
+        "最近在帮父母",
+        "最近在找住处"
       ]
     },
     {
@@ -2037,19 +2037,19 @@
     {
       "role": "frame",
       "examples": [
-        "this",
-        "that",
-        "the total",
-        "the ticket",
-        "delivery",
-        "a bottle of water",
-        "the set meal",
-        "shipping",
-        "one night",
-        "per person"
+        "is this",
+        "is that",
+        "is the total",
+        "is delivery",
+        "is a bottle of water",
+        "is the set meal",
+        "is shipping",
+        "is it for one night",
+        "is it per person",
+        "is the ticket"
       ],
       "id": "f63",
-      "en": "How much is {price}?",
+      "en": "How much {price}?",
       "zh": "……多少钱？",
       "slot": "price",
       "group": "ask",
@@ -2057,45 +2057,45 @@
         "这个",
         "那个",
         "总共",
-        "票价",
         "配送费",
         "一瓶水",
         "套餐",
         "运费",
         "一晚",
-        "每人"
+        "每人",
+        "票"
       ]
     },
     {
       "role": "frame",
       "examples": [
-        "card",
-        "cash",
-        "WeChat",
-        "Alipay",
-        "phone",
-        "Apple Pay",
-        "bank transfer",
-        "QR code",
-        "credit card",
-        "splitting it"
+        "by card",
+        "in cash",
+        "with WeChat",
+        "with Alipay",
+        "with my phone",
+        "with Apple Pay",
+        "by bank transfer",
+        "by QR code",
+        "with a credit card",
+        "later"
       ],
       "id": "f64",
-      "en": "Can I pay by {pay}?",
-      "zh": "可以用……付吗？",
+      "en": "Can I pay {pay}?",
+      "zh": "可以……吗？",
       "slot": "pay",
       "group": "ask",
       "examplesZh": [
-        "银行卡",
-        "现金",
-        "微信",
-        "支付宝",
-        "手机",
-        "Apple Pay",
-        "银行转账",
-        "二维码",
-        "信用卡",
-        "AA"
+        "用银行卡付款",
+        "用现金付款",
+        "用微信付款",
+        "用支付宝付款",
+        "用手机付款",
+        "用 Apple Pay 付款",
+        "用银行转账付款",
+        "用二维码付款",
+        "用信用卡付款",
+        "稍后再付款"
       ]
     },
     {
@@ -2107,14 +2107,14 @@
         "the Wi-Fi",
         "carrying this",
         "finding the gate",
-        "a photo",
+        "my luggage",
         "this translation",
         "booking a table",
         "checking the time"
       ],
       "id": "f65",
       "en": "Could you help me with {help}?",
-      "zh": "你能帮我……吗？",
+      "zh": "你能帮我……？",
       "slot": "help",
       "group": "ask",
       "examplesZh": [
@@ -2124,7 +2124,7 @@
         "连一下 Wi-Fi",
         "搬一下这个",
         "找一下登机口",
-        "拍张照",
+        "拿一下行李",
         "翻译一下",
         "订个位",
         "对一下时间"
@@ -2356,8 +2356,8 @@
       "id": "who05",
       "island": "who",
       "role": "line",
-      "en": "I work as {job}.",
-      "zh": "我的工作是……。",
+      "en": "I'm {job}.",
+      "zh": "我是……。",
       "slots": [
         "job"
       ],
@@ -2371,7 +2371,7 @@
       "island": "who",
       "role": "line",
       "en": "I work at {workplace}.",
-      "zh": "我在……上班/上学。",
+      "zh": "我在……上班。",
       "slots": [
         "workplace"
       ],
@@ -2402,11 +2402,9 @@
       "id": "who09",
       "island": "who",
       "role": "line",
-      "en": "{family}.",
-      "zh": "关于家人……。",
-      "slots": [
-        "family"
-      ],
+      "en": "There are three people in my family.",
+      "zh": "我家有三口人。",
+      "slots": [],
       "tags": [],
       "difficulty": 1
     },
@@ -2753,7 +2751,7 @@
       "island": "likes",
       "role": "line",
       "en": "I like {food}.",
-      "zh": "我喜欢吃/喝……。",
+      "zh": "我喜欢……。",
       "slots": [
         "food"
       ],
@@ -3578,7 +3576,7 @@
       "island": "dine",
       "role": "line",
       "en": "Could we have the check?",
-      "zh": "买单。",
+      "zh": "可以买单吗？",
       "slots": [],
       "tags": [
         "ask"
@@ -4725,8 +4723,8 @@
       "id": "chat19",
       "island": "chat",
       "role": "line",
-      "en": "I've been pretty well, thanks.",
-      "zh": "我还不错，谢谢。",
+      "en": "I've been doing well, thanks.",
+      "zh": "我最近还不错，谢谢。",
       "slots": [],
       "tags": [
         "reply"
@@ -5937,7 +5935,7 @@
       "island": "commute",
       "role": "line",
       "en": "I missed the train.",
-      "zh": "我错过火车/地铁了。",
+      "zh": "我错过火车了。",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -6223,7 +6221,7 @@
       "island": "home",
       "role": "line",
       "en": "The lights went out.",
-      "zh": "灯灭了/停电了。",
+      "zh": "停电了，灯灭了。",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -6629,7 +6627,7 @@
       "island": "pay",
       "role": "line",
       "en": "Could I get a receipt, please?",
-      "zh": "可以开发票/收据吗？",
+      "zh": "可以给我一张收据吗？",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -8216,8 +8214,8 @@
       "id": "workx04",
       "island": "work",
       "role": "line",
-      "en": "I'll loop you in.",
-      "zh": "我把你拉进群/抄送你。",
+      "en": "I'll add you to the thread.",
+      "zh": "我把你加进讨论里。",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -8246,8 +8244,8 @@
       "id": "workx07",
       "island": "work",
       "role": "line",
-      "en": "Let's take this offline.",
-      "zh": "我们会后私下聊。",
+      "en": "Let's talk about this after the meeting.",
+      "zh": "我们会后再聊这个。",
       "slots": [],
       "tags": [
         "closer"
@@ -8270,8 +8268,8 @@
       "id": "workx09",
       "island": "work",
       "role": "line",
-      "en": "I'm OOO tomorrow.",
-      "zh": "我明天不在办公室/请假。",
+      "en": "I'm out of the office tomorrow.",
+      "zh": "我明天不在办公室。",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -8414,7 +8412,7 @@
       "id": "rplx03",
       "island": "reply",
       "role": "line",
-      "en": "You got a point.",
+      "en": "You've got a point.",
       "zh": "你说得有道理。",
       "slots": [],
       "tags": [],
@@ -8444,8 +8442,8 @@
       "id": "rplx06",
       "island": "reply",
       "role": "line",
-      "en": "Same energy.",
-      "zh": "同感同频。",
+      "en": "I feel the same.",
+      "zh": "我有同样的感觉。",
       "slots": [],
       "tags": [],
       "difficulty": 1
@@ -8621,6 +8619,44 @@
         "reply"
       ],
       "difficulty": 2
+    },
+    {
+      "id": "who06b",
+      "island": "who",
+      "role": "line",
+      "en": "I study at {workplace}.",
+      "zh": "我在……上学。",
+      "slots": [
+        "workplace"
+      ],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "com15b",
+      "island": "commute",
+      "role": "line",
+      "en": "I missed the subway.",
+      "zh": "我错过地铁了。",
+      "slots": [],
+      "tags": [
+        "reply"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "pay11b",
+      "island": "pay",
+      "role": "line",
+      "en": "Could I get an invoice, please?",
+      "zh": "可以开发票吗？",
+      "slots": [],
+      "tags": [
+        "ask"
+      ],
+      "difficulty": 2
     }
   ],
   "weekPlans": [
@@ -8688,7 +8724,7 @@
       },
       {
         "speaker": "B",
-        "text": "I work as {job}."
+        "text": "I'm {job}."
       }
     ],
     "today": [
@@ -8954,7 +8990,7 @@
       },
       {
         "speaker": "A",
-        "text": "Can I pay by WeChat?"
+        "text": "Can I pay with WeChat?"
       },
       {
         "speaker": "B",
@@ -9214,7 +9250,7 @@
       },
       {
         "speaker": "B",
-        "text": "I'll ping you after lunch."
+        "text": "I'll message you after lunch."
       }
     ],
     "trav": [
