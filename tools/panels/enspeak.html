@@ -101,6 +101,8 @@
           <div class="panel-card">
             <h2 class="subhead">本周复盘</h2>
             <div id="enspeak-review" class="enspeak-review"></div>
+            <div class="enspeak-checkin" id="enspeak-checkin" aria-label="近四周开口打卡"></div>
+            <p class="hint tight">绿=当日达标 · 蓝=有开口未达标 · 灰=未练。点格子可看当天摘要。</p>
           </div>
           <div class="panel-card">
             <h2 class="subhead">进度</h2>
@@ -119,6 +121,7 @@
               <li>每日闭环：①听跟 → ②架子裂变换词 → ③接话 → ④无稿开口（至少 2 句真实情况）</li>
               <li>新学 5～8 句/天；同一听跟段连用 3～5 天；一周主攻一个岛</li>
               <li>有真人时优先对人说；手机上可用「无稿开口」先藏英文再对照</li>
+              <li>开口后点自评（流畅/卡了一下/再练）；「更多」里看近四周打卡</li>
             </ul>
           </div>
         </div>
@@ -136,6 +139,14 @@
               <button type="button" class="ghost-btn" id="enspeak-dlg-play" hidden>回放</button>
               <button type="button" class="primary-btn" id="enspeak-dlg-spoken">已开口（真实情况）</button>
               <button type="submit" class="ghost-btn" value="close">关闭</button>
+            </div>
+            <div class="enspeak-self-eval" id="enspeak-dlg-eval" aria-label="开口自评">
+              <span class="hint tight">开口自评</span>
+              <div class="btn-row tool-actions">
+                <button type="button" class="ghost-btn" data-eval="smooth">流畅</button>
+                <button type="button" class="ghost-btn" data-eval="sticky">卡了一下</button>
+                <button type="button" class="ghost-btn" data-eval="again">再练一次</button>
+              </div>
             </div>
             <audio id="enspeak-dlg-audio" controls hidden></audio>
             <p class="hint tight" id="enspeak-dlg-status"></p>

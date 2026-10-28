@@ -207,6 +207,28 @@
     setSentencePatch(id, { status: next, fills: [...fills], updatedAt: todayKey() });
   }
 
+  function historyDay(key = todayKey()) {
+    if (!state.history[key] || typeof state.history[key] !== "object") {
+      state.history[key] = {};
+    }
+    const h = state.history[key];
+    if (!h.selfEval || typeof h.selfEval !== "object") h.selfEval = { smooth: 0, sticky: 0, again: 0 };
+    return h;
+  }
+
+  function bumpHistory(patch = {}) {
+    const h = historyDay();
+    if (patch.spokenDelta) h.spoken = (h.spoken || 0) + patch.spokenDelta;
+    if (patch.recordedDelta) h.recorded = (h.recorded || 0) + patch.recordedDelta;
+    if (patch.eval) {
+      const k = patch.eval;
+      if (k === "smooth" || k === "sticky" || k === "again") {
+        h.selfEval[k] = (h.selfEval[k] || 0) + 1;
+      }
+    }
+    if (patch.goal) h.goal = true;
+  }
+
   function markSpoken(id) {
     ensureToday();
     const rec = state.sentences[id] || {};
@@ -214,19 +236,53 @@
     if (rec.myVersion?.trim()) fills.add(rec.myVersion.trim().toLowerCase());
     let status = "spoken";
     if (fills.size >= 3) status = "flexible";
+    const firstToday = !state.today.spokenIds.includes(id);
     setSentencePatch(id, {
       status,
       fills: [...fills],
       spokenCount: (rec.spokenCount || 0) + 1,
       lastSpoken: todayKey(),
     });
-    if (!state.today.spokenIds.includes(id)) state.today.spokenIds.push(id);
+    if (firstToday) state.today.spokenIds.push(id);
+    bumpHistory({ spokenDelta: 1 });
     if (state.today.spokenIds.length >= (CONTENT?.method?.mustSpeak || 2)) {
       state.today.blocks.output = true;
     }
     maybeCompleteGoal();
     saveState();
     renderAll();
+  }
+
+  function recordSelfEval(kind) {
+    const id = activeSentenceId;
+    bumpHistory({ eval: kind });
+    if (id) {
+      setSentencePatch(id, { lastEval: kind, lastEvalAt: todayKey() });
+    }
+    if (kind === "again") {
+      saveState();
+      $("#enspeak-dlg-status").textContent = "再练：先听示范，再说一遍自己的版本";
+      toast("再练一次 · 先听再开口");
+      const line = $("#enspeak-dlg-mine")?.value || $("#enspeak-dlg-en")?.textContent || "";
+      if (line) speakText(line);
+      renderCheckin();
+      return;
+    }
+    if (id) {
+      const mine = $("#enspeak-dlg-mine")?.value?.trim() || "";
+      if (mine) setSentencePatch(id, { myVersion: mine });
+      if (!state.today.spokenIds.includes(id)) markSpoken(id);
+      else {
+        saveState();
+        renderReview();
+      }
+    } else {
+      saveState();
+      renderReview();
+    }
+    const label = kind === "smooth" ? "流畅" : "卡了一下";
+    $("#enspeak-dlg-status").textContent = `已记开口 · 自评：${label}`;
+    toast(`已记 · ${label}`);
   }
 
   function starterFlexibleRatio() {
@@ -252,7 +308,7 @@
     if (!goalReached()) return;
     const key = todayKey();
     if (!state.history[key]?.goal) {
-      state.history[key] = { ...(state.history[key] || {}), goal: true };
+      bumpHistory({ goal: true });
       if (state.lastGoalDate !== key) {
         const y = new Date();
         y.setDate(y.getDate() - 1);
@@ -1016,12 +1072,45 @@
     const flex = (CONTENT.sentences || []).filter((s) => getStatus(s.id) === "flexible").length;
     const spoken = (CONTENT.sentences || []).filter((s) => ["spoken", "flexible"].includes(getStatus(s.id))).length;
     const ratio = starterFlexibleRatio();
+    const todayH = state.history[todayKey()] || {};
+    const se = todayH.selfEval || {};
     el.innerHTML = `
       <div>今日开口：${spokenToday} 句 · 达标：${goalReached() ? "是" : "尚未"}</div>
+      <div>今日自评：流畅 ${se.smooth || 0} · 卡壳 ${se.sticky || 0} · 再练 ${se.again || 0}${todayH.recorded ? ` · 录音 ${todayH.recorded}` : ""}</div>
       <div>累计能开口/变形：${spoken} · 其中能变形：${flex}</div>
       <div>起步岛进度：${Math.round(ratio * 100)}% ${extensionsUnlocked() ? "（扩展岛已解锁）" : "（约 70% 解锁扩展岛）"}</div>
       <div class="enspeak-progress-bar" aria-hidden="true"><span style="width:${Math.min(100, Math.round(ratio * 100))}%"></span></div>
       <div>连续达标：${state.streak || 0} 天</div>
+    `;
+    renderCheckin();
+  }
+
+  function renderCheckin() {
+    const el = $("#enspeak-checkin");
+    if (!el) return;
+    const days = [];
+    const now = new Date();
+    for (let i = 27; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const key = todayKey(d);
+      const h = state.history[key] || {};
+      const spokenN = h.spoken || 0;
+      const goal = !!h.goal;
+      let cls = "is-empty";
+      if (goal) cls = "is-goal";
+      else if (spokenN > 0) cls = "is-spoken";
+      const title = goal
+        ? `${key} · 达标 · 开口 ${spokenN || "✓"}`
+        : spokenN
+          ? `${key} · 开口 ${spokenN} 句 · 未达标`
+          : `${key} · 未练`;
+      days.push(
+        `<button type="button" class="enspeak-checkin-day ${cls}" data-day="${escapeAttr(key)}" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}"><span>${d.getDate()}</span></button>`
+      );
+    }
+    el.innerHTML = `
+      <div class="enspeak-checkin-head hint tight">近 28 天打卡</div>
+      <div class="enspeak-checkin-grid">${days.join("")}</div>
     `;
   }
 
@@ -1065,8 +1154,13 @@
       const mine = $("#enspeak-dlg-mine")?.value?.trim() || "";
       if (mine) setSentencePatch(id, { myVersion: mine });
       markSpoken(id);
-      $("#enspeak-dlg-status").textContent = "已记：今日真实开口";
+      $("#enspeak-dlg-status").textContent = "已记：今日真实开口 · 可再点自评";
       toast("已记开口");
+    });
+    $("#enspeak-dlg-eval")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-eval]");
+      if (!b) return;
+      recordSelfEval(b.dataset.eval);
     });
     $("#enspeak-dlg-rec")?.addEventListener("click", async () => {
       const btn = $("#enspeak-dlg-rec");
@@ -1094,7 +1188,10 @@
             audio.hidden = false;
           }
           if (play) play.hidden = false;
-          $("#enspeak-dlg-status").textContent = "录音已保存（仅本机，可回放）";
+          bumpHistory({ recordedDelta: 1 });
+          saveState();
+          $("#enspeak-dlg-status").textContent = "录音已保存（仅本机）· 回放后点自评或「已开口」";
+          renderCheckin();
         };
         mediaRecorder.start();
         btn.textContent = "停止";
@@ -1196,13 +1293,13 @@
 
   function runPseudoDialogue() {
     const island = activeIsland;
-    const lines = CONTENT.dialogues?.[island] || CONTENT.dialogues?.who;
+    const lines = CONTENT.dialogues?.[island];
     if (!lines?.length) {
-      toast("当前岛暂无伪对话，试试「我是谁 / 今天 / 喜好 / 接话」");
+      toast("当前岛暂无伪对话，换一个岛或先练对话链");
       return;
     }
-    openDrill("listen");
-    state.today.listen.island = ["who", "today", "likes", "reply"].includes(island) ? island : state.today.listen.island;
+    // 听跟段优先切到当前岛（各岛均有伪对话）
+    state.today.listen.island = island;
     saveState();
     switchTab("today");
     openDrill("listen");
@@ -1350,6 +1447,21 @@
       saveState();
       toast("生活档案已保存");
       renderAll();
+    });
+
+    $("#enspeak-checkin")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-day]");
+      if (!b) return;
+      const key = b.dataset.day;
+      const h = state.history[key] || {};
+      const se = h.selfEval || {};
+      if (h.goal) {
+        toast(`${key} · 达标 · 开口 ${h.spoken || "✓"} · 流畅${se.smooth || 0}/卡壳${se.sticky || 0}`);
+      } else if (h.spoken) {
+        toast(`${key} · 开口 ${h.spoken} 句 · 未达标 · 再练${se.again || 0}`);
+      } else {
+        toast(`${key} · 未练`);
+      }
     });
 
     $("#enspeak-export")?.addEventListener("click", exportJson);
