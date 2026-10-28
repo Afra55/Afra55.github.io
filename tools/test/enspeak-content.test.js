@@ -134,6 +134,18 @@ t("开口句英文不含「A / B」二选一粘连（避免整句练错）", () 
   }
 });
 
+t("10 分钟极简 / 对方接话 / 卡壳复习 / 档案无稿", () => {
+  assert.ok(js.includes("startExpress"));
+  assert.ok(js.includes("renderExpressDrill"));
+  assert.ok(js.includes("partnerPromptBundle"));
+  assert.ok(js.includes("queueForReview"));
+  assert.ok(js.includes("profileSpeakTargets"));
+  assert.ok(js.includes("reviewQueue"));
+  assert.ok(html.includes("enspeak-express"));
+  assert.ok(html.includes("10 分钟极简"));
+  assert.ok(content.method?.expressMinutes === 10 || content.method?.dailyMinutes);
+});
+
 t("准确度门禁：禁易练错英文 / 禁中文斜杠二选一 / 问句中文要像问句", () => {
   const { fillEnTemplate } = require("../lib/enspeak-fill.js");
   const banEn =

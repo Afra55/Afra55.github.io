@@ -28,12 +28,17 @@
     return {
       profile: {},
       sentences: {},
+      /** @type {{ id: string, reason: string, addedOn: string }[]} */
+      reviewQueue: [],
       today: {
         date: "",
         blocks: { listen: false, reword: false, reply: false, output: false },
         spokenIds: [],
         listen: { island: "who", day: 0, count: 0, startedOn: "" },
         newIds: [],
+        expressStep: 0,
+        expressIds: [],
+        expressMode: false,
       },
       streak: 0,
       lastGoalDate: "",
@@ -69,7 +74,14 @@
         ...raw,
         profile: { ...base.profile, ...(raw.profile || {}) },
         sentences: { ...(raw.sentences || {}) },
-        today: { ...base.today, ...(raw.today || {}), blocks: { ...base.today.blocks, ...(raw.today?.blocks || {}) }, listen: { ...base.today.listen, ...(raw.today?.listen || {}) } },
+        reviewQueue: Array.isArray(raw.reviewQueue) ? raw.reviewQueue : [],
+        today: {
+          ...base.today,
+          ...(raw.today || {}),
+          blocks: { ...base.today.blocks, ...(raw.today?.blocks || {}) },
+          listen: { ...base.today.listen, ...(raw.today?.listen || {}) },
+          expressIds: Array.isArray(raw.today?.expressIds) ? raw.today.expressIds : [],
+        },
         settings: { ...base.settings, ...(raw.settings || {}) },
         history: { ...(raw.history || {}) },
       };
@@ -109,6 +121,9 @@
         ? { ...state.today.listen }
         : { island: focusIslandId(), day: 1, count: 0, startedOn: key },
       newIds: [],
+      expressStep: 0,
+      expressIds: [],
+      expressMode: false,
     };
     // lock listen clip 3 days
     const lockDays = CONTENT?.method?.listenLockDays || 3;
@@ -253,19 +268,43 @@
     renderAll();
   }
 
+  function queueForReview(id, reason) {
+    if (!id || !sentenceById(id)) return;
+    if (!Array.isArray(state.reviewQueue)) state.reviewQueue = [];
+    const rest = state.reviewQueue.filter((r) => r.id !== id);
+    rest.unshift({ id, reason: reason || "sticky", addedOn: todayKey() });
+    state.reviewQueue = rest.slice(0, 40);
+  }
+
+  function clearFromReview(id) {
+    if (!id || !Array.isArray(state.reviewQueue)) return;
+    state.reviewQueue = state.reviewQueue.filter((r) => r.id !== id);
+  }
+
+  function reviewIds() {
+    return (state.reviewQueue || []).map((r) => r.id).filter((id) => sentenceById(id));
+  }
+
   function recordSelfEval(kind) {
     const id = activeSentenceId;
     bumpHistory({ eval: kind });
     if (id) {
       setSentencePatch(id, { lastEval: kind, lastEvalAt: todayKey() });
     }
+    if (kind === "again" || kind === "sticky") {
+      if (id) queueForReview(id, kind);
+    }
+    if (kind === "smooth" && id) {
+      clearFromReview(id);
+    }
     if (kind === "again") {
       saveState();
-      $("#enspeak-dlg-status").textContent = "再练：先听示范，再说一遍自己的版本";
-      toast("再练一次 · 先听再开口");
+      $("#enspeak-dlg-status").textContent = "再练：已加入明日复习 · 先听示范再说一遍";
+      toast("已加入复习 · 先听再开口");
       const line = $("#enspeak-dlg-mine")?.value || $("#enspeak-dlg-en")?.textContent || "";
       if (line) speakText(line);
       renderCheckin();
+      renderReviewNudge();
       return;
     }
     if (id) {
@@ -280,9 +319,10 @@
       saveState();
       renderReview();
     }
-    const label = kind === "smooth" ? "流畅" : "卡了一下";
+    const label = kind === "smooth" ? "流畅" : "卡了一下（已进复习）";
     $("#enspeak-dlg-status").textContent = `已记开口 · 自评：${label}`;
-    toast(`已记 · ${label}`);
+    toast(kind === "smooth" ? "已记 · 流畅" : "已记 · 卡壳句进复习");
+    renderReviewNudge();
   }
 
   function starterFlexibleRatio() {
@@ -321,13 +361,18 @@
   }
 
   function pickTodayNew(n = 6) {
+    const ids = [];
+    // 卡壳复习置顶
+    for (const id of reviewIds()) {
+      if (ids.length >= n) break;
+      if (!ids.includes(id)) ids.push(id);
+    }
     const focus = weekPlan()?.focus || ["who"];
     const pool = (CONTENT?.sentences || []).filter(
       (s) => focus.includes(s.island) && getStatus(s.id) === "new" && s.role !== "prompt"
     );
     const lifelineNew = lifelines().filter((s) => getStatus(s.id) === "new");
     const mixed = [...lifelineNew.slice(0, 2), ...pool];
-    const ids = [];
     for (const s of mixed) {
       if (ids.length >= n) break;
       if (!ids.includes(s.id)) ids.push(s.id);
@@ -391,17 +436,38 @@
     if (!el) return;
     const spoken = state.today.spokenIds.length;
     const need = CONTENT.method.mustSpeak || 2;
+    const rq = reviewIds().length;
     el.innerHTML = `
       <span class="enspeak-pill">第 ${week} 周 · ${escapeHtml(plan?.title || "")}</span>
       <span class="enspeak-pill">连续达标 ${state.streak || 0} 天</span>
       <span class="enspeak-pill ${goalReached() ? "is-ok" : ""}">${goalReached() ? "今日已达标" : `开口 ${spoken}/${need}`}</span>
       <span class="enspeak-pill">听跟第 ${state.today.listen.day || 1} 天</span>
+      ${rq ? `<span class="enspeak-pill">复习 ${rq} 句</span>` : ""}
     `;
     const hint = $("#enspeak-today-hint");
     if (hint) {
       hint.textContent =
-        plan?.hint || "今日按 听→裂变→接话→无稿开口；架子换词时变体带中文，说出口再勾完成。";
+        plan?.hint ||
+        "求快点「10 分钟极简」；求完整走四段。卡壳自评会进明日复习。";
     }
+    renderReviewNudge();
+  }
+
+  function renderReviewNudge() {
+    const el = $("#enspeak-review-nudge");
+    if (!el) return;
+    const ids = reviewIds();
+    if (!ids.length) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    const sample = ids
+      .slice(0, 3)
+      .map((id) => sentenceById(id)?.zh || id)
+      .join(" · ");
+    el.textContent = `明日/今日复习置顶 ${ids.length} 句：${sample}${ids.length > 3 ? "…" : ""}`;
   }
 
   function renderBlocks() {
@@ -431,6 +497,7 @@
     const body = $("#enspeak-drill-body");
     if (!drill || !body) return;
     drill.hidden = false;
+    if (block !== "express") state.today.expressMode = false;
     if (block === "listen") {
       title.textContent = "听跟 · 同一段连用多天";
       body.innerHTML = renderListenDrill();
@@ -447,7 +514,357 @@
       title.textContent = "无稿开口 · 说出口才算会";
       body.innerHTML = renderOutputDrill();
       bindOutputDrill(body);
+    } else if (block === "express") {
+      title.textContent = "10 分钟极简";
+      body.innerHTML = renderExpressDrill();
+      bindExpressDrill(body);
     }
+  }
+
+  function pickExpressIds() {
+    const ids = [];
+    for (const id of reviewIds()) {
+      if (ids.length >= 3) break;
+      if (!ids.includes(id)) ids.push(id);
+    }
+    for (const id of pickTodayNew(8)) {
+      if (ids.length >= 3) break;
+      if (!ids.includes(id)) ids.push(id);
+    }
+    return ids.slice(0, 3);
+  }
+
+  function profileSpeakTargets() {
+    const prefer = ["who01", "who03", "who05", "td02", "td03", "chat01", "mood01"];
+    const out = [];
+    for (const id of prefer) {
+      if (out.length >= 2) break;
+      if (sentenceById(id) && !out.includes(id)) out.push(id);
+    }
+    for (const id of reviewIds()) {
+      if (out.length >= 2) break;
+      if (!out.includes(id) && sentenceById(id)) out.push(id);
+    }
+    return out;
+  }
+
+  function partnerPromptBundle() {
+    const island = state.today.listen.island || focusIslandId();
+    const dlg = CONTENT.dialogues?.[island] || CONTENT.dialogues?.who || [];
+    let youSaid = "";
+    let youZh = "用英语说出你的那一句";
+    const partner = [];
+    // 取一段 B 作为「你刚说的」，后续 A 作为对方可能接话
+    for (let i = 0; i < dlg.length; i++) {
+      if (dlg[i].speaker === "B") {
+        youSaid = fillTemplate(dlg[i].text);
+        youZh = `伪对话里你（B）刚说完这句`;
+        for (let j = i + 1; j < dlg.length && partner.length < 3; j++) {
+          if (dlg[j].speaker === "A") partner.push(fillTemplate(dlg[j].text));
+        }
+        if (partner.length) break;
+      }
+    }
+    if (!youSaid && dlg[0]) {
+      youSaid = fillTemplate(dlg[0].text);
+      for (let j = 1; j < dlg.length && partner.length < 3; j++) {
+        partner.push(fillTemplate(dlg[j].text));
+      }
+    }
+    while (partner.length < 2) {
+      const pool = [...replies(), ...lifelines()];
+      const s = pool[partner.length % Math.max(1, pool.length)];
+      if (s) partner.push(displayEn(s));
+      else partner.push("Really? Tell me more.");
+    }
+    const back = [...replies()].slice(0, 3).map((s) => ({
+      id: s.id,
+      en: displayEn(s),
+      zh: s.zh,
+    }));
+    while (back.length < 2) {
+      back.push({ id: "", en: "Same here.", zh: "彼此彼此 / 我也是" });
+    }
+    return { island, youSaid, youZh, partner: partner.slice(0, 3), back: back.slice(0, 3) };
+  }
+
+  function startExpress() {
+    ensureToday();
+    state.today.expressMode = true;
+    state.today.expressStep = 1;
+    state.today.expressIds = pickExpressIds();
+    state.today.newIds = [...new Set([...(state.today.expressIds || []), ...(state.today.newIds || [])])];
+    saveState();
+    switchTab("today");
+    openDrill("express");
+    toast("极简开始：听跟 → 裂变 3 句 → 对方接话 → 无稿 2 句");
+  }
+
+  function renderExpressDrill() {
+    const step = state.today.expressStep || 1;
+    const steps = ["听跟", "裂变×3", "对方接话", "档案无稿×2"];
+    const nav = `<div class="enspeak-express-steps" aria-label="极简进度">${steps
+      .map((label, i) => {
+        const n = i + 1;
+        const on = n === step;
+        const done = n < step;
+        return `<span class="enspeak-express-step ${on ? "is-on" : ""} ${done ? "is-done" : ""}">${n}. ${escapeHtml(label)}</span>`;
+      })
+      .join("")}</div>`;
+
+    if (step === 1) {
+      return `${nav}
+        <p class="hint tight">约 2～3 分钟：听整段，跟读至少 1 次，再下一步。</p>
+        ${renderListenDrill()}
+        <div class="btn-row tool-actions enspeak-action-row">
+          <button type="button" class="primary-btn" data-xact="next">下一步：裂变</button>
+        </div>`;
+    }
+    if (step === 2) {
+      const ids = state.today.expressIds?.length ? state.today.expressIds : pickExpressIds();
+      state.today.expressIds = ids;
+      const cards = ids
+        .map((id) => {
+          const s = sentenceById(id);
+          if (!s) return "";
+          const mine = state.sentences[id]?.myVersion || displayEn(s);
+          const rev = reviewIds().includes(id) ? " · 复习" : "";
+          return `<div class="enspeak-sent" data-sid="${id}">
+            <div class="enspeak-sent-en">${escapeHtml(fillTemplate(s.en))}</div>
+            <div class="enspeak-sent-zh">${escapeHtml(s.zh)}${escapeHtml(rev)}</div>
+            <label class="enspeak-field">我的版本
+              <input class="text-input enspeak-mine-input" data-sid="${id}" value="${escapeAttr(mine)}" />
+            </label>
+            <div class="btn-row tool-actions">
+              <button type="button" class="ghost-btn" data-xact="speak" data-sid="${id}">听 / 跟读</button>
+              <button type="button" class="primary-btn" data-xact="spoken" data-sid="${id}">已开口</button>
+            </div>
+          </div>`;
+        })
+        .join("");
+      return `${nav}
+        <p class="hint tight">约 3 分钟：3 句改成自己的并说出口（复习句优先）。</p>
+        ${cards}
+        <div class="btn-row tool-actions enspeak-action-row">
+          <button type="button" class="ghost-btn" data-xact="back">上一步</button>
+          <button type="button" class="primary-btn" data-xact="next">下一步：对方接话</button>
+        </div>`;
+    }
+    if (step === 3) {
+      const bundle = partnerPromptBundle();
+      return `${nav}
+        <p class="hint tight">约 2 分钟：你说完后，对方可能这样接；再选一句回过去。</p>
+        <div class="enspeak-partner">
+          <div class="enspeak-partner-you">
+            <div class="enspeak-chain-kicker">你刚说</div>
+            <div class="enspeak-sent-en">${escapeHtml(bundle.youSaid)}</div>
+            <div class="enspeak-sent-zh">${escapeHtml(bundle.youZh)}</div>
+            <button type="button" class="ghost-btn" data-xact="speak-you">听我这句</button>
+          </div>
+          <div class="enspeak-partner-them">
+            <div class="enspeak-chain-kicker">对方下一句（可能）</div>
+            ${bundle.partner
+              .map(
+                (line, i) => `<button type="button" class="enspeak-sent" data-xact="speak-partner" data-line="${escapeAttr(line)}">
+                  <div class="enspeak-sent-en">${escapeHtml(line)}</div>
+                  <div class="enspeak-sent-meta">点按试听 · 选项 ${i + 1}</div>
+                </button>`
+              )
+              .join("")}
+          </div>
+          <div class="enspeak-partner-back">
+            <div class="enspeak-chain-kicker">你怎么回</div>
+            ${bundle.back
+              .map(
+                (b) => `<div class="enspeak-sent">
+                  <div class="enspeak-sent-en">${escapeHtml(b.en)}</div>
+                  <div class="enspeak-sent-zh">${escapeHtml(b.zh)}</div>
+                  <div class="btn-row tool-actions">
+                    <button type="button" class="ghost-btn" data-xact="speak-back" data-line="${escapeAttr(b.en)}">听</button>
+                    <button type="button" class="primary-btn" data-xact="said-back" data-sid="${escapeAttr(b.id || "")}" data-line="${escapeAttr(b.en)}">已开口回一句</button>
+                  </div>
+                </div>`
+              )
+              .join("")}
+          </div>
+        </div>
+        <div class="btn-row tool-actions enspeak-action-row">
+          <button type="button" class="ghost-btn" data-xact="back">上一步</button>
+          <button type="button" class="primary-btn" data-xact="next">下一步：无稿</button>
+        </div>`;
+    }
+    // step 4 output
+    const targets = profileSpeakTargets();
+    const p = state.profile || {};
+    const profileHint = [p.name && `称呼 ${p.name}`, p.city && `住 ${p.city}`, p.job && `身份 ${p.job}`]
+      .filter(Boolean)
+      .join(" · ");
+    return `${nav}
+      <p class="hint tight">约 3 分钟：用<strong>你的档案</strong>说 2 句真实情况（可先藏英文自己说）。${
+        profileHint ? `当前：${escapeHtml(profileHint)}` : "档案空着也行，先按提示改成你的事实。"
+      }</p>
+      <div class="enspeak-sent-list">${targets
+        .map((id) => {
+          const s = sentenceById(id);
+          if (!s) return "";
+          const done = state.today.spokenIds.includes(id);
+          return `<div class="enspeak-sent enspeak-variant" data-sid="${id}">
+            <div class="enspeak-sent-zh">意图：${escapeHtml(s.zh)}</div>
+            <div class="enspeak-sent-en">${escapeHtml(displayEn(s))}</div>
+            <div class="btn-row tool-actions">
+              <button type="button" class="ghost-btn" data-xact="blind-one" data-sid="${id}">藏英文</button>
+              <button type="button" class="ghost-btn" data-xact="speak" data-sid="${id}">听示范</button>
+              <button type="button" class="primary-btn" data-xact="spoken" data-sid="${id}" ${done ? "disabled" : ""}>${
+                done ? "今日已开口" : "已开口"
+              }</button>
+            </div>
+          </div>`;
+        })
+        .join("")}</div>
+      <div class="btn-row tool-actions enspeak-action-row">
+        <button type="button" class="ghost-btn" data-xact="back">上一步</button>
+        <button type="button" class="primary-btn" data-xact="finish">完成极简</button>
+      </div>`;
+  }
+
+  function bindExpressDrill(root) {
+    // 每次重绘替换 handler，避免叠加
+    root.onclick = (e) => {
+      const btn = e.target.closest("[data-xact], [data-act]");
+      // allow listen drill inner acts
+      if (!btn) return;
+      const xact = btn.dataset.xact || "";
+      const act = btn.dataset.act || "";
+      const sid = btn.dataset.sid;
+
+      if (act === "play-all" || act === "shadow" || act === "done") {
+        // reuse listen handlers lightly
+        const island = state.today.listen.island || focusIslandId();
+        const lines = (CONTENT.dialogues?.[island] || []).map((l) => fillTemplate(l.text));
+        if (act === "play-all") void playQueue(lines);
+        else if (act === "shadow") {
+          state.today.listen.count = (state.today.listen.count || 0) + 1;
+          if (state.today.listen.count >= 1) state.today.blocks.listen = true;
+          saveState();
+          openDrill("express");
+          renderBlocks();
+          renderTodayMeta();
+        } else if (act === "done") {
+          state.today.blocks.listen = true;
+          saveState();
+          renderBlocks();
+          toast("听跟完成");
+        }
+        return;
+      }
+
+      if (xact === "speak" && sid) {
+        const input = root.querySelector(`input[data-sid="${sid}"]`);
+        speakText(input?.value || displayEn(sentenceById(sid)));
+        return;
+      }
+      if (xact === "spoken" && sid) {
+        const input = root.querySelector(`input[data-sid="${sid}"]`);
+        const val = input?.value?.trim();
+        if (val) {
+          const fills = new Set(state.sentences[sid]?.fills || []);
+          fills.add(val.toLowerCase());
+          setSentencePatch(sid, { myVersion: val, fills: [...fills], status: "practicing" });
+        }
+        markSpoken(sid);
+        openDrill("express");
+        return;
+      }
+      if (xact === "speak-you") {
+        const bundle = partnerPromptBundle();
+        speakText(bundle.youSaid);
+        return;
+      }
+      if (xact === "speak-partner" || xact === "speak-back") {
+        speakText(btn.dataset.line || "");
+        return;
+      }
+      if (xact === "said-back") {
+        const id = btn.dataset.sid;
+        if (id && sentenceById(id)) markSpoken(id);
+        else {
+          state.today.blocks.reply = true;
+          bumpHistory({ spokenDelta: 1 });
+          saveState();
+        }
+        state.today.blocks.reply = true;
+        saveState();
+        maybeCompleteGoal();
+        renderBlocks();
+        toast("接话已记");
+        openDrill("express");
+        return;
+      }
+      if (xact === "blind-one" && sid) {
+        const card = root.querySelector(`.enspeak-variant[data-sid="${sid}"]`);
+        card?.classList.toggle("is-blind");
+        return;
+      }
+      if (xact === "back") {
+        state.today.expressStep = Math.max(1, (state.today.expressStep || 1) - 1);
+        saveState();
+        openDrill("express");
+        return;
+      }
+      if (xact === "next") {
+        const step = state.today.expressStep || 1;
+        if (step === 1) {
+          state.today.blocks.listen = true;
+          state.today.expressStep = 2;
+        } else if (step === 2) {
+          // save inputs
+          for (const id of state.today.expressIds || []) {
+            const input = root.querySelector(`input[data-sid="${id}"]`);
+            const val = input?.value?.trim();
+            if (val) {
+              const fills = new Set(state.sentences[id]?.fills || []);
+              fills.add(val.toLowerCase());
+              setSentencePatch(id, {
+                myVersion: val,
+                fills: [...fills],
+                status: getStatus(id) === "new" ? "practicing" : getStatus(id),
+              });
+            }
+          }
+          state.today.blocks.reword = true;
+          state.today.expressStep = 3;
+        } else if (step === 3) {
+          state.today.blocks.reply = true;
+          state.today.expressStep = 4;
+        }
+        saveState();
+        maybeCompleteGoal();
+        renderBlocks();
+        renderTodayMeta();
+        openDrill("express");
+        return;
+      }
+      if (xact === "finish") {
+        const need = CONTENT?.method?.mustSpeak || 2;
+        if ((state.today.spokenIds || []).length < need) {
+          toast(`再无稿开口 ${need - state.today.spokenIds.length} 句`);
+          return;
+        }
+        state.today.blocks.output = true;
+        state.today.blocks.listen = true;
+        state.today.blocks.reword = true;
+        state.today.blocks.reply = true;
+        state.today.expressMode = false;
+        state.today.expressStep = 0;
+        saveState();
+        maybeCompleteGoal();
+        renderBlocks();
+        renderTodayMeta();
+        toast(goalReached() ? "极简完成 · 今日达标" : "极简完成 · 开口已记");
+        const d = $("#enspeak-drill");
+        if (d) d.hidden = true;
+      }
+    };
   }
 
   function renderListenDrill() {
@@ -627,20 +1044,37 @@
   }
 
   function renderOutputDrill() {
-    const ids = [...new Set([...(state.today.newIds || []), ...(state.today.spokenIds || [])])].slice(0, 8);
+    const profileFirst = profileSpeakTargets();
+    const ids = [
+      ...new Set([
+        ...profileFirst,
+        ...reviewIds(),
+        ...(state.today.newIds || []),
+        ...(state.today.spokenIds || []),
+      ]),
+    ].slice(0, 8);
     const fallback = pickTodayNew(4);
     const use = ids.length ? ids : fallback;
+    const p = state.profile || {};
+    const profileHint = [p.name && `你是 ${p.name}`, p.city && `住 ${p.city}`, p.job && `${p.job}`]
+      .filter(Boolean)
+      .join(" · ");
     return `
-      <p class="hint tight">对着空气说也行；有真人就优先找人。勾选「已用真实情况说出口」才算数。</p>
+      <p class="hint tight">优先用<strong>生活档案</strong>说真实情况；对着空气也行。说出口才算数。${
+        profileHint ? `（${escapeHtml(profileHint)}）` : "可先去「档案」填名字/城市/工作。"
+      }</p>
       <div class="enspeak-sent-list">${use
         .map((id) => {
           const s = sentenceById(id);
           if (!s) return "";
           const done = state.today.spokenIds.includes(id);
-          return `<div class="enspeak-sent">
+          const rev = reviewIds().includes(id) ? " · 复习" : "";
+          const prof = profileFirst.includes(id) ? " · 档案题" : "";
+          return `<div class="enspeak-sent enspeak-variant" data-sid="${id}">
+            <div class="enspeak-sent-zh">意图：${escapeHtml(s.zh)}${escapeHtml(rev)}${escapeHtml(prof)}</div>
             <div class="enspeak-sent-en">${escapeHtml(displayEn(s))}</div>
-            <div class="enspeak-sent-zh">${escapeHtml(s.zh)}</div>
             <div class="btn-row tool-actions">
+              <button type="button" class="ghost-btn" data-act="blind" data-sid="${id}">藏英文</button>
               <button type="button" class="ghost-btn" data-act="speak" data-sid="${id}">听示范</button>
               <button type="button" class="primary-btn" data-act="spoken" data-sid="${id}" ${done ? "disabled" : ""}>${done ? "今日已开口" : "已开口"}</button>
             </div>
@@ -654,6 +1088,10 @@
       const btn = e.target.closest("[data-act]");
       if (!btn) return;
       const id = btn.dataset.sid;
+      if (btn.dataset.act === "blind" && id) {
+        root.querySelector(`.enspeak-variant[data-sid="${id}"]`)?.classList.toggle("is-blind");
+        return;
+      }
       if (btn.dataset.act === "speak") speakText(displayEn(sentenceById(id)));
       if (btn.dataset.act === "spoken") {
         markSpoken(id);
@@ -1077,6 +1515,7 @@
     el.innerHTML = `
       <div>今日开口：${spokenToday} 句 · 达标：${goalReached() ? "是" : "尚未"}</div>
       <div>今日自评：流畅 ${se.smooth || 0} · 卡壳 ${se.sticky || 0} · 再练 ${se.again || 0}${todayH.recorded ? ` · 录音 ${todayH.recorded}` : ""}</div>
+      <div>复习队列：${reviewIds().length} 句（卡壳/再练会置顶到极简与裂变）</div>
       <div>累计能开口/变形：${spoken} · 其中能变形：${flex}</div>
       <div>起步岛进度：${Math.round(ratio * 100)}% ${extensionsUnlocked() ? "（扩展岛已解锁）" : "（约 70% 解锁扩展岛）"}</div>
       <div class="enspeak-progress-bar" aria-hidden="true"><span style="width:${Math.min(100, Math.round(ratio * 100))}%"></span></div>
@@ -1323,8 +1762,11 @@
       if (b) openDrill(b.dataset.block);
     });
 
+    $("#enspeak-express")?.addEventListener("click", () => startExpress());
+
     $("#enspeak-start-today")?.addEventListener("click", () => {
       ensureToday();
+      state.today.expressMode = false;
       if (!state.today.newIds?.length) {
         state.today.newIds = pickTodayNew(6);
         saveState();
