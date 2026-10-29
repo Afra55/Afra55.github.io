@@ -17,6 +17,24 @@ test("emptyRequest defaults", () => {
   assert.strictEqual(r.bodyType, "none");
   assert.ok(r.id);
   assert.deepStrictEqual(r.headers, []);
+  assert.deepStrictEqual(r.tagIds, []);
+});
+
+test("tags normalize + export roundtrip", () => {
+  const tag = P.emptyTag({ id: "t1", name: "登录" });
+  const item = P.emptyRequest({
+    name: "login",
+    url: "https://x.test/login",
+    tagIds: ["t1", "t1", "", "t2"],
+  });
+  assert.deepStrictEqual(item.tagIds, ["t1", "t2"]);
+  const pack = P.packExport([item], { all: false, tags: [tag, P.emptyTag({ id: "t2", name: "其它" })] });
+  assert.strictEqual(pack.version, 2);
+  assert.strictEqual(pack.tags.length, 2);
+  const unpacked = P.unpackImport(JSON.stringify(pack));
+  assert.strictEqual(unpacked.items.length, 1);
+  assert.deepStrictEqual(unpacked.items[0].tagIds, ["t1", "t2"]);
+  assert.ok(unpacked.tags.some((t) => t.id === "t1" && t.name === "登录"));
 });
 
 test("applyQueryToUrl + buildFetchInit", () => {
@@ -106,9 +124,10 @@ test("packExport / unpackImport", () => {
   const item = P.emptyRequest({ name: "one", url: "https://x.test/" });
   const pack = P.packExport([item], { all: false });
   assert.strictEqual(pack.kind, P.EXPORT_KIND);
-  const items = P.unpackImport(JSON.stringify(pack));
+  const { items, tags } = P.unpackImport(JSON.stringify(pack));
   assert.strictEqual(items.length, 1);
   assert.strictEqual(items[0].name, "one");
+  assert.ok(Array.isArray(tags));
   assert.throws(() => P.unpackImport({ kind: "other", items: [] }), /不是本工具/);
 });
 

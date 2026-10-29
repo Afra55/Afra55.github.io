@@ -15,6 +15,42 @@
     return { id: uid(4), enabled: true, key: "", value: "" };
   }
 
+  function normalizeTagIds(raw) {
+    if (!Array.isArray(raw)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const id of raw) {
+      const s = String(id || "").trim();
+      if (!s || seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    return out;
+  }
+
+  function emptyTag(partial = {}) {
+    const name = String(partial.name || "").trim() || "未命名标签";
+    return {
+      id: partial.id || uid(8),
+      name,
+      createdAt: partial.createdAt || Date.now(),
+    };
+  }
+
+  function normalizeTags(raw) {
+    if (!Array.isArray(raw)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const t of raw) {
+      if (!t || typeof t !== "object") continue;
+      const tag = emptyTag(t);
+      if (seen.has(tag.id)) continue;
+      seen.add(tag.id);
+      out.push(tag);
+    }
+    return out;
+  }
+
   function emptyRequest(partial = {}) {
     return {
       id: partial.id || uid(12),
@@ -26,6 +62,7 @@
       cookies: Array.isArray(partial.cookies) ? partial.cookies : [],
       bodyType: partial.bodyType || "none",
       bodyText: partial.bodyText || "",
+      tagIds: normalizeTagIds(partial.tagIds),
       createdAt: partial.createdAt || Date.now(),
       updatedAt: partial.updatedAt || Date.now(),
     };
@@ -420,13 +457,18 @@
     return rows.filter((r) => r.key);
   }
 
-  function packExport(items, { all = false } = {}) {
+  function packExport(items, { all = false, tags = [] } = {}) {
+    const list = (items || []).map((it) => emptyRequest(it));
+    const used = new Set();
+    for (const it of list) for (const id of it.tagIds || []) used.add(id);
+    const catalog = normalizeTags(tags).filter((t) => used.has(t.id) || all);
     return {
       kind: EXPORT_KIND,
-      version: 1,
+      version: 2,
       exportedAt: Date.now(),
       all: Boolean(all),
-      items: (items || []).map((it) => emptyRequest(it)),
+      tags: catalog,
+      items: list,
     };
   }
 
@@ -445,7 +487,10 @@
           ? [data]
           : [];
     if (!items.length) throw new Error("文件里没有请求");
-    return items.map((it) => emptyRequest(it));
+    return {
+      tags: normalizeTags(data.tags),
+      items: items.map((it) => emptyRequest(it)),
+    };
   }
 
   const api = {
@@ -453,7 +498,10 @@
     METHODS,
     uid,
     emptyKv,
+    emptyTag,
     emptyRequest,
+    normalizeTagIds,
+    normalizeTags,
     enabledPairs,
     applyQueryToUrl,
     parseQueryFromUrl,

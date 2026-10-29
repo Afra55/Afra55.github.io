@@ -1,7 +1,7 @@
 <section id="apidebug" class="panel tool-panel" data-reveal>
   <div class="panel-head">
     <h1>API 调试</h1>
-    <p>本地 REST：方法 / Header / Cookie / Body · 收藏导入导出 · 请求 ↔ cURL。跨域可勾选经统一本机桥代发。</p>
+    <p>本地 REST：方法 / Header / Cookie / Body · 收藏可打标签筛选 · 导入导出 · 请求 ↔ cURL。跨域可勾选经统一本机桥代发。</p>
   </div>
   <div class="panel-body apid-body">
     <p class="error" id="apid-error" hidden role="alert"></p>
@@ -18,8 +18,13 @@
           <button type="button" class="ghost-btn" id="apid-export-all" title="导出全部收藏">导出全部</button>
         </div>
         <input id="apid-import-file" type="file" accept=".json,application/json" hidden />
+        <label class="apid-search-lab" for="apid-search">
+          <span class="sr-only">搜索收藏</span>
+          <input id="apid-search" type="search" placeholder="搜索名称 / URL / 标签…" autocomplete="off" />
+        </label>
+        <div class="apid-tag-filters" id="apid-tag-filters" aria-label="标签筛选"></div>
         <ul class="apid-list" id="apid-list" aria-label="收藏列表"></ul>
-        <p class="hint tight apid-side-hint">右键：发送 / cURL / 导出 / 删除</p>
+        <p class="hint tight apid-side-hint">右键：发送 / cURL / 导出 / 删除 · 标签可点「×」移除</p>
       </aside>
 
       <div class="apid-main">
@@ -44,6 +49,10 @@
             <label class="flag apid-bridge-flag" title="打开后经本机桥代发，可带自定义 Cookie / 绕过 CORS">
               <input type="checkbox" id="apid-use-bridge" /> 经本机桥
             </label>
+          </div>
+          <div class="apid-editor-tags" id="apid-editor-tags" aria-label="当前请求标签">
+            <div class="apid-chip-row" id="apid-chip-row"></div>
+            <button type="button" class="ghost-btn apid-tag-add" id="apid-tag-add" title="添加标签">+ 标签</button>
           </div>
           <div class="btn-row tool-actions apid-toolbar">
             <button type="button" class="ghost-btn" id="apid-to-curl">复制 cURL</button>
@@ -158,6 +167,22 @@
       <textarea id="apid-curl-input" class="mono area" rows="10" placeholder="粘贴 curl …" spellcheck="false"></textarea>
       <div class="btn-row tool-actions">
         <button type="button" class="primary-btn" id="apid-curl-apply">解析并填入</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="apid-tag-dlg" class="apid-dlg" aria-label="添加标签">
+    <form method="dialog" class="apid-dlg-inner">
+      <div class="apid-dlg-head">
+        <strong>添加标签</strong>
+        <button type="submit" class="ghost-btn" value="cancel">关闭</button>
+      </div>
+      <p class="hint tight">输入可搜索已有标签；没有则新建。删除标签不会删收藏。</p>
+      <input id="apid-tag-search" type="search" placeholder="搜索或新建标签…" autocomplete="off" />
+      <div class="apid-tag-suggest" id="apid-tag-suggest"></div>
+      <div class="btn-row tool-actions">
+        <button type="submit" class="primary-btn" value="ok" id="apid-tag-ok">使用输入名 / 添加</button>
+        <button type="submit" class="ghost-btn" value="cancel">取消</button>
       </div>
     </form>
   </dialog>

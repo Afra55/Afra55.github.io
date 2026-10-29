@@ -16,10 +16,16 @@
   const IDB_KEY = "collection-v1";
   const BRIDGE_PREF_KEY = "devtools-apidebug-use-bridge";
 
+  const FILTER_ALL = "all";
+  const FILTER_UNTAGGED = "untagged";
+
   const els = {
     error: $("#apid-error"),
     list: $("#apid-list"),
     count: $("#apid-count"),
+    search: $("#apid-search"),
+    tagFilters: $("#apid-tag-filters"),
+    chipRow: $("#apid-chip-row"),
     method: $("#apid-method"),
     url: $("#apid-url"),
     name: $("#apid-name"),
@@ -35,12 +41,19 @@
     bridgeNote: $("#apid-bridge-note"),
     curlDlg: $("#apid-curl-dlg"),
     curlInput: $("#apid-curl-input"),
+    tagDlg: $("#apid-tag-dlg"),
+    tagSearch: $("#apid-tag-search"),
+    tagSuggest: $("#apid-tag-suggest"),
     importFile: $("#apid-import-file"),
   };
 
   const state = {
     items: [],
+    tags: [],
     currentId: "",
+    currentTagIds: [],
+    activeTagId: FILTER_ALL,
+    searchQuery: "",
     dirty: false,
     sending: false,
     bridgeBase: "http://127.0.0.1:17888",
@@ -105,18 +118,52 @@
     try {
       const raw = await idbGet(IDB_KEY);
       const items = Array.isArray(raw?.items) ? raw.items.map((it) => P.emptyRequest(it)) : [];
+      let tags = P.normalizeTags(raw?.tags);
+      const known = new Set(tags.map((t) => t.id));
+      for (const it of items) {
+        for (const id of it.tagIds || []) {
+          if (!known.has(id)) {
+            tags.push(P.emptyTag({ id, name: id }));
+            known.add(id);
+          }
+        }
+      }
       state.items = items;
+      state.tags = tags;
     } catch {
       state.items = [];
+      state.tags = [];
     }
   }
 
   async function persistCollection() {
-    await idbSet(IDB_KEY, { v: 1, items: state.items, savedAt: Date.now() });
+    await idbSet(IDB_KEY, {
+      v: 2,
+      items: state.items,
+      tags: state.tags,
+      savedAt: Date.now(),
+    });
   }
 
   function findItem(id) {
     return state.items.find((x) => x.id === id);
+  }
+
+  function tagById(id) {
+    return state.tags.find((t) => t.id === id);
+  }
+
+  function findTagByName(name) {
+    const n = String(name || "").trim().toLowerCase();
+    if (!n) return null;
+    return state.tags.find((t) => String(t.name || "").toLowerCase() === n) || null;
+  }
+
+  function defaultTagIdsForNew() {
+    if (state.activeTagId && state.activeTagId !== FILTER_ALL && state.activeTagId !== FILTER_UNTAGGED) {
+      return [state.activeTagId];
+    }
+    return [];
   }
 
   function readEditor() {
@@ -132,6 +179,7 @@
       cookies: readKv(els.cookies),
       bodyType,
       bodyText: String(els.body?.value || ""),
+      tagIds: P.normalizeTagIds(state.currentTagIds),
     });
   }
 
@@ -143,6 +191,7 @@
   function writeEditor(req) {
     const r = P.emptyRequest(req);
     state.currentId = r.id;
+    state.currentTagIds = [...(r.tagIds || [])];
     if (els.method) els.method.value = r.method;
     syncMethodTone();
     if (els.url) els.url.value = r.url;
@@ -154,6 +203,7 @@
     renderKv(els.headers, r.headers);
     renderKv(els.cookies, r.cookies);
     state.dirty = false;
+    paintEditorTags();
     paintList();
   }
 
@@ -230,27 +280,201 @@
       .replace(/>/g, "&gt;");
   }
 
+  function itemMatchesSearch(it, q) {
+    if (!q) return true;
+    const hay = [
+      it.name,
+      it.url,
+      it.method,
+      ...(it.tagIds || []).map((id) => tagById(id)?.name || id),
+    ]
+      .join("\n")
+      .toLowerCase();
+    return hay.includes(q);
+  }
+
+  function filteredItems() {
+    const q = String(state.searchQuery || "").trim().toLowerCase();
+    return state.items
+      .filter((it) => {
+        if (state.activeTagId === FILTER_UNTAGGED) {
+          if ((it.tagIds || []).length) return false;
+        } else if (state.activeTagId !== FILTER_ALL) {
+          if (!(it.tagIds || []).includes(state.activeTagId)) return false;
+        }
+        return itemMatchesSearch(it, q);
+      })
+      .slice()
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  }
+
+  function countForTag(tagId) {
+    if (tagId === FILTER_ALL) return state.items.length;
+    if (tagId === FILTER_UNTAGGED) return state.items.filter((it) => !(it.tagIds || []).length).length;
+    return state.items.filter((it) => (it.tagIds || []).includes(tagId)).length;
+  }
+
+  function paintTagFilters() {
+    if (!els.tagFilters) return;
+    const bits = [
+      `<button type="button" class="apid-tag-filter${state.activeTagId === FILTER_ALL ? " is-active" : ""}" data-apid-filter="${FILTER_ALL}">全部<span class="mono">${countForTag(FILTER_ALL)}</span></button>`,
+      `<button type="button" class="apid-tag-filter${state.activeTagId === FILTER_UNTAGGED ? " is-active" : ""}" data-apid-filter="${FILTER_UNTAGGED}">未分类<span class="mono">${countForTag(FILTER_UNTAGGED)}</span></button>`,
+    ];
+    const tags = state.tags.slice().sort((a, b) => String(a.name).localeCompare(String(b.name), "zh"));
+    for (const t of tags) {
+      bits.push(
+        `<span class="apid-tag-filter-wrap">` +
+          `<button type="button" class="apid-tag-filter${state.activeTagId === t.id ? " is-active" : ""}" data-apid-filter="${escapeAttr(t.id)}" title="${escapeAttr(t.name)}">${escapeHtml(t.name)}<span class="mono">${countForTag(t.id)}</span></button>` +
+          `<button type="button" class="apid-tag-del" data-apid-tag-del="${escapeAttr(t.id)}" title="删除标签（不删收藏）" aria-label="删除标签 ${escapeAttr(t.name)}">×</button>` +
+          `</span>`
+      );
+    }
+    els.tagFilters.innerHTML = bits.join("");
+  }
+
+  function paintEditorTags() {
+    if (!els.chipRow) return;
+    const ids = P.normalizeTagIds(state.currentTagIds);
+    if (!ids.length) {
+      els.chipRow.innerHTML = `<span class="hint tight apid-no-tags">未打标签</span>`;
+      return;
+    }
+    els.chipRow.innerHTML = ids
+      .map((id) => {
+        const name = tagById(id)?.name || id;
+        return (
+          `<span class="apid-chip" data-tag-id="${escapeAttr(id)}">` +
+          `<button type="button" class="apid-chip-name" data-apid-filter="${escapeAttr(id)}" title="筛选此标签">${escapeHtml(name)}</button>` +
+          `<button type="button" class="apid-chip-x" data-apid-chip-rm="${escapeAttr(id)}" title="移除此标签" aria-label="移除 ${escapeAttr(name)}">×</button>` +
+          `</span>`
+        );
+      })
+      .join("");
+  }
+
   function paintList() {
     if (!els.list) return;
-    if (els.count) els.count.textContent = String(state.items.length);
+    paintTagFilters();
+    paintEditorTags();
+    const list = filteredItems();
+    if (els.count) els.count.textContent = String(list.length);
     if (!state.items.length) {
       els.list.innerHTML = `<li class="hint tight" style="padding:0.4rem 0.2rem">暂无收藏。编辑后点「保存」，或导入 JSON / cURL。</li>`;
       return;
     }
-    els.list.innerHTML = state.items
-      .slice()
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-      .map(
-        (it) =>
+    if (!list.length) {
+      els.list.innerHTML = `<li class="hint tight" style="padding:0.4rem 0.2rem">没有匹配的收藏。试试清空搜索或换标签。</li>`;
+      return;
+    }
+    els.list.innerHTML = list
+      .map((it) => {
+        const chips = (it.tagIds || [])
+          .map((id) => {
+            const name = tagById(id)?.name || id;
+            return `<span class="apid-item-chip">${escapeHtml(name)}</span>`;
+          })
+          .join("");
+        return (
           `<li><button type="button" class="apid-item${it.id === state.currentId ? " is-active" : ""}" data-id="${escapeAttr(
             it.id
           )}" title="${escapeAttr(it.url)}">` +
           `<span class="apid-item-method mono" data-m="${escapeAttr(it.method)}">${escapeHtml(it.method)}</span>` +
           `<span class="apid-item-name">${escapeHtml(it.name)}</span>` +
           `<span class="apid-item-url mono">${escapeHtml(it.url || "（无 URL）")}</span>` +
+          (chips ? `<span class="apid-item-tags">${chips}</span>` : "") +
           `</button></li>`
+        );
+      })
+      .join("");
+  }
+
+  async function ensureTagNamed(name) {
+    const trimmed = String(name || "").trim();
+    if (!trimmed) throw new Error("请输入标签名");
+    let tag = findTagByName(trimmed);
+    if (!tag) {
+      tag = P.emptyTag({ name: trimmed });
+      state.tags.push(tag);
+      await persistCollection();
+    }
+    return tag;
+  }
+
+  async function addTagToCurrent(tagId) {
+    if (!tagId) return;
+    if (!tagById(tagId)) return;
+    if (!state.currentTagIds.includes(tagId)) state.currentTagIds.push(tagId);
+    const item = findItem(state.currentId);
+    if (item) {
+      item.tagIds = P.normalizeTagIds([...(item.tagIds || []), tagId]);
+      item.updatedAt = Date.now();
+      await persistCollection();
+    }
+    paintList();
+  }
+
+  async function removeTagFromCurrent(tagId) {
+    state.currentTagIds = state.currentTagIds.filter((id) => id !== tagId);
+    const item = findItem(state.currentId);
+    if (item) {
+      item.tagIds = (item.tagIds || []).filter((id) => id !== tagId);
+      item.updatedAt = Date.now();
+      await persistCollection();
+    }
+    paintList();
+    toast("已移除标签");
+  }
+
+  async function deleteTag(tagId) {
+    const tag = tagById(tagId);
+    if (!tag) return;
+    const linked = state.items.filter((it) => (it.tagIds || []).includes(tagId)).length;
+    const ok = window.confirm(
+      linked
+        ? `删除标签「${tag.name}」？\n不会删除任何收藏，只会去掉该标签。\n当前约有 ${linked} 条关联。`
+        : `删除标签「${tag.name}」？\n不会删除任何收藏。`
+    );
+    if (!ok) return;
+    state.tags = state.tags.filter((t) => t.id !== tagId);
+    for (const it of state.items) {
+      if (!(it.tagIds || []).includes(tagId)) continue;
+      it.tagIds = it.tagIds.filter((id) => id !== tagId);
+      it.updatedAt = Date.now();
+    }
+    state.currentTagIds = state.currentTagIds.filter((id) => id !== tagId);
+    if (state.activeTagId === tagId) state.activeTagId = FILTER_ALL;
+    await persistCollection();
+    paintList();
+    toast(`已删除标签「${tag.name}」`);
+  }
+
+  function paintTagSuggest() {
+    if (!els.tagSuggest) return;
+    const q = String(els.tagSearch?.value || "").trim().toLowerCase();
+    const have = new Set(state.currentTagIds);
+    const list = state.tags
+      .filter((t) => !have.has(t.id))
+      .filter((t) => !q || String(t.name).toLowerCase().includes(q))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), "zh"));
+    if (!list.length) {
+      els.tagSuggest.innerHTML = q
+        ? `<p class="hint tight">没有匹配标签，点下方可新建「${escapeHtml(els.tagSearch.value.trim())}」</p>`
+        : `<p class="hint tight">还没有标签，输入名称后添加。</p>`;
+      return;
+    }
+    els.tagSuggest.innerHTML = list
+      .map(
+        (t) =>
+          `<button type="button" class="apid-tag-suggest-item" data-apid-pick-tag="${escapeAttr(t.id)}">${escapeHtml(t.name)}</button>`
       )
       .join("");
+  }
+
+  function openTagDlg() {
+    if (els.tagSearch) els.tagSearch.value = "";
+    paintTagSuggest();
+    els.tagDlg?.showModal?.();
+    setTimeout(() => els.tagSearch?.focus?.(), 0);
   }
 
   function markDirty() {
@@ -266,11 +490,14 @@
         req.createdAt = Date.now();
         req.name = req.name.endsWith("（副本）") ? req.name : `${req.name}（副本）`;
       }
+      if (!req.tagIds.length) req.tagIds = defaultTagIdsForNew();
       state.items.push(req);
       state.currentId = req.id;
+      state.currentTagIds = [...req.tagIds];
     } else {
       const idx = state.items.findIndex((x) => x.id === req.id);
       req.createdAt = state.items[idx].createdAt || req.createdAt;
+      req.tagIds = P.normalizeTagIds(state.currentTagIds);
       state.items[idx] = req;
     }
     await persistCollection();
@@ -545,6 +772,7 @@
           ...item,
           id: P.uid(12),
           name: `${item.name}（副本）`,
+          tagIds: [...(item.tagIds || [])],
           createdAt: Date.now(),
           updatedAt: Date.now(),
         });
@@ -553,7 +781,7 @@
         writeEditor(copy);
         toast("已复制一份");
       } else if (act === "export") {
-        downloadJson(P.packExport([item], { all: false }), `${slug(item.name)}.apidebug.json`);
+        downloadJson(P.packExport([item], { all: false, tags: state.tags }), `${slug(item.name)}.apidebug.json`);
       } else if (act === "del") {
         if (window.confirm(`删除「${item.name}」？`)) await deleteItem(item.id);
       }
@@ -663,7 +891,7 @@
     });
 
     $("#apid-new")?.addEventListener("click", () => {
-      writeEditor(P.emptyRequest({ name: "未命名请求", method: "GET" }));
+      writeEditor(P.emptyRequest({ name: "未命名请求", method: "GET", tagIds: defaultTagIdsForNew() }));
       setError("");
     });
     $("#apid-save")?.addEventListener("click", () => saveCurrent().catch((e) => setError(e.message)));
@@ -679,8 +907,64 @@
       const raw = els.respHeaders?.textContent ?? "";
       toast((await copyText(raw)) ? "已复制响应头" : "复制失败");
     });
+    $("#apid-tag-add")?.addEventListener("click", () => openTagDlg());
+    els.search?.addEventListener("input", () => {
+      state.searchQuery = String(els.search.value || "");
+      paintList();
+    });
+    els.tagFilters?.addEventListener("click", (e) => {
+      const del = e.target.closest?.("[data-apid-tag-del]");
+      if (del) {
+        e.preventDefault();
+        e.stopPropagation();
+        void deleteTag(del.dataset.apidTagDel).catch((err) => setError(err?.message || "删除失败"));
+        return;
+      }
+      const btn = e.target.closest?.("[data-apid-filter]");
+      if (!btn) return;
+      state.activeTagId = btn.dataset.apidFilter || FILTER_ALL;
+      paintList();
+    });
+    els.chipRow?.addEventListener("click", (e) => {
+      const rm = e.target.closest?.("[data-apid-chip-rm]");
+      if (rm) {
+        void removeTagFromCurrent(rm.dataset.apidChipRm);
+        return;
+      }
+      const filter = e.target.closest?.("[data-apid-filter]");
+      if (filter) {
+        state.activeTagId = filter.dataset.apidFilter || FILTER_ALL;
+        paintList();
+      }
+    });
+    els.tagSearch?.addEventListener("input", () => paintTagSuggest());
+    els.tagSuggest?.addEventListener("click", async (e) => {
+      const btn = e.target.closest?.("[data-apid-pick-tag]");
+      if (!btn) return;
+      e.preventDefault();
+      try {
+        await addTagToCurrent(btn.dataset.apidPickTag);
+        els.tagDlg?.close?.();
+        toast("已添加标签");
+      } catch (err) {
+        setError(err?.message || "添加失败");
+      }
+    });
+    els.tagDlg?.querySelector("form")?.addEventListener("submit", async (e) => {
+      const submitter = e.submitter;
+      if (submitter && submitter.value === "cancel") return;
+      e.preventDefault();
+      try {
+        const tag = await ensureTagNamed(els.tagSearch?.value || "");
+        await addTagToCurrent(tag.id);
+        els.tagDlg?.close?.();
+        toast(`已添加「${tag.name}」`);
+      } catch (err) {
+        setError(err?.message || "添加失败");
+      }
+    });
     $("#apid-clear")?.addEventListener("click", () => {
-      writeEditor(P.emptyRequest({ name: "未命名请求", method: "GET" }));
+      writeEditor(P.emptyRequest({ name: "未命名请求", method: "GET", tagIds: defaultTagIdsForNew() }));
       if (els.respMeta) {
         els.respMeta.textContent = "尚未发送";
         els.respMeta.dataset.status = "";
@@ -712,14 +996,14 @@
     });
     $("#apid-export-one")?.addEventListener("click", () => {
       const req = readEditor();
-      downloadJson(P.packExport([req], { all: false }), `${slug(req.name)}.apidebug.json`);
+      downloadJson(P.packExport([req], { all: false, tags: state.tags }), `${slug(req.name)}.apidebug.json`);
     });
     $("#apid-export-all")?.addEventListener("click", () => {
       if (!state.items.length) {
         toast("没有可导出的收藏");
         return;
       }
-      downloadJson(P.packExport(state.items, { all: true }), `apidebug-all.json`);
+      downloadJson(P.packExport(state.items, { all: true, tags: state.tags }), `apidebug-all.json`);
     });
     $("#apid-import")?.addEventListener("click", () => els.importFile?.click());
     els.importFile?.addEventListener("change", async (e) => {
@@ -727,13 +1011,29 @@
       e.target.value = "";
       if (!file) return;
       try {
-        const items = P.unpackImport(await file.text());
+        const { items, tags } = P.unpackImport(await file.text());
+        const known = new Map(state.tags.map((t) => [t.id, t]));
+        for (const t of tags) {
+          if (!known.has(t.id)) {
+            state.tags.push(t);
+            known.set(t.id, t);
+          } else if (!known.get(t.id).name && t.name) {
+            known.get(t.id).name = t.name;
+          }
+        }
         let added = 0;
         let skipped = 0;
         for (const it of items) {
           if (findItem(it.id)) {
             skipped += 1;
             continue;
+          }
+          for (const id of it.tagIds || []) {
+            if (!known.has(id)) {
+              const orphan = P.emptyTag({ id, name: id });
+              state.tags.push(orphan);
+              known.set(id, orphan);
+            }
           }
           state.items.push(P.emptyRequest({ ...it, updatedAt: Date.now() }));
           added += 1;
