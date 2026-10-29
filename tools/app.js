@@ -569,23 +569,47 @@
   const JSON_DEFAULT_H = 300;
   const isJsonDesktop = () => window.matchMedia("(min-width: 721px)").matches;
 
+  function syncJsonHlMetrics(textarea, backdrop) {
+    if (!textarea || !backdrop) return;
+    // 把 textarea 实测排版抄到着色层，避免 UA 样式导致点选错位
+    const cs = getComputedStyle(textarea);
+    backdrop.style.fontFamily = cs.fontFamily;
+    backdrop.style.fontSize = cs.fontSize;
+    backdrop.style.lineHeight = cs.lineHeight;
+    backdrop.style.letterSpacing = cs.letterSpacing;
+    backdrop.style.paddingTop = cs.paddingTop;
+    backdrop.style.paddingRight = cs.paddingRight;
+    backdrop.style.paddingBottom = cs.paddingBottom;
+    backdrop.style.paddingLeft = cs.paddingLeft;
+    backdrop.style.tabSize = cs.tabSize || "2";
+    backdrop.style.boxSizing = cs.boxSizing;
+    backdrop.style.whiteSpace = "pre-wrap";
+    backdrop.style.wordBreak = cs.wordBreak;
+    backdrop.style.overflowWrap = cs.overflowWrap;
+  }
+
   function paintJsonHl(textarea, backdrop) {
     if (!textarea || !backdrop) return;
+    syncJsonHlMetrics(textarea, backdrop);
     const raw = textarea.value;
     if (!raw) {
       backdrop.innerHTML = "";
+      syncJsonHlScroll(textarea, backdrop);
       return;
     }
     const hl = window.DevToolsPure?.highlightJson;
     if (typeof hl === "function") {
       try {
-        backdrop.innerHTML = hl(raw);
+        // 末尾补换行，贴近 textarea 高度计算，减轻纵向漂移
+        backdrop.innerHTML = `${hl(raw)}\n`;
+        syncJsonHlScroll(textarea, backdrop);
         return;
       } catch (_) {
         /* fall through */
       }
     }
-    backdrop.textContent = raw;
+    backdrop.textContent = `${raw}\n`;
+    syncJsonHlScroll(textarea, backdrop);
   }
 
   function syncJsonHlScroll(textarea, backdrop) {
