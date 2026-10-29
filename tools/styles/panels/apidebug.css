@@ -37,6 +37,79 @@
   background: color-mix(in srgb, var(--panel-strong, transparent) 70%, transparent);
 }
 .apid-side-actions { flex-wrap: wrap; gap: 0.3rem; }
+.apid-search-lab { display: block; margin: 0.05rem 0; }
+.apid-search-lab input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel-strong, transparent) 80%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.84rem;
+}
+.apid-tag-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  max-height: 6.5rem;
+  overflow: auto;
+  padding: 0.05rem 0 0.15rem;
+}
+.apid-tag-filter-wrap {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel-strong, transparent) 70%, transparent);
+}
+.apid-tag-filter-wrap .apid-tag-filter {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.apid-tag-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel-strong, transparent) 70%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+.apid-tag-filter .mono {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.apid-tag-filter:hover,
+.apid-tag-filter-wrap:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.apid-tag-filter.is-active {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.apid-tag-filter-wrap:has(.is-active) {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.apid-tag-del {
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  background: transparent;
+  color: var(--muted);
+  padding: 0 0.4rem;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+.apid-tag-del:hover { color: #c01c28; background: color-mix(in srgb, #c01c28 12%, transparent); }
 .apid-list {
   list-style: none;
   margin: 0;
@@ -53,7 +126,7 @@
 .apid-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   column-gap: 0.45rem;
   row-gap: 0.08rem;
   width: 100%;
@@ -75,7 +148,7 @@
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .apid-item-method {
-  grid-row: 1 / span 2;
+  grid-row: 1 / span 3;
   align-self: center;
   font-size: 0.68rem;
   font-weight: 700;
@@ -106,7 +179,104 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.apid-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin-top: 0.08rem;
+}
+.apid-item-chip {
+  font-size: 0.66rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .apid-side-hint { margin: 0.1rem 0 0; }
+
+.apid-editor-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+.apid-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  align-items: center;
+  min-height: 1.5rem;
+}
+.apid-no-tags { margin: 0; }
+.apid-chip {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.apid-chip-name,
+.apid-chip-x {
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0.15rem 0.45rem;
+}
+.apid-chip-x {
+  border-left: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  color: var(--muted);
+  padding-inline: 0.35rem;
+}
+.apid-chip-name:hover,
+.apid-chip-x:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.apid-chip-x:hover { color: #c01c28; }
+.apid-tag-add { font-size: 0.8rem; padding: 0.2rem 0.55rem; }
+.apid-tag-suggest {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 12rem;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 9px;
+  padding: 0.3rem;
+  min-height: 3rem;
+}
+.apid-tag-suggest-item {
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.apid-tag-suggest-item:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+#apid-tag-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel-strong, transparent) 80%, transparent);
+  color: var(--ink);
+  font: inherit;
+}
 
 /* —— 主栏 —— */
 .apid-main { display: flex; flex-direction: column; gap: 0.65rem; min-width: 0; }

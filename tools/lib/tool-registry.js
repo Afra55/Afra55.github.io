@@ -1273,7 +1273,7 @@
     "phlogo": "P 站风双色 Logo：两段文字 + 圆角色块，可改颜色/字号，导出 PNG 或 SVG。参考 bestony/logoly。",
     "nokiasms": "诺基亚 3310 短信截图生成器：本地 Canvas 绘制，可改运营商/时间/倾斜机身。灵感来自 dcalsky/zzkia。",
     "query": "Query 字符串与 JWT 解析查看。",
-    "apidebug": "本地 REST 调试：方法/URL/Header/Cookie/Body，收藏与导入导出；请求 ↔ cURL 互转。勾选经桥时发送会自动唤起统一桥；响应支持一键复制与 JSON 着色。",
+    "apidebug": "本地 REST 调试：方法/URL/Header/Cookie/Body，收藏可打标签并搜索筛选；请求 ↔ cURL 互转。勾选经桥时发送会自动唤起统一桥；响应支持一键复制与 JSON 着色。",
     "text": "文本统计、去重、大小写等处理。",
     "caseconv": "驼峰 / snake / kebab 等命名风格转换。",
     "regex": "正则匹配测试、捕获分组；默认可点选的 Regex Vis 可视化编辑，另附本地 Regulex 只读铁路图。",
