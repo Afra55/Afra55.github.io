@@ -546,12 +546,10 @@
   }
 
   function initJsonPanel() {
-  // ---- JSON ----
+  // ---- JSON：单层 contenteditable 直接着色（无透明叠层）----
   const jsonInput = $("#json-input");
   if (!jsonInput) return;
   const jsonInputB = $("#json-input-b");
-  const jsonHlA = $("#json-hl-a");
-  const jsonHlB = $("#json-hl-b");
   const jsonError = $("#json-error");
   const jsonMeta = $("#json-meta");
   const paneA = $("#json-pane-a");
@@ -569,66 +567,80 @@
   const JSON_DEFAULT_H = 300;
   const isJsonDesktop = () => window.matchMedia("(min-width: 721px)").matches;
 
-  function syncJsonHlMetrics(textarea, backdrop) {
-    if (!textarea || !backdrop) return;
-    // 把 textarea 实测排版抄到着色层，避免 UA 样式导致点选错位
-    const cs = getComputedStyle(textarea);
-    backdrop.style.fontFamily = cs.fontFamily;
-    backdrop.style.fontSize = cs.fontSize;
-    backdrop.style.lineHeight = cs.lineHeight;
-    backdrop.style.letterSpacing = cs.letterSpacing;
-    backdrop.style.paddingTop = cs.paddingTop;
-    backdrop.style.paddingRight = cs.paddingRight;
-    backdrop.style.paddingBottom = cs.paddingBottom;
-    backdrop.style.paddingLeft = cs.paddingLeft;
-    backdrop.style.tabSize = cs.tabSize || "2";
-    backdrop.style.boxSizing = cs.boxSizing;
-    backdrop.style.whiteSpace = "pre-wrap";
-    backdrop.style.wordBreak = cs.wordBreak;
-    backdrop.style.overflowWrap = cs.overflowWrap;
+  function getJsonText(el) {
+    if (!el) return "";
+    if (!el.childNodes.length) return "";
+    if (el.childNodes.length === 1 && el.firstChild.nodeName === "BR") return "";
+    return String(el.textContent || "");
   }
 
-  function paintJsonHl(textarea, backdrop) {
-    if (!textarea || !backdrop) return;
-    syncJsonHlMetrics(textarea, backdrop);
-    const raw = textarea.value;
-    if (!raw) {
-      backdrop.innerHTML = "";
-      syncJsonHlScroll(textarea, backdrop);
-      return;
-    }
-    const hl = window.DevToolsPure?.highlightJson;
-    if (typeof hl === "function") {
-      try {
-        // 末尾补换行，贴近 textarea 高度计算，减轻纵向漂移
-        backdrop.innerHTML = `${hl(raw)}\n`;
-        syncJsonHlScroll(textarea, backdrop);
+  function getJsonCaret(el) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !el.contains(sel.anchorNode)) return getJsonText(el).length;
+    const range = sel.getRangeAt(0).cloneRange();
+    const pre = document.createRange();
+    pre.selectNodeContents(el);
+    pre.setEnd(range.endContainer, range.endOffset);
+    return pre.toString().length;
+  }
+
+  function setJsonCaret(el, offset) {
+    if (!el) return;
+    const target = Math.max(0, Number(offset) || 0);
+    const sel = window.getSelection();
+    if (!sel) return;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let remaining = target;
+    let node = walker.nextNode();
+    while (node) {
+      const len = node.textContent.length;
+      if (remaining <= len) {
+        const range = document.createRange();
+        range.setStart(node, remaining);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
         return;
-      } catch (_) {
-        /* fall through */
+      }
+      remaining -= len;
+      node = walker.nextNode();
+    }
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  /** 直接在原文上套色；坏 JSON 也能尽量着色，不要求合法 */
+  function setJsonText(el, text, { keepCaret = false } = {}) {
+    if (!el) return;
+    const raw = text == null ? "" : String(text);
+    const caret = keepCaret ? getJsonCaret(el) : 0;
+    if (!raw) {
+      el.innerHTML = "";
+    } else {
+      const hl = window.DevToolsPure?.highlightJson;
+      if (typeof hl === "function") {
+        try {
+          el.innerHTML = hl(raw);
+        } catch (_) {
+          el.textContent = raw;
+        }
+      } else {
+        el.textContent = raw;
       }
     }
-    backdrop.textContent = `${raw}\n`;
-    syncJsonHlScroll(textarea, backdrop);
-  }
-
-  function syncJsonHlScroll(textarea, backdrop) {
-    if (!textarea || !backdrop) return;
-    backdrop.scrollTop = textarea.scrollTop;
-    backdrop.scrollLeft = textarea.scrollLeft;
-  }
-
-  let jsonHlTimer = 0;
-  function scheduleJsonHl(textarea, backdrop) {
-    if (!backdrop) return;
-    clearTimeout(jsonHlTimer);
-    jsonHlTimer = window.setTimeout(() => paintJsonHl(textarea, backdrop), 80);
+    if (keepCaret) setJsonCaret(el, Math.min(caret, raw.length));
   }
 
   function saveJsonDraft(el) {
     if (!el) return;
-    try { localStorage.setItem(el === jsonInput ? JSON_DRAFT_KEY : JSON_DRAFT_B_KEY, el.value); } catch (_) {}
+    try {
+      localStorage.setItem(el === jsonInput ? JSON_DRAFT_KEY : JSON_DRAFT_B_KEY, getJsonText(el));
+    } catch (_) {}
   }
+
   function readJsonNum(key, def) {
     try {
       const n = Number(localStorage.getItem(key));
@@ -638,31 +650,62 @@
     }
   }
 
-  // 记忆上次输入，下次进来直接显示
-  try {
-    if (!jsonInput.value) {
-      const saved = localStorage.getItem(JSON_DRAFT_KEY);
-      if (saved) jsonInput.value = saved;
-    }
-    if (jsonInputB && !jsonInputB.value) {
-      const savedB = localStorage.getItem(JSON_DRAFT_B_KEY);
-      if (savedB) jsonInputB.value = savedB;
-    }
-  } catch (_) {}
-  jsonInput.addEventListener("input", () => {
-    saveJsonDraft(jsonInput);
-    scheduleJsonHl(jsonInput, jsonHlA);
-  });
-  jsonInputB?.addEventListener("input", () => {
-    saveJsonDraft(jsonInputB);
-    scheduleJsonHl(jsonInputB, jsonHlB);
-  });
-  jsonInput.addEventListener("scroll", () => syncJsonHlScroll(jsonInput, jsonHlA));
-  jsonInputB?.addEventListener("scroll", () => syncJsonHlScroll(jsonInputB, jsonHlB));
-  paintJsonHl(jsonInput, jsonHlA);
-  paintJsonHl(jsonInputB, jsonHlB);
+  const jsonHlTimers = new WeakMap();
+  function scheduleJsonPaint(el) {
+    if (!el) return;
+    clearTimeout(jsonHlTimers.get(el));
+    jsonHlTimers.set(
+      el,
+      window.setTimeout(() => {
+        setJsonText(el, getJsonText(el), { keepCaret: true });
+        saveJsonDraft(el);
+      }, 60)
+    );
+  }
 
-  // ---- 高度：两框同步，拖拽调整，无最高限制 ----
+  function bindJsonEditor(el) {
+    if (!el) return;
+    if (el.contentEditable !== "plaintext-only") {
+      el.contentEditable = "true";
+    }
+    let composing = false;
+    el.addEventListener("compositionstart", () => {
+      composing = true;
+    });
+    el.addEventListener("compositionend", () => {
+      composing = false;
+      scheduleJsonPaint(el);
+    });
+    el.addEventListener("input", () => {
+      if (composing) return;
+      scheduleJsonPaint(el);
+    });
+    el.addEventListener("paste", (e) => {
+      if (el.contentEditable === "plaintext-only") return;
+      e.preventDefault();
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      if (document.queryCommandSupported?.("insertText")) {
+        document.execCommand("insertText", false, text);
+      } else {
+        const cur = getJsonText(el);
+        const caret = getJsonCaret(el);
+        const next = cur.slice(0, caret) + text + cur.slice(caret);
+        setJsonText(el, next, { keepCaret: false });
+        setJsonCaret(el, caret + text.length);
+        saveJsonDraft(el);
+      }
+    });
+  }
+
+  try {
+    const saved = localStorage.getItem(JSON_DRAFT_KEY);
+    if (saved) setJsonText(jsonInput, saved);
+    const savedB = localStorage.getItem(JSON_DRAFT_B_KEY);
+    if (jsonInputB && savedB) setJsonText(jsonInputB, savedB);
+  } catch (_) {}
+  bindJsonEditor(jsonInput);
+  bindJsonEditor(jsonInputB);
+
   let jsonHeight = readJsonNum(JSON_HEIGHT_KEY, JSON_DEFAULT_H);
   function applyJsonHeight() {
     jsonHeight = Math.max(JSON_MIN_H, Math.round(jsonHeight));
@@ -671,16 +714,9 @@
       el.style.height = `${jsonHeight}px`;
       el.style.maxHeight = "none";
       el.style.overflowY = "auto";
-      el.style.resize = "none";
-    });
-    [jsonHlA, jsonHlB].forEach((el) => {
-      if (!el) return;
-      el.style.height = `${jsonHeight}px`;
-      el.style.maxHeight = "none";
     });
   }
 
-  // ---- 双栏 + 宽度 ----
   let jsonDual = false;
   try { jsonDual = localStorage.getItem(JSON_DUAL_KEY) === "1"; } catch (_) {}
   let jsonSplit = 0.5;
@@ -716,7 +752,6 @@
   }
   applyJsonLayout();
 
-  /** 当前生效的编辑框：单栏=只有 A；双栏=A+B */
   function jsonEditors() {
     const list = [jsonInput];
     if (jsonDualActive()) list.push(jsonInputB);
@@ -787,14 +822,13 @@
   });
 
   function parseJsonEditor(el) {
-    const raw = el.value.trim();
+    const raw = getJsonText(el).trim();
     if (!raw) throw new Error("请先输入 JSON");
     return JSON.parse(raw);
   }
 
-  /** 对当前所有生效的编辑框执行同一操作（有内容的才处理） */
   function runJson(mode) {
-    const editors = jsonEditors().filter((el) => el.value.trim());
+    const editors = jsonEditors().filter((el) => getJsonText(el).trim());
     if (!editors.length) {
       jsonMeta.textContent = "";
       setToolError(jsonError, "请先输入 JSON");
@@ -808,7 +842,7 @@
       try {
         const data = parseJsonEditor(el);
         const out = mode === "minify" ? JSON.stringify(data) : JSON.stringify(data, null, 2);
-        el.value = out;
+        setJsonText(el, out);
         saveJsonDraft(el);
         ok += 1;
         bits.push(
@@ -832,12 +866,10 @@
     } else {
       jsonMeta.textContent = "";
     }
-    paintJsonHl(jsonInput, jsonHlA);
-    paintJsonHl(jsonInputB, jsonHlB);
   }
 
   async function runJsonRepair() {
-    const editors = jsonEditors().filter((el) => el.value.trim());
+    const editors = jsonEditors().filter((el) => getJsonText(el).trim());
     if (!editors.length) {
       jsonMeta.textContent = "";
       setToolError(jsonError, "请先输入 JSON");
@@ -856,11 +888,11 @@
       editors.forEach((el) => {
         const label = el === jsonInput ? "A" : "B";
         try {
-          const raw = el.value.trim();
+          const raw = getJsonText(el).trim();
           const repaired = jsonrepair(raw);
           const data = JSON.parse(repaired);
           const pretty = JSON.stringify(data, null, 2);
-          el.value = pretty;
+          setJsonText(el, pretty);
           saveJsonDraft(el);
           bits.push(`${label} ${pretty.split("\n").length} 行`);
         } catch (err) {
@@ -870,8 +902,6 @@
       if (firstErr) setToolError(jsonError, `修复失败：${firstErr}`);
       jsonMeta.textContent = bits.length ? `已修复并美化 · ${bits.join(" · ")}` : "";
       if (bits.length) showToast("JSON 已修复");
-      paintJsonHl(jsonInput, jsonHlA);
-      paintJsonHl(jsonInputB, jsonHlB);
     } catch (err) {
       jsonMeta.textContent = "";
       const msg = err?.position != null ? `${err.message}` : String(err?.message || err);
@@ -888,12 +918,10 @@
   $("#json-minify").addEventListener("click", () => runJson("minify"));
   $("#json-validate").addEventListener("click", () => runJson("validate"));
   $("#json-clear").addEventListener("click", () => {
-    jsonInput.value = "";
-    if (jsonInputB) jsonInputB.value = "";
+    setJsonText(jsonInput, "");
+    if (jsonInputB) setJsonText(jsonInputB, "");
     jsonMeta.textContent = "";
     setToolError(jsonError, "");
-    paintJsonHl(jsonInput, jsonHlA);
-    paintJsonHl(jsonInputB, jsonHlB);
     try {
       localStorage.removeItem(JSON_DRAFT_KEY);
       localStorage.removeItem(JSON_DRAFT_B_KEY);
