@@ -25,6 +25,13 @@
       tags: ["人生", "健康", "理财", "指南", "github"],
     },
     {
+      id: "voicestudio",
+      title: "VoiceStudio",
+      desc: "开源、全本地的 ElevenLabs 替代：语音克隆、声音设计、视频配音、听写、转写与有声书，支持大量语言（本机运行，不上传）。",
+      url: "https://github.com/debpalash/VoiceStudio",
+      tags: ["语音", "克隆", "配音", "本地", "github"],
+    },
+    {
       id: "myspeed",
       title: "MySpeed",
       desc: "自托管网速监控：定时测速、历史图表、多服务器；支持 LibreSpeed / Ookla / Cloudflare。需本机 Docker 或安装包（MIT）。",
