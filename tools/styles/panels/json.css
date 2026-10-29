@@ -15,29 +15,44 @@ html[data-theme-scheme="light"] .json-hl .tok-punc { color: #64748b; }
   width: 100%;
 }
 
+/* 着色底层与编辑层必须同字号/行高/内边距，否则拖选会错位出「双层」 */
+.json-hl-backdrop,
+.json-area-overlay {
+  margin: 0;
+  padding: 0.78rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-sizing: border-box;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  tab-size: 2;
+  -moz-tab-size: 2;
+}
+
 .json-hl-backdrop {
   position: absolute;
   inset: 0;
   z-index: 0;
-  margin: 0;
-  padding: 0.75rem 0.85rem;
-  border: 1px solid transparent;
-  border-radius: 12px;
   overflow: auto;
   pointer-events: none;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: inherit;
-  line-height: 1.5;
-  box-sizing: border-box;
   color: var(--ink);
-  background: var(--control-bg, transparent);
+  background: var(--panel-strong, var(--control-bg, transparent));
+  scrollbar-width: none;
+}
+.json-hl-backdrop::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .json-area-overlay {
   position: relative;
   z-index: 1;
-  color: transparent;
+  /* 文字透明，只显示下层着色；光标保留 */
+  color: transparent !important;
   -webkit-text-fill-color: transparent;
   caret-color: var(--ink);
   background: transparent !important;
@@ -49,8 +64,19 @@ html[data-theme-scheme="light"] .json-hl .tok-punc { color: #64748b; }
   opacity: 0.85;
 }
 
-.json-area-overlay::selection {
-  color: var(--ink);
-  -webkit-text-fill-color: var(--ink);
-  background: color-mix(in srgb, var(--accent, #4a8) 35%, transparent);
+/*
+ * 选区文字也必须保持透明，否则选中时 ink 色字会叠在着色层上，
+ * 看起来像「另一层代码」、拖选发糊。
+ * 只用半透明底色标出选区。
+ */
+.json-area-overlay::selection,
+.json-area-overlay *::selection {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: color-mix(in srgb, var(--accent, #4a8) 38%, transparent);
+}
+.json-area-overlay::-moz-selection,
+.json-area-overlay *::-moz-selection {
+  color: transparent;
+  background: color-mix(in srgb, var(--accent, #4a8) 38%, transparent);
 }
