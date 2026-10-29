@@ -1,4 +1,4 @@
-/* JSON 语法色：跟随站点明暗 */
+/* JSON 语法色：跟随站点明暗（直接画在可编辑原文的 span 上） */
 .json-hl .tok-key { color: #7dd3fc; }
 .json-hl .tok-str { color: #86efac; }
 .json-hl .tok-num { color: #fcd34d; }
@@ -10,88 +10,41 @@ html[data-theme-scheme="light"] .json-hl .tok-num { color: #d97706; }
 html[data-theme-scheme="light"] .json-hl .tok-bool { color: #db2777; }
 html[data-theme-scheme="light"] .json-hl .tok-punc { color: #64748b; }
 
-/*
- * 着色编辑器：透明 textarea 叠在 pre 上。
- * 边框只画在外层；两层同字号/行高/内边距，并都预留 scrollbar-gutter，
- * 否则滚动条一出现两层换行宽度不同，鼠标点选会对不齐彩色字。
- */
 .json-editor-stack {
-  --json-fs: 14px;
-  --json-lh: 21px;
-  --json-pad-y: 0.78rem;
-  --json-pad-x: 0.9rem;
   position: relative;
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel-strong);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.json-editor-stack:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
-.json-hl-backdrop,
-.json-area-overlay {
+/* 单层可编辑着色：点选 / 输入 / 拖高都在同一层，无透明叠层 */
+.json-ce {
+  display: block;
+  width: 100%;
   margin: 0;
-  padding: var(--json-pad-y) var(--json-pad-x);
-  border: 0 !important;
-  border-radius: 0;
-  box-sizing: border-box;
-  box-shadow: none !important;
-  outline: none !important;
-  font-family: var(--mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: var(--json-fs);
-  line-height: var(--json-lh);
-  letter-spacing: 0;
-  font-variant-ligatures: none;
-  font-feature-settings: "liga" 0, "calt" 0;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: break-word;
   tab-size: 2;
   -moz-tab-size: 2;
   overflow: auto;
-  scrollbar-gutter: stable;
-  width: 100%;
-}
-
-.json-hl-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  color: var(--ink);
-  background: transparent;
-}
-
-.json-area-overlay {
-  position: relative;
-  z-index: 1;
-  display: block;
-  color: transparent !important;
-  -webkit-text-fill-color: transparent;
+  resize: none !important;
   caret-color: var(--ink);
-  background: transparent !important;
-  resize: none !important; /* 高度由外层拖条统一控制，避免单独 resize 打乱叠层 */
+  color: var(--ink);
+  -webkit-user-modify: read-write-plaintext-only;
 }
-
-.json-area-overlay::placeholder {
+.json-ce:focus {
+  outline: none;
+}
+.json-ce:empty::before {
+  content: attr(data-placeholder);
   color: var(--muted);
-  -webkit-text-fill-color: var(--muted);
   opacity: 0.85;
+  pointer-events: none;
 }
-
-/* 选区文字保持透明，只用底色标选区，避免叠出第二层字 */
-.json-area-overlay::selection,
-.json-area-overlay *::selection {
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  background: color-mix(in srgb, var(--accent, #4a8) 38%, transparent);
-}
-.json-area-overlay::-moz-selection,
-.json-area-overlay *::-moz-selection {
-  color: transparent;
-  background: color-mix(in srgb, var(--accent, #4a8) 38%, transparent);
+.json-ce .tok-key,
+.json-ce .tok-str,
+.json-ce .tok-num,
+.json-ce .tok-bool,
+.json-ce .tok-punc {
+  font: inherit;
+  letter-spacing: inherit;
 }
