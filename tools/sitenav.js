@@ -240,8 +240,6 @@
     grid.innerHTML = list
       .map((item, i) => {
         const delay = reduceMotion ? "" : `style="animation-delay:${Math.min(i, 12) * 28}ms"`;
-        const desc = String(item.desc || "");
-        const long = desc.length > 56;
         return `<article class="sitenav-card${reduceMotion ? "" : " is-enter"}" role="listitem" tabindex="0" data-url="${escapeHtml(
           item.url
         )}" data-id="${escapeHtml(item.id)}" ${delay}>
@@ -251,8 +249,7 @@
             .map((t) => `<span>${escapeHtml(t)}</span>`)
             .join("")}</span>
         </div>
-        <p class="sitenav-card-desc${long ? "" : " is-short"}">${escapeHtml(desc)}</p>
-        ${long ? `<button type="button" class="sitenav-more" data-more>展开简介</button>` : ""}
+        <p class="sitenav-card-desc">${escapeHtml(item.desc || "")}</p>
         <div class="sitenav-card-actions">
           <button type="button" class="ghost-btn sitenav-open" data-url="${escapeHtml(item.url)}">打开网站</button>
         </div>
@@ -292,16 +289,6 @@
     });
 
     $("#sitenav-grid")?.addEventListener("click", (e) => {
-      const more = e.target.closest?.("[data-more]");
-      if (more) {
-        e.preventDefault();
-        e.stopPropagation();
-        const card = more.closest(".sitenav-card");
-        if (!card) return;
-        const on = card.classList.toggle("is-expanded");
-        more.textContent = on ? "收起简介" : "展开简介";
-        return;
-      }
       const openBtn = e.target.closest?.(".sitenav-open");
       if (openBtn) {
         e.stopPropagation();

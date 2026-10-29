@@ -177,35 +177,6 @@
   color: var(--muted);
   font-size: 0.9rem;
   line-height: 1.5;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-
-.sitenav-card.is-expanded .sitenav-card-desc {
-  display: block;
-  -webkit-line-clamp: unset;
-  overflow: visible;
-}
-
-.sitenav-more {
-  appearance: none;
-  border: 0;
-  background: none;
-  padding: 0;
-  margin: 0;
-  align-self: flex-start;
-  color: var(--accent, #4a8);
-  font: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.sitenav-more:hover {
-  opacity: 0.85;
 }
 
 .sitenav-card-actions {
