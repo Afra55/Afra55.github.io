@@ -1,14 +1,15 @@
 "use strict";
 
 /**
- * 文件占用解锁模块（挂到统一桥 /unlock/*）。
+ * 文件占用解锁 + 安全擦除模块（挂到统一桥 /unlock/*）。
  * 仅 Windows 生效；其他平台 /health 会返回 isWin=false，前端据此隐藏。
  */
 
 const { isWindows, checkLocks, killProcess, pickPath, resolveByName } = require("./lock-ops");
+const { inspectPaths, purgePaths, DEFAULT_PASSES } = require("./purge-ops");
 
-const BRIDGE_VERSION = "0.1.0";
-const FEATURES = { unlock: true, winOnly: true };
+const BRIDGE_VERSION = "0.2.0";
+const FEATURES = { unlock: true, purge: true, secureWipe: true, winOnly: true };
 
 function readBody(req, limit = 1024 * 1024) {
   return new Promise((resolve, reject) => {
@@ -80,8 +81,26 @@ async function handleRequest(req, res, opts = {}) {
     }
     if (pathname === "/pick" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req));
-      const data = await pickPath(body.kind === "dir" ? "dir" : "file");
+      const kind = body.kind === "dir" ? "dir" : body.kind === "files" ? "files" : "file";
+      const data = await pickPath(kind);
       sendJson(res, 200, { ok: true, ...data });
+      return;
+    }
+    if (pathname === "/inspect" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req));
+      const items = await inspectPaths(body.paths || (body.path ? [body.path] : []));
+      sendJson(res, 200, { ok: true, items });
+      return;
+    }
+    if (pathname === "/purge" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req));
+      if (!body.confirm) {
+        sendJson(res, 400, { ok: false, error: "缺少确认标记 confirm=true" });
+        return;
+      }
+      const passes = Math.min(5, Math.max(1, Number(body.passes) || DEFAULT_PASSES));
+      const data = await purgePaths(body.paths || [], { passes });
+      sendJson(res, 200, { ok: data.ok, ...data });
       return;
     }
     sendJson(res, 404, { ok: false, error: "未知接口" });

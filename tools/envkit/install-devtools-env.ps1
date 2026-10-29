@@ -211,7 +211,7 @@ function Sync-Bridges {
     try { Download-File "$BaseUrl/git-bridge/$f" (Join-Path $BridgeDir "git-bridge\$f") }
     catch { Write-Miss "下载失败 $f" }
   }
-  foreach ($f in @("server.js", "lock-ops.js")) {
+  foreach ($f in @("server.js", "lock-ops.js", "purge-ops.js")) {
     Write-Info "fileunlock-bridge/$f"
     try { Download-File "$BaseUrl/fileunlock-bridge/$f" (Join-Path $BridgeDir "fileunlock-bridge\$f") }
     catch { Write-Miss "下载失败 $f" }
@@ -245,7 +245,7 @@ function Sync-Bridges {
   }
 
   $bad = $false
-  foreach ($rel in @("adb-bridge\server.js", "ffmpeg-bridge\server.js", "ffmpeg-bridge\gifski-core.js", "git-bridge\server.js", "git-bridge\git-ops.js", "fileunlock-bridge\server.js", "fileunlock-bridge\lock-ops.js", "pandoc-bridge\server.js", "pandoc-bridge\pandoc-ops.js", "mineru-bridge\server.js", "mineru-bridge\mineru-ops.js", "mineru-bridge\pyhooks\ensure_image_min_tokens.py", "docling-bridge\server.js", "docling-bridge\docling-ops.js", "lanboard-bridge\server.js")) {
+  foreach ($rel in @("adb-bridge\server.js", "ffmpeg-bridge\server.js", "ffmpeg-bridge\gifski-core.js", "git-bridge\server.js", "git-bridge\git-ops.js", "fileunlock-bridge\server.js", "fileunlock-bridge\lock-ops.js", "fileunlock-bridge\purge-ops.js", "pandoc-bridge\server.js", "pandoc-bridge\pandoc-ops.js", "mineru-bridge\server.js", "mineru-bridge\mineru-ops.js", "mineru-bridge\pyhooks\ensure_image_min_tokens.py", "docling-bridge\server.js", "docling-bridge\docling-ops.js", "lanboard-bridge\server.js")) {
     $p = Join-Path $BridgeDir $rel
     if (-not (Test-Path $p) -or (Get-Item $p).Length -lt 10) {
       Write-Miss "缺失或空：$rel"

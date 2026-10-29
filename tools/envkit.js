@@ -44,11 +44,11 @@
     },
     {
       id: "unlock-mount",
-      name: "⑤ 文件占用 · /unlock（仅 Windows）",
+      name: "⑤ 文件占用/安全删除 · /unlock（仅 Windows）",
       url: "http://127.0.0.1:17888/unlock/health",
       token: "devtools-bridge",
       tokenHeader: "X-Adb-Token",
-      link: "#fileunlock",
+      link: "#forcepurge",
       kind: "unlock",
       winOnly: true,
     },

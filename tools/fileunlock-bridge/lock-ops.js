@@ -292,23 +292,32 @@ async function killProcess(pid, { force = false } = {}) {
 async function pickPath(kind = "file") {
   if (!isWindows()) throw new Error("仅支持 Windows");
   const isDir = kind === "dir";
+  const multi = kind === "files";
   const script = [
     "Add-Type -AssemblyName System.Windows.Forms",
     "$f = New-Object System.Windows.Forms.Form",
     "$f.TopMost = $true",
     isDir
-      ? "$d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='选择文件夹'; $d.ShowNewFolderButton=$false"
-      : "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title='选择文件'; $d.CheckFileExists=$false; $d.CheckPathExists=$true; $d.ValidateNames=$false",
+      ? "$d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='选择文件夹（可多次添加）'; $d.ShowNewFolderButton=$false"
+      : multi
+        ? "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title='选择文件（可多选）'; $d.Multiselect=$true; $d.CheckFileExists=$true; $d.CheckPathExists=$true"
+        : "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title='选择文件'; $d.CheckFileExists=$false; $d.CheckPathExists=$true; $d.ValidateNames=$false",
     "$r = $d.ShowDialog($f)",
-    "if ($r -eq [System.Windows.Forms.DialogResult]::OK) { if (" +
-      (isDir ? "$d.SelectedPath" : "$d.FileName") +
-      ") { Write-Output (" +
-      (isDir ? "$d.SelectedPath" : "$d.FileName") +
-      ") } }",
+    "if ($r -eq [System.Windows.Forms.DialogResult]::OK) {",
+    isDir
+      ? "  if ($d.SelectedPath) { Write-Output $d.SelectedPath }"
+      : multi
+        ? "  foreach ($x in @($d.FileNames)) { if ($x) { Write-Output $x } }"
+        : "  if ($d.FileName) { Write-Output $d.FileName }",
+    "}",
   ].join("\n");
   const { stdout } = await runPowerShell(script, { sta: true, timeout: 120000 });
-  const picked = String(stdout || "").trim().split(/\r?\n/).filter(Boolean).pop() || "";
-  return { path: picked };
+  const paths = String(stdout || "")
+    .trim()
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return { path: paths[0] || "", paths };
 }
 
 module.exports = { isWindows, checkLocks, killProcess, pickPath, resolveByName };

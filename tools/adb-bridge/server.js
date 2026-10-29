@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.87";
+const BRIDGE_VERSION = "0.9.88";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -97,7 +97,9 @@ function loadFileUnlockBridge() {
 }
 const fileUnlockBridge = loadFileUnlockBridge();
 if (!fileUnlockBridge) {
-  console.warn("未找到文件占用模块（可选）：完整 ZIP 请包含 fileunlock-bridge/server.js + lock-ops.js");
+  console.warn(
+    "未找到文件占用模块（可选）：完整 ZIP 请包含 fileunlock-bridge/server.js + lock-ops.js + purge-ops.js"
+  );
 }
 function loadPandocBridge() {
   const candidates = [

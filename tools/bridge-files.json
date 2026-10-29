@@ -29,6 +29,7 @@
     "git-bridge/start-mac.command",
     "fileunlock-bridge/server.js",
     "fileunlock-bridge/lock-ops.js",
+    "fileunlock-bridge/purge-ops.js",
     "pandoc-bridge/server.js",
     "pandoc-bridge/pandoc-ops.js",
     "docling-bridge/server.js",

@@ -230,6 +230,12 @@ if not exist "%SCRIPT_DIR%git-bridge\server.js" (
   )
 )
 
+if not exist "%SCRIPT_DIR%fileunlock-bridge\purge-ops.js" (
+  if not exist "%SCRIPT_DIR%..\fileunlock-bridge\purge-ops.js" (
+    echo [WARN] fileunlock-bridge/purge-ops.js not found - secure purge needs full ZIP.
+    echo [WARN] missing fileunlock-bridge/purge-ops.js>> "%LOG_FILE%"
+  )
+)
 if not exist "%SCRIPT_DIR%fileunlock-bridge\server.js" (
   if not exist "%SCRIPT_DIR%..\fileunlock-bridge\server.js" (
     echo [WARN] fileunlock-bridge/server.js not found - File unlock API disabled until full ZIP is used.

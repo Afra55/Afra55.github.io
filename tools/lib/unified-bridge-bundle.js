@@ -98,6 +98,7 @@
         gitNoopCjs,
         unlockServerJs,
         unlockOpsJs,
+        unlockPurgeJs,
         pandocServerJs,
         pandocOpsJs,
         doclingServerJs,
@@ -124,6 +125,7 @@
         fetchTextAsset("./git-bridge/noop-editor.cjs").catch(() => "process.exit(0);\n"),
         fetchTextAsset("./fileunlock-bridge/server.js").catch(() => ""),
         fetchTextAsset("./fileunlock-bridge/lock-ops.js").catch(() => ""),
+        fetchTextAsset("./fileunlock-bridge/purge-ops.js").catch(() => ""),
         fetchTextAsset("./pandoc-bridge/server.js").catch(() => ""),
         fetchTextAsset("./pandoc-bridge/pandoc-ops.js").catch(() => ""),
         fetchTextAsset("./docling-bridge/server.js").catch(() => ""),
@@ -161,7 +163,7 @@
         "  - scrcpy-mirror.js / scrcpy-ctrl.js / device-inspect.js / resolve-port.js",
         "  - ffmpeg-bridge/server.js + ytdlp-core.js + gifski-core.js",
         "  - git-bridge/server.js + git-ops.js + noop-editor.*",
-        "  - fileunlock-bridge/server.js + lock-ops.js（Windows 文件占用解锁）",
+        "  - fileunlock-bridge/server.js + lock-ops.js + purge-ops.js（占用解锁 + 安全擦除）",
         "  - pandoc-bridge/server.js + pandoc-ops.js（Markdown → 任意格式，需本机装 pandoc）",
         "  - mineru-bridge/server.js + mineru-ops.js + pyhooks/ensure_image_min_tokens.py（PDF→MD 质量主力，建议 GPU：pip install \"mineru[full]\"）",
         "  - docling-bridge/server.js + docling-ops.js（无 GPU / 未装 MinerU 时回退 OCR）",
@@ -198,6 +200,7 @@
       if (gitNoopCjs) zip.file("git-bridge/noop-editor.cjs", gitNoopCjs);
       if (unlockServerJs) zip.file("fileunlock-bridge/server.js", unlockServerJs);
       if (unlockOpsJs) zip.file("fileunlock-bridge/lock-ops.js", unlockOpsJs);
+      if (unlockPurgeJs) zip.file("fileunlock-bridge/purge-ops.js", unlockPurgeJs);
       if (pandocServerJs) zip.file("pandoc-bridge/server.js", pandocServerJs);
       if (pandocOpsJs) zip.file("pandoc-bridge/pandoc-ops.js", pandocOpsJs);
       if (doclingServerJs) zip.file("docling-bridge/server.js", doclingServerJs);

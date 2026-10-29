@@ -183,6 +183,7 @@
     interpolator: "./extra-panels/interpolator.js",
     giftest: "./extra-panels/giftest.js",
     fileunlock: "./extra-panels/fileunlock.js",
+    forcepurge: "./extra-panels/forcepurge.js",
     mdm: "./extra-panels/mdm.js",
     docfmt: "./extra-panels/docfmt.js",
     mediafmt: "./extra-panels/mediafmt.js",
@@ -192,7 +193,7 @@
     "timediff", "color", "url", "query", "uuid", "hash", "text", "caseconv", "coord",
     "yaml", "imgb64", "imgrecolor", "qrcode", "cron", "units", "sharecard", "numbase", "markdown",
     "eyedropper", "password", "gifmaker", "gifx", "v2g", "gifbb", "gifc", "gife", "gifm",
-    "adb", "vsplit", "vbb", "interpolator", "giftest", "fileunlock", "mdm", "docfmt", "mediafmt",
+    "adb", "vsplit", "vbb", "interpolator", "giftest", "fileunlock", "forcepurge", "mdm", "docfmt", "mediafmt",
   ]);
 
   const EXTRA_MEDIA_TOOLS = new Set([

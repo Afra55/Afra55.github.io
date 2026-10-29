@@ -179,7 +179,8 @@
         "ffbridge",
         "ytdlp",
         "gitbridge",
-        "fileunlock"
+        "fileunlock",
+        "forcepurge"
       ]
     },
     {
@@ -959,6 +960,21 @@
       "desktopOnly": true,
       "winOnly": true
     },
+    "forcepurge": {
+      "name": "强制安全删除",
+      "aliases": [
+        "安全删除",
+        "强制删除",
+        "彻底删除",
+        "不可恢复",
+        "粉碎文件",
+        "shred",
+        "purge",
+        "wipe"
+      ],
+      "desktopOnly": true,
+      "winOnly": true
+    },
     "mdm": {
       "name": "Markdown 文档管理",
       "aliases": [
@@ -1310,6 +1326,7 @@
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
     "gitbridge": "今日交码看板 + 说明模板 + Gerrit 视角 + 历史/工作线右键；统一桥 /git。",
     "fileunlock": "找出 Windows 上占用某文件/文件夹的程序，并可一键关闭释放占用（Restart Manager 检测，仅 Windows）。",
+    "forcepurge": "多选文件+文件夹一并加入清单：覆写后永久删除（尽量不可恢复）；若被占用则强制结束进程再删。仅 Windows，统一桥 /unlock/purge。",
     "mdm": "Markdown 文档管理：选本机文件夹存储、分类/标签/搜索、实时预览；导入按质量路由（结构化 Pandoc / PDF·图 MinerU），导出经 Pandoc 最高质量参数。专用互转见「文档互转」。",
     "docfmt": "文档格式互转：Word↔PDF、Office↔HTML 等（不局限 Markdown）；结构化走 Pandoc，PDF/扫描件经 MinerU/Docling 中转；另附专用「转 MD / MD 转出」。统一本机桥，不上传公网。",
     "mediafmt": "媒体格式互转入口：视频/音频走本机 FFmpeg 最高质量档；图片导向图片工具（mozjpeg/AVIF）；并链到视频工具、音频处理、修剪、GIF、FFmpeg 桥等专用面板。",

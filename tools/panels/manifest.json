@@ -133,6 +133,11 @@
       "bytes": 4992
     },
     {
+      "id": "forcepurge",
+      "file": "./panels/forcepurge.html",
+      "bytes": 3120
+    },
+    {
       "id": "fruitearn",
       "file": "./panels/fruitearn.html",
       "bytes": 4993

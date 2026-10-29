@@ -381,8 +381,8 @@ sync_bridges() {
   done
   chmod +x "$BRIDGE_DIR/git-bridge/start-linux.sh" "$BRIDGE_DIR/git-bridge/start-mac.command" "$BRIDGE_DIR/git-bridge/noop-editor.sh" 2>/dev/null || true
 
-  # 文件占用解锁（Windows 专用；其他平台下载后不生效）
-  for f in server.js lock-ops.js; do
+  # 文件占用解锁 + 安全擦除（Windows 专用；其他平台下载后不生效）
+  for f in server.js lock-ops.js purge-ops.js; do
     info "fileunlock-bridge/$f"
     download_file "${BASE_URL}/fileunlock-bridge/$f" "$BRIDGE_DIR/fileunlock-bridge/$f" || warn "下载失败 $f"
   done
@@ -428,6 +428,7 @@ sync_bridges() {
     "$BRIDGE_DIR/git-bridge/git-ops.js" \
     "$BRIDGE_DIR/fileunlock-bridge/server.js" \
     "$BRIDGE_DIR/fileunlock-bridge/lock-ops.js" \
+    "$BRIDGE_DIR/fileunlock-bridge/purge-ops.js" \
     "$BRIDGE_DIR/pandoc-bridge/server.js" \
     "$BRIDGE_DIR/pandoc-bridge/pandoc-ops.js" \
     "$BRIDGE_DIR/mineru-bridge/server.js" \

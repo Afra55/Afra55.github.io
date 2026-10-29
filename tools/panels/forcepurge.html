@@ -1,0 +1,48 @@
+<section id="forcepurge" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>强制安全删除</h1>
+        <p>
+          多选文件与文件夹一并加入清单：先覆写再永久删除（尽量不可恢复，不进回收站）。若被占用会强制结束占用进程后继续删。仅 Windows · 走统一桥
+          <span class="mono">/unlock/purge</span>。
+        </p>
+      </div>
+      <div class="panel-body">
+        <div id="fp-bridge-shell" class="bridge-shell-host"></div>
+        <p class="error" id="fp-error" hidden></p>
+        <div id="fp-workspace" hidden>
+          <div class="fp-drop" id="fp-drop">把多个文件 / 文件夹拖到这里（可混选），加入删除清单</div>
+          <div class="btn-row tool-actions" style="margin-top:0.55rem;flex-wrap:wrap">
+            <button type="button" class="secondary-btn" id="fp-pick-files">添加文件（可多选）</button>
+            <button type="button" class="secondary-btn" id="fp-pick-dir">添加文件夹</button>
+            <button type="button" class="ghost-btn" id="fp-clear">清空清单</button>
+          </div>
+          <label class="fp-paste-label" for="fp-paste">或粘贴路径（每行一个，文件与文件夹均可）</label>
+          <textarea id="fp-paste" class="mono fp-paste" rows="3" placeholder="D:\tmp\a.zip&#10;D:\tmp\old-folder" spellcheck="false"></textarea>
+          <div class="btn-row tool-actions" style="margin-top:0.4rem">
+            <button type="button" class="ghost-btn" id="fp-add-paste">加入清单</button>
+          </div>
+          <div class="label-row" style="margin-top:1rem">
+            <h2 class="subhead">待删清单</h2>
+            <span class="hint tight" id="fp-meta">0 项</span>
+          </div>
+          <div id="fp-list" class="fp-list" role="list"></div>
+          <p class="hint tight" id="fp-empty">清单为空。请拖入、点添加，或粘贴路径。</p>
+          <div class="fp-confirm-box">
+            <label class="fp-check">
+              <input type="checkbox" id="fp-ack" />
+              我确认：这些项会被<strong>覆写后永久删除</strong>，无法从回收站找回；占用它们的程序可能被强制结束。
+            </label>
+            <label class="fp-confirm-type" for="fp-confirm-text">请输入 <span class="mono">删除</span> 以继续</label>
+            <input id="fp-confirm-text" class="text-input" type="text" autocomplete="off" placeholder="删除" />
+            <div class="btn-row tool-actions">
+              <button type="button" class="primary-btn" id="fp-run" disabled>开始安全删除</button>
+            </div>
+          </div>
+          <p class="hint tight" style="margin-top:0.8rem">
+            说明：每个文件默认随机覆写 + 零覆写共 2 遍后删除并打乱文件名。固态硬盘 / TRIM
+            无法保证绝对不可恢复，但会显著提高恢复成本。系统目录、盘符根、用户主目录根已禁止。
+          </p>
+          <div id="fp-result" class="fp-result" hidden></div>
+        </div>
+      </div>
+    </section>
