@@ -127,10 +127,11 @@ assert(
   assert(/devtools-vbb-quality-first/.test(vbbUi), "黑盒面板须记住画质优先");
   assert(/qualityFirst:\s*vbbQualityFirstOn\(\)/.test(vbbUi), "黑盒编码须传入画质优先");
   const vtrimEd = fs.readFileSync(path.join(__dirname, "lib/vtrim-editor.js"), "utf8");
-  assert(/END_KEEP_SEC\s*=\s*1\s*\/\s*25/.test(vtrimEd), "编辑预览片尾半开 1/25s");
-  assert(/last\.end\s*=\s*Math\.max\([\s\S]{0,80}END_KEEP_SEC/.test(vtrimEd), "keepRanges 成片须收掉预览半开片尾");
+  assert(/END_KEEP_SEC\s*=\s*1\s*\/\s*25/.test(vtrimEd), "编辑预览片尾半开兜底 1/25s");
+  assert(/last\.end\s*=\s*Math\.max\(\s*last\.start\s*\+\s*0\.05\s*,\s*last\.end\s*-\s*endKeep\s*\)/.test(vtrimEd), "keepRanges 成片须收掉预览半开片尾");
   assert(/from currentTime|a = t|当前进度/.test(vtrimEd) && /addCutoutAtPlayhead/.test(vtrimEd), "删中间从播放头起");
-  assert(/cutStart\s*-\s*END_KEEP_SEC/.test(vtrimEd) && /END_KEEP_SEC\s*\+\s*START_KEEP_SEC/.test(vtrimEd), "删中间须用 END/START_KEEP 对齐红柄");
+  assert(/cutStart\s*-\s*endKeep/.test(vtrimEd) && /endKeep\s*\+\s*startKeep/.test(vtrimEd), "删中间须用 end/startKeep 对齐红柄");
+  assert(/Math\.min\(\s*want\s*,\s*Math\.max\(\s*fromShown/.test(vtrimEd), "片尾抬手禁止推过拖点");
   assert(/trimStart:\s*quantizeTrimSec\(startSec\)/.test(vtrimEd), "完成编辑须提交黄柄所见 trimStart，勿预加 START_KEEP");
   assert(/function keepRangesForEncode/.test(vtrimEd), "成片须有 keepRangesForEncode（≡预览所见）");
   assert(/下载编辑后的视频/.test(vtrimEd) && /function exportKeepVideo/.test(vtrimEd), "编辑层须能下载编辑后 mp4");
