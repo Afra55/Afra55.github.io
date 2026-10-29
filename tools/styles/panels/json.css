@@ -10,52 +10,71 @@ html[data-theme-scheme="light"] .json-hl .tok-num { color: #d97706; }
 html[data-theme-scheme="light"] .json-hl .tok-bool { color: #db2777; }
 html[data-theme-scheme="light"] .json-hl .tok-punc { color: #64748b; }
 
+/*
+ * 着色编辑器：透明 textarea 叠在 pre 上。
+ * 边框只画在外层；两层同字号/行高/内边距，并都预留 scrollbar-gutter，
+ * 否则滚动条一出现两层换行宽度不同，鼠标点选会对不齐彩色字。
+ */
 .json-editor-stack {
+  --json-fs: 14px;
+  --json-lh: 21px;
+  --json-pad-y: 0.78rem;
+  --json-pad-x: 0.9rem;
   position: relative;
   width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.json-editor-stack:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
-/* 着色底层与编辑层必须同字号/行高/内边距，否则拖选会错位出「双层」 */
 .json-hl-backdrop,
 .json-area-overlay {
   margin: 0;
-  padding: 0.78rem 0.9rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  padding: var(--json-pad-y) var(--json-pad-x);
+  border: 0 !important;
+  border-radius: 0;
   box-sizing: border-box;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  letter-spacing: normal;
+  box-shadow: none !important;
+  outline: none !important;
+  font-family: var(--mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: var(--json-fs);
+  line-height: var(--json-lh);
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: break-word;
   tab-size: 2;
   -moz-tab-size: 2;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  width: 100%;
 }
 
 .json-hl-backdrop {
   position: absolute;
   inset: 0;
   z-index: 0;
-  overflow: auto;
   pointer-events: none;
   color: var(--ink);
-  background: var(--panel-strong, var(--control-bg, transparent));
-  scrollbar-width: none;
-}
-.json-hl-backdrop::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  background: transparent;
 }
 
 .json-area-overlay {
   position: relative;
   z-index: 1;
-  /* 文字透明，只显示下层着色；光标保留 */
+  display: block;
   color: transparent !important;
   -webkit-text-fill-color: transparent;
   caret-color: var(--ink);
   background: transparent !important;
+  resize: none !important; /* 高度由外层拖条统一控制，避免单独 resize 打乱叠层 */
 }
 
 .json-area-overlay::placeholder {
@@ -64,11 +83,7 @@ html[data-theme-scheme="light"] .json-hl .tok-punc { color: #64748b; }
   opacity: 0.85;
 }
 
-/*
- * 选区文字也必须保持透明，否则选中时 ink 色字会叠在着色层上，
- * 看起来像「另一层代码」、拖选发糊。
- * 只用半透明底色标出选区。
- */
+/* 选区文字保持透明，只用底色标选区，避免叠出第二层字 */
 .json-area-overlay::selection,
 .json-area-overlay *::selection {
   color: transparent;
