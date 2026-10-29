@@ -105,4 +105,31 @@ t("ENCODE_BOUND_PAD_SEC=0（取消成片多删垫）", () => {
   assert.ok(/ENCODE_BOUND_PAD_SEC\s*=\s*0/.test(vtrim));
 });
 
+t("片尾抬手只用 min(want,…) 收紧，禁止推过拖点", () => {
+  assert.ok(/Math\.min\(\s*want\s*,\s*Math\.max\(\s*fromShown/.test(vtrim));
+  assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(vtrim));
+});
+
+t("有 srcFps 时半开 = 1/fps", () => {
+  const { keepRangesFromEdit } = loadKeepFns();
+  const edit = { trimStart: 0, trimEnd: 10, cutouts: [], srcFps: 60 };
+  // loadKeepFns 沙箱未注入 srcFps 分支时仍用 END_KEEP；直接跑源码逻辑
+  const box = {};
+  const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
+  const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
+  vm.runInNewContext(
+    `
+    const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
+    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 0;
+    ${norm[0]}
+    ${fromEdit[0]}
+    this.keepRangesFromEdit = keepRangesFromEdit;
+    `,
+    box
+  );
+  const ks = box.keepRangesFromEdit(edit, 10);
+  assert.strictEqual(ks.length, 1);
+  assert.ok(Math.abs(ks[0].end - (10 - 1 / 60)) < 1e-9, "60fps 片尾半开 1/60");
+});
+
 console.log(`vbb-preview-encode-align.test.js: ${n} passed`);

@@ -51,13 +51,29 @@
   }
   /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
   const DRAG_SEEK_MS = 72;
-  /** 半开片尾：预览与成片共用，约 1 帧（勿只靠 timeupdate，否则会多播） */
+  /** 半开片尾兜底（约 1 帧 @25fps）；有片源 fps 时用 1/fps */
   const END_KEEP_SEC = 1 / 25;
   /**
-   * 删段后下一段片头半开：预览与成片共用（红柄终点所见帧已删干净再开播）。
-   * 不做「再多删几帧」——手机拖到哪一帧，预览/GIF 就对准哪一帧。
+   * 删段后下一段片头半开兜底；有片源 fps 时随 endKeep 收紧。
+   * 不做「再多删几帧」——拖到哪一帧，预览/GIF 就对准哪一帧。
    */
   const START_KEEP_SEC = 1 / 50;
+
+  /** 按片源 fps 取半开片尾；无有效 fps 回退 END_KEEP_SEC */
+  function resolveEndKeepSec(editOrFps) {
+    const fps =
+      editOrFps && typeof editOrFps === "object"
+        ? Number(editOrFps.srcFps) || 0
+        : Number(editOrFps) || 0;
+    const n = normalizeSourceFps(fps);
+    if (n >= 5) return 1 / n;
+    return END_KEEP_SEC;
+  }
+
+  function resolveStartKeepSec(editOrFps) {
+    const endKeep = resolveEndKeepSec(editOrFps);
+    return Math.min(START_KEEP_SEC, endKeep * 0.5);
+  }
   /** @deprecated 已取消「成片多删垫」；保留导出字段以免旧调用报错 */
   const ENCODE_BOUND_PAD_SEC = 0;
   let uidSeq = 0;
@@ -736,13 +752,19 @@
       } catch (_) {}
     }
 
+    /** 半开一步：优先片源真实帧间隔，避免固定 1/25 在 60fps 上差几帧 */
+    function endKeepStepSec() {
+      return frameSnapSec > 0 ? frameSnapSec : END_KEEP_SEC;
+    }
+
     function endKeepSec() {
-      return Math.max(startSec, endSec - END_KEEP_SEC);
+      return Math.max(startSec, endSec - endKeepStepSec());
     }
 
     function startKeepSec() {
       // 半开片头：成片从略晚于预览落点开始，避免多吸前几帧
-      return Math.min(endKeepSec(), startSec + START_KEEP_SEC);
+      const step = Math.min(START_KEEP_SEC, endKeepStepSec() * 0.5);
+      return Math.min(endKeepSec(), startSec + step);
     }
 
     function previewSeek(t, { throttle = false } = {}) {
@@ -1206,6 +1228,7 @@
         const preLift = dragSecBeforeLift(endSec);
         const before = endSec;
         const want = quantizeTrimSec(snapTrimHandle(preLift, "end"));
+        const step = endKeepStepSec();
         setEnd(want, {
           preview: false,
           immediateSeek: false,
@@ -1218,15 +1241,16 @@
           clearTimeout(dragSeekTimer);
           dragSeekTimer = 0;
         }
-        const keep = endKeepSec();
+        const keep = Math.max(startSec, want - step);
         try {
           video.currentTime = keep;
         } catch (_) {}
         await waitSeek(video);
         const shown = Number(video.currentTime) || keep;
-        // 所见对齐片尾半开；偏早则收紧 end，避免成片多出尾帧
+        // 解码偏早 → 收紧 end；解码偏后（关键帧）→ 绝不能把 end 推过用户拖到的 want（否则预览多几帧）
+        const fromShown = shown + step;
         endSec = quantizeTrimSec(
-          clamp(Math.max(want, shown + END_KEEP_SEC), startSec + MIN_SPAN, duration)
+          clamp(Math.min(want, Math.max(fromShown, startSec + MIN_SPAN)), startSec + MIN_SPAN, duration)
         );
         clipCutoutsToWindow();
         await seekPlayheadExact(endKeepSec());
@@ -1441,6 +1465,8 @@
         // 提交黄/红柄所见时间：预览与 GIF 都按此精确对齐（所见即所得）
         trimStart: quantizeTrimSec(startSec),
         trimEnd: quantizeTrimSec(endSec),
+        // 带上片源 fps，外预览/成片半开与编辑器同一帧间隔
+        srcFps: sourceFps > 0 ? sourceFps : undefined,
         cutouts: cuts.map((c) => ({
           start: quantizeTrimSec(c.start),
           end: quantizeTrimSec(c.end),
@@ -1705,15 +1731,19 @@
         previewSeek(startSec, { throttle: false });
       } else {
         const want = quantizeTrimSec(endSec);
-        const keep = Math.max(startSec, want - END_KEEP_SEC);
+        const step = endKeepStepSec();
+        const keep = Math.max(startSec, want - step);
         try {
           video.currentTime = keep;
         } catch (_) {}
         await waitSeek(video);
         if (gen !== nudgeSnapGen || closed) return;
         const shown = Number(video.currentTime) || keep;
-        // 所见应对齐片尾半开点；解码偏早则收紧 end，避免成片多出尾帧
-        endSec = quantizeTrimSec(clamp(Math.max(want, shown + END_KEEP_SEC), startSec + MIN_SPAN, duration));
+        // 同抬手：只收紧、不越过 want，避免片尾- 预览多出几帧
+        const fromShown = shown + step;
+        endSec = quantizeTrimSec(
+          clamp(Math.min(want, Math.max(fromShown, startSec + MIN_SPAN)), startSec + MIN_SPAN, duration)
+        );
         clipCutoutsToWindow();
         previewSeek(endKeepSec(), { throttle: false });
       }
@@ -2142,16 +2172,20 @@
     const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
     const trimEnd = Math.min(d, Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || d));
     const cuts = normalizeCutouts(edit?.cutouts, trimStart, trimEnd);
+    // 有 srcFps 时半开 = 1 帧；否则回退 1/25，避免固定常量在高帧率片上差几帧
+    const fps = Number(edit?.srcFps) || 0;
+    const endKeep = fps >= 5 && fps <= 240 ? 1 / fps : END_KEEP_SEC;
+    const startKeep = Math.min(START_KEEP_SEC, endKeep * 0.5);
     const keeps = [];
     let cursor = trimStart;
     for (const c of cuts) {
       // 闭区间：红柄 cut.start / cut.end 所见帧都要删。
-      // 上一段按片尾半开在 start 前收掉 END_KEEP，避免 HTML5 播到 start 仍画出该帧；
-      // 下一段从 end+END_KEEP 起再加 START_KEEP 片头半开，与成片一致。
+      // 上一段按片尾半开在 start 前收掉 endKeep，避免 HTML5 播到 start 仍画出该帧；
+      // 下一段从 end+endKeep 起再加 startKeep 片头半开，与成片一致。
       const cutStart = Math.max(trimStart, Number(c.start) || 0);
       const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
-      const keepEnd = Math.max(cursor + 0.05, cutStart - END_KEEP_SEC);
-      const resumeAt = Math.min(trimEnd, cutEnd + END_KEEP_SEC + START_KEEP_SEC);
+      const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep);
+      const resumeAt = Math.min(trimEnd, cutEnd + endKeep + startKeep);
       if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
       cursor = Math.max(cursor, resumeAt);
     }
@@ -2159,7 +2193,7 @@
     if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
     const last = keeps[keeps.length - 1];
     if (last && last.end >= trimEnd - 0.001) {
-      last.end = Math.max(last.start + 0.05, last.end - END_KEEP_SEC);
+      last.end = Math.max(last.start + 0.05, last.end - endKeep);
     }
     return keeps;
   }
@@ -2355,6 +2389,8 @@
     exportKeepVideo,
     normalizeSourceFps,
     frameSnapSecFromFps,
+    resolveEndKeepSec,
+    resolveStartKeepSec,
     DEFAULT_FRAME_FPS,
     END_KEEP_SEC,
     START_KEEP_SEC,

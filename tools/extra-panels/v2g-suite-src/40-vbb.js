@@ -578,7 +578,25 @@
           item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
         }
         if (!Array.isArray(item.edit.cutouts)) item.edit.cutouts = [];
+        // 半开片尾按片源 fps；编辑器提交时也会写 edit.srcFps
+        const fps = Number(item.srcFps) || Number(item.edit.srcFps) || 0;
+        if (fps >= 5) item.edit.srcFps = fps;
         return item.edit;
+      }
+
+      /** keep 计算前带上 fps，避免固定 1/25 在高帧率片上片尾多几帧 */
+      function vbbEditWithSrcFps(edit, item) {
+        const e = edit && typeof edit === "object" ? { ...edit } : {};
+        let fps = Number(e.srcFps) || Number(item?.srcFps) || 0;
+        if (!(fps >= 5)) {
+          try {
+            fps = Number(getActiveVbbEditItem()?.srcFps) || 0;
+          } catch (_) {
+            fps = 0;
+          }
+        }
+        if (fps >= 5) e.srcFps = fps;
+        return e;
       }
 
       function vbbNormalizeCutouts(list, trimStart, trimEnd) {
@@ -621,22 +639,35 @@
       }
 
       function vbbKeepRangesFromEdit(edit, duration) {
+        const stamped = vbbEditWithSrcFps(edit);
         const fn = window.DevToolsVtrimEditor?.keepRangesFromEdit;
-        if (typeof fn === "function") return fn(edit, duration);
+        if (typeof fn === "function") return fn(stamped, duration);
         const d = Math.max(0, Number(duration) || 0);
-        const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
-        const trimEnd = Math.min(d, Math.max(trimStart + VBB_MIN_SPAN, Number(edit?.trimEnd) || d));
-        const cuts = vbbNormalizeCutouts(edit?.cutouts, trimStart, trimEnd);
+        const trimStart = Math.max(0, Number(stamped?.trimStart) || 0);
+        const trimEnd = Math.min(d, Math.max(trimStart + VBB_MIN_SPAN, Number(stamped?.trimEnd) || d));
+        const cuts = vbbNormalizeCutouts(stamped?.cutouts, trimStart, trimEnd);
         const keeps = [];
         let cursor = trimStart;
+        const resolveEnd = window.DevToolsVtrimEditor?.resolveEndKeepSec;
+        const resolveStart = window.DevToolsVtrimEditor?.resolveStartKeepSec;
+        const fps = Number(stamped?.srcFps) || 0;
         const endKeep =
-          Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
-            ? window.DevToolsVtrimEditor.END_KEEP_SEC
-            : 1 / 25;
+          typeof resolveEnd === "function"
+            ? resolveEnd(stamped)
+            : fps >= 5 && fps <= 240
+              ? 1 / fps
+              : Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
+                ? window.DevToolsVtrimEditor.END_KEEP_SEC
+                : 1 / 25;
         const startKeep =
-          Number(window.DevToolsVtrimEditor?.START_KEEP_SEC) > 0
-            ? window.DevToolsVtrimEditor.START_KEEP_SEC
-            : 1 / 50;
+          typeof resolveStart === "function"
+            ? resolveStart(stamped)
+            : Math.min(
+                Number(window.DevToolsVtrimEditor?.START_KEEP_SEC) > 0
+                  ? window.DevToolsVtrimEditor.START_KEEP_SEC
+                  : 1 / 50,
+                endKeep * 0.5
+              );
         for (const c of cuts) {
           const cutStart = Math.max(trimStart, Number(c.start) || 0);
           const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
@@ -658,9 +689,10 @@
        * 成片/拼接/外预览播放共用 ≡ 黄/红柄所见（所见即所得，不多删垫）。
        */
       function vbbKeepRangesForEncode(edit, duration) {
+        const stamped = vbbEditWithSrcFps(edit);
         const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
-        if (typeof fn === "function") return fn(edit, duration);
-        return vbbKeepRangesFromEdit(edit, duration);
+        if (typeof fn === "function") return fn(stamped, duration);
+        return vbbKeepRangesFromEdit(stamped, duration);
       }
 
       function vbbEditIsDirty(edit, duration, srcW, srcH) {
