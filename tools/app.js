@@ -650,16 +650,32 @@
     }
   }
 
+  // 约 100KB：日常粘贴/编辑够用；再大就输入时不上色，失焦/美化再上色，避免整篇重绘卡顿
+  const JSON_LIVE_HL_MAX = 100000;
   const jsonHlTimers = new WeakMap();
+
   function scheduleJsonPaint(el) {
     if (!el) return;
     clearTimeout(jsonHlTimers.get(el));
+    const len = getJsonText(el).length;
+    const delay = len > JSON_LIVE_HL_MAX ? 220 : 60;
     jsonHlTimers.set(
       el,
       window.setTimeout(() => {
-        setJsonText(el, getJsonText(el), { keepCaret: true });
+        const raw = getJsonText(el);
+        if (raw.length > JSON_LIVE_HL_MAX) {
+          // 大文本：打平成纯文本继续打字，不做 span 重绘
+          if (el.querySelector?.(".tok-key, .tok-str, .tok-num, .tok-bool, .tok-punc")) {
+            const caret = getJsonCaret(el);
+            el.textContent = raw;
+            setJsonCaret(el, caret);
+          }
+          saveJsonDraft(el);
+          return;
+        }
+        setJsonText(el, raw, { keepCaret: true });
         saveJsonDraft(el);
-      }, 60)
+      }, delay)
     );
   }
 
@@ -679,6 +695,12 @@
     el.addEventListener("input", () => {
       if (composing) return;
       scheduleJsonPaint(el);
+    });
+    // 失焦时无论大小都上一次色（大文件也只付一次成本）
+    el.addEventListener("blur", () => {
+      clearTimeout(jsonHlTimers.get(el));
+      setJsonText(el, getJsonText(el), { keepCaret: false });
+      saveJsonDraft(el);
     });
     el.addEventListener("paste", (e) => {
       if (el.contentEditable === "plaintext-only") return;
