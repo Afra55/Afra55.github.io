@@ -1,0 +1,56 @@
+/* JSON 语法色：跟随站点明暗 */
+.json-hl .tok-key { color: #7dd3fc; }
+.json-hl .tok-str { color: #86efac; }
+.json-hl .tok-num { color: #fcd34d; }
+.json-hl .tok-bool { color: #f9a8d4; }
+.json-hl .tok-punc { color: #94a3b8; }
+html[data-theme-scheme="light"] .json-hl .tok-key { color: #2563eb; }
+html[data-theme-scheme="light"] .json-hl .tok-str { color: #059669; }
+html[data-theme-scheme="light"] .json-hl .tok-num { color: #d97706; }
+html[data-theme-scheme="light"] .json-hl .tok-bool { color: #db2777; }
+html[data-theme-scheme="light"] .json-hl .tok-punc { color: #64748b; }
+
+.json-editor-stack {
+  position: relative;
+  width: 100%;
+}
+
+.json-hl-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  overflow: auto;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: inherit;
+  line-height: 1.5;
+  box-sizing: border-box;
+  color: var(--ink);
+  background: var(--control-bg, transparent);
+}
+
+.json-area-overlay {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--ink);
+  background: transparent !important;
+}
+
+.json-area-overlay::placeholder {
+  color: var(--muted);
+  -webkit-text-fill-color: var(--muted);
+  opacity: 0.85;
+}
+
+.json-area-overlay::selection {
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
+  background: color-mix(in srgb, var(--accent, #4a8) 35%, transparent);
+}

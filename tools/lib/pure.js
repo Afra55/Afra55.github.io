@@ -1573,6 +1573,7 @@
     escapeHtml,
     detectShareLang,
     prettyJsonText,
+    highlightJson,
     renderShareCode,
     outOfChina,
     wgs84ToGcj02,

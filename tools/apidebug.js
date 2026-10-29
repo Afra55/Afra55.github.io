@@ -322,6 +322,66 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
+  function openBridgeConfig(msg) {
+    const det = $("#apid-bridge-details");
+    if (det) det.open = true;
+    if (els.bridgeNote) els.bridgeNote.textContent = msg || "请配置并启动本机桥（17888）。";
+    try {
+      det?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    } catch (_) {}
+  }
+
+  function syncBridgeFromShell() {
+    const b = panel.querySelector("#apid-base");
+    const t = panel.querySelector("#apid-token");
+    if (b) state.bridgeBase = String(b.value || "http://127.0.0.1:17888").replace(/\/$/, "");
+    if (t) state.bridgeToken = String(t.value || "devtools-bridge").trim() || "devtools-bridge";
+  }
+
+  async function ensureBridgeReady() {
+    const BT = window.devtoolsBridgeToken;
+    syncBridgeFromShell();
+    if (!BT?.probeHealth) {
+      openBridgeConfig("桥组件未加载，请刷新页面或检查网络后重试。");
+      throw new Error("本机桥组件未就绪，请先配置桥。");
+    }
+    const prefer = state.bridgeBase || "http://127.0.0.1:17888";
+    const tok = state.bridgeToken || "devtools-bridge";
+    let health = await BT.probeHealth(prefer, tok, false).catch(() => null);
+    if (health?.ok) {
+      state.bridgeOk = true;
+      return;
+    }
+    if (typeof BT.discoverBase === "function") {
+      const found = await BT.discoverBase(prefer, tok, { kind: "unified" }).catch(() => null);
+      if (found?.health?.ok || found?.health) {
+        state.bridgeBase = found.base || prefer;
+        state.bridgeOk = true;
+        const b = panel.querySelector("#apid-base");
+        if (b && found.base) b.value = found.base;
+        return;
+      }
+    }
+    if (els.respMeta) els.respMeta.textContent = "正在自动启动本机桥…";
+    BT.tryLaunchBridge?.("unified");
+    const found2 = await BT.ensureBridgeRunning?.({
+      preferredBase: prefer,
+      token: tok,
+      timeoutMs: 28000,
+      launch: false,
+      kind: "unified",
+    });
+    if (found2?.health) {
+      state.bridgeBase = found2.base || prefer;
+      state.bridgeOk = true;
+      const b = panel.querySelector("#apid-base");
+      if (b && found2.base) b.value = found2.base;
+      return;
+    }
+    openBridgeConfig("未检测到本机桥。请填写解压目录并点「启动 / 连接」，或取消勾选「经本机桥」。");
+    throw new Error("本机桥未启动。请先配置并启动统一桥（17888），或改用浏览器直连。");
+  }
+
   async function sendRequest() {
     if (state.sending) return;
     const req = readEditor();
@@ -336,6 +396,7 @@
     try {
       let result;
       if (els.useBridge?.checked) {
+        await ensureBridgeReady();
         result = await sendViaBridge(req);
       } else {
         result = await sendViaBrowser(req);
@@ -349,7 +410,7 @@
         els.respMeta.textContent = `失败 · ${ms} ms`;
       }
       if (els.respHeaders) els.respHeaders.textContent = "—";
-      if (els.respBody) els.respBody.textContent = err?.message || String(err);
+      setRespBody(err?.message || String(err), { json: false });
       setError(err?.message || "请求失败");
     } finally {
       state.sending = false;
@@ -410,6 +471,19 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
+  function setRespBody(text, { json = false } = {}) {
+    if (!els.respBody) return;
+    const raw = text == null ? "" : String(text);
+    els.respBody.dataset.raw = raw;
+    if (json && raw && window.DevToolsPure?.highlightJson) {
+      els.respBody.classList.add("is-json");
+      els.respBody.innerHTML = window.DevToolsPure.highlightJson(raw);
+    } else {
+      els.respBody.classList.remove("is-json");
+      els.respBody.textContent = raw || "（空正文）";
+    }
+  }
+
   function paintResponse(result, ms) {
     const size = new TextEncoder().encode(result.bodyText || "").length;
     const status = Number(result.status) || 0;
@@ -422,12 +496,14 @@
       els.respHeaders.textContent = lines.length ? lines.join("\n") : "（无）";
     }
     let body = result.bodyText || "";
+    let isJson = false;
     try {
       body = JSON.stringify(JSON.parse(body), null, 2);
+      isJson = true;
     } catch (_) {
       /* keep */
     }
-    if (els.respBody) els.respBody.textContent = body || "（空正文）";
+    setRespBody(body || "（空正文）", { json: isJson && !!body });
   }
 
   function closeCtx() {
@@ -595,6 +671,14 @@
       saveCurrent({ asNew: true }).catch((e) => setError(e.message))
     );
     $("#apid-send")?.addEventListener("click", () => sendRequest());
+    $("#apid-copy-body")?.addEventListener("click", async () => {
+      const raw = els.respBody?.dataset?.raw ?? els.respBody?.textContent ?? "";
+      toast((await copyText(raw)) ? "已复制正文" : "复制失败");
+    });
+    $("#apid-copy-headers")?.addEventListener("click", async () => {
+      const raw = els.respHeaders?.textContent ?? "";
+      toast((await copyText(raw)) ? "已复制响应头" : "复制失败");
+    });
     $("#apid-clear")?.addEventListener("click", () => {
       writeEditor(P.emptyRequest({ name: "未命名请求", method: "GET" }));
       if (els.respMeta) {
@@ -602,7 +686,7 @@
         els.respMeta.dataset.status = "";
       }
       if (els.respHeaders) els.respHeaders.textContent = "—";
-      if (els.respBody) els.respBody.textContent = "—";
+      setRespBody("—", { json: false });
     });
     els.method?.addEventListener("change", syncMethodTone);
     $("#apid-to-curl")?.addEventListener("click", async () => {
@@ -766,7 +850,10 @@
       el.addEventListener("click", async (ev) => {
         const act = ev.target.closest?.("[data-act]")?.dataset?.act;
         closeCtx();
-        if (act === "copy-body") toast((await copyText(els.respBody.textContent)) ? "已复制正文" : "复制失败");
+        if (act === "copy-body") {
+          const raw = els.respBody?.dataset?.raw ?? els.respBody?.textContent ?? "";
+          toast((await copyText(raw)) ? "已复制正文" : "复制失败");
+        }
         if (act === "copy-headers")
           toast((await copyText(els.respHeaders.textContent)) ? "已复制响应头" : "复制失败");
       });

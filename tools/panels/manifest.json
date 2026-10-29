@@ -35,7 +35,7 @@
     {
       "id": "apidebug",
       "file": "./panels/apidebug.html",
-      "bytes": 6817
+      "bytes": 9929
     },
     {
       "id": "audio",
@@ -250,7 +250,7 @@
     {
       "id": "json",
       "file": "./panels/json.html",
-      "bytes": 1181
+      "bytes": 2445
     },
     {
       "id": "lanboard",

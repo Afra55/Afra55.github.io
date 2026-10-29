@@ -314,6 +314,12 @@
   justify-content: space-between;
   margin-bottom: 0.35rem;
 }
+.apid-resp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-left: auto;
+}
 .apid-resp-meta {
   font-size: 0.82rem;
   color: var(--muted);
@@ -362,6 +368,17 @@
   line-height: 1.45;
 }
 .apid-resp-body { min-height: 7.5rem; }
+.apid-resp-body.is-json { white-space: pre; }
+.apid-resp-body.json-hl .tok-key { color: #7dd3fc; }
+.apid-resp-body.json-hl .tok-str { color: #86efac; }
+.apid-resp-body.json-hl .tok-num { color: #fcd34d; }
+.apid-resp-body.json-hl .tok-bool { color: #f9a8d4; }
+.apid-resp-body.json-hl .tok-punc { color: #94a3b8; }
+html[data-theme-scheme="light"] .apid-resp-body.json-hl .tok-key { color: #2563eb; }
+html[data-theme-scheme="light"] .apid-resp-body.json-hl .tok-str { color: #059669; }
+html[data-theme-scheme="light"] .apid-resp-body.json-hl .tok-num { color: #d97706; }
+html[data-theme-scheme="light"] .apid-resp-body.json-hl .tok-bool { color: #db2777; }
+html[data-theme-scheme="light"] .apid-resp-body.json-hl .tok-punc { color: #64748b; }
 
 .apid-bridge-details summary {
   cursor: pointer;

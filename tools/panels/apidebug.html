@@ -128,12 +128,16 @@
           <div class="apid-resp-bar">
             <strong>响应</strong>
             <span class="apid-resp-meta mono" id="apid-resp-meta" data-status="">尚未发送</span>
+            <div class="apid-resp-actions">
+              <button type="button" class="ghost-btn" id="apid-copy-headers" title="复制响应头">复制响应头</button>
+              <button type="button" class="secondary-btn" id="apid-copy-body" title="复制响应正文">复制正文</button>
+            </div>
           </div>
           <details class="apid-resp-headers">
             <summary>响应头</summary>
             <pre class="mono apid-pre" id="apid-resp-headers">—</pre>
           </details>
-          <pre class="mono apid-pre apid-resp-body" id="apid-resp-body" tabindex="0">—</pre>
+          <pre class="mono apid-pre apid-resp-body json-hl" id="apid-resp-body" tabindex="0" data-raw="">—</pre>
         </div>
 
         <details class="apid-bridge-details panel-card" id="apid-bridge-details">

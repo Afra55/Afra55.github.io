@@ -697,6 +697,8 @@
         await loadScript("./lib/code-scan.js");
       }
       if (id === "apidebug") {
+        await loadScript("./lib/diff-core.js").catch(() => {});
+        await loadScript("./lib/pure.js").catch(() => {});
         await loadScript("./lib/apidebug-pure.js");
         try {
           await window.DevToolsPanels?.ensure?.(id);

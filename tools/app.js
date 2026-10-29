@@ -550,6 +550,8 @@
   const jsonInput = $("#json-input");
   if (!jsonInput) return;
   const jsonInputB = $("#json-input-b");
+  const jsonHlA = $("#json-hl-a");
+  const jsonHlB = $("#json-hl-b");
   const jsonError = $("#json-error");
   const jsonMeta = $("#json-meta");
   const paneA = $("#json-pane-a");
@@ -566,6 +568,38 @@
   const JSON_MIN_H = 120;
   const JSON_DEFAULT_H = 300;
   const isJsonDesktop = () => window.matchMedia("(min-width: 721px)").matches;
+
+  function paintJsonHl(textarea, backdrop) {
+    if (!textarea || !backdrop) return;
+    const raw = textarea.value;
+    if (!raw) {
+      backdrop.innerHTML = "";
+      return;
+    }
+    const hl = window.DevToolsPure?.highlightJson;
+    if (typeof hl === "function") {
+      try {
+        backdrop.innerHTML = hl(raw);
+        return;
+      } catch (_) {
+        /* fall through */
+      }
+    }
+    backdrop.textContent = raw;
+  }
+
+  function syncJsonHlScroll(textarea, backdrop) {
+    if (!textarea || !backdrop) return;
+    backdrop.scrollTop = textarea.scrollTop;
+    backdrop.scrollLeft = textarea.scrollLeft;
+  }
+
+  let jsonHlTimer = 0;
+  function scheduleJsonHl(textarea, backdrop) {
+    if (!backdrop) return;
+    clearTimeout(jsonHlTimer);
+    jsonHlTimer = window.setTimeout(() => paintJsonHl(textarea, backdrop), 80);
+  }
 
   function saveJsonDraft(el) {
     if (!el) return;
@@ -591,8 +625,18 @@
       if (savedB) jsonInputB.value = savedB;
     }
   } catch (_) {}
-  jsonInput.addEventListener("input", () => saveJsonDraft(jsonInput));
-  jsonInputB?.addEventListener("input", () => saveJsonDraft(jsonInputB));
+  jsonInput.addEventListener("input", () => {
+    saveJsonDraft(jsonInput);
+    scheduleJsonHl(jsonInput, jsonHlA);
+  });
+  jsonInputB?.addEventListener("input", () => {
+    saveJsonDraft(jsonInputB);
+    scheduleJsonHl(jsonInputB, jsonHlB);
+  });
+  jsonInput.addEventListener("scroll", () => syncJsonHlScroll(jsonInput, jsonHlA));
+  jsonInputB?.addEventListener("scroll", () => syncJsonHlScroll(jsonInputB, jsonHlB));
+  paintJsonHl(jsonInput, jsonHlA);
+  paintJsonHl(jsonInputB, jsonHlB);
 
   // ---- 高度：两框同步，拖拽调整，无最高限制 ----
   let jsonHeight = readJsonNum(JSON_HEIGHT_KEY, JSON_DEFAULT_H);
@@ -604,6 +648,11 @@
       el.style.maxHeight = "none";
       el.style.overflowY = "auto";
       el.style.resize = "none";
+    });
+    [jsonHlA, jsonHlB].forEach((el) => {
+      if (!el) return;
+      el.style.height = `${jsonHeight}px`;
+      el.style.maxHeight = "none";
     });
   }
 
@@ -759,6 +808,8 @@
     } else {
       jsonMeta.textContent = "";
     }
+    paintJsonHl(jsonInput, jsonHlA);
+    paintJsonHl(jsonInputB, jsonHlB);
   }
 
   async function runJsonRepair() {
@@ -795,6 +846,8 @@
       if (firstErr) setToolError(jsonError, `修复失败：${firstErr}`);
       jsonMeta.textContent = bits.length ? `已修复并美化 · ${bits.join(" · ")}` : "";
       if (bits.length) showToast("JSON 已修复");
+      paintJsonHl(jsonInput, jsonHlA);
+      paintJsonHl(jsonInputB, jsonHlB);
     } catch (err) {
       jsonMeta.textContent = "";
       const msg = err?.position != null ? `${err.message}` : String(err?.message || err);
@@ -815,6 +868,8 @@
     if (jsonInputB) jsonInputB.value = "";
     jsonMeta.textContent = "";
     setToolError(jsonError, "");
+    paintJsonHl(jsonInput, jsonHlA);
+    paintJsonHl(jsonInputB, jsonHlB);
     try {
       localStorage.removeItem(JSON_DRAFT_KEY);
       localStorage.removeItem(JSON_DRAFT_B_KEY);
