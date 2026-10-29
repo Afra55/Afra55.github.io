@@ -4,10 +4,16 @@
     <p>只收集本站没有做成工具的外部站点。点卡片新窗口打开；需要系统浏览器时会尽量跳出 PWA。</p>
   </div>
   <div class="panel-body">
-    <label class="sitenav-search-wrap" for="sitenav-q">
-      <span class="visually-hidden">搜索外链</span>
-      <input id="sitenav-q" class="sitenav-search" type="search" placeholder="搜索名称 / 简介…" autocomplete="off" />
-    </label>
+    <div class="sitenav-toolbar" id="sitenav-toolbar">
+      <div class="sitenav-toolbar-row">
+        <label class="sitenav-search-wrap" for="sitenav-q">
+          <span class="visually-hidden">搜索外链</span>
+          <input id="sitenav-q" class="sitenav-search" type="search" placeholder="搜索名称 / 简介 / 标签…" autocomplete="off" />
+        </label>
+        <p class="hint tight sitenav-count" id="sitenav-count" aria-live="polite"></p>
+      </div>
+      <div class="sitenav-filters" id="sitenav-filters" role="toolbar" aria-label="按标签筛选"></div>
+    </div>
     <div id="sitenav-grid" class="sitenav-grid" role="list"></div>
     <p class="hint tight" id="sitenav-empty" hidden>没有匹配的外链。</p>
   </div>

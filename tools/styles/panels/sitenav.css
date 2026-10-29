@@ -1,6 +1,27 @@
+.sitenav-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0 0.65rem;
+  background: color-mix(in srgb, var(--panel, var(--bg, #111)) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.sitenav-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+}
+
 .sitenav-search-wrap {
   display: block;
-  margin: 0 0 1rem;
+  flex: 1 1 16rem;
+  margin: 0;
+  min-width: 0;
 }
 
 .sitenav-search {
@@ -11,6 +32,48 @@
   border-radius: 12px;
   background: var(--control-bg);
   color: var(--ink);
+}
+
+.sitenav-count {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.sitenav-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.sitenav-chip {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  padding: 0.28rem 0.62rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.sitenav-chip:hover {
+  border-color: color-mix(in srgb, var(--accent, #4a8) 55%, var(--line));
+  color: var(--ink);
+}
+
+.sitenav-chip.is-on {
+  border-color: color-mix(in srgb, var(--accent, #4a8) 70%, var(--line));
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent, #4a8) 14%, transparent);
+}
+
+.sitenav-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent, #4a8) 70%, transparent);
+  outline-offset: 2px;
 }
 
 .sitenav-grid {
@@ -36,6 +99,47 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   background: color-mix(in srgb, var(--panel) 86%, transparent);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.sitenav-card:hover,
+.sitenav-card:focus-within {
+  border-color: color-mix(in srgb, var(--accent, #4a8) 55%, var(--line));
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  transform: translateY(-1px);
+}
+
+.sitenav-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent, #4a8) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.sitenav-card.is-enter {
+  animation: sitenav-card-in 0.32s ease both;
+}
+
+@keyframes sitenav-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sitenav-card,
+  .sitenav-card:hover,
+  .sitenav-card:focus-within {
+    transition: none;
+    transform: none;
+  }
+  .sitenav-card.is-enter {
+    animation: none;
+  }
 }
 
 .sitenav-card-top {
@@ -73,6 +177,35 @@
   color: var(--muted);
   font-size: 0.9rem;
   line-height: 1.5;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.sitenav-card.is-expanded .sitenav-card-desc {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.sitenav-more {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  align-self: flex-start;
+  color: var(--accent, #4a8);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sitenav-more:hover {
+  opacity: 0.85;
 }
 
 .sitenav-card-actions {

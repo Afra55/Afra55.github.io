@@ -152,8 +152,20 @@
     },
   ];
 
+  const ACTIVE_LINKS = LINKS.filter((item) => !item.tool);
+  /** @type {Set<string>} */
+  const selectedTags = new Set();
+
   function $(sel, root) {
     return (root || document).querySelector(sel);
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function openExternal(url) {
@@ -164,52 +176,151 @@
     a.click();
   }
 
-  function render(filter) {
-    const grid = $("#sitenav-grid");
-    const empty = $("#sitenav-empty");
-    if (!grid) return;
-    const q = String(filter || "")
+  function allTags() {
+    const counts = new Map();
+    for (const item of ACTIVE_LINKS) {
+      for (const t of item.tags || []) {
+        counts.set(t, (counts.get(t) || 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh"))
+      .map(([tag, count]) => ({ tag, count }));
+  }
+
+  function filteredList(query) {
+    const q = String(query || "")
       .trim()
       .toLowerCase();
-    // 有 tool 字段的是站内已有工具，外链导航不重复展示
-    const list = LINKS.filter((item) => !item.tool).filter((item) => {
+    return ACTIVE_LINKS.filter((item) => {
+      if (selectedTags.size) {
+        const tags = item.tags || [];
+        for (const t of selectedTags) {
+          if (!tags.includes(t)) return false;
+        }
+      }
       if (!q) return true;
       const hay = `${item.title} ${item.desc} ${(item.tags || []).join(" ")} ${item.id}`.toLowerCase();
       return hay.includes(q);
     });
+  }
+
+  function renderFilters() {
+    const host = $("#sitenav-filters");
+    if (!host) return;
+    const tags = allTags();
+    host.innerHTML = [
+      `<button type="button" class="sitenav-chip ${selectedTags.size ? "" : "is-on"}" data-tag="__all" aria-pressed="${
+        selectedTags.size ? "false" : "true"
+      }">全部</button>`,
+      ...tags.map(
+        ({ tag, count }) =>
+          `<button type="button" class="sitenav-chip ${selectedTags.has(tag) ? "is-on" : ""}" data-tag="${escapeHtml(
+            tag
+          )}" aria-pressed="${selectedTags.has(tag) ? "true" : "false"}">${escapeHtml(tag)} · ${count}</button>`
+      ),
+    ].join("");
+  }
+
+  function updateCount(shown) {
+    const el = $("#sitenav-count");
+    if (!el) return;
+    const total = ACTIVE_LINKS.length;
+    el.textContent = shown === total ? `共 ${total}` : `共 ${total} · 显示 ${shown}`;
+  }
+
+  function render(filter) {
+    const grid = $("#sitenav-grid");
+    const empty = $("#sitenav-empty");
+    if (!grid) return;
+    const list = filteredList(filter);
+    updateCount(list.length);
+    const reduceMotion =
+      typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     grid.innerHTML = list
-      .map(
-        (item) => `<article class="sitenav-card" role="listitem" data-url="${item.url}">
+      .map((item, i) => {
+        const delay = reduceMotion ? "" : `style="animation-delay:${Math.min(i, 12) * 28}ms"`;
+        const desc = String(item.desc || "");
+        const long = desc.length > 56;
+        return `<article class="sitenav-card${reduceMotion ? "" : " is-enter"}" role="listitem" tabindex="0" data-url="${escapeHtml(
+          item.url
+        )}" data-id="${escapeHtml(item.id)}" ${delay}>
         <div class="sitenav-card-top">
-          <h3 class="sitenav-card-title">${item.title}</h3>
-          <span class="sitenav-card-tags">${(item.tags || []).map((t) => `<span>${t}</span>`).join("")}</span>
+          <h3 class="sitenav-card-title">${escapeHtml(item.title)}</h3>
+          <span class="sitenav-card-tags">${(item.tags || [])
+            .map((t) => `<span>${escapeHtml(t)}</span>`)
+            .join("")}</span>
         </div>
-        <p class="sitenav-card-desc">${item.desc}</p>
+        <p class="sitenav-card-desc${long ? "" : " is-short"}">${escapeHtml(desc)}</p>
+        ${long ? `<button type="button" class="sitenav-more" data-more>展开简介</button>` : ""}
         <div class="sitenav-card-actions">
-          <button type="button" class="primary-btn sitenav-open" data-url="${item.url}">打开网站</button>
+          <button type="button" class="ghost-btn sitenav-open" data-url="${escapeHtml(item.url)}">打开网站</button>
         </div>
-      </article>`
-      )
+      </article>`;
+      })
       .join("");
     if (empty) empty.hidden = list.length > 0;
+  }
+
+  function refresh() {
+    renderFilters();
+    render($("#sitenav-q")?.value || "");
   }
 
   let bound = false;
   function bind() {
     if (bound) {
-      render($("#sitenav-q")?.value || "");
+      refresh();
       return;
     }
     bound = true;
     const q = $("#sitenav-q");
     q?.addEventListener("input", () => render(q.value));
+
+    $("#sitenav-filters")?.addEventListener("click", (e) => {
+      const btn = e.target.closest?.(".sitenav-chip");
+      if (!btn) return;
+      const tag = btn.dataset.tag || "";
+      if (tag === "__all") {
+        selectedTags.clear();
+      } else if (selectedTags.has(tag)) {
+        selectedTags.delete(tag);
+      } else {
+        selectedTags.add(tag);
+      }
+      refresh();
+    });
+
     $("#sitenav-grid")?.addEventListener("click", (e) => {
+      const more = e.target.closest?.("[data-more]");
+      if (more) {
+        e.preventDefault();
+        e.stopPropagation();
+        const card = more.closest(".sitenav-card");
+        if (!card) return;
+        const on = card.classList.toggle("is-expanded");
+        more.textContent = on ? "收起简介" : "展开简介";
+        return;
+      }
       const openBtn = e.target.closest?.(".sitenav-open");
       if (openBtn) {
+        e.stopPropagation();
         void openExternal(openBtn.dataset.url);
+        return;
       }
+      const card = e.target.closest?.(".sitenav-card");
+      if (card?.dataset.url) void openExternal(card.dataset.url);
     });
-    render("");
+
+    $("#sitenav-grid")?.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const card = e.target.closest?.(".sitenav-card");
+      if (!card || e.target.closest("button")) return;
+      e.preventDefault();
+      if (card.dataset.url) void openExternal(card.dataset.url);
+    });
+
+    refresh();
   }
 
   bind();
