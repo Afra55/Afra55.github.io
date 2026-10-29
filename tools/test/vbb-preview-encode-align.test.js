@@ -48,6 +48,11 @@ t("编辑内 keepRangesLocal 走 keepRangesForEncode（预览=成片）", () => 
   );
   assert.ok(block.includes("keepRangesForEncode("));
   assert.ok(!block.includes("keepRangesFromEdit("));
+  assert.ok(/srcFps:\s*sourceFps/.test(block), "播放 keep 必须带 srcFps，与拖拽半开一致");
+});
+
+t("拖拽半开 endKeepStepSec ≡ resolveEndKeepSec(sourceFps)", () => {
+  assert.ok(/function endKeepStepSec\(\)\s*\{[\s\S]*?return resolveEndKeepSec\(sourceFps\)/.test(vtrim));
 });
 
 t("外预览播放/落点走 vbbKeepRangesForEncode", () => {
@@ -110,12 +115,10 @@ t("片尾抬手只用 min(want,…) 收紧，禁止推过拖点", () => {
   assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(vtrim));
 });
 
-t("有 srcFps 时半开 = 1/fps", () => {
-  const { keepRangesFromEdit } = loadKeepFns();
-  const edit = { trimStart: 0, trimEnd: 10, cutouts: [], srcFps: 60 };
-  // loadKeepFns 沙箱未注入 srcFps 分支时仍用 END_KEEP；直接跑源码逻辑
+t("有 srcFps 时半开 = 1/fps，且拖拽落点=播放 keep 尾=成片 keep 尾", () => {
   const box = {};
   const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
+  const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
   vm.runInNewContext(
     `
@@ -123,13 +126,24 @@ t("有 srcFps 时半开 = 1/fps", () => {
     const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 0;
     ${norm[0]}
     ${fromEdit[0]}
+    ${forEnc[0]}
     this.keepRangesFromEdit = keepRangesFromEdit;
+    this.keepRangesForEncode = keepRangesForEncode;
     `,
     box
   );
-  const ks = box.keepRangesFromEdit(edit, 10);
-  assert.strictEqual(ks.length, 1);
-  assert.ok(Math.abs(ks[0].end - (10 - 1 / 60)) < 1e-9, "60fps 片尾半开 1/60");
+  for (const fps of [24, 30, 60]) {
+    const trimEnd = 10;
+    const edit = { trimStart: 0, trimEnd, cutouts: [], srcFps: fps };
+    const preview = box.keepRangesFromEdit(edit, 12);
+    const enc = box.keepRangesForEncode(edit, 12);
+    const dragSeek = trimEnd - 1 / fps; // endKeepSec()
+    assert.strictEqual(preview.length, 1);
+    assert.ok(Math.abs(preview[0].end - dragSeek) < 1e-9, `${fps}fps 播放 keep 尾 = 拖拽落点`);
+    assert.ok(Math.abs(enc[0].end - dragSeek) < 1e-9, `${fps}fps 成片 keep 尾 = 拖拽落点`);
+  }
+  const noFps = box.keepRangesFromEdit({ trimStart: 0, trimEnd: 10, cutouts: [] }, 12);
+  assert.ok(Math.abs(noFps[0].end - (10 - 1 / 25)) < 1e-9, "无 fps 回退 1/25");
 });
 
 console.log(`vbb-preview-encode-align.test.js: ${n} passed`);

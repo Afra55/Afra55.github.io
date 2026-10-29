@@ -484,11 +484,11 @@
     }
 
     /**
-     * 编辑内播放/跳切 = 成片 keep = 黄/红柄所见（所见即所得，不多删垫）。
+     * 拖拽预览 / 点播放 / 成片：同一套 keep（必须带 srcFps，半开才与 endKeepStepSec 一致）。
      */
     function keepRangesLocal() {
       return keepRangesForEncode(
-        { trimStart: startSec, trimEnd: endSec, cutouts },
+        { trimStart: startSec, trimEnd: endSec, cutouts, srcFps: sourceFps },
         duration || endSec
       );
     }
@@ -752,9 +752,12 @@
       } catch (_) {}
     }
 
-    /** 半开一步：优先片源真实帧间隔，避免固定 1/25 在 60fps 上差几帧 */
+    /**
+     * 半开一步 ≡ keepRangesFromEdit 的 endKeep（resolveEndKeepSec(sourceFps)）。
+     * 拖拽 seek、播放截断、成片切片必须用同一个值。
+     */
     function endKeepStepSec() {
-      return frameSnapSec > 0 ? frameSnapSec : END_KEEP_SEC;
+      return resolveEndKeepSec(sourceFps);
     }
 
     function endKeepSec() {
@@ -762,9 +765,8 @@
     }
 
     function startKeepSec() {
-      // 半开片头：成片从略晚于预览落点开始，避免多吸前几帧
-      const step = Math.min(START_KEEP_SEC, endKeepStepSec() * 0.5);
-      return Math.min(endKeepSec(), startSec + step);
+      // 半开片头：与 keepRangesFromEdit 的 startKeep 同一公式
+      return Math.min(endKeepSec(), startSec + resolveStartKeepSec(sourceFps));
     }
 
     function previewSeek(t, { throttle = false } = {}) {

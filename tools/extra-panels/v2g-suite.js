@@ -8377,15 +8377,15 @@
       }
 
       function resolveVbbEncodeEdits(item, file, duration, srcW, srcH) {
-        const edit = item?.edit || (item === null ? vbbSingleEdit : null);
+        const editRaw = item?.edit || (item === null ? vbbSingleEdit : null);
+        // 预览播放 ≡ 成片：同一套 keep（带 srcFps），禁止再分「预览 keep / 编码 keep」
+        const edit = editRaw ? vbbEditWithSrcFps(editRaw, item) : null;
         let startSec = 0;
         let span = Math.max(0, Number(duration) || 0);
         let keepRanges = [{ start: 0, end: span }];
-        let previewKeeps = keepRanges;
         if (edit) {
           clampVbbEdit(edit, duration, srcW, srcH);
-          previewKeeps = vbbKeepRangesFromEdit(edit, duration);
-          // 编码时间线用略多删的 keep，预览仍用 previewKeeps
+          if (editRaw && edit.srcFps && !editRaw.srcFps) editRaw.srcFps = edit.srcFps;
           keepRanges = vbbKeepRangesForEncode(edit, duration);
           startSec = Number(keepRanges[0]?.start) || 0;
           const last = keepRanges[keepRanges.length - 1];
@@ -8398,7 +8398,7 @@
             span = vbbKeepSpanSec(keepRanges);
           }
         }
-        return { startSec, span, edit, keepRanges, previewKeeps };
+        return { startSec, span, edit, keepRanges, previewKeeps: keepRanges };
       }
 
       /** 多段 keep 总时长（秒）；压缩时长倍速必须按此算，禁止回退原片整段。 */
