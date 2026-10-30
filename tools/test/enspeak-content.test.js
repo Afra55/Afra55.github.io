@@ -146,6 +146,14 @@ t("10 分钟极简 / 对方接话 / 卡壳复习 / 档案无稿", () => {
   assert.ok(content.method?.expressMinutes === 10 || content.method?.dailyMinutes);
 });
 
+t("按钮反馈：本地面包屑 toast + 朗读失败提示 + 裂变开口计入", () => {
+  assert.ok(js.includes('getElementById("toast")'), "toast 须直写 #toast，不依赖 extra-kit");
+  assert.ok(js.includes("markAdhocSpoken"), "架子裂变「已开口」须计入今日");
+  assert.ok(js.includes("warmSpeakVoices"), "朗读须预热 voices");
+  assert.ok(js.includes("enspeak-print-frame"), "打印被拦时须 iframe 回退");
+  assert.ok(js.includes("请自己出声跟读") || js.includes("不支持朗读"), "朗读失败须可见提示");
+});
+
 t("准确度门禁：禁易练错英文 / 禁中文斜杠二选一 / 问句中文要像问句", () => {
   const { fillEnTemplate } = require("../lib/enspeak-fill.js");
   const banEn =

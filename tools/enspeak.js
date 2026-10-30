@@ -391,27 +391,115 @@
   }
 
   function toast(msg) {
-    window.DevToolsExtraKit?.toast?.(msg) || console.info(msg);
+    const text = String(msg || "").trim();
+    if (!text) return;
+    try {
+      if (window.DevToolsExtraKit?.toast) {
+        window.DevToolsExtraKit.toast(text);
+        return;
+      }
+    } catch (_) {}
+    // enspeak 不依赖 extra-kit：直接打 #toast，避免「点了只有 console」
+    const el = document.getElementById("toast");
+    if (!el) {
+      console.info(text);
+      return;
+    }
+    el.textContent = text;
+    el.hidden = false;
+    el.classList.add("is-show");
+    clearTimeout(toast._t);
+    clearTimeout(toast._tHide);
+    toast._t = setTimeout(() => {
+      el.classList.remove("is-show");
+      toast._tHide = setTimeout(() => {
+        el.hidden = true;
+      }, 200);
+    }, 1600);
+  }
+
+  /** 架子裂变等无句库 id 的开口，也计入今日开口数 */
+  function markAdhocSpoken(line, toastMsg) {
+    ensureToday();
+    const key = `x:${String(line || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 96)}`;
+    if (!key || key === "x:") {
+      toast(toastMsg || "先生成一句再开口");
+      return;
+    }
+    const first = !state.today.spokenIds.includes(key);
+    if (first) state.today.spokenIds.push(key);
+    bumpHistory({ spokenDelta: 1 });
+    if (state.today.spokenIds.length >= (CONTENT?.method?.mustSpeak || 2)) {
+      state.today.blocks.output = true;
+    }
+    maybeCompleteGoal();
+    saveState();
+    renderTodayMeta();
+    renderBlocks();
+    renderReview();
+    toast(toastMsg || (first ? "已记开口" : "又开口一次（今日已记过这句）"));
+  }
+
+  let speakVoicesReady = false;
+  function warmSpeakVoices() {
+    try {
+      const syn = window.speechSynthesis;
+      if (!syn?.getVoices) return;
+      const list = syn.getVoices() || [];
+      if (list.length) speakVoicesReady = true;
+      else if (!warmSpeakVoices._bound) {
+        warmSpeakVoices._bound = true;
+        syn.addEventListener?.("voiceschanged", () => {
+          speakVoicesReady = (syn.getVoices() || []).length > 0;
+        });
+      }
+    } catch (_) {}
   }
 
   function speakText(text, { rate } = {}) {
+    const cleaned = String(text || "")
+      .replace(/___+/g, "…")
+      .replace(/\{[a-z0-9_]+\}/gi, "…")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!cleaned || cleaned === "…" || /^[.…\s]+$/.test(cleaned)) {
+      toast("这句还没填完整 · 先换槽位词或去「档案」补信息");
+      return;
+    }
+    const syn = window.speechSynthesis;
+    if (!syn || typeof SpeechSynthesisUtterance === "undefined") {
+      toast("当前浏览器不支持朗读 · 请自己出声跟读");
+      return;
+    }
     try {
-      window.speechSynthesis?.cancel();
-      // 空槽 ___ / {slot} 不要读成 underscore
-      const cleaned = String(text || "")
-        .replace(/___+/g, "…")
-        .replace(/\{[a-z0-9_]+\}/gi, "…")
-        .replace(/\s+/g, " ")
-        .trim();
+      warmSpeakVoices();
+      syn.cancel();
+      try {
+        syn.resume?.();
+      } catch (_) {}
       const u = new SpeechSynthesisUtterance(cleaned);
       u.lang = "en-US";
       u.rate = rate ?? state.settings.rate ?? 0.92;
-      const voices = window.speechSynthesis?.getVoices?.() || [];
-      const en = voices.find((v) => /en(-|_)US/i.test(v.lang)) || voices.find((v) => /^en/i.test(v.lang));
+      const voices = syn.getVoices?.() || [];
+      const en =
+        voices.find((v) => /en(-|_)US/i.test(v.lang)) || voices.find((v) => /^en/i.test(v.lang));
       if (en) u.voice = en;
-      window.speechSynthesis.speak(u);
+      u.onerror = () => toast("朗读失败 · 请检查系统静音，或自己出声跟读");
+      // 部分浏览器 cancel 后立刻 speak 会静音：微延迟
+      setTimeout(() => {
+        try {
+          syn.resume?.();
+          syn.speak(u);
+        } catch (_) {
+          toast("朗读失败 · 请自己出声跟读");
+        }
+      }, 40);
     } catch (err) {
-      toast("当前浏览器不支持朗读");
+      toast("当前浏览器不支持朗读 · 请自己出声跟读");
     }
   }
 
@@ -1377,11 +1465,14 @@
           const line = card.dataset.say || "";
           const act = actBtn?.dataset.vact;
           if (act === "spoken") {
-            toast("裂变句已记开口（继续换词再说一句）");
+            markAdhocSpoken(line, "裂变句已记开口 · 继续换词再说一句");
+            actBtn.disabled = true;
+            actBtn.textContent = "今日已开口";
             return;
           }
           if (act === "shadow" || act === "hear" || !actBtn) {
             if (line) speakText(line);
+            else toast("没有可朗读的句子");
           }
         };
       }
@@ -1753,11 +1844,43 @@
       <ol>${lines
         .map((s) => `<li><strong>${escapeHtml(displayEn(s))}</strong><br/><span>${escapeHtml(s.zh)}</span></li>`)
         .join("")}</ol>
-      <script>print()</script></body>`;
+      </body>`;
     const w = window.open("", "_blank");
     if (w) {
       w.document.write(html);
       w.document.close();
+      try {
+        w.focus();
+        w.print();
+      } catch (_) {}
+      toast("已打开本周一页纸 · 可打印或存 PDF");
+      return;
+    }
+    // 手机常拦截 window.open：改用隐藏 iframe 打印
+    try {
+      let frame = document.getElementById("enspeak-print-frame");
+      if (!frame) {
+        frame = document.createElement("iframe");
+        frame.id = "enspeak-print-frame";
+        frame.title = "print";
+        frame.setAttribute("aria-hidden", "true");
+        frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0";
+        document.body.appendChild(frame);
+      }
+      const doc = frame.contentDocument || frame.contentWindow?.document;
+      if (!doc) throw new Error("no frame");
+      doc.open();
+      doc.write(html);
+      doc.close();
+      setTimeout(() => {
+        try {
+          frame.contentWindow?.focus();
+          frame.contentWindow?.print();
+        } catch (_) {}
+      }, 120);
+      toast("正在调起打印 · 可选「存储为 PDF」");
+    } catch (_) {
+      toast("无法打开打印页 · 请允许弹窗后重试，或先导出 JSON");
     }
   }
 
@@ -1851,6 +1974,7 @@
     $("#enspeak-chain-hear")?.addEventListener("click", () => {
       const line = currentChainLine();
       if (line) speakText(line);
+      else toast("先点「对话链」生成一串");
     });
     $("#enspeak-chain-next")?.addEventListener("click", () => {
       if (!islandChainIds.length) {
@@ -1971,9 +2095,7 @@
     activeIsland = focusIslandId();
     bindUi();
     renderAll();
-    try {
-      window.speechSynthesis?.getVoices?.();
-    } catch (_) {}
+    warmSpeakVoices();
   }
 
   window.addEventListener("devtools:route", (e) => {
