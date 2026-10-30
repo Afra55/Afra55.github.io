@@ -30,8 +30,10 @@
     "wss://test.mosquitto.org:8081/mqtt",
   ];
   const MQTT_MSG_TTL_MS = 120000;
+  /** 心跳间隔；手机后台会节流 timer，过短易误判离线 */
   const PRESENCE_MS = 4000;
-  const PEER_STALE_MS = 12000;
+  /** 允许多跳心跳丢失（安卓息屏/WebView 节流常见 20–40s） */
+  const PEER_STALE_MS = 45000;
   /** 进场后等多久仍无他人 → 视为空房，丢掉上次残留 */
   const ROOM_SETTLE_MS = 6500;
   const TEXT_MQTT_MAX = 1800;
@@ -172,11 +174,26 @@
     return `${(x / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  function guessMimeFromName(name, kind) {
+    const n = String(name || "").toLowerCase();
+    if (/\.gif$/i.test(n)) return "image/gif";
+    if (/\.png$/i.test(n)) return "image/png";
+    if (/\.jpe?g$/i.test(n)) return "image/jpeg";
+    if (/\.webp$/i.test(n)) return "image/webp";
+    if (/\.bmp$/i.test(n)) return "image/bmp";
+    if (/\.mp4$/i.test(n)) return "video/mp4";
+    if (/\.webm$/i.test(n)) return "video/webm";
+    if (/\.mov$/i.test(n)) return "video/quicktime";
+    if (kind === "image") return "image/*";
+    if (kind === "video") return "video/*";
+    return "application/octet-stream";
+  }
+
   function fileKindOf(file) {
     const mime = String(file?.type || "").toLowerCase();
     if (mime.startsWith("video/")) return "video";
     if (mime.startsWith("image/")) return "image";
-    // 部分手机选视频不带 MIME，按扩展名兜底，避免当普通文件且跳过缩略图路径
+    // 部分手机选视频/GIF 不带 MIME，按扩展名兜底，避免当普通文件且跳过缩略图路径
     const name = String(file?.name || "").toLowerCase();
     if (/\.(mp4|webm|mov|m4v|mkv|avi|3gp)$/.test(name)) return "video";
     if (/\.(png|jpe?g|gif|webp|bmp|heic|heif)$/.test(name)) return "image";
@@ -472,9 +489,20 @@
     return p?.name || String(id || "").slice(0, 8);
   }
 
+  /** WebRTC 仍通时，即使 MQTT 心跳短暂丢包也不该判「源已离开」 */
+  function peerLinkAlive(ownerId) {
+    if (!ownerId) return false;
+    const link = state.links.get(ownerId);
+    if (!link || linkIsDead(link)) return false;
+    if (linkDcOpen(link)) return true;
+    const st = link.pc?.connectionState;
+    return st === "connected" || st === "connecting";
+  }
+
   function isOwnerOnline(ownerId) {
     if (!ownerId) return false;
     if (ownerId === state.peerId) return true;
+    if (peerLinkAlive(ownerId)) return true;
     const p = state.peers.get(ownerId);
     return !!(p && Date.now() - (p.lastSeen || 0) < PEER_STALE_MS);
   }
@@ -484,6 +512,12 @@
     if (state.localBlobs.has(it.id)) return true;
     if (it.onBridge && state.bridgeOk) return true;
     return isOwnerOnline(it.ownerId);
+  }
+
+  /** 任意信令/通道活动都刷新 lastSeen，避免只靠 4s presence */
+  function touchPeer(id, name) {
+    if (!id || id === state.peerId) return;
+    notePeer(id, name || state.peers.get(id)?.name || "");
   }
 
   function upsertItem(raw, { paint = true, persist = true, relay = false } = {}) {
@@ -682,7 +716,10 @@
   }
 
   async function makeImageThumb(file) {
-    if (!file?.type?.startsWith("image/") || file.size > 12 * 1024 * 1024) return "";
+    const mime = String(file?.type || "").toLowerCase();
+    const byExt = /\.(png|jpe?g|gif|webp|bmp|heic|heif)$/i.test(String(file?.name || ""));
+    // 安卓常给出空 MIME 的 gif/jpg；无 type 时仍按扩展名出缩略图
+    if ((!mime.startsWith("image/") && !byExt) || file.size > 12 * 1024 * 1024) return "";
     return withTimeout(
       (async () => {
         let bmp;
@@ -972,6 +1009,18 @@
           state.mqttOk = true;
           paintStatus();
         });
+        // mqtt.js 重连也会再发 connect；须立刻 presence，否则对端 45s 内会误判离开
+        client.on("connect", () => {
+          state.mqttOk = true;
+          try {
+            client.subscribe(MQTT_TOPIC, { qos: 0 });
+          } catch {
+            /* ignore */
+          }
+          publishPresence();
+          healLinks();
+          paintStatus();
+        });
         publishPresence();
         requestSnapshots();
         paintStatus();
@@ -1017,9 +1066,13 @@
   }
 
   function handleSignalMsg(msg, via) {
+    const fromId = msg.peerId || msg.from;
+    // bye 除外：任意 MQTT/BC 包都续命，避免只靠 presence 心跳
+    if (fromId && msg.type !== "bye") {
+      touchPeer(fromId, msg.name || msg.item?.ownerName || "");
+    }
     switch (msg.type) {
       case "presence":
-        notePeer(msg.peerId || msg.from, msg.name || "");
         maybeConnect(msg.peerId || msg.from);
         break;
       case "bye":
@@ -1428,6 +1481,8 @@
     };
     dc.onclose = () => paintStatus();
     dc.onmessage = (ev) => {
+      // DataChannel 有流量说明对端仍在，刷新在场（不依赖 MQTT 心跳）
+      touchPeer(remoteId, state.peers.get(remoteId)?.name || "");
       if (typeof ev.data !== "string") {
         handleBinaryFrom(remoteId, ev.data);
         return;
@@ -1532,11 +1587,54 @@
     return next;
   }
 
-  function triggerBlobDownload(blob, filename) {
-    const url = URL.createObjectURL(blob);
+  function isAppleTouchBrowser() {
+    const ua = String(navigator.userAgent || "");
+    if (/iPad|iPhone|iPod/i.test(ua)) return true;
+    // iPadOS 桌面 UA
+    return navigator.platform === "MacIntel" && Number(navigator.maxTouchPoints || 0) > 1;
+  }
+
+  async function triggerBlobDownload(blob, filename) {
+    const name = filename || "download";
+    const typed =
+      blob?.type && blob.type !== "application/octet-stream"
+        ? blob
+        : new Blob([blob], { type: guessMimeFromName(name, "") || blob?.type || "application/octet-stream" });
+
+    // iOS Safari：<a download> 对 blob 常无效；优先系统分享，其次新开页长按保存
+    if (isAppleTouchBrowser() && navigator.canShare && navigator.share) {
+      try {
+        const file = new File([typed], name, { type: typed.type || "application/octet-stream" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: name });
+          return;
+        }
+      } catch (e) {
+        if (e?.name === "AbortError") return;
+        /* fall through */
+      }
+    }
+
+    const url = URL.createObjectURL(typed);
+    if (isAppleTouchBrowser()) {
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+      notifyToast("已打开文件，可长按图片/用分享菜单保存");
+      return;
+    }
+
     const a = document.createElement("a");
     a.href = url;
-    a.download = filename || "download";
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1988,14 +2086,22 @@
           /* fall through */
         }
       }
-      if (isOwnerOnline(it.ownerId)) {
-        const { meta, chunks } = await requestFileFromPeer(it.ownerId, id, onStart);
-        got = new Blob(chunks, { type: meta?.mime || it.mime || "application/octet-stream" });
-        state.localBlobs.set(id, got);
-        return got;
-      }
-      if (!quiet && !mediaDownloadable(it)) {
-        setInfo(SOURCE_GONE);
+      // 有 owner 就尝试 WebRTC（不因 MQTT 心跳短暂过期而直接放弃）
+      if (it.ownerId && it.ownerId !== state.peerId) {
+        try {
+          const { meta, chunks } = await requestFileFromPeer(it.ownerId, id, onStart);
+          const mime =
+            meta?.mime ||
+            it.mime ||
+            guessMimeFromName(it.name || meta?.name || "", it.kind) ||
+            "application/octet-stream";
+          got = new Blob(chunks, { type: mime });
+          state.localBlobs.set(id, got);
+          touchPeer(it.ownerId, it.ownerName || "");
+          return got;
+        } catch (e) {
+          if (!quiet) setInfo(e?.message || SOURCE_GONE);
+        }
       }
       return null;
     })();
@@ -2049,27 +2155,42 @@
       els.previewSub.textContent = "";
     }
     if (els.previewDl) {
-      const canDl = mediaDownloadable(it);
-      els.previewDl.hidden = !canDl;
-      els.previewDl.disabled = !canDl;
+      els.previewDl.hidden = false;
+      els.previewDl.disabled = false;
     }
     els.previewStage.innerHTML = `<p class="lb-preview-fallback hint">加载中…</p>`;
     if (!els.previewDlg.open) els.previewDlg.showModal();
 
+    // 先秀缩略图，避免「点了没反应」；完整图后台拉取
+    if (it.thumb) {
+      els.previewStage.innerHTML = `<img src="${escapeHtml(it.thumb)}" alt="" />`;
+      if (els.previewSub) {
+        els.previewSub.hidden = false;
+        els.previewSub.textContent = "正在拉取原图…";
+      }
+    }
+
     let blob = null;
+    let errMsg = "";
     try {
       blob = await resolveMediaBlob(id, { quiet: true });
     } catch (e) {
-      /* thumb fallback below */
+      errMsg = e?.message || SOURCE_GONE;
     }
     if (previewItemId !== id) return;
 
     if (blob) {
-      previewObjectUrl = URL.createObjectURL(blob);
+      const mime = blob.type || guessMimeFromName(it.name || "", it.kind) || "application/octet-stream";
+      const typed = blob.type ? blob : new Blob([blob], { type: mime });
+      previewObjectUrl = URL.createObjectURL(typed);
       if (it.kind === "video") {
-        els.previewStage.innerHTML = `<video controls playsinline src="${previewObjectUrl}"></video>`;
+        els.previewStage.innerHTML = `<video controls playsinline autoplay muted src="${previewObjectUrl}"></video>`;
       } else {
         els.previewStage.innerHTML = `<img src="${previewObjectUrl}" alt="" />`;
+      }
+      if (els.previewSub) {
+        els.previewSub.hidden = true;
+        els.previewSub.textContent = "";
       }
       if (els.previewDl) {
         els.previewDl.hidden = false;
@@ -2079,25 +2200,28 @@
     }
 
     if (it.thumb) {
-      els.previewStage.innerHTML = `<img src="${escapeHtml(it.thumb)}" alt="" />`;
       if (els.previewSub) {
         els.previewSub.hidden = false;
-        els.previewSub.textContent = it.kind === "video"
-          ? (mediaDownloadable(it) ? "完整视频加载中或可点下载" : `${SOURCE_GONE}（缩略图）`)
-          : (mediaDownloadable(it) ? "" : SOURCE_GONE);
-        if (!els.previewSub.textContent) els.previewSub.hidden = true;
+        els.previewSub.textContent = errMsg || (mediaDownloadable(it) ? "原图暂不可用，可稍后重试" : SOURCE_GONE);
       }
       return;
     }
 
-    els.previewStage.innerHTML = `<p class="lb-preview-fallback hint">${SOURCE_GONE}</p>`;
-    notifyToast(SOURCE_GONE);
+    els.previewStage.innerHTML = `<p class="lb-preview-fallback hint">${escapeHtml(errMsg || SOURCE_GONE)}</p>`;
+    notifyToast(errMsg || SOURCE_GONE);
   }
 
   async function downloadItem(id) {
     const it = state.items.get(id);
     if (!it || it.kind === "text") return;
-    if (!mediaDownloadable(it)) {
+    // 有本地/桥/在线/尚存链路就允许点；真正失败在 resolve 里提示
+    if (
+      !state.localBlobs.has(id) &&
+      !(it.onBridge && state.bridgeOk) &&
+      !isOwnerOnline(it.ownerId) &&
+      !state.peers.has(it.ownerId) &&
+      !state.links.has(it.ownerId)
+    ) {
       notifyToast(SOURCE_GONE);
       setInfo(SOURCE_GONE);
       paintFeed();
@@ -2354,11 +2478,12 @@
     } catch {
       thumb = "";
     }
+    const mime = file.type || guessMimeFromName(file.name || "", kind) || "application/octet-stream";
     const item = {
       id,
       kind,
       name: file.name || kindLabel(kind),
-      mime: file.type || "application/octet-stream",
+      mime,
       size: file.size,
       ownerId: state.peerId,
       ownerName: state.peerName,
@@ -2366,7 +2491,8 @@
       addedAt: Date.now(),
       onBridge: false,
     };
-    state.localBlobs.set(id, file);
+    // 无 MIME 的 File 克隆成带类型的 Blob，方便对端预览 GIF
+    state.localBlobs.set(id, file.type ? file : new Blob([file], { type: mime }));
     upsertItem(item, { relay: true });
     pushMediaToBridge(item, file).catch(() => {});
   }

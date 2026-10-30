@@ -63,6 +63,9 @@ function staticCheck() {
   );
   assert(js.includes("PEER_ID_KEY") && js.includes("sessionStorage"), "peerId 须 sessionStorage 持久化，避免刷新幽灵会话");
   assert(js.includes("pagehide"), "离开页须 pagehide 发 bye");
+  assert(js.includes("peerLinkAlive") && /PEER_STALE_MS\s*=\s*([4-9]\d{4}|[1-9]\d{5,})/.test(js), "在场判定须含 WebRTC 存活且过期≥45s，避免误报源离开");
+  assert(js.includes("touchPeer") || js.includes("notePeer"), "信令/DC 活动须刷新对端 lastSeen");
+  assert(js.includes("guessMimeFromName") || /image\/gif/.test(js), "无 MIME 的 gif 须能猜类型以便预览");
   assert(js.includes("wipeAbandonedRoom") || js.includes("clearRoomLocal"), "空房须清空残留");
   assert(js.includes("ROOM_SETTLE_MS") || js.includes("persistGate"), "进场须空房结算门闩");
   assert(js.includes("/lanboard/clear"), "末人离开须清桥 /lanboard/clear");
