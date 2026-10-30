@@ -8,7 +8,7 @@
 const { isWindows, checkLocks, killProcess, pickPath, resolveByName } = require("./lock-ops");
 const { inspectPaths, purgePaths, DEFAULT_PASSES } = require("./purge-ops");
 
-const BRIDGE_VERSION = "0.2.0";
+const BRIDGE_VERSION = "0.2.1";
 const FEATURES = { unlock: true, purge: true, secureWipe: true, winOnly: true };
 
 function readBody(req, limit = 1024 * 1024) {

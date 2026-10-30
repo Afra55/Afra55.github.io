@@ -3,9 +3,7 @@
 
   const K = window.DevToolsExtraKit;
   if (!K) return;
-  const { $, bindPanel } = K;
-
-  if (!window.devtoolsBridgeShell?.mount) return;
+  const { $, bindPanel, toast } = K;
 
   const DEFAULT_BASE = "http://127.0.0.1:17888";
   const DEFAULT_TOKEN = "devtools-bridge";
@@ -20,12 +18,30 @@
       .replace(/"/g, "&quot;");
   }
 
-  bindPanel("fileunlock", () => {
-    const host = $("#fu-bridge-shell");
-    if (!host) return;
+  bindPanel("fileunlock", (panelRoot) => {
+    const root = panelRoot || document.getElementById("fileunlock");
+    if (!root) return;
+    const $p = (sel) => root.querySelector(sel) || $(sel);
+
+    const host = $p("#fu-bridge-shell");
+    const errorEl = $p("#fu-error");
+    const workspace = $p("#fu-workspace");
+    const pathInput = $p("#fu-path");
+    const metaEl = $p("#fu-meta");
+    const resultEl = $p("#fu-result");
+    const pickFileBtn = $p("#fu-pick-file");
+    const pickDirBtn = $p("#fu-pick-dir");
+
+    if (!window.devtoolsBridgeShell?.mount || !host) {
+      if (errorEl) {
+        errorEl.hidden = false;
+        errorEl.textContent = "桥连接组件未加载，请强制刷新页面后重试";
+      }
+      return;
+    }
 
     const shell = window.devtoolsBridgeShell.mount({
-      host: "#fu-bridge-shell",
+      host,
       prefix: "fu",
       kind: "unified",
       collapseAdvanced: true,
@@ -37,11 +53,6 @@
 
     const baseInput = shell.els.base;
     const tokenInput = shell.els.token;
-    const errorEl = $("#fu-error");
-    const workspace = $("#fu-workspace");
-    const pathInput = $("#fu-path");
-    const metaEl = $("#fu-meta");
-    const resultEl = $("#fu-result");
 
     try {
       const b = localStorage.getItem(BASE_KEY);
@@ -135,22 +146,38 @@
 
     async function doPick(kind) {
       setError("");
+      if (workspace?.hidden) {
+        setError("请先连接本机统一桥（仅 Windows）");
+        toast?.("请先连接本机桥");
+        return;
+      }
+      const label = kind === "dir" ? "文件夹" : "文件";
+      setMeta(`正在打开系统${label}选择框…（若没弹出请看任务栏）`);
+      toast?.(`正在打开系统${label}选择框…`);
+      if (pickFileBtn) pickFileBtn.disabled = true;
+      if (pickDirBtn) pickDirBtn.disabled = true;
       try {
         const data = await api("/pick", { method: "POST", body: { kind } });
         if (data.path && pathInput) {
           pathInput.value = data.path;
           await doCheck();
+        } else {
+          setMeta("");
+          toast?.("已取消选择");
         }
       } catch (err) {
+        setMeta("");
         setError(err.message || String(err));
+      } finally {
+        if (pickFileBtn) pickFileBtn.disabled = false;
+        if (pickDirBtn) pickDirBtn.disabled = false;
       }
     }
 
-    $("#fu-check")?.addEventListener("click", () => void doCheck());
+    $p("#fu-check")?.addEventListener("click", () => void doCheck());
 
     // ---- 拖拽：文件 / 文件夹拖进来即填入并检查 ----
-    const dropEl = $("#fu-drop");
-    const panelEl = $("#fileunlock");
+    const dropEl = $p("#fu-drop");
     async function handleDrop(e) {
       if (!e.dataTransfer) return;
       e.preventDefault();
@@ -183,18 +210,24 @@
       void doCheck();
     }
     ["dragenter", "dragover"].forEach((ev) =>
-      panelEl?.addEventListener(ev, (e) => {
+      root.addEventListener(ev, (e) => {
         if (!e.dataTransfer) return;
         e.preventDefault();
         dropEl?.classList.add("is-over");
       })
     );
-    panelEl?.addEventListener("dragleave", (e) => {
-      if (e.target === panelEl || e.target === dropEl) dropEl?.classList.remove("is-over");
+    root.addEventListener("dragleave", (e) => {
+      if (e.target === root || e.target === dropEl) dropEl?.classList.remove("is-over");
     });
-    panelEl?.addEventListener("drop", (e) => void handleDrop(e));
-    $("#fu-pick-file")?.addEventListener("click", () => void doPick("file"));
-    $("#fu-pick-dir")?.addEventListener("click", () => void doPick("dir"));
+    root.addEventListener("drop", (e) => void handleDrop(e));
+    pickFileBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      void doPick("file");
+    });
+    pickDirBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      void doPick("dir");
+    });
     pathInput?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") void doCheck();
     });

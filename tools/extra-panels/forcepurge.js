@@ -3,9 +3,7 @@
 
   const K = window.DevToolsExtraKit;
   if (!K) return;
-  const { $, bindPanel } = K;
-
-  if (!window.devtoolsBridgeShell?.mount) return;
+  const { bindPanel, toast } = K;
 
   const DEFAULT_BASE = "http://127.0.0.1:17888";
   const DEFAULT_TOKEN = "devtools-bridge";
@@ -28,51 +26,39 @@
     return `${(x / 1024 / 1024 / 1024).toFixed(2)} GB`;
   }
 
-  bindPanel("forcepurge", () => {
-    const host = $("#fp-bridge-shell");
-    if (!host) return;
+  bindPanel("forcepurge", (panelRoot) => {
+    const root = panelRoot || document.getElementById("forcepurge");
+    if (!root) return;
+    const $p = (sel) => root.querySelector(sel);
 
-    const shell = window.devtoolsBridgeShell.mount({
-      host: "#fp-bridge-shell",
-      prefix: "fp",
-      kind: "unified",
-      collapseAdvanced: true,
-      refreshLabel: "刷新",
-      hintDisconnected: "请先下载完整 ZIP 并运行启动脚本；本功能仅 Windows 有效。",
-      connHint:
-        '与占用解锁共用统一桥：17888 · Token <span class="mono">devtools-bridge</span> · API <span class="mono">/unlock/purge</span>。',
-    });
+    const host = $p("#fp-bridge-shell");
+    const errorEl = $p("#fp-error");
+    const workspace = $p("#fp-workspace");
+    const listEl = $p("#fp-list");
+    const emptyEl = $p("#fp-empty");
+    const metaEl = $p("#fp-meta");
+    const resultEl = $p("#fp-result");
+    const ackEl = $p("#fp-ack");
+    const confirmEl = $p("#fp-confirm-text");
+    const runBtn = $p("#fp-run");
+    const pasteEl = $p("#fp-paste");
+    const pickFilesBtn = $p("#fp-pick-files");
+    const pickDirBtn = $p("#fp-pick-dir");
 
-    const baseInput = shell.els.base;
-    const tokenInput = shell.els.token;
-    const errorEl = $("#fp-error");
-    const workspace = $("#fp-workspace");
-    const listEl = $("#fp-list");
-    const emptyEl = $("#fp-empty");
-    const metaEl = $("#fp-meta");
-    const resultEl = $("#fp-result");
-    const ackEl = $("#fp-ack");
-    const confirmEl = $("#fp-confirm-text");
-    const runBtn = $("#fp-run");
-    const pasteEl = $("#fp-paste");
-
-    /** @type {{ path: string, kind: string, size: number, safe: boolean, reason: string }[]} */
-    let queue = [];
-
-    try {
-      const b = localStorage.getItem(BASE_KEY);
-      const t = localStorage.getItem(TOKEN_KEY);
-      if (b && baseInput) baseInput.value = b;
-      if (t && tokenInput) tokenInput.value = t;
-    } catch (_) {}
-
-    const baseUrl = () => String(baseInput?.value || DEFAULT_BASE).replace(/\/$/, "");
-    const token = () => String(tokenInput?.value || DEFAULT_TOKEN).trim();
     const setError = (m) => {
       if (!errorEl) return;
       errorEl.hidden = !m;
       errorEl.textContent = m || "";
     };
+
+    /** @type {{ path: string, kind: string, size: number, safe: boolean, reason: string }[]} */
+    let queue = [];
+    let baseInput = null;
+    let tokenInput = null;
+    let shellApi = null;
+
+    const baseUrl = () => String(baseInput?.value || DEFAULT_BASE).replace(/\/$/, "");
+    const token = () => String(tokenInput?.value || DEFAULT_TOKEN).trim();
 
     async function api(pathname, opts = {}) {
       const headers = { ...(opts.headers || {}) };
@@ -114,9 +100,19 @@
       listEl.innerHTML = queue
         .map((item, i) => {
           const kindLabel =
-            item.kind === "dir" ? "文件夹" : item.kind === "file" ? "文件" : item.kind === "missing" ? "不存在" : item.kind || "?";
+            item.kind === "dir"
+              ? "文件夹"
+              : item.kind === "file"
+                ? "文件"
+                : item.kind === "missing"
+                  ? "不存在"
+                  : item.kind || "?";
           const size =
-            item.kind === "file" && item.size != null ? ` · ${formatBytes(item.size)}` : item.kind === "dir" ? " · 将递归擦除内部全部文件" : "";
+            item.kind === "file" && item.size != null
+              ? ` · ${formatBytes(item.size)}`
+              : item.kind === "dir"
+                ? " · 将递归擦除内部全部文件"
+                : "";
           const bad = item.safe === false;
           return `<div class="fp-item ${bad ? "is-blocked" : ""}" role="listitem" data-idx="${i}">
             <div class="fp-item-main">
@@ -150,7 +146,6 @@
         }
         renderList();
       } catch (err) {
-        // 桥未通时仍先入队，删时再报错
         for (const p of incoming) {
           if (queue.some((q) => q.path.toLowerCase() === p.toLowerCase())) continue;
           queue.push({ path: p, kind: "unknown", size: 0, safe: true, reason: "" });
@@ -162,19 +157,44 @@
 
     async function doPick(kind) {
       setError("");
+      if (!window.devtoolsBridgeShell?.mount) {
+        setError("桥连接组件未加载，请强制刷新页面后重试");
+        return;
+      }
+      if (workspace?.hidden) {
+        setError("请先连接本机统一桥（仅 Windows），连接成功后再选择文件");
+        toast?.("请先连接本机桥");
+        return;
+      }
+      const label = kind === "dir" ? "文件夹" : "文件";
+      if (metaEl) metaEl.textContent = `正在打开系统${label}选择框…（若没弹出请看任务栏）`;
+      toast?.(`正在打开系统${label}选择框…`);
+      if (pickFilesBtn) pickFilesBtn.disabled = true;
+      if (pickDirBtn) pickDirBtn.disabled = true;
       try {
         const data = await api("/pick", { method: "POST", body: { kind } });
-        const paths = Array.isArray(data.paths) && data.paths.length ? data.paths : data.path ? [data.path] : [];
+        const paths =
+          Array.isArray(data.paths) && data.paths.length ? data.paths : data.path ? [data.path] : [];
+        if (!paths.length) {
+          if (metaEl) metaEl.textContent = `${queue.length} 项`;
+          toast?.("已取消选择");
+          return;
+        }
         await addPaths(paths);
+        toast?.(`已加入 ${paths.length} 项`);
       } catch (err) {
         setError(err.message || String(err));
+        if (metaEl) metaEl.textContent = `${queue.length} 项`;
+      } finally {
+        if (pickFilesBtn) pickFilesBtn.disabled = false;
+        if (pickDirBtn) pickDirBtn.disabled = false;
       }
     }
 
     async function handleDrop(e) {
       if (!e.dataTransfer) return;
       e.preventDefault();
-      $("#fp-drop")?.classList.remove("is-over");
+      $p("#fp-drop")?.classList.remove("is-over");
       let paths = [];
       try {
         paths = window.devtoolsBridgeToken?.pathsFromDataTransfer?.(e.dataTransfer) || [];
@@ -236,7 +256,6 @@
             data.failed || 0
           }</p>${lines}`;
         }
-        // 成功的从清单移除
         const okSet = new Set((data.results || []).filter((r) => r.ok).map((r) => String(r.path).toLowerCase()));
         queue = queue.filter((q) => !okSet.has(q.path.toLowerCase()));
         if (ackEl) ackEl.checked = false;
@@ -251,14 +270,21 @@
       }
     }
 
-    $("#fp-pick-files")?.addEventListener("click", () => void doPick("files"));
-    $("#fp-pick-dir")?.addEventListener("click", () => void doPick("dir"));
-    $("#fp-clear")?.addEventListener("click", () => {
+    // 先绑按钮，避免桥壳初始化异常时整页「点了没反应」
+    pickFilesBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      void doPick("files");
+    });
+    pickDirBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      void doPick("dir");
+    });
+    $p("#fp-clear")?.addEventListener("click", () => {
       queue = [];
       renderList();
       setError("");
     });
-    $("#fp-add-paste")?.addEventListener("click", () => {
+    $p("#fp-add-paste")?.addEventListener("click", () => {
       const lines = String(pasteEl?.value || "")
         .split(/\r?\n/)
         .map((s) => s.trim().replace(/^["']|["']$/g, ""))
@@ -267,7 +293,7 @@
         if (pasteEl) pasteEl.value = "";
       });
     });
-    $("#fp-run")?.addEventListener("click", () => void runPurge());
+    $p("#fp-run")?.addEventListener("click", () => void runPurge());
     ackEl?.addEventListener("change", syncRunEnabled);
     confirmEl?.addEventListener("input", syncRunEnabled);
 
@@ -280,19 +306,18 @@
       renderList();
     });
 
-    const dropEl = $("#fp-drop");
-    const panelEl = $("#forcepurge");
+    const dropEl = $p("#fp-drop");
     ["dragenter", "dragover"].forEach((ev) =>
-      panelEl?.addEventListener(ev, (e) => {
+      root.addEventListener(ev, (e) => {
         if (!e.dataTransfer) return;
         e.preventDefault();
         dropEl?.classList.add("is-over");
       })
     );
-    panelEl?.addEventListener("dragleave", (e) => {
-      if (e.target === panelEl || e.target === dropEl) dropEl?.classList.remove("is-over");
+    root.addEventListener("dragleave", (e) => {
+      if (e.target === root || e.target === dropEl) dropEl?.classList.remove("is-over");
     });
-    panelEl?.addEventListener("drop", (e) => void handleDrop(e));
+    root.addEventListener("drop", (e) => void handleDrop(e));
 
     async function connectBridge() {
       try {
@@ -326,41 +351,64 @@
       }
     }
 
-    let shellApi = null;
-    shellApi = shell.bind({
-      onStatus: () => {},
-      onConnected: async () => {
-        setError("");
-        try {
-          const h = await api("/health", { auth: false });
-          if (!h.isWin) {
-            if (workspace) workspace.hidden = true;
-            setError("当前桥运行在非 Windows 系统，此工具仅 Windows 可用。");
-            return;
+    if (host && window.devtoolsBridgeShell?.mount) {
+      const shell = window.devtoolsBridgeShell.mount({
+        host,
+        prefix: "fp",
+        kind: "unified",
+        collapseAdvanced: true,
+        refreshLabel: "刷新",
+        hintDisconnected: "请先下载完整 ZIP 并运行启动脚本；本功能仅 Windows 有效。",
+        connHint:
+          '与占用解锁共用统一桥：17888 · Token <span class="mono">devtools-bridge</span> · API <span class="mono">/unlock/purge</span>。',
+      });
+      baseInput = shell.els.base;
+      tokenInput = shell.els.token;
+      try {
+        const b = localStorage.getItem(BASE_KEY);
+        const t = localStorage.getItem(TOKEN_KEY);
+        if (b && baseInput) baseInput.value = b;
+        if (t && tokenInput) tokenInput.value = t;
+      } catch (_) {}
+
+      shellApi = shell.bind({
+        onStatus: () => {},
+        onConnected: async () => {
+          setError("");
+          try {
+            const h = await api("/health", { auth: false });
+            if (!h.isWin) {
+              if (workspace) workspace.hidden = true;
+              setError("当前桥运行在非 Windows 系统，此工具仅 Windows 可用。");
+              return;
+            }
+            if (workspace) workspace.hidden = false;
+          } catch (err) {
+            setError(err.message || String(err));
           }
-          if (workspace) workspace.hidden = false;
-        } catch (err) {
-          setError(err.message || String(err));
-        }
-      },
-      onConnect: () => {
-        void connectBridge();
-      },
-      onRefresh: () => {
-        void connectBridge();
-      },
-      onPersist: () => {
-        try {
-          localStorage.setItem(BASE_KEY, baseUrl());
-          localStorage.setItem(TOKEN_KEY, token());
-        } catch (_) {}
-      },
-      toast: (msg) => {
-        if (metaEl) metaEl.textContent = msg;
-      },
-    });
+        },
+        onConnect: () => {
+          void connectBridge();
+        },
+        onRefresh: () => {
+          void connectBridge();
+        },
+        onPersist: () => {
+          try {
+            localStorage.setItem(BASE_KEY, baseUrl());
+            localStorage.setItem(TOKEN_KEY, token());
+          } catch (_) {}
+        },
+        toast: (msg) => {
+          if (metaEl) metaEl.textContent = msg;
+        },
+      });
+      void connectBridge();
+    } else {
+      setError("桥连接组件未加载，请强制刷新页面后重试");
+    }
 
     renderList();
-    void connectBridge();
+    window.DevToolsForcePurge = { version: 1 };
   });
 })();

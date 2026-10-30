@@ -653,6 +653,21 @@
   // 约 100KB：日常粘贴/编辑够用；再大就输入时不上色，失焦/美化再上色，避免整篇重绘卡顿
   const JSON_LIVE_HL_MAX = 100000;
   const jsonHlTimers = new WeakMap();
+  /** @type {WeakMap<Element, { stack: string[], idx: number, typing: boolean, before: string, _idle?: number }>} */
+  const jsonHistByEl = new WeakMap();
+
+  function pushJsonExternalHist(el, text) {
+    const hist = jsonHistByEl.get(el);
+    if (!hist) return;
+    const t = text == null ? getJsonText(el) : String(text);
+    if (hist.stack[hist.idx] === t) return;
+    hist.stack = hist.stack.slice(0, hist.idx + 1);
+    hist.stack.push(t);
+    if (hist.stack.length > 80) hist.stack.shift();
+    else hist.idx += 1;
+    hist.before = t;
+    hist.typing = false;
+  }
 
   function scheduleJsonPaint(el) {
     if (!el) return;
@@ -684,6 +699,48 @@
     if (el.contentEditable !== "plaintext-only") {
       el.contentEditable = "true";
     }
+    // contenteditable 每次 innerHTML 着色会清空浏览器原生撤销栈 → 自管 Ctrl+Z / Ctrl+Y
+    const hist = { stack: [getJsonText(el)], idx: 0, typing: false, before: getJsonText(el) };
+    jsonHistByEl.set(el, hist);
+    const MAX_HIST = 80;
+    let applyingHist = false;
+
+    function commitHist(text) {
+      const t = text == null ? getJsonText(el) : String(text);
+      if (hist.stack[hist.idx] === t) return;
+      hist.stack = hist.stack.slice(0, hist.idx + 1);
+      hist.stack.push(t);
+      if (hist.stack.length > MAX_HIST) hist.stack.shift();
+      else hist.idx += 1;
+    }
+
+    function applyHistAt(i) {
+      if (i < 0 || i >= hist.stack.length) return;
+      applyingHist = true;
+      hist.idx = i;
+      const t = hist.stack[i] || "";
+      hist.before = t;
+      hist.typing = false;
+      setJsonText(el, t, { keepCaret: false });
+      setJsonCaret(el, t.length);
+      saveJsonDraft(el);
+      applyingHist = false;
+    }
+
+    function undoJson() {
+      if (hist.typing) {
+        commitHist(getJsonText(el));
+        hist.typing = false;
+      }
+      if (hist.idx <= 0) return;
+      applyHistAt(hist.idx - 1);
+    }
+
+    function redoJson() {
+      if (hist.idx >= hist.stack.length - 1) return;
+      applyHistAt(hist.idx + 1);
+    }
+
     let composing = false;
     el.addEventListener("compositionstart", () => {
       composing = true;
@@ -692,19 +749,53 @@
       composing = false;
       scheduleJsonPaint(el);
     });
+    el.addEventListener("keydown", (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = String(e.key || "").toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undoJson();
+        return;
+      }
+      if (key === "y" || (key === "z" && e.shiftKey)) {
+        e.preventDefault();
+        redoJson();
+      }
+    });
+    el.addEventListener("beforeinput", () => {
+      if (applyingHist || composing || hist.typing) return;
+      hist.before = getJsonText(el);
+      hist.typing = true;
+      commitHist(hist.before);
+    });
     el.addEventListener("input", () => {
-      if (composing) return;
+      if (composing || applyingHist) return;
       scheduleJsonPaint(el);
+      clearTimeout(hist._idle);
+      hist._idle = window.setTimeout(() => {
+        hist.typing = false;
+        commitHist(getJsonText(el));
+      }, 400);
     });
     // 失焦时无论大小都上一次色（大文件也只付一次成本）
     el.addEventListener("blur", () => {
       clearTimeout(jsonHlTimers.get(el));
-      setJsonText(el, getJsonText(el), { keepCaret: false });
+      clearTimeout(hist._idle);
+      hist.typing = false;
+      const raw = getJsonText(el);
+      commitHist(raw);
+      setJsonText(el, raw, { keepCaret: false });
       saveJsonDraft(el);
     });
     el.addEventListener("paste", (e) => {
       if (el.contentEditable === "plaintext-only") return;
       e.preventDefault();
+      if (!hist.typing) {
+        hist.before = getJsonText(el);
+        commitHist(hist.before);
+        hist.typing = true;
+      }
       const text = e.clipboardData?.getData("text/plain") ?? "";
       if (document.queryCommandSupported?.("insertText")) {
         document.execCommand("insertText", false, text);
@@ -864,7 +955,9 @@
       try {
         const data = parseJsonEditor(el);
         const out = mode === "minify" ? JSON.stringify(data) : JSON.stringify(data, null, 2);
+        pushJsonExternalHist(el, getJsonText(el));
         setJsonText(el, out);
+        pushJsonExternalHist(el, out);
         saveJsonDraft(el);
         ok += 1;
         bits.push(
@@ -914,7 +1007,9 @@
           const repaired = jsonrepair(raw);
           const data = JSON.parse(repaired);
           const pretty = JSON.stringify(data, null, 2);
+          pushJsonExternalHist(el, getJsonText(el));
           setJsonText(el, pretty);
+          pushJsonExternalHist(el, pretty);
           saveJsonDraft(el);
           bits.push(`${label} ${pretty.split("\n").length} 行`);
         } catch (err) {
@@ -940,8 +1035,14 @@
   $("#json-minify").addEventListener("click", () => runJson("minify"));
   $("#json-validate").addEventListener("click", () => runJson("validate"));
   $("#json-clear").addEventListener("click", () => {
+    pushJsonExternalHist(jsonInput, getJsonText(jsonInput));
     setJsonText(jsonInput, "");
-    if (jsonInputB) setJsonText(jsonInputB, "");
+    pushJsonExternalHist(jsonInput, "");
+    if (jsonInputB) {
+      pushJsonExternalHist(jsonInputB, getJsonText(jsonInputB));
+      setJsonText(jsonInputB, "");
+      pushJsonExternalHist(jsonInputB, "");
+    }
     jsonMeta.textContent = "";
     setToolError(jsonError, "");
     try {

@@ -704,6 +704,11 @@
           await window.DevToolsPanels?.ensure?.(id);
         } catch (_) {}
       }
+      if (id === "forcepurge" || id === "fileunlock") {
+        try {
+          await window.DevToolsPanels?.ensure?.(id);
+        } catch (_) {}
+      }
       // 备忘录 / 局域网看板：必须先有面板节点，否则脚本会空跑且不再初始化
       if (id === "memo" || id === "lanboard") {
         try {

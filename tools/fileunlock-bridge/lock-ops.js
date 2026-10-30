@@ -293,16 +293,28 @@ async function pickPath(kind = "file") {
   if (!isWindows()) throw new Error("仅支持 Windows");
   const isDir = kind === "dir";
   const multi = kind === "files";
+  // 先建不可见 owner 窗并 Show/Hide，确保对话框能抢到前台（否则常表现为「点了没反应」）
   const script = [
     "Add-Type -AssemblyName System.Windows.Forms",
+    "[System.Windows.Forms.Application]::EnableVisualStyles() | Out-Null",
     "$f = New-Object System.Windows.Forms.Form",
     "$f.TopMost = $true",
+    "$f.ShowInTaskbar = $false",
+    "$f.Opacity = 0",
+    "$f.Width = 1",
+    "$f.Height = 1",
+    "$f.StartPosition = 'Manual'",
+    "$f.Location = New-Object System.Drawing.Point(-2000,-2000)",
+    "$f.Show() | Out-Null",
+    "$f.Activate() | Out-Null",
+    "$f.Hide() | Out-Null",
     isDir
       ? "$d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='选择文件夹（可多次添加）'; $d.ShowNewFolderButton=$false"
       : multi
         ? "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title='选择文件（可多选）'; $d.Multiselect=$true; $d.CheckFileExists=$true; $d.CheckPathExists=$true"
         : "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title='选择文件'; $d.CheckFileExists=$false; $d.CheckPathExists=$true; $d.ValidateNames=$false",
     "$r = $d.ShowDialog($f)",
+    "$f.Close() | Out-Null",
     "if ($r -eq [System.Windows.Forms.DialogResult]::OK) {",
     isDir
       ? "  if ($d.SelectedPath) { Write-Output $d.SelectedPath }"

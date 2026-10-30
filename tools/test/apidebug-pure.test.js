@@ -37,6 +37,29 @@ test("tags normalize + export roundtrip", () => {
   assert.ok(unpacked.tags.some((t) => t.id === "t1" && t.name === "登录"));
 });
 
+test("splitUrlAndQuery extracts query and strips search", () => {
+  const a = P.splitUrlAndQuery("https://example.com/api?x=1&y=hi%20there");
+  assert.strictEqual(a.changed, true);
+  assert.strictEqual(a.url, "https://example.com/api");
+  assert.strictEqual(a.query.length, 2);
+  assert.strictEqual(a.query[0].key, "x");
+  assert.strictEqual(a.query[1].value, "hi there");
+
+  const b = P.splitUrlAndQuery("example.com/path?page=2");
+  assert.strictEqual(b.changed, true);
+  assert.strictEqual(b.url, "example.com/path");
+  assert.strictEqual(b.query[0].key, "page");
+
+  const c = P.splitUrlAndQuery("/v1/items?limit=10");
+  assert.strictEqual(c.changed, true);
+  assert.strictEqual(c.url, "/v1/items");
+  assert.strictEqual(c.query[0].value, "10");
+
+  const d = P.splitUrlAndQuery("https://example.com/clean");
+  assert.strictEqual(d.changed, false);
+  assert.strictEqual(d.query.length, 0);
+});
+
 test("applyQueryToUrl + buildFetchInit", () => {
   const req = P.emptyRequest({
     method: "POST",

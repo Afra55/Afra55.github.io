@@ -194,12 +194,24 @@
     state.currentTagIds = [...(r.tagIds || [])];
     if (els.method) els.method.value = r.method;
     syncMethodTone();
-    if (els.url) els.url.value = r.url;
+    // URL 里若仍带 ?query，拆进表；已有 query 行则优先保留
+    let urlVal = r.url;
+    let queryRows = r.query;
+    if ((!queryRows || !queryRows.length) && String(urlVal || "").includes("?")) {
+      const split = P.splitUrlAndQuery(urlVal);
+      if (split.changed) {
+        urlVal = split.url;
+        queryRows = split.query;
+      }
+    } else if (String(urlVal || "").includes("?")) {
+      urlVal = P.splitUrlAndQuery(urlVal).url || String(urlVal).split("?")[0];
+    }
+    if (els.url) els.url.value = urlVal;
     if (els.name) els.name.value = r.name;
     if (els.body) els.body.value = r.bodyText || "";
     const radio = panel.querySelector(`input[name="apid-body-type"][value="${r.bodyType || "none"}"]`);
     if (radio) radio.checked = true;
-    renderKv(els.query, r.query);
+    renderKv(els.query, queryRows);
     renderKv(els.headers, r.headers);
     renderKv(els.cookies, r.cookies);
     state.dirty = false;
@@ -244,6 +256,22 @@
       ? [...readKv(host).filter((r) => String(r.key || "").trim() || String(r.value || "").trim()), ...next]
       : next;
     renderKv(host, merged);
+    if (kind === "query" && els.url) {
+      const path = String(els.url.value || "").trim().split("?")[0];
+      const pairs = P.enabledPairs(merged);
+      if (!path) {
+        /* keep empty */
+      } else if (!pairs.length) {
+        els.url.value = path;
+      } else if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)) {
+        els.url.value = P.applyQueryToUrl(path, merged);
+      } else {
+        const sp = new URLSearchParams();
+        for (const row of pairs) sp.append(String(row.key).trim(), String(row.value ?? ""));
+        const q = sp.toString();
+        els.url.value = q ? `${path}?${q}` : path;
+      }
+    }
     markDirty();
     return next.length;
   }
@@ -1085,12 +1113,77 @@
       });
     });
 
+    let syncingUrlQuery = false;
+
+    function urlPathOnly(raw) {
+      const s = String(raw || "").trim();
+      if (!s) return "";
+      const split = P.splitUrlAndQuery(s);
+      return split.url || s.split("?")[0];
+    }
+
+    function buildUrlWithQuery(pathRaw, queryRows) {
+      const path = urlPathOnly(pathRaw);
+      if (!path) return "";
+      const pairs = P.enabledPairs(queryRows);
+      if (!pairs.length) return path;
+      try {
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)) {
+          return P.applyQueryToUrl(path, queryRows);
+        }
+        // 无协议 / 相对路径：手动拼，避免 new URL 失败
+        const sp = new URLSearchParams();
+        for (const row of pairs) sp.append(String(row.key).trim(), String(row.value ?? ""));
+        const q = sp.toString();
+        return q ? `${path}?${q}` : path;
+      } catch {
+        return path;
+      }
+    }
+
+    /** URL 栏出现 ?query → 拆进 Query 表，URL 只留 path */
+    function syncUrlIntoQuery() {
+      if (syncingUrlQuery || !els.url) return false;
+      const split = P.splitUrlAndQuery(els.url.value);
+      if (!split.changed) return false;
+      syncingUrlQuery = true;
+      try {
+        els.url.value = split.url;
+        renderKv(els.query, split.query.length ? split.query : [P.emptyKv()]);
+        markDirty();
+        return true;
+      } finally {
+        syncingUrlQuery = false;
+      }
+    }
+
+    /** Query 表改动 → 写回 URL 的 search，保持联动 */
+    function syncQueryIntoUrl() {
+      if (syncingUrlQuery || !els.url) return;
+      const next = buildUrlWithQuery(els.url.value, readKv(els.query));
+      if (!next || String(els.url.value || "") === next) return;
+      syncingUrlQuery = true;
+      try {
+        els.url.value = next;
+      } finally {
+        syncingUrlQuery = false;
+      }
+    }
+
     panel.addEventListener("input", (e) => {
       if (e.target?.closest?.(".apid-kv, #apid-url, #apid-name, #apid-body, #apid-method")) markDirty();
+      if (e.target?.closest?.("#apid-url") && String(els.url?.value || "").includes("?")) {
+        syncUrlIntoQuery();
+      }
+      if (e.target?.closest?.("#apid-query")) {
+        syncQueryIntoUrl();
+      }
     });
     els.url?.addEventListener("change", () => {
-      const q = P.parseQueryFromUrl(els.url.value);
-      if (q.length) renderKv(els.query, q);
+      syncUrlIntoQuery();
+    });
+    els.url?.addEventListener("paste", () => {
+      queueMicrotask(() => syncUrlIntoQuery());
     });
     panel.addEventListener("click", (e) => {
       const del = e.target.closest?.("[data-k='del']");
@@ -1099,6 +1192,7 @@
         const host = row?.closest?.(".apid-kv");
         row?.remove();
         if (host && !host.querySelector(".apid-kv-row")) renderKv(host, [P.emptyKv()]);
+        if (host === els.query) syncQueryIntoUrl();
         markDirty();
       }
     });
