@@ -105,11 +105,13 @@ function nearestResize(img, cw, ch) {
   const panel = fs.readFileSync(path.join(__dirname, "panels/vbb.html"), "utf8");
   assert(/devtools-vbb-auto-crop[\s\S]{0,120}!==\s*"0"/.test(vbb), "默认开：localStorage !== \"0\"");
   assert(/stored\s*==\s*null[\s\S]{0,80}setItem\([\s\S]{0,40}"1"/.test(vbb), "首次写入默认 1");
-  assert(/cacheKey\s*=\s*`v11\|/.test(vbb), "crop 缓存键须为 v11");
+  assert(/cacheKey\s*=\s*`v12\|/.test(vbb), "crop 缓存键须为 v12");
+  assert(/MAX_SIDE_RATIO\s*=\s*0\.25/.test(vbb), "单边上限须 25%");
+  assert(/darkTrims\.length\s*>=\s*need/.test(vbb), "暗边须多数表决合并");
   assert(/detectVideoCropViaFfmpeg/.test(vbb), "须有 ffmpeg 抽帧回退（手机 HTML5 seek 失败）");
   assert(/frameLooksDecoded/.test(vbb), "须过滤未解码近黑帧");
   assert(/mergeCropRects/.test(vbb) && /fullFrameContentRect/.test(vbb), "须多帧合并且无边记整幅");
-  assert(/Math\.min\(\.\.\.list\.map/.test(vbb), "各边须取最小裁量，禁止裁进有画面帧");
+  assert(/darkTrims\.length\s*>=\s*need/.test(vbb) && /Math\.min\(\.\.\.darkTrims\)/.test(vbb), "暗边多数表决后取最小 trim");
   assert(/d \* 0\.5/.test(vbb) && /start \+ 0\.05/.test(vbb), "取样须含起/中/末");
   assert(/去色边未生效/.test(vbb), "开关开着但无 crop 须 toast 提示");
   assert(/devtools-vbb-auto-crop"\)\s*!==\s*"0"/.test(vbb), "DOM 缺失时仍认 localStorage");
@@ -138,9 +140,9 @@ function nearestResize(img, cw, ch) {
   assert(rBorder, "有边帧应检出");
   const full = fullFrameContentRect(320, 240);
   const transient = mergeContentRects([rBorder, full, full]);
-  assert(!transient, "仅 1/3 帧有边 → 最小裁量 0，不裁");
+  assert(!transient, "仅 1/3 帧有暗边 → 未过半数，不裁");
   const mixed = mergeContentRects([rBorder, rBorder, full]);
-  assert(!mixed, "2/3 有边但 1 帧有画面顶边 → 最小裁量 0，绝不裁画面");
+  assert(mixed && mixed.left >= 20 && mixed.w - 1 - mixed.right >= 24, "2/3 暗边多数表决 → 应裁（忽略 1 帧无边）");
   const stable = mergeContentRects([rBorder, rBorder, rBorder]);
   assert(stable && stable.left >= 20 && stable.w - 1 - stable.right >= 24, "三帧都有左右边 → 应裁左右");
   assert(stable.top === 0 && stable.bottom === stable.h - 1, "稳定左右边不得误裁上下");
@@ -153,6 +155,58 @@ function nearestResize(img, cw, ch) {
   const tbOnly = detectFrameContentRect(makeBorderedRgba(320, 240, { T: 16, B: 18 }), 14);
   assert(lrOnly && lrOnly.top === 0 && lrOnly.bottom === lrOnly.h - 1, "仅左右");
   assert(tbOnly && tbOnly.left === 0 && tbOnly.right === tbOnly.w - 1, "仅上下");
+}
+
+// ---- v12：底条 + 顶发丝；多数表决；纯色场不误裁；暗边映射不回退 ----
+{
+  // 仅底黑条（约 11%），模拟用户成片残留
+  const bottomOnly = makeBorderedRgba(960, 720, { B: 80, border: [0, 0, 0], content: [60, 110, 50] });
+  const rB = detectFrameContentRect(bottomOnly, 14);
+  assert(rB && rB.darkBottom && rB.top === 0, `仅底条应检出暗底，得 ${JSON.stringify(rB)}`);
+  const cropB = mapThumbCropToSource(rB, bottomOnly.width, bottomOnly.height);
+  assert(cropB, "底条应映射");
+  const bTrim = bottomOnly.height - cropB.y - cropB.h;
+  assert(bTrim >= 80, `暗底映射应吃满≥80（含 +1），得 ${bTrim}`);
+  const barsB = measureDarkBars(cropRgba(bottomOnly, cropB), { avgMax: 40, darkCh: 40 });
+  assert(barsB.B <= 1 && barsB.T <= 1, `底条裁后应干净 ${JSON.stringify(barsB)}`);
+
+  // 顶 2px + 底条
+  const hair = makeBorderedRgba(960, 720, { T: 2, B: 80, border: [0, 0, 0], content: [70, 120, 55] });
+  const rH = detectFrameContentRect(hair, 14);
+  assert(rH && rH.darkTop && rH.top >= 2, `顶发丝应检出，得 top=${rH && rH.top}`);
+  const cropH = mapThumbCropToSource(rH, hair.width, hair.height);
+  assert(cropH && cropH.y >= 2, `暗顶不回退，y 应≥2，得 ${cropH && cropH.y}`);
+  const barsH = measureDarkBars(cropRgba(hair, cropH), { avgMax: 40, darkCh: 40 });
+  assert(barsH.T <= 1 && barsH.B <= 1, `发丝+底条裁后应干净 ${JSON.stringify(barsH)}`);
+
+  // 整幅纯色不得当色边
+  const flat = makeBorderedRgba(320, 240, { content: [40, 80, 40], border: [40, 80, 40] });
+  // makeBordered with no LRTB still fills content color everywhere
+  const rFlat = detectFrameContentRect(flat, 14);
+  assert(!rFlat, `整幅纯色不得裁，得 ${JSON.stringify(rFlat)}`);
+
+  // 用户截图像素：底条约 24/214
+  const fs = require("fs");
+  const { spawnSync } = require("child_process");
+  const shot = "/home/ubuntu/.cursor/projects/workspace/assets/01a18f18-3be3-7177-8a4d-5a78f6ba8b6e.jpg";
+  if (fs.existsSync(shot)) {
+    const raw = "/tmp/vbb-user-shot.rgba";
+    const ff = spawnSync("ffmpeg", ["-y", "-i", shot, "-f", "rawvideo", "-pix_fmt", "rgba", raw], {
+      encoding: "utf8",
+    });
+    if (ff.status === 0 && fs.existsSync(raw)) {
+      const buf = fs.readFileSync(raw);
+      const img = { width: 448, height: 214, data: new Uint8ClampedArray(buf.buffer, buf.byteOffset, 448 * 214 * 4) };
+      const rU = detectFrameContentRect(img, 14);
+      assert(rU && rU.darkBottom, `用户截图应检出底黑条，得 ${JSON.stringify(rU)}`);
+      const cropU = mapThumbCropToSource(rU, 448, 214);
+      assert(cropU, "用户截图应映射 crop");
+      const bt = 214 - cropU.y - cropU.h;
+      assert(bt >= 22, `用户底条应裁掉≥22px，得 ${bt}`);
+      const after = measureDarkBars(cropRgba(img, cropU), { avgMax: 40, darkCh: 40 });
+      assert(after.B <= 2, `用户图裁后底条应≈0，得 ${JSON.stringify(after)}`);
+    }
+  }
 }
 
 // ---- 可选：本机 Download 样本离线回归 ----

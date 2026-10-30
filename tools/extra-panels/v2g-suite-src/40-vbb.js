@@ -4285,9 +4285,9 @@
        *  1) 暗边（letterbox/pillarbox）：按「暗像素占比」吃边，能吞压缩噪点 + 渐变过渡列
        *     （旧「纯度」在过渡暗列/最外列噪点上会提前停，缩成 GIF 后左右仍留黑条）
        *  2) 非暗纯色边（白/灰/绿…）：仍用严纯度，防雾气误裁
-       *  单边 ≤18%；暗边在 detectVideoCrop 映射时多吃约 1 缩略像素，非暗边才做 1px 回退。
+       *  单边 ≤25%；暗边映射不回退并多吃 1px；非暗边回退 1px。
        *  各边独立（仅左右 / 仅上下 / 三边 / 四边均可）。
-       *  与 tools/lib/vbb-auto-crop.js 同步（v11）。 */
+       *  与 tools/lib/vbb-auto-crop.js 同步（v12）。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -4305,6 +4305,7 @@
         const DARK_EDGE_AVG = 36;
         const SOFT_CH = 48;
         const SOFT_RATIO = 0.82;
+        const MAX_SIDE_RATIO = 0.25;
         const lineStats = (get, n) => {
           let r = 0;
           let g = 0;
@@ -4371,7 +4372,7 @@
               }
               break;
             }
-            // 不再多吃过渡列：宁可留一丝边，也不裁进有画面像素
+            // 不再多吃过渡列：宁可留一丝边，也不裁进有画面像素（映射阶段再补吃暗边）
             return { trim, dark: true };
           }
           if (st0.pure) {
@@ -4384,14 +4385,20 @@
               trim += 1;
               idx = fromStart ? idx + 1 : idx - 1;
             }
+            // 整幅近纯色：扫到 max 仍同色 → 不是色边
+            if (trim >= maxN) return { trim: 0, dark: false };
+            if (trim > 0) {
+              const stStop = lineStats(lineAt(idx), length);
+              if (stStop.pure && near(stStop.avg, c0)) return { trim: 0, dark: false };
+            }
             return { trim, dark: false };
           }
           return { trim: 0, dark: false };
         };
-        const maxTop = Math.floor(h * 0.18);
-        const maxBottom = Math.floor(h * 0.18);
-        const maxLeft = Math.floor(w * 0.18);
-        const maxRight = Math.floor(w * 0.18);
+        const maxTop = Math.floor(h * MAX_SIDE_RATIO);
+        const maxBottom = Math.floor(h * MAX_SIDE_RATIO);
+        const maxLeft = Math.floor(w * MAX_SIDE_RATIO);
+        const maxRight = Math.floor(w * MAX_SIDE_RATIO);
         const leftScan = scanSide(true, true, maxLeft);
         const rightScan = scanSide(true, false, maxRight);
         const topScan = scanSide(false, true, maxTop);
@@ -4425,11 +4432,15 @@
         let y = acc.top > 0 ? Math.max(0, Math.ceil(acc.top * sy)) : 0;
         let x2 = Math.min(vw, Math.floor((acc.right + 1) * sx));
         let y2 = Math.min(vh, Math.floor((acc.bottom + 1) * sy));
-        // 映射回源分辨率时各边回退 1px，避免缩略量化把画面边缘裁掉
-        if (x > 0) x -= 1;
-        if (y > 0) y -= 1;
-        if (x2 < vw) x2 += 1;
-        if (y2 < vh) y2 += 1;
+        // 非暗边回退 1px 保画面；暗边不回退并多吃 1px，清发丝黑线/底条
+        if (x > 0 && !acc.darkLeft) x -= 1;
+        if (y > 0 && !acc.darkTop) y -= 1;
+        if (x2 < vw && !acc.darkRight) x2 += 1;
+        if (y2 < vh && !acc.darkBottom) y2 += 1;
+        if (acc.darkLeft && x > 0) x = Math.min(vw - 8, x + 1);
+        if (acc.darkTop && y > 0) y = Math.min(vh - 8, y + 1);
+        if (acc.darkRight && x2 < vw) x2 = Math.max(x + 8, x2 - 1);
+        if (acc.darkBottom && y2 < vh) y2 = Math.max(y + 8, y2 - 1);
         let w = x2 - x;
         let h = y2 - y;
         if (x + w > vw) w = vw - x;
@@ -4453,21 +4464,39 @@
         };
       }
 
-      /** 多帧各边最小裁量（与 lib/vbb-auto-crop.mergeContentRects 对齐）：有画面的边绝不裁 */
+      /** 多帧合并（与 lib/vbb-auto-crop.mergeContentRects 对齐）：暗边多数表决，非暗边仍全体同意 */
       function mergeCropRects(rects) {
         const list = (rects || []).filter((r) => r && r.w > 0 && r.h > 0);
         if (!list.length) return null;
         const w = list[0].w;
         const h = list[0].h;
-        const L = Math.min(...list.map((r) => Math.max(0, r.left | 0)));
-        const T = Math.min(...list.map((r) => Math.max(0, r.top | 0)));
-        const Rt = Math.min(...list.map((r) => Math.max(0, r.w - 1 - (r.right | 0))));
-        const Bt = Math.min(...list.map((r) => Math.max(0, r.h - 1 - (r.bottom | 0))));
+        const n = list.length;
+        const need = Math.max(1, Math.ceil(n / 2));
+        const sideTrim = (trimOf, darkFlag) => {
+          const darkTrims = [];
+          const allTrims = [];
+          for (const r of list) {
+            const t = Math.max(0, trimOf(r) | 0);
+            allTrims.push(t);
+            if (r[darkFlag] && t > 0) darkTrims.push(t);
+          }
+          if (darkTrims.length >= need) {
+            return { trim: Math.min(...darkTrims), dark: true };
+          }
+          return { trim: Math.min(...allTrims), dark: false };
+        };
+        const leftS = sideTrim((r) => r.left, "darkLeft");
+        const topS = sideTrim((r) => r.top, "darkTop");
+        const rightS = sideTrim((r) => r.w - 1 - r.right, "darkRight");
+        const bottomS = sideTrim((r) => r.h - 1 - r.bottom, "darkBottom");
+        const L = leftS.trim;
+        const T = topS.trim;
+        const Rt = rightS.trim;
+        const Bt = bottomS.trim;
         if (L === 0 && T === 0 && Rt === 0 && Bt === 0) return null;
         const right = w - 1 - Rt;
         const bottom = h - 1 - Bt;
         if (right <= L || bottom <= T) return null;
-        const allDark = (flag, trim) => trim > 0 && list.every((r) => r[flag]);
         return {
           left: L,
           top: T,
@@ -4475,10 +4504,10 @@
           bottom,
           w,
           h,
-          darkLeft: allDark("darkLeft", L),
-          darkRight: allDark("darkRight", Rt),
-          darkTop: allDark("darkTop", T),
-          darkBottom: allDark("darkBottom", Bt),
+          darkLeft: leftS.dark && L > 0,
+          darkRight: rightS.dark && Rt > 0,
+          darkTop: topS.dark && T > 0,
+          darkBottom: bottomS.dark && Bt > 0,
         };
       }
 
@@ -4656,11 +4685,11 @@
 
       /**
        * 起/中/末三取样，各边取最小裁量；手机优先预览 video + ffmpeg 回退。
-       * v11：任一帧该边有画面 → 该边不裁；无边帧记整幅；单边～四边独立。
+       * v12：暗边多数表决；无边帧记整幅；单边～四边独立。
        */
       async function detectVideoCrop(file, hintW, hintH, hintDur) {
         if (!file) return null;
-        const cacheKey = `v11|${file.name}|${file.size}|${file.lastModified || 0}`;
+        const cacheKey = `v12|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         let failReason = "";

@@ -2,8 +2,9 @@
  * 黑盒「自动裁剪纯色边框」纯函数（与 v2g-suite-src/40-vbb.js 对齐）。
  * Node 单测 / 离线回归用；浏览器套件内另有同名实现，改一处必须两边一起改。
  *
- * v11：暗边按占比吃边；起/中/末三取样；各边独立；
- * 多帧合并取「各边最小裁量」（任一帧该边有画面 → 该边不裁，绝不裁进内容）。
+ * v12：暗边按占比吃边；起/中/末三取样；各边独立；
+ * 暗边（letterbox）多帧用多数表决，避免 1 帧无边把整段去色边否决；
+ * 映射时暗边不回退 1px（防发丝黑线）；纯色边须扫到异色内容，防整幅纯色误裁。
  */
 "use strict";
 
@@ -13,9 +14,12 @@ const DARK_EDGE_AVG = 36;
 const SOFT_CH = 48;
 const SOFT_RATIO = 0.82;
 const OUTLIER_RATIO = 0.012;
-const MAX_SIDE_RATIO = 0.18;
+/** 影院片上下黑边常见 ~10–20%；过小会留底条 */
+const MAX_SIDE_RATIO = 0.25;
 /** 检测缩略图最大宽（细左右边在 360 宽里易丢） */
 const DETECT_MAX_W = 960;
+/** 算法版本（缓存键 / 回归） */
+const CROP_ALGO_VER = "v12";
 
 /**
  * @param {{ width:number, height:number, data:Uint8ClampedArray|Uint8Array }} img
@@ -108,6 +112,13 @@ function detectFrameContentRect(img, tol = 14) {
         trim += 1;
         idx = fromStart ? idx + 1 : idx - 1;
       }
+      // 整幅近纯色（雾/纯色场）：扫到 max 仍同色 → 不是「边框」
+      if (trim >= maxN) return { trim: 0, dark: false };
+      // 必须看到与边框异色的内容行，否则也不裁
+      if (trim > 0) {
+        const stStop = lineStats(lineAt(idx), length);
+        if (stStop.pure && near(stStop.avg, c0)) return { trim: 0, dark: false };
+      }
       return { trim, dark: false };
     }
     return { trim: 0, dark: false };
@@ -153,11 +164,16 @@ function mapThumbCropToSource(acc, vw, vh) {
   let y = acc.top > 0 ? Math.max(0, Math.ceil(acc.top * sy)) : 0;
   let x2 = Math.min(vw, Math.floor((acc.right + 1) * sx));
   let y2 = Math.min(vh, Math.floor((acc.bottom + 1) * sy));
-  // 映射回源分辨率时各边回退 1px，避免缩略量化把画面边缘裁掉
-  if (x > 0) x -= 1;
-  if (y > 0) y -= 1;
-  if (x2 < vw) x2 += 1;
-  if (y2 < vh) y2 += 1;
+  // 非暗边回退 1px，避免缩略量化裁进画面；
+  // 暗边（letterbox）不回退，并多吃 1 源像素，清掉发丝黑线/底条残留
+  if (x > 0 && !acc.darkLeft) x -= 1;
+  if (y > 0 && !acc.darkTop) y -= 1;
+  if (x2 < vw && !acc.darkRight) x2 += 1;
+  if (y2 < vh && !acc.darkBottom) y2 += 1;
+  if (acc.darkLeft && x > 0) x = Math.min(vw - 8, x + 1);
+  if (acc.darkTop && y > 0) y = Math.min(vh - 8, y + 1);
+  if (acc.darkRight && x2 < vw) x2 = Math.max(x + 8, x2 - 1);
+  if (acc.darkBottom && y2 < vh) y2 = Math.max(y + 8, y2 - 1);
   let w = x2 - x;
   let h = y2 - y;
   if (x + w > vw) w = vw - x;
@@ -221,8 +237,10 @@ function unionContentRects(a, b) {
 }
 
 /**
- * 多帧合并：各边取最小裁量（三帧交集）。
- * 任一帧该边 trim=0（有画面顶到边）→ 该边不裁；只裁「每一帧都认定是色边」的部分。
+ * 多帧合并：
+ * - 暗边（letterbox/pillarbox）：多数表决——≥半数样本该边是暗边则取这些样本的最小 trim
+ *   （避免片头亮场/seek 失败帧一张「无边」就把整段底条否决掉）
+ * - 非暗纯色边：仍要全体同意（最小裁量含 0），防误裁
  * @param {Array<ReturnType<typeof detectFrameContentRect>|ReturnType<typeof fullFrameContentRect>>} rects
  */
 function mergeContentRects(rects) {
@@ -230,16 +248,36 @@ function mergeContentRects(rects) {
   if (!list.length) return null;
   const w = list[0].w;
   const h = list[0].h;
-  const L = Math.min(...list.map((r) => Math.max(0, r.left | 0)));
-  const T = Math.min(...list.map((r) => Math.max(0, r.top | 0)));
-  const Rt = Math.min(...list.map((r) => Math.max(0, r.w - 1 - (r.right | 0))));
-  const Bt = Math.min(...list.map((r) => Math.max(0, r.h - 1 - (r.bottom | 0))));
+  const n = list.length;
+  const need = Math.max(1, Math.ceil(n / 2));
+
+  const sideTrim = (trimOf, darkFlag) => {
+    const darkTrims = [];
+    const allTrims = [];
+    for (const r of list) {
+      const t = Math.max(0, trimOf(r) | 0);
+      allTrims.push(t);
+      if (r[darkFlag] && t > 0) darkTrims.push(t);
+    }
+    if (darkTrims.length >= need) {
+      return { trim: Math.min(...darkTrims), dark: true };
+    }
+    // 非暗：全体最小（任一帧 0 → 不裁）
+    return { trim: Math.min(...allTrims), dark: false };
+  };
+
+  const leftS = sideTrim((r) => r.left, "darkLeft");
+  const topS = sideTrim((r) => r.top, "darkTop");
+  const rightS = sideTrim((r) => r.w - 1 - r.right, "darkRight");
+  const bottomS = sideTrim((r) => r.h - 1 - r.bottom, "darkBottom");
+  const L = leftS.trim;
+  const T = topS.trim;
+  const Rt = rightS.trim;
+  const Bt = bottomS.trim;
   if (L === 0 && T === 0 && Rt === 0 && Bt === 0) return null;
   const right = w - 1 - Rt;
   const bottom = h - 1 - Bt;
   if (right <= L || bottom <= T) return null;
-  // 最小裁量 > 0 时，该边在所有样本上都有边 → dark 取「全员 dark」更稳妥
-  const allDark = (flag, trim) => trim > 0 && list.every((r) => r[flag]);
   return {
     left: L,
     top: T,
@@ -247,10 +285,10 @@ function mergeContentRects(rects) {
     bottom,
     w,
     h,
-    darkLeft: allDark("darkLeft", L),
-    darkRight: allDark("darkRight", Rt),
-    darkTop: allDark("darkTop", T),
-    darkBottom: allDark("darkBottom", Bt),
+    darkLeft: leftS.dark && L > 0,
+    darkRight: rightS.dark && Rt > 0,
+    darkTop: topS.dark && T > 0,
+    darkBottom: bottomS.dark && Bt > 0,
   };
 }
 
@@ -353,10 +391,12 @@ function cropRgba(img, crop) {
 }
 
 module.exports = {
+  CROP_ALGO_VER,
   DETECT_MAX_W,
   DARK_CH,
   DARK_RATIO,
   DARK_EDGE_AVG,
+  MAX_SIDE_RATIO,
   detectFrameContentRect,
   mapThumbCropToSource,
   fullFrameContentRect,
