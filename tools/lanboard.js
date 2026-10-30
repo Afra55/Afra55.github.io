@@ -16,8 +16,9 @@
     { urls: "stun:stun.hitv.com:3478" },
     { urls: "stun:stun.l.google.com:19302" },
   ];
-  const CHUNK_SIZE = 32 * 1024;
-  const DC_BUFFER_LIMIT = 512 * 1024;
+  /** 局域网直传：256KB 块，9MB GIF 约 36 片，远快于旧 32KB */
+  const CHUNK_SIZE = 256 * 1024;
+  const DC_BUFFER_LIMIT = 2 * 1024 * 1024;
   const NAME_KEY = "devtools-lanboard-name";
   const PEER_ID_KEY = "devtools-lanboard-peer-id";
   const IDB_NAME = "devtools-lanboard";
@@ -40,6 +41,9 @@
   const THUMB_TIMEOUT_MS = 2500;
   const MQTT_THUMB_MAX = 12000;
   const SOURCE_GONE = "源设备已离开，仅可预览";
+  const CONN_FAIL = "连接失败，请双方保持看板在前台后重试";
+  /** bye 后仍保留在场的宽限（安卓 pagehide/切后台常见假离开） */
+  const BYE_GRACE_MS = 22000;
 
   /** #lanboard?room=xxx 或 ?lbRoom=xxx → 隔离冒烟/私房，默认公共大厅 */
   function resolveLobbySlug() {
@@ -152,6 +156,8 @@
   const resolveInflight = new Map();
   /** @type {Map<string, "queued"|"downloading">} 下载按钮可见状态 */
   const dlUiState = new Map();
+  /** @type {Map<string, { received: number, total: number }>} 下载/预览进度 */
+  const dlProgress = new Map();
 
   function uid(n = 10) {
     const a = new Uint8Array(n);
@@ -511,6 +517,8 @@
     if (!it || it.kind === "text") return false;
     if (state.localBlobs.has(it.id)) return true;
     if (it.onBridge && state.bridgeOk) return true;
+    // 有 owner 就允许点下载/预览；真正失败在拉取时提示（避免假 bye 后按钮灰掉秒报离开）
+    if (it.ownerId && it.ownerId !== state.peerId) return true;
     return isOwnerOnline(it.ownerId);
   }
 
@@ -585,6 +593,7 @@
         .map((it) => {
           const thumb = String(it.thumb || "");
           const thumbSig = thumb ? `${thumb.length}:${thumb.slice(0, 24)}:${thumb.slice(-12)}` : "";
+          const prog = dlProgress.get(it.id);
           return [
             it.id,
             it.kind,
@@ -596,6 +605,7 @@
             selectedDlIds.has(it.id) ? "1" : "0",
             peerLabel(it.ownerId),
             dlUiState.get(it.id) || "",
+            prog ? `${prog.received}:${prog.total}` : "",
           ].join("|");
         })
         .join(";")
@@ -635,18 +645,46 @@
         const canDl = mediaDownloadable(it);
         const selected = canDl && selectedDlIds.has(it.id);
         const dlSt = dlUiState.get(it.id) || "";
-        const dlLabel = dlSt === "queued" ? "排队中" : dlSt === "downloading" ? "下载中…" : "下载";
+        const prog = dlProgress.get(it.id);
+        const pct =
+          prog && prog.total > 0
+            ? Math.min(99, Math.floor((100 * prog.received) / prog.total))
+            : prog && prog.received > 0
+              ? -1
+              : 0;
+        const dlLabel =
+          dlSt === "queued"
+            ? "排队中"
+            : dlSt === "downloading"
+              ? pct > 0
+                ? `下载 ${pct}%`
+                : "下载中…"
+              : "下载";
         const canPreview = it.kind === "image" || it.kind === "video";
         const label = kindLabel(it.kind);
         const preview = it.thumb
           ? `<img src="${escapeHtml(it.thumb)}" alt="" loading="lazy" />`
           : `<span class="lb-kind lb-kind-${escapeHtml(it.kind === "video" || it.kind === "image" ? it.kind : "file")}">${escapeHtml(label)}</span>`;
-        const hint = !canDl
+        const ownerLikelyGone =
+          it.ownerId &&
+          it.ownerId !== state.peerId &&
+          !state.localBlobs.has(it.id) &&
+          !(it.onBridge && state.bridgeOk) &&
+          !isOwnerOnline(it.ownerId) &&
+          !state.peers.has(it.ownerId) &&
+          !state.links.has(it.ownerId);
+        const hint = ownerLikelyGone
           ? `<span class="lb-dl-hint is-warn">${SOURCE_GONE}</span>`
           : dlSt === "queued"
             ? `<span class="lb-dl-hint">排队等待同设备传完</span>`
             : dlSt === "downloading"
-              ? `<span class="lb-dl-hint">接收中</span>`
+              ? `<span class="lb-dl-hint">${
+                  prog && prog.total > 0
+                    ? `接收中 ${fmtSize(prog.received)} / ${fmtSize(prog.total)}`
+                    : prog && prog.received > 0
+                      ? `接收中 ${fmtSize(prog.received)}`
+                      : "正在连接…"
+                }</span>`
               : "";
         const previewBtn = canPreview
           ? `<button type="button" class="ghost-btn lb-open-preview" data-id="${escapeHtml(it.id)}">预览</button>`
@@ -868,10 +906,11 @@
     });
   }
 
+  /** 等一小段 host/srflx，但不堵死：其余靠 trickle ICE */
   async function waitIce(pc) {
     if (pc.iceGatheringState === "complete") return;
     await new Promise((resolve) => {
-      const to = setTimeout(resolve, 3500);
+      const to = setTimeout(resolve, 700);
       pc.addEventListener("icegatheringstatechange", () => {
         if (pc.iceGatheringState === "complete") {
           clearTimeout(to);
@@ -1076,7 +1115,22 @@
         maybeConnect(msg.peerId || msg.from);
         break;
       case "bye":
-        dropPeer(msg.peerId || msg.from);
+        onPeerBye(msg.peerId || msg.from);
+        break;
+      case "need-offer":
+        // 对端要拉文件但自己是 answerer：请我们主动发 offer
+        if (msg.to && msg.to !== state.peerId) break;
+        {
+          const who = msg.from || msg.peerId;
+          if (who && who !== state.peerId) {
+            (async () => {
+              const ex = state.links.get(who);
+              if (linkDcOpen(ex)) return;
+              if (ex) dropLink(who);
+              await ensureLink(who, true);
+            })().catch(() => {});
+          }
+        }
         break;
       case "room-clear":
         // 末人清房广播：若本地已无他人，跟着清掉残留
@@ -1193,9 +1247,37 @@
     paintFeed();
   }
 
+  /**
+   * 处理 bye：勿立刻抹掉同伴。
+   * 安卓切后台/选文件/息屏常发 pagehide→bye，此时对方其实还在；立刻 drop 会导致
+   * iOS「一点下载就提示源设备离开」。WebRTC 仍通则忽略；否则只加速过期、保留宽限。
+   */
+  function onPeerBye(id) {
+    if (!id || id === state.peerId) return;
+    if (peerLinkAlive(id)) return;
+    const p = state.peers.get(id);
+    if (p) {
+      const floor = Date.now() - (PEER_STALE_MS - BYE_GRACE_MS);
+      p.lastSeen = Math.min(p.lastSeen || Date.now(), floor);
+      p.softBye = true;
+    } else {
+      // 未见过 presence 的迟到 bye：忽略
+      return;
+    }
+    dropLink(id);
+    paintStatus();
+    paintFeed();
+  }
+
   function prunePeers() {
     const now = Date.now();
     for (const [id, p] of state.peers) {
+      // 链路仍活则续命，避免假 bye + 心跳节流误删
+      if (peerLinkAlive(id)) {
+        p.lastSeen = now;
+        p.softBye = false;
+        continue;
+      }
       if (now - (p.lastSeen || 0) > PEER_STALE_MS) dropPeer(id);
     }
   }
@@ -1225,7 +1307,19 @@
     return linkDcOpen(state.links.get(peerId));
   }
 
-  /** 下载/发送前确保 DC 可用：死链先拆再重建 */
+  /** 请对端（或本端）尽快建 DC：解决「仅较小 id 发 offer」导致下载侧干等 */
+  function requestPeerOffer(peerId) {
+    if (!peerId || peerId === state.peerId) return;
+    publishMqtt({
+      type: "need-offer",
+      to: peerId,
+      from: state.peerId,
+      peerId: state.peerId,
+      name: state.peerName,
+    });
+  }
+
+  /** 下载/发送前确保 DC 可用：死链先拆再重建；下载侧可强制发 offer */
   async function ensureDcReady(peerId) {
     if (!peerId || peerId === state.peerId) return false;
     let link = state.links.get(peerId);
@@ -1234,13 +1328,22 @@
       link = null;
     }
     if (linkDcOpen(link)) return true;
-    const asOfferer = state.peerId < peerId;
-    await ensureLink(peerId, asOfferer);
-    if (await waitDcOpen(peerId, 10000)) return true;
-    // 仍未通：拆掉再试一次（对方可能刚回前台）
+
+    const naturalOfferer = state.peerId < peerId;
+    if (!naturalOfferer) requestPeerOffer(peerId);
+    await ensureLink(peerId, naturalOfferer);
+    if (await waitDcOpen(peerId, naturalOfferer ? 5000 : 3500)) return true;
+
+    // 仍未通：本端强制发 offer（polite 冲突由信令侧消化）
     dropLink(peerId);
-    await ensureLink(peerId, asOfferer);
-    return waitDcOpen(peerId, 8000);
+    requestPeerOffer(peerId);
+    await ensureLink(peerId, true);
+    if (await waitDcOpen(peerId, 8000)) return true;
+
+    dropLink(peerId);
+    requestPeerOffer(peerId);
+    await ensureLink(peerId, false);
+    return waitDcOpen(peerId, 5000);
   }
 
   function sendSnapshotTo(to, via) {
@@ -1707,7 +1810,7 @@
     const needPeer =
       !state.localBlobs.has(id) &&
       !(it.onBridge && state.bridgeOk) &&
-      isOwnerOnline(it.ownerId);
+      !!(it.ownerId && it.ownerId !== state.peerId);
     const peerBusy =
       needPeer &&
       [...dlUiState.keys()].some((otherId) => {
@@ -1819,13 +1922,27 @@
     const sess = recvSessions.get(`${from}:${fileId}`);
     if (!sess) return;
     sess.chunks.push(buf);
+    const n = buf?.byteLength || buf?.size || 0;
+    sess.received = (sess.received || 0) + n;
+    try {
+      sess.onProgress?.(sess.received, sess.meta?.size || 0);
+    } catch {
+      /* ignore */
+    }
   }
 
   function handleFileCtrl(from, msg) {
     const key = `${from}:${msg.fileId}`;
     const sess = recvSessions.get(key);
     if (!sess) return;
-    if (msg.type === "file-meta") sess.meta = msg;
+    if (msg.type === "file-meta") {
+      sess.meta = msg;
+      try {
+        sess.onProgress?.(sess.received || 0, msg.size || 0);
+      } catch {
+        /* ignore */
+      }
+    }
     if (msg.type === "file-done") {
       clearTimeout(sess.timer);
       sess.resolve({ meta: sess.meta, chunks: sess.chunks });
@@ -1944,7 +2061,7 @@
     return enqueuePeerJob(serveTailByPeer, to, () => serveFileBody(to, fileId));
   }
 
-  function requestFileFromPeerNow(ownerId, fileId, onStart) {
+  function requestFileFromPeerNow(ownerId, fileId, { onStart = null, onProgress = null } = {}) {
     return new Promise(async (resolve, reject) => {
       let holdingWake = false;
       const finish = (fn, arg) => {
@@ -1999,6 +2116,8 @@
         recvSessions.set(key, {
           chunks: [],
           meta: null,
+          received: 0,
+          onProgress,
           resolve: (v) => {
             if (activeRecvByPeer.get(ownerId) === fileId) activeRecvByPeer.delete(ownerId);
             finish(resolve, v);
@@ -2031,18 +2150,41 @@
       }
       if (!ok) {
         disarmSession(timer);
-        finish(reject, new Error(SOURCE_GONE));
+        const likelyGone =
+          !state.peers.has(ownerId) && !peerLinkAlive(ownerId) && !isOwnerOnline(ownerId);
+        finish(reject, new Error(likelyGone ? SOURCE_GONE : CONN_FAIL));
       }
     });
   }
 
-  function requestFileFromPeer(ownerId, fileId, onStart) {
+  function requestFileFromPeer(ownerId, fileId, opts) {
     return enqueuePeerJob(recvTailByPeer, ownerId, () =>
-      requestFileFromPeerNow(ownerId, fileId, onStart)
+      requestFileFromPeerNow(ownerId, fileId, opts || {})
     );
   }
 
-  async function resolveMediaBlob(id, { quiet = false, onStart = null } = {}) {
+  function noteDlProgress(id, received, total) {
+    if (!id) return;
+    const prev = dlProgress.get(id);
+    const nextTotal = total || prev?.total || state.items.get(id)?.size || 0;
+    // 避免每片都整表重绘：按约 4% 或 256KB 节流
+    const step = Math.max(256 * 1024, Math.floor(nextTotal / 25) || 256 * 1024);
+    if (prev && nextTotal > 0 && Math.floor(prev.received / step) === Math.floor(received / step)) {
+      dlProgress.set(id, { received, total: nextTotal });
+      return;
+    }
+    dlProgress.set(id, { received, total: nextTotal });
+    if (dlUiState.has(id)) bumpFeedPaint();
+    if (previewItemId === id && els.previewSub) {
+      els.previewSub.hidden = false;
+      els.previewSub.textContent =
+        nextTotal > 0
+          ? `正在拉取原图… ${fmtSize(received)} / ${fmtSize(nextTotal)}`
+          : `正在拉取原图… ${fmtSize(received)}`;
+    }
+  }
+
+  async function resolveMediaBlob(id, { quiet = false, onStart = null, onProgress = null } = {}) {
     const it = state.items.get(id);
     if (!it || it.kind === "text") return null;
     let blob = state.localBlobs.get(id);
@@ -2089,7 +2231,17 @@
       // 有 owner 就尝试 WebRTC（不因 MQTT 心跳短暂过期而直接放弃）
       if (it.ownerId && it.ownerId !== state.peerId) {
         try {
-          const { meta, chunks } = await requestFileFromPeer(it.ownerId, id, onStart);
+          const { meta, chunks } = await requestFileFromPeer(it.ownerId, id, {
+            onStart,
+            onProgress: (received, total) => {
+              noteDlProgress(id, received, total);
+              try {
+                onProgress?.(received, total);
+              } catch {
+                /* ignore */
+              }
+            },
+          });
           const mime =
             meta?.mime ||
             it.mime ||
@@ -2100,7 +2252,9 @@
           touchPeer(it.ownerId, it.ownerName || "");
           return got;
         } catch (e) {
+          // quiet：不写 info 条，仍抛给预览/下载以便区分「连接失败」与「源离开」
           if (!quiet) setInfo(e?.message || SOURCE_GONE);
+          throw e;
         }
       }
       return null;
@@ -2111,6 +2265,7 @@
       return await job;
     } finally {
       if (resolveInflight.get(id) === job) resolveInflight.delete(id);
+      dlProgress.delete(id);
     }
   }
 
@@ -2173,9 +2328,18 @@
     let blob = null;
     let errMsg = "";
     try {
-      blob = await resolveMediaBlob(id, { quiet: true });
+      blob = await resolveMediaBlob(id, {
+        quiet: true,
+        onStart: () => {
+          if (els.previewSub && previewItemId === id) {
+            els.previewSub.hidden = false;
+            els.previewSub.textContent = "正在连接源设备…";
+          }
+        },
+      });
     } catch (e) {
-      errMsg = e?.message || SOURCE_GONE;
+      errMsg = e?.message || CONN_FAIL;
+      blob = null;
     }
     if (previewItemId !== id) return;
 
@@ -2202,7 +2366,8 @@
     if (it.thumb) {
       if (els.previewSub) {
         els.previewSub.hidden = false;
-        els.previewSub.textContent = errMsg || (mediaDownloadable(it) ? "原图暂不可用，可稍后重试" : SOURCE_GONE);
+        els.previewSub.textContent =
+          errMsg || (isOwnerOnline(it.ownerId) ? "原图暂不可用，可稍后重试" : SOURCE_GONE);
       }
       return;
     }
@@ -2214,13 +2379,11 @@
   async function downloadItem(id) {
     const it = state.items.get(id);
     if (!it || it.kind === "text") return;
-    // 有本地/桥/在线/尚存链路就允许点；真正失败在 resolve 里提示
+    // 有本地缓存或桥直接下；否则只要有 ownerId 就尝试建链拉取（勿因假 bye 秒拒）
     if (
       !state.localBlobs.has(id) &&
       !(it.onBridge && state.bridgeOk) &&
-      !isOwnerOnline(it.ownerId) &&
-      !state.peers.has(it.ownerId) &&
-      !state.links.has(it.ownerId)
+      !(it.ownerId && it.ownerId !== state.peerId)
     ) {
       notifyToast(SOURCE_GONE);
       setInfo(SOURCE_GONE);
@@ -2263,7 +2426,10 @@
       setError(e?.message || SOURCE_GONE);
     } finally {
       wakeRelease();
-      if (ownedUi) dlUiState.delete(id);
+      if (ownedUi) {
+        dlUiState.delete(id);
+        dlProgress.delete(id);
+      }
       bumpFeedPaint();
     }
   }
@@ -2721,7 +2887,8 @@
     }, PRESENCE_MS);
     state.pruneTimer = setInterval(() => probeBridge().catch(() => {}), 20000);
 
-    window.addEventListener("pagehide", publishBye);
+    // 只用 beforeunload：pagehide 在安卓切后台/选文件/息屏也会触发，
+    // 会导致对端立刻 dropPeer → iOS 误报「源设备已离开」。
     window.addEventListener("beforeunload", publishBye);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
@@ -2732,6 +2899,9 @@
           requestSnapshots();
           pullBridgeSnapshot().catch(() => {});
         }
+      } else if (document.visibilityState === "hidden") {
+        // 后台时补一次 presence，方便对端续命；不发 bye
+        publishPresence();
       }
     });
   }
