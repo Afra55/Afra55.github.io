@@ -10,12 +10,15 @@
   const LOBBY_SLUG_DEFAULT = "devtools-lanboard";
   /** 文字条最长保留（超时丢弃，避免冒烟/他人旧帖长期滞留） */
   const TEXT_ITEM_MAX_AGE_MS = 3 * 60 * 60 * 1000;
-  const STUN = [
-    { urls: "stun:stun.miwifi.com:3478" },
-    { urls: "stun:stun.chat.bilibili.com:3478" },
-    { urls: "stun:stun.hitv.com:3478" },
-    { urls: "stun:stun.l.google.com:19302" },
-  ];
+  /** 局域网优先 host 候选；只挂 1 个 STUN，多 STUN 会拖慢手机 ICE 收集 */
+  const STUN = [{ urls: "stun:stun.miwifi.com:3478" }];
+  /** 预收集候选，缩短点下载后的「正在连接」 */
+  const ICE_CANDIDATE_POOL = 4;
+  /** 下载侧单次等 DC 打开的上限 */
+  const DC_OPEN_MS = 4000;
+  const DC_OPEN_RETRY_MS = 3500;
+  /** 同 peer 的 need-offer 最小间隔，避免心跳刷屏 */
+  const NEED_OFFER_GAP_MS = 2500;
   /** 局域网直传：256KB 块，9MB GIF 约 36 片，远快于旧 32KB */
   const CHUNK_SIZE = 256 * 1024;
   const DC_BUFFER_LIMIT = 2 * 1024 * 1024;
@@ -158,6 +161,10 @@
   const dlUiState = new Map();
   /** @type {Map<string, { received: number, total: number }>} 下载/预览进度 */
   const dlProgress = new Map();
+  /** @type {Map<string, number>} peerId → 上次 need-offer 时间 */
+  const needOfferAt = new Map();
+  /** @type {Map<string, Array<() => void>>} peerId → 等 DC open 的回调 */
+  const dcOpenWaiters = new Map();
 
   function uid(n = 10) {
     const a = new Uint8Array(n);
@@ -903,21 +910,21 @@
       iceServers: STUN,
       bundlePolicy: "max-bundle",
       rtcpMuxPolicy: "require",
+      iceCandidatePoolSize: ICE_CANDIDATE_POOL,
     });
   }
 
-  /** 等一小段 host/srflx，但不堵死：其余靠 trickle ICE */
-  async function waitIce(pc) {
-    if (pc.iceGatheringState === "complete") return;
-    await new Promise((resolve) => {
-      const to = setTimeout(resolve, 700);
-      pc.addEventListener("icegatheringstatechange", () => {
-        if (pc.iceGatheringState === "complete") {
-          clearTimeout(to);
-          resolve(null);
-        }
-      });
-    });
+  function notifyDcOpen(peerId) {
+    const list = dcOpenWaiters.get(peerId);
+    if (!list?.length) return;
+    dcOpenWaiters.delete(peerId);
+    for (const fn of list) {
+      try {
+        fn();
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   function getMqttConnect() {
@@ -1143,6 +1150,10 @@
         if (msg.item) {
           if (state.persistGate === "pending") promotePersistLive().catch(() => {});
           upsertItem({ ...msg.item, text: undefined });
+          // 对方刚发媒体：后台暖 DC，避免点预览才开始协商
+          if (msg.item.ownerId && msg.item.ownerId !== state.peerId) {
+            warmPeerLink(msg.item.ownerId);
+          }
         }
         break;
       case "item-text":
@@ -1235,6 +1246,7 @@
       /* ignore */
     }
     state.links.delete(id);
+    dcOpenWaiters.delete(id);
     clearPeerTransferState(id);
     paintStatus();
   }
@@ -1282,15 +1294,16 @@
     }
   }
 
-  /** 丢掉死链并对仍在场的同伴重新协商 */
+  /** 丢掉死链并对仍在场的同伴重新协商；较大 id 也主动要 offer，提前暖 DC */
   function healLinks() {
     for (const [id, link] of [...state.links]) {
       if (linkIsDead(link)) dropLink(id);
     }
     for (const [id, p] of state.peers) {
-      if (Date.now() - (p.lastSeen || 0) < PEER_STALE_MS) {
-        maybeConnect(id).catch(() => {});
-      }
+      if (Date.now() - (p.lastSeen || 0) >= PEER_STALE_MS) continue;
+      if (linkDcOpen(state.links.get(id))) continue;
+      maybeConnect(id).catch(() => {});
+      if (state.peerId > id) requestPeerOffer(id);
     }
   }
 
@@ -1298,18 +1311,40 @@
     return new Promise((r) => setTimeout(r, ms));
   }
 
-  async function waitDcOpen(peerId, ms = 10000) {
-    const start = Date.now();
-    while (Date.now() - start < ms) {
-      if (linkDcOpen(state.links.get(peerId))) return true;
-      await waitMs(120);
-    }
-    return linkDcOpen(state.links.get(peerId));
+  async function waitDcOpen(peerId, ms = DC_OPEN_MS) {
+    if (linkDcOpen(state.links.get(peerId))) return true;
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (ok) => {
+        if (done) return;
+        done = true;
+        clearTimeout(to);
+        clearInterval(iv);
+        const list = dcOpenWaiters.get(peerId);
+        if (list) {
+          const i = list.indexOf(onOpen);
+          if (i >= 0) list.splice(i, 1);
+          if (!list.length) dcOpenWaiters.delete(peerId);
+        }
+        resolve(ok);
+      };
+      const onOpen = () => finish(true);
+      const list = dcOpenWaiters.get(peerId) || [];
+      list.push(onOpen);
+      dcOpenWaiters.set(peerId, list);
+      const iv = setInterval(() => {
+        if (linkDcOpen(state.links.get(peerId))) finish(true);
+      }, 40);
+      const to = setTimeout(() => finish(linkDcOpen(state.links.get(peerId))), ms);
+    });
   }
 
-  /** 请对端（或本端）尽快建 DC：解决「仅较小 id 发 offer」导致下载侧干等 */
+  /** 请对端尽快建 DC；节流避免 presence/heal 刷屏 */
   function requestPeerOffer(peerId) {
     if (!peerId || peerId === state.peerId) return;
+    const now = Date.now();
+    if (now - (needOfferAt.get(peerId) || 0) < NEED_OFFER_GAP_MS) return;
+    needOfferAt.set(peerId, now);
     publishMqtt({
       type: "need-offer",
       to: peerId,
@@ -1319,7 +1354,20 @@
     });
   }
 
-  /** 下载/发送前确保 DC 可用：死链先拆再重建；下载侧可强制发 offer */
+  /** 暖链路：收到对方媒体后后台建 DC，点预览时少等「正在连接」 */
+  function warmPeerLink(peerId) {
+    if (!peerId || peerId === state.peerId || !webrtcSupported()) return;
+    if (linkDcOpen(state.links.get(peerId))) return;
+    if (state.peerId < peerId) {
+      maybeConnect(peerId).catch(() => {});
+    } else {
+      requestPeerOffer(peerId);
+      // 下载侧也直接发 offer，双路径竞速（polite 消冲突）
+      ensureLink(peerId, true).catch(() => {});
+    }
+  }
+
+  /** 下载/发送前确保 DC：直接发 offer（不再先当 answerer 干等数秒） */
   async function ensureDcReady(peerId) {
     if (!peerId || peerId === state.peerId) return false;
     let link = state.links.get(peerId);
@@ -1329,21 +1377,15 @@
     }
     if (linkDcOpen(link)) return true;
 
-    const naturalOfferer = state.peerId < peerId;
-    if (!naturalOfferer) requestPeerOffer(peerId);
-    await ensureLink(peerId, naturalOfferer);
-    if (await waitDcOpen(peerId, naturalOfferer ? 5000 : 3500)) return true;
+    // 双路径：请对方发 + 本端立刻 offer，谁先成用谁
+    requestPeerOffer(peerId);
+    await ensureLink(peerId, true);
+    if (await waitDcOpen(peerId, DC_OPEN_MS)) return true;
 
-    // 仍未通：本端强制发 offer（polite 冲突由信令侧消化）
     dropLink(peerId);
     requestPeerOffer(peerId);
     await ensureLink(peerId, true);
-    if (await waitDcOpen(peerId, 8000)) return true;
-
-    dropLink(peerId);
-    requestPeerOffer(peerId);
-    await ensureLink(peerId, false);
-    return waitDcOpen(peerId, 5000);
+    return waitDcOpen(peerId, DC_OPEN_RETRY_MS);
   }
 
   function sendSnapshotTo(to, via) {
@@ -1388,9 +1430,14 @@
     (msg.texts || []).forEach((it) => {
       if (textItemFresh(it)) upsertItem(it, { paint: false, persist: false });
     });
-    (msg.media || []).forEach((it) => upsertItem(it, { paint: false, persist: false }));
+    const owners = new Set();
+    (msg.media || []).forEach((it) => {
+      upsertItem(it, { paint: false, persist: false });
+      if (it?.ownerId && it.ownerId !== state.peerId) owners.add(it.ownerId);
+    });
     persistItems();
     paintFeed();
+    for (const oid of owners) warmPeerLink(oid);
   }
 
   function dcSend(peerId, obj) {
@@ -1534,7 +1581,7 @@
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        await waitIce(pc);
+        // 立刻发 offer，ICE 走 trickle，不再等 gathering（可省 ~0.7s+）
         publishMqtt({
           type: "signal",
           signalType: "offer",
@@ -1555,6 +1602,7 @@
     link.dc = dc;
     dc.binaryType = "arraybuffer";
     dc.onopen = () => {
+      notifyDcOpen(remoteId);
       paintStatus();
       try {
         dc.send(
@@ -1981,10 +2029,17 @@
       const offerCollision = link.makingOffer || pc.signalingState !== "stable";
       if (offerCollision && !link.polite) return;
       try {
+        if (offerCollision && link.polite) {
+          try {
+            await pc.setLocalDescription({ type: "rollback" });
+          } catch {
+            /* ignore */
+          }
+        }
         await pc.setRemoteDescription({ type: "offer", sdp: msg.sdp });
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        await waitIce(pc);
+        // 立刻回 answer，ICE trickle
         publishMqtt({
           type: "signal",
           signalType: "answer",
@@ -2333,7 +2388,9 @@
         onStart: () => {
           if (els.previewSub && previewItemId === id) {
             els.previewSub.hidden = false;
-            els.previewSub.textContent = "正在连接源设备…";
+            els.previewSub.textContent = linkDcOpen(state.links.get(it.ownerId))
+              ? "正在拉取原图…"
+              : "正在连接…";
           }
         },
       });

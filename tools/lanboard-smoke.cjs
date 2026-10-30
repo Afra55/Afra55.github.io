@@ -66,6 +66,8 @@ function staticCheck() {
   assert(!/addEventListener\(\s*["']pagehide["']\s*,\s*publishBye/.test(js), "禁止 pagehide→bye（安卓切后台会误杀同伴）");
   assert(js.includes("onPeerBye") && js.includes("BYE_GRACE_MS"), "bye 须软处理并保留宽限");
   assert(js.includes("need-offer") && js.includes("requestPeerOffer"), "下载侧须能请求/强制协商 DataChannel");
+  assert(js.includes("warmPeerLink") && js.includes("iceCandidatePoolSize"), "须预热 DC 且启用 ICE candidate pool");
+  assert(!/await waitIce\(/.test(js), "发 offer/answer 不得 await waitIce，须立刻 trickle");
   assert(/CHUNK_SIZE\s*=\s*256\s*\*\s*1024/.test(js), "分块须≥256KB，避免大 GIF 过慢");
   assert(js.includes("CONN_FAIL"), "连接失败与源离开文案须区分");
   assert(js.includes("peerLinkAlive") && /PEER_STALE_MS\s*=\s*([4-9]\d{4}|[1-9]\d{5,})/.test(js), "在场判定须含 WebRTC 存活且过期≥45s，避免误报源离开");
