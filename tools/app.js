@@ -935,7 +935,11 @@
   });
 
   function parseJsonEditor(el) {
-    const raw = getJsonText(el).trim();
+    // contenteditable / 粘贴偶发带 BOM、零宽字符，校验前清掉，避免「明明合法却报错」
+    const raw = getJsonText(el)
+      .replace(/^\uFEFF/, "")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
+      .trim();
     if (!raw) throw new Error("请先输入 JSON");
     return JSON.parse(raw);
   }
@@ -950,10 +954,17 @@
     let ok = 0;
     let firstErr = "";
     const bits = [];
+    const total = editors.length;
     editors.forEach((el) => {
       const label = el === jsonInput ? "A" : "B";
       try {
         const data = parseJsonEditor(el);
+        if (mode === "validate") {
+          // 「仅校验」：只 parse，不改写正文（避免误触发美化/撤销栈）
+          ok += 1;
+          bits.push(`${label} 合法`);
+          return;
+        }
         const out = mode === "minify" ? JSON.stringify(data) : JSON.stringify(data, null, 2);
         pushJsonExternalHist(el, getJsonText(el));
         setJsonText(el, out);
@@ -971,13 +982,14 @@
     });
     if (firstErr) {
       setToolError(jsonError, `JSON 无效：${firstErr}`);
-    } else {
-      setToolError(jsonError, "");
+      jsonMeta.textContent = ok ? `部分通过 · ${bits.join(" · ")}` : "";
+      return;
     }
+    setToolError(jsonError, "");
     if (ok) {
       const verb = mode === "validate" ? "校验通过" : mode === "pretty" ? "已美化" : "已压缩";
       jsonMeta.textContent = `${verb} · ${bits.join(" · ")}`;
-      if (mode === "validate") showToast("JSON 合法");
+      if (mode === "validate" && ok === total) showToast("JSON 合法");
     } else {
       jsonMeta.textContent = "";
     }
