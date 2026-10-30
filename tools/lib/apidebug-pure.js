@@ -89,16 +89,60 @@
   }
 
   function parseQueryFromUrl(url) {
-    try {
-      const u = new URL(String(url || "").trim());
-      return [...u.searchParams.entries()].map(([key, value]) => ({
+    return splitUrlAndQuery(url).query;
+  }
+
+  /**
+   * 从完整链接拆出 path URL + query 行。
+   * 支持无协议（example.com/a?x=1）、相对路径（/api?x=1）与完整 URL。
+   * @returns {{ url: string, query: ReturnType<typeof emptyKv>[], changed: boolean }}
+   */
+  function splitUrlAndQuery(url) {
+    const raw = String(url || "").trim();
+    if (!raw) return { url: "", query: [], changed: false };
+
+    const toRows = (sp) =>
+      [...sp.entries()].map(([key, value]) => ({
         id: uid(4),
         enabled: true,
         key,
         value,
       }));
+
+    try {
+      const u = new URL(raw);
+      const query = toRows(u.searchParams);
+      if (!query.length) return { url: raw, query: [], changed: false };
+      const next = `${u.origin}${u.pathname}${u.hash || ""}`;
+      return { url: next, query, changed: true };
     } catch {
-      return [];
+      /* fall through */
+    }
+
+    // 无协议：example.com/path?a=1
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw) && !raw.startsWith("/") && raw.includes("?")) {
+      try {
+        const u = new URL(`https://${raw}`);
+        const query = toRows(u.searchParams);
+        if (!query.length) return { url: raw, query: [], changed: false };
+        const qIdx = raw.indexOf("?");
+        return { url: raw.slice(0, qIdx), query, changed: true };
+      } catch {
+        /* fall through */
+      }
+    }
+
+    // 相对路径或其它：按第一个 ? 切开
+    const qIdx = raw.indexOf("?");
+    if (qIdx < 0) return { url: raw, query: [], changed: false };
+    const pathPart = raw.slice(0, qIdx);
+    const search = raw.slice(qIdx + 1);
+    try {
+      const query = toRows(new URLSearchParams(search));
+      if (!query.length) return { url: raw, query: [], changed: false };
+      return { url: pathPart, query, changed: true };
+    } catch {
+      return { url: raw, query: [], changed: false };
     }
   }
 
@@ -339,13 +383,9 @@
       else if (ct && /x-www-form-urlencoded/i.test(ct.value)) bodyType = "form";
     }
 
-    let query = parseQueryFromUrl(url);
-    try {
-      const u = new URL(url);
-      url = `${u.origin}${u.pathname}`;
-    } catch {
-      /* keep */
-    }
+    const split = splitUrlAndQuery(url);
+    url = split.url || url;
+    const query = split.query;
 
     return emptyRequest({
       ...base,
@@ -505,6 +545,7 @@
     enabledPairs,
     applyQueryToUrl,
     parseQueryFromUrl,
+    splitUrlAndQuery,
     mergeCookieHeader,
     buildFetchInit,
     requestToCurl,

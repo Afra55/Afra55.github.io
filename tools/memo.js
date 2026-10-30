@@ -3302,9 +3302,7 @@
   }
 
   function tagsForNewItem() {
-    if (state.activeTagId && state.activeTagId !== "all" && state.activeTagId !== DEFAULT_TAG_ID) {
-      return [state.activeTagId];
-    }
+    // 入库默认未分类：不跟随左侧当前筛选标签（否则看某标签时剪贴板入库会被误打上该标签）
     return [DEFAULT_TAG_ID];
   }
 
