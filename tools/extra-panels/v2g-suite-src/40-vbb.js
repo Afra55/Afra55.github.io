@@ -7173,6 +7173,9 @@
       window.DevToolsVbb = {
         getBps15: () => vbbAnalysis?.bps15 ?? null,
         getSrcW: () => vbbAnalysis?.srcW ?? 0,
+        getSrcH: () => vbbAnalysis?.srcH ?? 0,
+        getSrcFps: () => vbbAnalysis?.srcFps ?? 0,
+        getSourceFile: () => vbbSourceFile || null,
         getActivePlan: () => (vbbAnalysis ? resolveActiveVbbPlan() : null),
         getClips: () => vbbClips.slice(),
         getBatchFiles: () => vbbBatchFiles.slice(),
@@ -7191,6 +7194,8 @@
         },
         formatClipTitle: (c, idx) => formatVbbClipTitle(c, idx),
         formatClipMeta: (c, opts) => formatVbbClipMeta(c, opts || {}),
+        /** @deprecated 旧同轮 firstSeed 已移除；保留恒 false 以免外部探测脚本崩 */
+        shouldReuseFirstPlan: () => false,
         loadSpanScheme: (span, speed, meta) => loadVbbSpanScheme(span, speed, meta),
         saveSpanScheme: (span, seed, enc) => saveVbbSpanScheme(span, seed, enc),
         spanSchemeKey: (span, speed, meta) => vbbSpanSchemeKey(span, speed, meta),

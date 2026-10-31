@@ -93,13 +93,10 @@ t("去色边仍对原片取样（单段/批量）", () => {
   assert.ok(/resolveVbbEncodeCrop\(\s*vbbSourceFile[\s\S]*?\bduration\b/.test(single));
 });
 
-t("编码器：非片头窗 / 压缩时长也允许 wantSeg（失败回退原片）", () => {
+t("编码器：非片头窗也允许 wantSeg（失败回退原片）；倍速靠 accurate 而非扩大 wantSeg", () => {
   assert.ok(shared.includes("Number(opts.startSec) > 0.05"));
-  assert.ok(shared.includes("speed > 1.01"));
-  assert.ok(
-    /file\.size >= FFMPEG_SEG_FILE_BYTES[\s\S]{0,120}speed > 1\.01/.test(shared),
-    "wantSeg 须覆盖大文件/非片头/倍速"
-  );
+  assert.ok(shared.includes("file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05"));
+  assert.ok(shared.includes("accurate: speed > 1.01 || Boolean(opts.forceAccurateCut)"));
 });
 
 t("构建产物含门闩与精确预裁标记", () => {

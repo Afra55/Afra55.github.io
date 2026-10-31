@@ -112,22 +112,21 @@ t("结果卡会提示加速达上限", () => {
 });
 
 t("无倍速不强制对准目标秒数（避免均匀 delay 被拆成 60/70 顿挫）", () => {
-  assert.ok(shared.includes("forceAlignSpan = speed > 1.01 && chunkTarget > 0.05"));
+  assert.ok(shared.includes("forceAlignSpan = speed > 1.01 && chunkTargetRequested > 0.05"));
   assert.ok(shared.includes("仍用均匀，保流畅"));
   assert.ok(shared.includes("buildUniformGifDurationsMs(encodedFrames, fps)"));
 });
 
-t("压缩时长即使少帧也对准目标秒数", () => {
-  assert.ok(shared.includes("即使少帧也要把 delay 拉到目标秒数"));
+t("压缩时长按请求份额对准目标（少帧不按实际比例缩短目标）", () => {
+  assert.ok(shared.includes("chunkTargetRequested"));
+  assert.ok(shared.includes("speed > 1.01 ? chunkTargetRequested : chunkTargetActual"));
   assert.ok(shared.includes("speed > 1.01 || frameRatio >= 0.9"));
 });
 
-t("压缩时长小文件也要精确预切", () => {
-  assert.ok(shared.includes("speed > 1.01"));
-  assert.ok(
-    /file\.size >= FFMPEG_SEG_FILE_BYTES[\s\S]{0,120}speed > 1\.01/.test(shared),
-    "wantSeg 须含 speed>1.01"
-  );
+t("倍速预切仍只在大文件/非片头触发 wantSeg（避免小文件多一趟重编码）", () => {
+  assert.ok(shared.includes("file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05"));
+  assert.ok(!/file\.size >= FFMPEG_SEG_FILE_BYTES \|\|[\s\S]{0,80}speed > 1\.01/.test(shared));
+  assert.ok(shared.includes("accurate: speed > 1.01 || Boolean(opts.forceAccurateCut)"));
 });
 
 t("无倍速大文件预切仍可用 copy（行为与改前一致）", () => {

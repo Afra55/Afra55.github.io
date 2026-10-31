@@ -1328,13 +1328,12 @@
           encodeInput = inName;
           if (aborted()) throw new Error("已取消");
   
-          // 大文件、非片头窗、或压缩时长：先按段切出（倍速必须精确切，避免少帧再加速成「目标 30 却 21s」）
+          // 大文件、或非片头窗：先按段切出（失败则仍用原片+ss）
+          // 倍速时若走到预切，accurate 已强制 libx264；勿因倍速对小文件一律预切（手机易多吃一趟重编码）
           const wantSeg =
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
-            (file.size >= FFMPEG_SEG_FILE_BYTES ||
-              Number(opts.startSec) > 0.05 ||
-              speed > 1.01);
+            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
           if (wantSeg) {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
@@ -2175,13 +2174,11 @@
           encodeInput = inName;
           if (aborted()) throw new Error("已取消");
 
-          // 大文件、非片头窗、或压缩时长：先按段切出（倍速必须精确切）
+          // 大文件、或非片头窗：先按段切出（失败则仍用原片+ss）
           const wantSeg =
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
-            (file.size >= FFMPEG_SEG_FILE_BYTES ||
-              Number(opts.startSec) > 0.05 ||
-              speed > 1.01);
+            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
           if (wantSeg) {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
@@ -2312,11 +2309,18 @@
               Math.max(0.05, Number(opts.span) || 0) / Math.max(1, Number(opts.speed) || 1);
             const allowStillMerge =
               fps < 18 - 0.01 && effSpanForMerge > V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
+            // 无倍速：按实际抽到的帧占比计目标（少帧如实变短）
+            // 压缩时长：按「本段应占的目标秒数」拉 delay（少帧也凑满目标，避免 46→30 却播成 ~21）
+            const chunkShare =
+              frameCount > 0 && chunkFrames > 0 ? chunkFrames / frameCount : 1;
+            const chunkTargetRequested = Math.max(0.05, effSpanForMerge * chunkShare);
+            const chunkTargetActual =
+              chunkFrames > 0
+                ? effSpanForMerge * (n / Math.max(1, chunkFrames))
+                : effSpanForMerge;
             const chunkTarget =
-              chunkFrames > 0 ? effSpanForMerge * (n / Math.max(1, chunkFrames)) : effSpanForMerge;
-            // 压缩时长：即使少帧也要把 delay 拉到目标秒数（避免 46→30 却播成 ~21）
-            // 无倍速保持均匀 fps delay（可走 canPassFps，避免 60/70 交替顿挫）
-            const forceAlignSpan = speed > 1.01 && chunkTarget > 0.05;
+              speed > 1.01 ? chunkTargetRequested : chunkTargetActual;
+            const forceAlignSpan = speed > 1.01 && chunkTargetRequested > 0.05;
             if (allowStillMerge) {
               try {
                 const merged = mergeStaticFramesInPlace(view, n, stride, fps);
@@ -2416,7 +2420,7 @@
           );
           const playbackFps = gifEffectivePlaybackFps(fps);
           const frameRatio = frameCount > 0 ? actualFrames / frameCount : 1;
-          // 压缩时长已强制对准目标秒数 → 仍报目标；无倍速少帧才按比例如实报
+          // 压缩时长：delay 已按请求份额拉到目标 → 报 effSpan；无倍速少帧按比例如实报
           const outSpan =
             speed > 1.01 || frameRatio >= 0.9
               ? effSpan
@@ -2424,7 +2428,7 @@
           if (frameRatio < 0.9) {
             vbbLog(
               speed > 1.01
-                ? `[vbb-phase] gifski 少帧 ${actualFrames}/${frameCount} → delay 已拉到目标 ${effSpan.toFixed(1)}s`
+                ? `[vbb-phase] gifski 少帧 ${actualFrames}/${frameCount} → delay 已按目标 ${effSpan.toFixed(1)}s 对准（内容可能不全，时长对齐）`
                 : `[vbb-phase] gifski 少帧 ${actualFrames}/${frameCount} → 成片按 ${outSpan.toFixed(1)}s 计（目标 ${effSpan.toFixed(1)}s）`
             );
           }
@@ -3122,6 +3126,10 @@
           const keys = Object.keys(map).sort((a, b) => (map[b].at || 0) - (map[a].at || 0));
           while (keys.length > VBB_FEATURE_SCHEME_MAX) delete map[keys.pop()];
           localStorage.setItem(VBB_FEATURE_SCHEME_KEY, JSON.stringify(map));
+          // 内存与持久 LRU 对齐，避免长会话 Map 只增不减
+          for (const k of [...vbbFeatureSchemeMem.keys()]) {
+            if (!(k in map)) vbbFeatureSchemeMem.delete(k);
+          }
         } catch (_) {}
       }
 
@@ -14827,6 +14835,9 @@
       window.DevToolsVbb = {
         getBps15: () => vbbAnalysis?.bps15 ?? null,
         getSrcW: () => vbbAnalysis?.srcW ?? 0,
+        getSrcH: () => vbbAnalysis?.srcH ?? 0,
+        getSrcFps: () => vbbAnalysis?.srcFps ?? 0,
+        getSourceFile: () => vbbSourceFile || null,
         getActivePlan: () => (vbbAnalysis ? resolveActiveVbbPlan() : null),
         getClips: () => vbbClips.slice(),
         getBatchFiles: () => vbbBatchFiles.slice(),
@@ -14845,6 +14856,8 @@
         },
         formatClipTitle: (c, idx) => formatVbbClipTitle(c, idx),
         formatClipMeta: (c, opts) => formatVbbClipMeta(c, opts || {}),
+        /** @deprecated 旧同轮 firstSeed 已移除；保留恒 false 以免外部探测脚本崩 */
+        shouldReuseFirstPlan: () => false,
         loadSpanScheme: (span, speed, meta) => loadVbbSpanScheme(span, speed, meta),
         saveSpanScheme: (span, seed, enc) => saveVbbSpanScheme(span, seed, enc),
         spanSchemeKey: (span, speed, meta) => vbbSpanSchemeKey(span, speed, meta),

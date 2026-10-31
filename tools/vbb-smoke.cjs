@@ -444,7 +444,7 @@ async function tap(page, selector) {
     };
   });
 
-  // 2.4s / 0.8s → 3 段等长：中间段应沿用 #01，末段独立探测
+  // 2.4s / 0.8s → 3 段等长：预写特征库后各段可沿用方案
   const tmpReuse = path.join(TMP, "vbb-smoke-reuse.mp4");
   execSync(
     `ffmpeg -y -f lavfi -i testsrc=size=1280x720:rate=30:duration=2.4 -f lavfi -i sine=f=440:d=2.4 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest ${tmpReuse}`,
@@ -477,28 +477,51 @@ async function tap(page, selector) {
   });
   const reusePlan = await page.evaluate(() => {
     const plan = window.DevToolsVbb?.getActivePlan?.();
-    const reuse = window.DevToolsVbb?.shouldReuseFirstPlan;
     const ranges = plan?.ranges || [];
     return {
       count: plan?.count,
       spans: ranges.map((r) => Number(r.span.toFixed(3))),
-      flags: ranges.map((_, i) => (typeof reuse === "function" ? reuse(ranges, i) : null)),
     };
   });
   if (reusePlan.count !== 3 || reusePlan.spans.some((s) => Math.abs(s - 0.8) > 0.05)) {
     throw new Error(`reuse plan should be 3×0.8s, got ${JSON.stringify(reusePlan)}`);
   }
-  if (reusePlan.flags[0] !== false || reusePlan.flags[1] !== true || reusePlan.flags[2] !== false) {
-    throw new Error(`reuse flags should be [false,true,false], got ${JSON.stringify(reusePlan)}`);
-  }
+  // 统一特征库：须带体积/分辨率/帧率；同特征段（含末段）均可沿用
   await page.evaluate(() => {
+    const file = window.DevToolsVbb?.getSourceFile?.() || null;
+    const srcW = Number(window.DevToolsVbb?.getSrcW?.()) || 1280;
+    const srcH = Number(window.DevToolsVbb?.getSrcH?.()) || 720;
+    const srcFps = Number(window.DevToolsVbb?.getSrcFps?.()) || 30;
+    const meta = window.DevToolsVbb?.buildFeatureMeta?.({
+      srcW,
+      srcH,
+      srcFps,
+      fileBytes: file?.size || 0,
+      qualityFirst: false,
+    });
+    if (!(meta?.fileBytes > 0) || !meta?.srcFps) {
+      throw new Error(`feature meta incomplete: ${JSON.stringify(meta)}`);
+    }
     window.DevToolsVbb?.saveSpanScheme?.(
       0.8,
-      { fps: 15, maxW: 420, compressRounds: 0, usedFallback: false },
+      {
+        fps: 15,
+        maxW: 420,
+        compressRounds: 0,
+        usedFallback: false,
+        speed: 1,
+        srcW: meta.srcW,
+        srcH: meta.srcH,
+        effW: meta.effW,
+        effH: meta.effH,
+        srcFps: meta.srcFps,
+        fileBytes: meta.fileBytes,
+        qualityFirst: false,
+      },
       "blackbox"
     );
-    if (!window.DevToolsVbb?.loadSpanScheme?.(0.8)) {
-      throw new Error("span scheme cache not written");
+    if (!window.DevToolsVbb?.loadSpanScheme?.(0.8, 1, meta)) {
+      throw new Error("feature scheme cache not written");
     }
   });
   await tap(page, "#vbb-run");
@@ -519,11 +542,12 @@ async function tap(page, selector) {
     throw new Error(`reuse encode failed: ${JSON.stringify(reuseRun)}`);
   }
   if (reuseRun.some((c) => /firstSeed|usedFallback/.test(c.error))) {
-    throw new Error(`cached span seed should not throw: ${JSON.stringify(reuseRun)}`);
+    throw new Error(`cached feature seed should not throw: ${JSON.stringify(reuseRun)}`);
   }
-  if (/沿用#01/.test(reuseRun[0].note)) throw new Error(`#01 should probe, got ${reuseRun[0].note}`);
-  if (!/沿用/.test(reuseRun[1].note)) throw new Error(`#02 should reuse #01, got ${reuseRun[1].note}`);
-  if (/沿用#01/.test(reuseRun[2].note)) throw new Error(`last clip should not reuse, got ${reuseRun[2].note}`);
+  // 预写入特征库后各段都可「沿用方案」（含末段）；不再要求仅中间段沿用
+  if (!reuseRun.some((c) => /沿用/.test(c.note))) {
+    throw new Error(`expected feature reuse note, got ${JSON.stringify(reuseRun)}`);
+  }
 
   const cleanup = await page.evaluate(async () => {
     const before = window.DevToolsTemp?.blobStats?.() || { count: -1, bytes: -1 };

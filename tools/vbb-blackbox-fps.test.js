@@ -211,8 +211,10 @@ assert(
   assert(/vbbSeedFitsMeta|vbbSchemeSizeBucket|vbbFileSizeBucket/.test(src), "沿用须校验分辨率/帧率/体积");
   assert(/只按时长/.test(src), "须显式禁止只按时长沿用");
   assert(/vbbFeatureSchemeMem/.test(src), "同轮须走内存特征库");
-  assert(!/shouldReuseVbbFirstPlan/.test(src), "旧 firstSeed 同轮逻辑须移除");
+  assert(!/function shouldReuseVbbFirstPlan/.test(src), "旧 firstSeed 同轮逻辑须移除");
   assert(/devtools-vbb-feature-scheme-v1/.test(src), "须换用新特征库键名");
+  assert(/chunkTargetRequested/.test(src), "压缩时长须按请求份额对准目标");
+  assert(/vbbFeatureSchemeMem\.delete/.test(src), "特征内存须与持久 LRU 对齐");
   const gifskiCore = fs.readFileSync(path.join(__dirname, "ffmpeg-bridge/gifski-core.js"), "utf8");
   assert(!/srcSpan\s*\+\s*0\.05/.test(gifskiCore), "原生 gifski 不得再给片尾 +50ms");
   assert(/-ss"[\s\S]{0,80}opts\.startSec/.test(gifskiCore), "原生裁剪须有 -ss");
