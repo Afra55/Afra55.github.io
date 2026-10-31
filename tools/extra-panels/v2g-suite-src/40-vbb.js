@@ -4287,7 +4287,7 @@
        *  2) 非暗纯色边（白/灰/绿…）：仍用严纯度，防雾气误裁
        *  单边 ≤25%；暗边映射不回退并多吃 1px；非暗边回退 1px。
        *  各边独立（仅左右 / 仅上下 / 三边 / 四边均可）。
-       *  与 tools/lib/vbb-auto-crop.js 同步（v12）。 */
+       *  与 tools/lib/vbb-auto-crop.js 同步（v13）。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -4464,26 +4464,23 @@
         };
       }
 
-      /** 多帧合并（与 lib/vbb-auto-crop.mergeContentRects 对齐）：暗边多数表决，非暗边仍全体同意 */
+      /** 多帧合并（与 lib/vbb-auto-crop.mergeContentRects 对齐）：该边全体有色边才裁 */
       function mergeCropRects(rects) {
         const list = (rects || []).filter((r) => r && r.w > 0 && r.h > 0);
         if (!list.length) return null;
         const w = list[0].w;
         const h = list[0].h;
         const n = list.length;
-        const need = Math.max(1, Math.ceil(n / 2));
         const sideTrim = (trimOf, darkFlag) => {
-          const darkTrims = [];
           const allTrims = [];
+          let darkN = 0;
           for (const r of list) {
             const t = Math.max(0, trimOf(r) | 0);
             allTrims.push(t);
-            if (r[darkFlag] && t > 0) darkTrims.push(t);
+            if (r[darkFlag] && t > 0) darkN += 1;
           }
-          if (darkTrims.length >= need) {
-            return { trim: Math.min(...darkTrims), dark: true };
-          }
-          return { trim: Math.min(...allTrims), dark: false };
+          const trim = Math.min(...allTrims);
+          return { trim, dark: trim > 0 && darkN === n };
         };
         const leftS = sideTrim((r) => r.left, "darkLeft");
         const topS = sideTrim((r) => r.top, "darkTop");
@@ -4685,11 +4682,11 @@
 
       /**
        * 起/中/末三取样，各边取最小裁量；手机优先预览 video + ffmpeg 回退。
-       * v12：暗边多数表决；无边帧记整幅；单边～四边独立。
+       * v13：三帧该边都有色边才裁；无边帧记整幅；单边～四边独立。
        */
       async function detectVideoCrop(file, hintW, hintH, hintDur) {
         if (!file) return null;
-        const cacheKey = `v12|${file.name}|${file.size}|${file.lastModified || 0}`;
+        const cacheKey = `v13|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         let failReason = "";

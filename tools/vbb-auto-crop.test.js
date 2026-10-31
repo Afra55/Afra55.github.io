@@ -105,13 +105,13 @@ function nearestResize(img, cw, ch) {
   const panel = fs.readFileSync(path.join(__dirname, "panels/vbb.html"), "utf8");
   assert(/devtools-vbb-auto-crop[\s\S]{0,120}!==\s*"0"/.test(vbb), "默认开：localStorage !== \"0\"");
   assert(/stored\s*==\s*null[\s\S]{0,80}setItem\([\s\S]{0,40}"1"/.test(vbb), "首次写入默认 1");
-  assert(/cacheKey\s*=\s*`v12\|/.test(vbb), "crop 缓存键须为 v12");
+  assert(/cacheKey\s*=\s*`v13\|/.test(vbb), "crop 缓存键须为 v13");
   assert(/MAX_SIDE_RATIO\s*=\s*0\.25/.test(vbb), "单边上限须 25%");
-  assert(/darkTrims\.length\s*>=\s*need/.test(vbb), "暗边须多数表决合并");
+  assert(/Math\.min\(\.\.\.allTrims\)/.test(vbb), "多帧合并须全体最小 trim（任一帧无边不裁）");
   assert(/detectVideoCropViaFfmpeg/.test(vbb), "须有 ffmpeg 抽帧回退（手机 HTML5 seek 失败）");
   assert(/frameLooksDecoded/.test(vbb), "须过滤未解码近黑帧");
   assert(/mergeCropRects/.test(vbb) && /fullFrameContentRect/.test(vbb), "须多帧合并且无边记整幅");
-  assert(/darkTrims\.length\s*>=\s*need/.test(vbb) && /Math\.min\(\.\.\.darkTrims\)/.test(vbb), "暗边多数表决后取最小 trim");
+  assert(/darkN\s*===\s*n/.test(vbb), "暗边标记须全体样本该边都是暗边");
   assert(/d \* 0\.5/.test(vbb) && /start \+ 0\.05/.test(vbb), "取样须含起/中/末");
   assert(/去色边未生效/.test(vbb), "开关开着但无 crop 须 toast 提示");
   assert(/devtools-vbb-auto-crop"\)\s*!==\s*"0"/.test(vbb), "DOM 缺失时仍认 localStorage");
@@ -140,9 +140,9 @@ function nearestResize(img, cw, ch) {
   assert(rBorder, "有边帧应检出");
   const full = fullFrameContentRect(320, 240);
   const transient = mergeContentRects([rBorder, full, full]);
-  assert(!transient, "仅 1/3 帧有暗边 → 未过半数，不裁");
+  assert(!transient, "仅 1/3 帧有边 → 不裁");
   const mixed = mergeContentRects([rBorder, rBorder, full]);
-  assert(mixed && mixed.left >= 20 && mixed.w - 1 - mixed.right >= 24, "2/3 暗边多数表决 → 应裁（忽略 1 帧无边）");
+  assert(!mixed, "2/3 有边、1 帧无边 → 该边不裁");
   const stable = mergeContentRects([rBorder, rBorder, rBorder]);
   assert(stable && stable.left >= 20 && stable.w - 1 - stable.right >= 24, "三帧都有左右边 → 应裁左右");
   assert(stable.top === 0 && stable.bottom === stable.h - 1, "稳定左右边不得误裁上下");
@@ -157,7 +157,7 @@ function nearestResize(img, cw, ch) {
   assert(tbOnly && tbOnly.left === 0 && tbOnly.right === tbOnly.w - 1, "仅上下");
 }
 
-// ---- v12：底条 + 顶发丝；多数表决；纯色场不误裁；暗边映射不回退 ----
+// ---- v13：底条 + 顶发丝；全体同意；纯色场不误裁；暗边映射不回退 ----
 {
   // 仅底黑条（约 11%），模拟用户成片残留
   const bottomOnly = makeBorderedRgba(960, 720, { B: 80, border: [0, 0, 0], content: [60, 110, 50] });

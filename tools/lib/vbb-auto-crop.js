@@ -2,8 +2,8 @@
  * 黑盒「自动裁剪纯色边框」纯函数（与 v2g-suite-src/40-vbb.js 对齐）。
  * Node 单测 / 离线回归用；浏览器套件内另有同名实现，改一处必须两边一起改。
  *
- * v12：暗边按占比吃边；起/中/末三取样；各边独立；
- * 暗边（letterbox）多帧用多数表决，避免 1 帧无边把整段去色边否决；
+ * v13：暗边按占比吃边；起/中/末三取样；各边独立；
+ * 多帧合并须该边全体有色边才裁（任一帧该边无边 → 不裁该边）；
  * 映射时暗边不回退 1px（防发丝黑线）；纯色边须扫到异色内容，防整幅纯色误裁。
  */
 "use strict";
@@ -19,7 +19,7 @@ const MAX_SIDE_RATIO = 0.25;
 /** 检测缩略图最大宽（细左右边在 360 宽里易丢） */
 const DETECT_MAX_W = 960;
 /** 算法版本（缓存键 / 回归） */
-const CROP_ALGO_VER = "v12";
+const CROP_ALGO_VER = "v13";
 
 /**
  * @param {{ width:number, height:number, data:Uint8ClampedArray|Uint8Array }} img
@@ -237,10 +237,9 @@ function unionContentRects(a, b) {
 }
 
 /**
- * 多帧合并：
- * - 暗边（letterbox/pillarbox）：多数表决——≥半数样本该边是暗边则取这些样本的最小 trim
- *   （避免片头亮场/seek 失败帧一张「无边」就把整段底条否决掉）
- * - 非暗纯色边：仍要全体同意（最小裁量含 0），防误裁
+ * 多帧合并（起/中/末）：
+ * 各边独立——三帧（各样本）该边都有色边才裁，取最小 trim；
+ * 任一帧该边无边（trim=0）→ 不裁该边。
  * @param {Array<ReturnType<typeof detectFrameContentRect>|ReturnType<typeof fullFrameContentRect>>} rects
  */
 function mergeContentRects(rects) {
@@ -249,21 +248,17 @@ function mergeContentRects(rects) {
   const w = list[0].w;
   const h = list[0].h;
   const n = list.length;
-  const need = Math.max(1, Math.ceil(n / 2));
 
   const sideTrim = (trimOf, darkFlag) => {
-    const darkTrims = [];
     const allTrims = [];
+    let darkN = 0;
     for (const r of list) {
       const t = Math.max(0, trimOf(r) | 0);
       allTrims.push(t);
-      if (r[darkFlag] && t > 0) darkTrims.push(t);
+      if (r[darkFlag] && t > 0) darkN += 1;
     }
-    if (darkTrims.length >= need) {
-      return { trim: Math.min(...darkTrims), dark: true };
-    }
-    // 非暗：全体最小（任一帧 0 → 不裁）
-    return { trim: Math.min(...allTrims), dark: false };
+    const trim = Math.min(...allTrims);
+    return { trim, dark: trim > 0 && darkN === n };
   };
 
   const leftS = sideTrim((r) => r.left, "darkLeft");
