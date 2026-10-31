@@ -117,7 +117,8 @@ function nearestResize(img, cw, ch) {
   assert(/去色边未生效/.test(vbb), "开关开着但无 crop 须 toast 提示");
   assert(/devtools-vbb-auto-crop"\)\s*!==\s*"0"/.test(vbb), "DOM 缺失时仍认 localStorage");
   assert(!/编辑只裁了时长[\s\S]{0,40}禁止再叠/.test(vbb), "不得再因只裁时长跳过自动去色边");
-  assert(/edit\?\.cropOn\s*&&\s*edit\.crop/.test(vbb), "手动裁画面仍优先绿框");
+  assert(/intersectVbbCrops/.test(vbb), "绿框须与去色边取交集");
+  assert(/manual && auto\) return intersectVbbCrops\(manual, auto\)/.test(vbb), "编码裁剪须绿框∩去色边");
   assert(/id="vbb-auto-crop"\s+checked/.test(panel), "面板 checkbox 默认 checked");
   assert(/Math\.min\(960,\s*vw\)/.test(vbb), "检测宽须 960");
   assert(/DARK_RATIO\s*=\s*0\.9/.test(vbb), "暗边占比阈值须同步");

@@ -8802,20 +8802,37 @@
         return { file: outFile, startSec, span, srcW: outW, srcH: outH, edit, cutNote };
       }
 
+      /** 绿框 ∩ 去色边：手动裁保留用户框，仍去掉框内残留 letterbox */
+      function intersectVbbCrops(a, b) {
+        if (!a) return b || null;
+        if (!b) return a;
+        const x1 = Math.max(Number(a.x) || 0, Number(b.x) || 0);
+        const y1 = Math.max(Number(a.y) || 0, Number(b.y) || 0);
+        const x2 = Math.min((Number(a.x) || 0) + (Number(a.w) || 0), (Number(b.x) || 0) + (Number(b.w) || 0));
+        const y2 = Math.min((Number(a.y) || 0) + (Number(a.h) || 0), (Number(b.y) || 0) + (Number(b.h) || 0));
+        const w = Math.floor(x2 - x1);
+        const h = Math.floor(y2 - y1);
+        if (w < 8 || h < 8) return a;
+        return { x: Math.round(x1), y: Math.round(y1), w, h };
+      }
+
       async function resolveVbbEncodeCrop(file, edit, srcW, srcH, duration) {
-        // 用户在编辑里手动裁了画面（绿框非整幅）→ 用绿框，不再叠自动去色边
+        let manual = null;
         if (edit?.cropOn && edit.crop) {
-          const manual = normalizeV2gCrop(edit.crop, srcW, srcH);
+          const m = normalizeV2gCrop(edit.crop, srcW, srcH);
           if (
-            manual &&
-            (manual.w < Math.max(1, Number(srcW) || 0) - 4 ||
-              manual.h < Math.max(1, Number(srcH) || 0) - 4)
+            m &&
+            (m.w < Math.max(1, Number(srcW) || 0) - 4 ||
+              m.h < Math.max(1, Number(srcH) || 0) - 4)
           ) {
-            return manual;
+            manual = m;
           }
         }
-        // 只裁时长 / 删中间 / 绿框仍是整幅：走自动去色边（开关开着时）
-        return vbbResolveCrop(file, srcW, srcH, duration);
+        // 去色边开着：即使绿框裁过，也要再叠自动边框（否则上下黑边会留在绿框里）
+        const auto = await vbbResolveCrop(file, srcW, srcH, duration);
+        if (manual && auto) return intersectVbbCrops(manual, auto);
+        if (manual) return manual;
+        return auto;
       }
 
       function paintVbbEditStatusLabel(el, { badge, name, batch }) {
@@ -12526,22 +12543,14 @@
               } catch (_) {}
               names[i] = nmM;
             }
-            let crop =
-              win.edit?.cropOn && win.edit.crop
-                ? typeof normalizeV2gCrop === "function"
-                  ? normalizeV2gCrop(win.edit.crop, item.srcW, item.srcH)
-                  : win.edit.crop
-                : null;
-            // 拼接中间片也要套自动去色边；旧逻辑只认编辑裁画面，多段黑边宽不一会在 pad 后残留/补边
-            if (!crop) {
-              crop = await resolveVbbEncodeCrop(
-                item.file,
-                win.edit,
-                item.srcW,
-                item.srcH,
-                item.duration
-              );
-            }
+            // 绿框 + 去色边统一走 resolve（内部会取交集，避免只认绿框留下上下黑边）
+            const crop = await resolveVbbEncodeCrop(
+              item.file,
+              win.edit,
+              item.srcW,
+              item.srcH,
+              item.duration
+            );
             wins.push({ ...win, startSec, span, crop });
           }
           setVbbProgress(true, 0.48, "拼接 · 探测片源帧率…", { busy: true });
