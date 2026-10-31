@@ -4579,15 +4579,18 @@
       },
       true
     );
-    // visually-hidden / clip 的 file input + label 在部分浏览器偶发无反应：始终走 showPicker/click
+    // 选文件：嵌套 input 走原生；for= 兄弟则打开选择器（clipped/hidden 在部分浏览器点 label 无反应）
     document.addEventListener(
       "click",
       (e) => {
         const label = e.target?.closest?.("label.file-btn");
         if (!label || label.closest(".tool-panel") == null) return;
-        const id = label.getAttribute("for");
-        if (!id) return;
-        const input = document.getElementById(id);
+        let input = label.querySelector('input[type="file"]');
+        if (!input) {
+          const id = label.getAttribute("for");
+          if (!id) return;
+          input = document.getElementById(id);
+        }
         if (!input || input.type !== "file" || input.disabled) return;
         const panel = input.closest(".tool-panel");
         // 粘滞 loading 挡板会吃掉原生 label→input；点选文件时强制清掉
@@ -4596,18 +4599,59 @@
           panel.removeAttribute("aria-busy");
         }
         try {
-          // 便于重选同一文件也能触发 change；showPicker 不会走 input 的 click 清空逻辑
+          // 便于重选同一文件也能触发 change
           input.value = "";
         } catch (_) {}
+
+        // 嵌套在 label 内（覆盖点击层）：交给浏览器原生，勿 preventDefault
+        if (label.contains(input)) return;
+
         e.preventDefault();
-        try {
-          if (typeof input.showPicker === "function") input.showPicker();
-          else input.click();
-        } catch (_) {
+        e.stopPropagation();
+
+        const wasAttrHidden = input.hasAttribute("hidden");
+        const prevInline = input.getAttribute("style") || "";
+        const revealForPicker = () => {
+          // [hidden]/display:none / 零尺寸 clip 时 showPicker/click 会静默失败
+          if (wasAttrHidden) input.removeAttribute("hidden");
+          input.style.cssText =
+            "position:fixed!important;left:0!important;top:0!important;width:1px!important;height:1px!important;opacity:0.01!important;margin:0!important;padding:0!important;border:0!important;clip:auto!important;overflow:hidden!important;z-index:2147483646!important;";
+        };
+        const restoreInput = () => {
           try {
-            input.click();
+            if (wasAttrHidden) input.setAttribute("hidden", "");
+            if (prevInline) input.setAttribute("style", prevInline);
+            else input.removeAttribute("style");
           } catch (_) {}
+        };
+
+        const fallbackClick = () => {
+          try {
+            revealForPicker();
+            input.click();
+          } catch (_) {
+            restoreInput();
+            return;
+          }
+          window.setTimeout(restoreInput, 800);
+        };
+
+        try {
+          revealForPicker();
+          if (typeof input.showPicker === "function") {
+            const ret = input.showPicker();
+            // showPicker 返回 Promise：拒绝时须回退 click（旧代码只 catch 同步抛错）
+            if (ret != null && typeof ret.then === "function") {
+              ret.then(restoreInput, fallbackClick);
+              return;
+            }
+            restoreInput();
+            return;
+          }
+        } catch (_) {
+          /* fall through */
         }
+        fallbackClick();
       },
       true
     );

@@ -12,8 +12,9 @@
         </div>
         <div data-vbb-video>
         <div class="btn-row tool-actions vbb-pick-row">
-          <label class="file-btn" for="vbb-file">① 选择视频（可多选）</label>
-          <input id="vbb-file" class="visually-hidden" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" multiple />
+          <label class="file-btn">① 选择视频（可多选）
+            <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" multiple />
+          </label>
           <button type="button" class="ghost-btn" id="vbb-clear">清空</button>
         </div>
         <p class="hint" id="vbb-meta"></p>
@@ -265,9 +266,10 @@
         </div>
         </div>
         <div id="vbb-images-panel" hidden>
-          <input id="vbb-img-file" type="file" accept="image/*" multiple hidden />
           <div class="btn-row tool-actions">
-            <label class="file-btn" for="vbb-img-file">选择图片（可多选）</label>
+            <label class="file-btn">选择图片（可多选）
+              <input id="vbb-img-file" type="file" accept="image/*" multiple />
+            </label>
             <button type="button" class="ghost-btn" id="vbb-img-clear">清空</button>
           </div>
           <div class="vbb-img-drop" id="vbb-img-drop">把图片拖到这里（也可点上方按钮选择）</div>

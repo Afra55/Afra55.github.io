@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20261031-075253";
+const SHELL_CACHE = "devtools-shell-20261031-091631";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -106,33 +106,25 @@ self.addEventListener("fetch", (event) => {
   }
   if (shouldBypass(url)) return;
 
-  // 导航请求（HTML 文档）走网络优先：否则缓存的 index.html 会一直引到旧的 ?v= 资源，
-  // 用户永远拿不到新代码（曾导致「发了版手机上还是旧版」）。离线时才回退缓存。
-  const isDoc =
-    req.mode === "navigate" ||
-    (req.headers.get("accept") || "").includes("text/html");
-  if (isDoc) {
-    event.respondWith(
-      networkFetch(req, url).catch(() =>
-        caches.match(req).then((c) => c || caches.match("./index.html").then((r) => r || caches.match("./")))
-      )
-    );
-    return;
-  }
-
-  // 构建戳入口：网络优先，保证新发布能看到新的 TOOLS_BUILD / ?v=
-  // memo.js 等业务脚本已带 ?v=<BUILD>，走下方缓存优先即可；勿再网络优先，否则每次进备忘录都像重新拉模块
   const path = url.pathname || "";
+
+  // 唯二「网络优先」：构建戳。页面其余时间缓存优先即时可用；
+  // 客户端 tools-build 探测到远端 BUILD 更新后再清壳缓存并刷新。
   if (/\/(?:tools-build)\.js$/i.test(path) || /\/lib\/tools-build\.js$/i.test(path)) {
     event.respondWith(networkFetch(req, url));
     return;
   }
 
-  // 其余静态资源缓存优先：命中即返回，后台 stale-while-revalidate
-  // （JS/CSS 都带 ?v=<BUILD>，新版本 = 新 URL，所以不会拿到旧文件）
+  // HTML / JS / CSS / 面板等：缓存优先，命中即返回，后台 stale-while-revalidate
+  // （资源带 ?v=<BUILD>；发版改 SHELL_CACHE 名会清旧壳；BUILD 探测负责拉新 HTML）
   event.respondWith(
     caches.match(req).then((cached) => {
-      const network = networkFetch(req, url);
+      const network = networkFetch(req, url).catch(() => {
+        if (req.mode === "navigate") {
+          return caches.match("./index.html").then((r) => r || caches.match("./"));
+        }
+        return undefined;
+      });
       if (cached) {
         event.waitUntil(network.catch(() => {}));
         return cached;

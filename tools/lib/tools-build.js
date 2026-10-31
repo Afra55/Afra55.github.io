@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const BUILD = "2026.10.31-075253";
+  const BUILD = "2026.10.31-091631";
   window.TOOLS_BUILD = BUILD;
   window.TOOLS_VERSION = BUILD;
 
@@ -113,10 +113,60 @@
 
   try { localStorage.setItem("devtools-seen-build-v1", BUILD); } catch (_) {}
 
+  /** 远端 BUILD 更新时清壳缓存并刷新一次（日常走缓存优先，发版才拉新） */
+  function probeRemoteBuildAndRefresh() {
+    let probeUrl = "";
+    try {
+      probeUrl = resolveFromToolsBuild("./tools-build.js");
+      const u = new URL(probeUrl);
+      u.searchParams.set("probe", String(Date.now()));
+      probeUrl = u.href;
+    } catch (_) {
+      return;
+    }
+    const idle = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 1200));
+    idle(() => {
+      fetch(probeUrl, { cache: "no-store" })
+        .then((r) => (r.ok ? r.text() : Promise.reject()))
+        .then((text) => {
+          const m = String(text || "").match(/const BUILD = "([^"]+)"/);
+          const remote = m && m[1];
+          if (!remote || remote === BUILD) return;
+          const flag = `devtools-build-reload-${remote}`;
+          try {
+            if (sessionStorage.getItem(flag)) return;
+            sessionStorage.setItem(flag, "1");
+          } catch (_) {}
+          const wipe = window.caches?.keys
+            ? caches.keys().then((keys) =>
+                Promise.all(
+                  keys
+                    .filter((k) => String(k).startsWith("devtools-shell-"))
+                    .map((k) => caches.delete(k))
+                )
+              )
+            : Promise.resolve();
+          wipe.finally(() => {
+            try {
+              const url = new URL(location.href);
+              url.searchParams.set("_fresh", Date.now().toString(36));
+              location.replace(`${url.pathname}${url.search}${url.hash}`);
+            } catch (_) {
+              location.reload();
+            }
+          });
+        })
+        .catch(() => {});
+    });
+  }
+  if (document.readyState === "complete") probeRemoteBuildAndRefresh();
+  else window.addEventListener("load", probeRemoteBuildAndRefresh, { once: true });
+
   function injectHosts() {
     if (document.getElementById("muyu-fs") && document.getElementById("nav-organize") && document.getElementById("vsplit-fs")) return;
     const hostsUrl = resolveFromToolsBuild("./shell-hosts.html?v=" + encodeURIComponent(BUILD));
-    fetch(hostsUrl, { cache: "no-store" })
+    // 同版本优先用缓存，发版 ?v= 变了会自然换新
+    fetch(hostsUrl, { cache: "default" })
       .then((r) => (r.ok ? r.text() : Promise.reject()))
       .then((html) => {
         const box = document.createElement("div");
