@@ -12953,7 +12953,7 @@
                 }
                 if (prepared.cutNote) editBits.push(prepared.cutNote);
                 if (win.edit?.cropOn) editBits.push("裁画面");
-                else if (vbbCrop) editBits.push("去色边");
+                if (vbbCrop) editBits.push("去色边");
                 vbbClips[i].gifNote = [
                   vbbClips[i].gifNote,
                   ...editBits,
@@ -13201,7 +13201,7 @@
           }
           if (prepared.cutNote) editBits.push(prepared.cutNote);
           if (win.edit?.cropOn) editBits.push("裁画面");
-          else if (vbbCrop) editBits.push("去色边");
+          if (vbbCrop) editBits.push("去色边");
           vbbClips[0].gifNote = [
             vbbClips[0].gifNote,
             ...editBits,
