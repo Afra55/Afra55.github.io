@@ -1259,8 +1259,8 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const effSpan = span / speed;
-        // 半开区间 [start, end)：不 +1，避免片尾比编辑拖到的位置多出几帧
-        const naturalFrames = Math.max(2, Math.round(effSpan * fps));
+        // 半开 [start, end)：向下取整帧数，避免 round 多吃片尾 1～数帧（预览没有、GIF 却有）
+        const naturalFrames = Math.max(2, Math.floor(effSpan * fps + 1e-6));
         const framesCapped = false;
         const frameCount = naturalFrames;
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
@@ -1312,7 +1312,9 @@
         let segName = null;
         let encodeInput = inName;
         let encodeSs = startSec;
-        let encodeT = span;
+        // 半开：时长略短半帧，避免 -t/fps 滤镜在片尾多吐帧（预览无、GIF 却有）
+        const halfOpenPad = 0.5 / Math.max(8, fps);
+        let encodeT = Math.max(0.05, span - halfOpenPad);
   
         try {
           ticker.setPhase(`${stageLabel}本地载入`);
@@ -1335,8 +1337,8 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            // 时长不加正垫：半开 [start, start+span)；倍速时必须精确切，禁止 copy 关键帧少切
-            const cutDur = span;
+            // 半开 [start, start+span)；倍速时必须精确切，禁止 copy 关键帧少切
+            const cutDur = encodeT;
             // 编辑对齐 / 倍速 / 非片头：禁止 copy，避免关键帧多带片头或接点帧
             const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
               accurate: speed > 1.01 || Boolean(opts.forceAccurateCut),
@@ -1346,7 +1348,7 @@
             if (cutCode === 0) {
               encodeInput = segName;
               encodeSs = 0;
-              encodeT = span;
+              encodeT = cutDur;
               vbbLog(`[vbb-phase] 抽片段 ${Math.round(performance.now() - tPhase)}ms`);
             } else {
               try {
@@ -1889,7 +1891,8 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const effSpan = span / speed;
-        const frameCount = Math.max(2, Math.round(effSpan * fps));
+        // 半开 [start, end)：向下取整，避免片尾多帧
+        const frameCount = Math.max(2, Math.floor(effSpan * fps + 1e-6));
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
         const crop = normalizeV2gCrop(opts.crop, srcW, srcH);
@@ -2060,8 +2063,8 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const effSpan = span / speed;
-        // 半开区间 [start, end)：不 +1，避免片尾比编辑拖到的位置多出几帧
-        const frameCount = Math.max(2, Math.round(effSpan * fps));
+        // 半开 [start, end)：向下取整帧数，避免 round 多吃片尾 1～数帧
+        const frameCount = Math.max(2, Math.floor(effSpan * fps + 1e-6));
         const framesCapped = false;
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
@@ -2158,7 +2161,8 @@
         let segName = null;
         let encodeInput = inName;
         let encodeSs = startSec;
-        let encodeT = span;
+        const halfOpenPad = 0.5 / Math.max(8, fps);
+        let encodeT = Math.max(0.05, span - halfOpenPad);
 
         try {
           ticker.setPhase(`${stageLabel}本地载入`);
@@ -2178,7 +2182,7 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            const cutDur = span;
+            const cutDur = encodeT;
             const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
               accurate: speed > 1.01 || Boolean(opts.forceAccurateCut),
             });
@@ -2187,7 +2191,7 @@
             if (cutCode === 0) {
               encodeInput = segName;
               encodeSs = 0;
-              encodeT = span;
+              encodeT = cutDur;
             } else {
               try {
                 await ffmpeg.deleteFile(segName);
@@ -8626,7 +8630,8 @@
        */
       async function materializeVbbTrimClip(file, startSec, span, srcW, srcH, onProgress, ffmpegLease) {
         const start = Math.max(0, Number(startSec) || 0);
-        const dur = Math.max(0.05, Number(span) || 0.05);
+        // 半开窗：略短半帧，避免预裁切再转 GIF 时片尾多出预览没有的帧
+        const dur = Math.max(0.05, (Number(span) || 0.05) - 1 / 60);
         const keepW = Math.max(1, Math.round(Number(srcW) || 1));
         const keepH = Math.max(1, Math.round(Number(srcH) || 1));
         const cacheKey = vbbPrecutClipCacheKey(file, start, dur, keepW, keepH);
@@ -11861,12 +11866,12 @@
 
       /** 从一帧里估算边框，返回保留区域（不含边框）；无边则 null。
        *  两套策略：
-       *  1) 暗边（letterbox/pillarbox）：按「暗像素占比」吃边，能吞压缩噪点 + 渐变过渡列
-       *     （旧「纯度」在过渡暗列/最外列噪点上会提前停，缩成 GIF 后左右仍留黑条）
-       *  2) 非暗纯色边（白/灰/绿…）：仍用严纯度，防雾气误裁
+       *  1) 上下 letterbox：按暗像素占比吃边（允许字幕噪点）
+       *  2) 左右 pillarbox：仅平坦纯黑（夜景暗内容不误裁）
+       *  3) 非暗纯色边（白/灰/绿…）：严纯度，防雾气误裁
        *  单边 ≤25%；暗边映射不回退并多吃 1px；非暗边回退 1px。
        *  各边独立（仅左右 / 仅上下 / 三边 / 四边均可）。
-       *  与 tools/lib/vbb-auto-crop.js 同步（v13）。 */
+       *  与 tools/lib/vbb-auto-crop.js 同步（v14）。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -11878,7 +11883,7 @@
         const near = (a, b) =>
           Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
         const OUTLIER_RATIO = 0.012;
-        /** 暗边：通道峰值 ≤32 算暗像素；行/列 ≥90% 暗且均值也够暗 → 边框 */
+        /** 暗边：通道峰值 ≤32 算暗像素 */
         const DARK_CH = 32;
         const DARK_RATIO = 0.9;
         const DARK_EDGE_AVG = 36;
@@ -11920,12 +11925,19 @@
             darkRatio: dark / n,
             softRatio: soft / n,
             avgMax: Math.max(avg.r, avg.g, avg.b),
+            maxDev,
           };
         };
-        const isDarkBorder = (st) =>
-          st.avgMax <= DARK_EDGE_AVG && st.darkRatio >= DARK_RATIO;
-        const isSoftDark = (st) =>
-          st.avgMax <= SOFT_CH + 8 && st.softRatio >= SOFT_RATIO && st.darkRatio >= 0.55;
+        /** 左右：平坦纯黑才认 pillarbox（夜景暗内容不误裁） */
+        const isFlatBlackBar = (st) => st.avgMax <= 14 && st.darkRatio >= 0.96 && st.pure;
+        const isStillFlatBlack = (st) =>
+          (st.avgMax <= 16 && st.darkRatio >= 0.94 && st.pure) ||
+          (st.avgMax <= 12 && st.darkRatio >= 0.97);
+        /** 上下 letterbox：允许底条字幕噪点 */
+        const isLetterboxRow = (st) =>
+          (st.avgMax <= 14 && st.darkRatio >= 0.92) || (st.avgMax <= 8 && st.darkRatio >= 0.85);
+        const isStillLetterbox = (st) =>
+          (st.avgMax <= 18 && st.darkRatio >= 0.9) || (st.avgMax <= 12 && st.darkRatio >= 0.82);
         const rowAt = (y) => (i) => px(i, y);
         const colAt = (x) => (i) => px(x, i);
         /** 从一边往里扫，返回裁掉的像素数 + 是否走了暗边模式 */
@@ -11935,23 +11947,21 @@
           const lineAt = isCol ? colAt : rowAt;
           const edgeIdx = fromStart ? 0 : span - 1;
           const st0 = lineStats(lineAt(edgeIdx), length);
-          const darkish =
-            isDarkBorder(st0) || (st0.darkRatio >= 0.85 && st0.avgMax <= DARK_EDGE_AVG + 6);
-          if (darkish) {
+          const darkStart = isCol ? isFlatBlackBar(st0) : isLetterboxRow(st0);
+          if (darkStart) {
             let trim = 0;
             let idx = edgeIdx;
             while (trim < maxN) {
               const st = lineStats(lineAt(idx), length);
-              const hard =
-                st.darkRatio >= DARK_RATIO && st.avgMax <= DARK_EDGE_AVG + 4;
-              if (hard || isSoftDark(st)) {
+              const keep = isCol ? isStillFlatBlack(st) : isStillLetterbox(st);
+              if (keep) {
                 trim += 1;
                 idx = fromStart ? idx + 1 : idx - 1;
                 continue;
               }
               break;
             }
-            // 不再多吃过渡列：宁可留一丝边，也不裁进有画面像素（映射阶段再补吃暗边）
+            // 宁可留一丝边，也不裁进有画面像素（映射阶段再补吃暗边）
             return { trim, dark: true };
           }
           if (st0.pure) {
@@ -12261,11 +12271,11 @@
 
       /**
        * 起/中/末三取样，各边取最小裁量；手机优先预览 video + ffmpeg 回退。
-       * v13：三帧该边都有色边才裁；无边帧记整幅；单边～四边独立。
+       * v14：三帧该边都有色边才裁；左右仅平坦纯黑；无边帧记整幅；单边～四边独立。
        */
       async function detectVideoCrop(file, hintW, hintH, hintDur) {
         if (!file) return null;
-        const cacheKey = `v13|${file.name}|${file.size}|${file.lastModified || 0}`;
+        const cacheKey = `v14|${file.name}|${file.size}|${file.lastModified || 0}`;
         if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
         let result = null;
         let failReason = "";

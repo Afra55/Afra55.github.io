@@ -105,13 +105,14 @@ function nearestResize(img, cw, ch) {
   const panel = fs.readFileSync(path.join(__dirname, "panels/vbb.html"), "utf8");
   assert(/devtools-vbb-auto-crop[\s\S]{0,120}!==\s*"0"/.test(vbb), "默认开：localStorage !== \"0\"");
   assert(/stored\s*==\s*null[\s\S]{0,80}setItem\([\s\S]{0,40}"1"/.test(vbb), "首次写入默认 1");
-  assert(/cacheKey\s*=\s*`v13\|/.test(vbb), "crop 缓存键须为 v13");
+  assert(/cacheKey\s*=\s*`v14\|/.test(vbb), "crop 缓存键须为 v14");
   assert(/MAX_SIDE_RATIO\s*=\s*0\.25/.test(vbb), "单边上限须 25%");
   assert(/Math\.min\(\.\.\.allTrims\)/.test(vbb), "多帧合并须全体最小 trim（任一帧无边不裁）");
   assert(/detectVideoCropViaFfmpeg/.test(vbb), "须有 ffmpeg 抽帧回退（手机 HTML5 seek 失败）");
   assert(/frameLooksDecoded/.test(vbb), "须过滤未解码近黑帧");
   assert(/mergeCropRects/.test(vbb) && /fullFrameContentRect/.test(vbb), "须多帧合并且无边记整幅");
   assert(/darkN\s*===\s*n/.test(vbb), "暗边标记须全体样本该边都是暗边");
+  assert(/isFlatBlackBar/.test(vbb) && /isLetterboxRow/.test(vbb), "左右纯黑 / 上下 letterbox 须分流");
   assert(/d \* 0\.5/.test(vbb) && /start \+ 0\.05/.test(vbb), "取样须含起/中/末");
   assert(/去色边未生效/.test(vbb), "开关开着但无 crop 须 toast 提示");
   assert(/devtools-vbb-auto-crop"\)\s*!==\s*"0"/.test(vbb), "DOM 缺失时仍认 localStorage");
@@ -157,7 +158,7 @@ function nearestResize(img, cw, ch) {
   assert(tbOnly && tbOnly.left === 0 && tbOnly.right === tbOnly.w - 1, "仅上下");
 }
 
-// ---- v13：底条 + 顶发丝；全体同意；纯色场不误裁；暗边映射不回退 ----
+// ---- v14：底条 + 顶发丝；全体同意；纯色场不误裁；暗边映射不回退；夜景左右不误裁 ----
 {
   // 仅底黑条（约 11%），模拟用户成片残留
   const bottomOnly = makeBorderedRgba(960, 720, { B: 80, border: [0, 0, 0], content: [60, 110, 50] });
@@ -186,8 +187,6 @@ function nearestResize(img, cw, ch) {
   assert(!rFlat, `整幅纯色不得裁，得 ${JSON.stringify(rFlat)}`);
 
   // 用户截图像素：底条约 24/214
-  const fs = require("fs");
-  const { spawnSync } = require("child_process");
   const shot = "/home/ubuntu/.cursor/projects/workspace/assets/01a18f18-3be3-7177-8a4d-5a78f6ba8b6e.jpg";
   if (fs.existsSync(shot)) {
     const raw = "/tmp/vbb-user-shot.rgba";
@@ -205,6 +204,31 @@ function nearestResize(img, cw, ch) {
       assert(bt >= 22, `用户底条应裁掉≥22px，得 ${bt}`);
       const after = measureDarkBars(cropRgba(img, cropU), { avgMax: 40, darkCh: 40 });
       assert(after.B <= 2, `用户图裁后底条应≈0，得 ${JSON.stringify(after)}`);
+    }
+  }
+
+  // 夜景骑士：左右是暗树林画面，不得当 pillarbox；上下 letterbox 仍可裁
+  const night = "/home/ubuntu/.cursor/projects/workspace/assets/01a19057-91f4-7c8c-a22c-35f02a700127.jpg";
+  if (fs.existsSync(night)) {
+    const raw = "/tmp/vbb-night.rgba";
+    const ff = spawnSync("ffmpeg", ["-y", "-i", night, "-f", "rawvideo", "-pix_fmt", "rgba", raw], {
+      encoding: "utf8",
+    });
+    if (ff.status === 0 && fs.existsSync(raw)) {
+      const dim = spawnSync(
+        "ffprobe",
+        ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", night],
+        { encoding: "utf8" }
+      ).stdout.trim();
+      const [nw, nh] = dim.split(",").map(Number);
+      const buf = fs.readFileSync(raw);
+      const img = { width: nw, height: nh, data: new Uint8ClampedArray(buf.buffer, buf.byteOffset, nw * nh * 4) };
+      const rN = detectFrameContentRect(img, 14);
+      assert(rN, `夜景应至少检出上下黑边，得 ${JSON.stringify(rN)}`);
+      assert(!rN.darkLeft && rN.left === 0, `夜景左树林不得裁，left=${rN.left}`);
+      assert(!rN.darkRight && rN.right === nw - 1, `夜景右树林不得裁，right=${rN.right}`);
+      assert(rN.darkTop && rN.top >= 80, `夜景顶 letterbox 应裁，top=${rN.top}`);
+      assert(rN.darkBottom && nh - 1 - rN.bottom >= 80, `夜景底 letterbox 应裁，B=${nh - 1 - rN.bottom}`);
     }
   }
 }

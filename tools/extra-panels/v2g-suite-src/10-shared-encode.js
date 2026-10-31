@@ -1210,8 +1210,8 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const effSpan = span / speed;
-        // 半开区间 [start, end)：不 +1，避免片尾比编辑拖到的位置多出几帧
-        const naturalFrames = Math.max(2, Math.round(effSpan * fps));
+        // 半开 [start, end)：向下取整帧数，避免 round 多吃片尾 1～数帧（预览没有、GIF 却有）
+        const naturalFrames = Math.max(2, Math.floor(effSpan * fps + 1e-6));
         const framesCapped = false;
         const frameCount = naturalFrames;
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
@@ -1263,7 +1263,9 @@
         let segName = null;
         let encodeInput = inName;
         let encodeSs = startSec;
-        let encodeT = span;
+        // 半开：时长略短半帧，避免 -t/fps 滤镜在片尾多吐帧（预览无、GIF 却有）
+        const halfOpenPad = 0.5 / Math.max(8, fps);
+        let encodeT = Math.max(0.05, span - halfOpenPad);
   
         try {
           ticker.setPhase(`${stageLabel}本地载入`);
@@ -1286,8 +1288,8 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            // 时长不加正垫：半开 [start, start+span)；倍速时必须精确切，禁止 copy 关键帧少切
-            const cutDur = span;
+            // 半开 [start, start+span)；倍速时必须精确切，禁止 copy 关键帧少切
+            const cutDur = encodeT;
             // 编辑对齐 / 倍速 / 非片头：禁止 copy，避免关键帧多带片头或接点帧
             const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
               accurate: speed > 1.01 || Boolean(opts.forceAccurateCut),
@@ -1297,7 +1299,7 @@
             if (cutCode === 0) {
               encodeInput = segName;
               encodeSs = 0;
-              encodeT = span;
+              encodeT = cutDur;
               vbbLog(`[vbb-phase] 抽片段 ${Math.round(performance.now() - tPhase)}ms`);
             } else {
               try {
@@ -1840,7 +1842,8 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const effSpan = span / speed;
-        const frameCount = Math.max(2, Math.round(effSpan * fps));
+        // 半开 [start, end)：向下取整，避免片尾多帧
+        const frameCount = Math.max(2, Math.floor(effSpan * fps + 1e-6));
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
         const crop = normalizeV2gCrop(opts.crop, srcW, srcH);
@@ -2011,8 +2014,8 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const effSpan = span / speed;
-        // 半开区间 [start, end)：不 +1，避免片尾比编辑拖到的位置多出几帧
-        const frameCount = Math.max(2, Math.round(effSpan * fps));
+        // 半开 [start, end)：向下取整帧数，避免 round 多吃片尾 1～数帧
+        const frameCount = Math.max(2, Math.floor(effSpan * fps + 1e-6));
         const framesCapped = false;
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
@@ -2109,7 +2112,8 @@
         let segName = null;
         let encodeInput = inName;
         let encodeSs = startSec;
-        let encodeT = span;
+        const halfOpenPad = 0.5 / Math.max(8, fps);
+        let encodeT = Math.max(0.05, span - halfOpenPad);
 
         try {
           ticker.setPhase(`${stageLabel}本地载入`);
@@ -2129,7 +2133,7 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            const cutDur = span;
+            const cutDur = encodeT;
             const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
               accurate: speed > 1.01 || Boolean(opts.forceAccurateCut),
             });
@@ -2138,7 +2142,7 @@
             if (cutCode === 0) {
               encodeInput = segName;
               encodeSs = 0;
-              encodeT = span;
+              encodeT = cutDur;
             } else {
               try {
                 await ffmpeg.deleteFile(segName);

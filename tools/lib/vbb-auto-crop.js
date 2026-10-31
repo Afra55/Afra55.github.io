@@ -2,9 +2,9 @@
  * 黑盒「自动裁剪纯色边框」纯函数（与 v2g-suite-src/40-vbb.js 对齐）。
  * Node 单测 / 离线回归用；浏览器套件内另有同名实现，改一处必须两边一起改。
  *
- * v13：暗边按占比吃边；起/中/末三取样；各边独立；
- * 多帧合并须该边全体有色边才裁（任一帧该边无边 → 不裁该边）；
- * 映射时暗边不回退 1px（防发丝黑线）；纯色边须扫到异色内容，防整幅纯色误裁。
+ * v14：起/中/末三取样；各边独立；有画面不裁、纯色边才裁（全体最小 trim）；
+ * 左右仅认「平坦纯黑」pillarbox（暗场景内容不误裁）；上下 letterbox 允许字幕噪点；
+ * 映射时暗边不回退 1px；纯色边须扫到异色内容，防整幅纯色误裁。
  */
 "use strict";
 
@@ -19,7 +19,7 @@ const MAX_SIDE_RATIO = 0.25;
 /** 检测缩略图最大宽（细左右边在 360 宽里易丢） */
 const DETECT_MAX_W = 960;
 /** 算法版本（缓存键 / 回归） */
-const CROP_ALGO_VER = "v13";
+const CROP_ALGO_VER = "v14";
 
 /**
  * @param {{ width:number, height:number, data:Uint8ClampedArray|Uint8Array }} img
@@ -71,11 +71,19 @@ function detectFrameContentRect(img, tol = 14) {
       darkRatio: dark / n,
       softRatio: soft / n,
       avgMax: Math.max(avg.r, avg.g, avg.b),
+      maxDev,
     };
   };
-  const isDarkBorder = (st) => st.avgMax <= DARK_EDGE_AVG && st.darkRatio >= DARK_RATIO;
-  const isSoftDark = (st) =>
-    st.avgMax <= SOFT_CH + 8 && st.softRatio >= SOFT_RATIO && st.darkRatio >= 0.55;
+  /** 左右：必须平坦纯黑，避免暗树林/夜景内容被当成 pillarbox */
+  const isFlatBlackBar = (st) => st.avgMax <= 14 && st.darkRatio >= 0.96 && st.pure;
+  const isStillFlatBlack = (st) =>
+    (st.avgMax <= 16 && st.darkRatio >= 0.94 && st.pure) ||
+    (st.avgMax <= 12 && st.darkRatio >= 0.97);
+  /** 上下：影院 letterbox；允许底条烧录字幕带来的少量亮点 */
+  const isLetterboxRow = (st) =>
+    (st.avgMax <= 14 && st.darkRatio >= 0.92) || (st.avgMax <= 8 && st.darkRatio >= 0.85);
+  const isStillLetterbox = (st) =>
+    (st.avgMax <= 18 && st.darkRatio >= 0.9) || (st.avgMax <= 12 && st.darkRatio >= 0.82);
   const rowAt = (y) => (i) => px(i, y);
   const colAt = (x) => (i) => px(x, i);
   const scanSide = (isCol, fromStart, maxN) => {
@@ -84,22 +92,21 @@ function detectFrameContentRect(img, tol = 14) {
     const lineAt = isCol ? colAt : rowAt;
     const edgeIdx = fromStart ? 0 : span - 1;
     const st0 = lineStats(lineAt(edgeIdx), length);
-    const darkish =
-      isDarkBorder(st0) || (st0.darkRatio >= 0.85 && st0.avgMax <= DARK_EDGE_AVG + 6);
-    if (darkish) {
+    const darkStart = isCol ? isFlatBlackBar(st0) : isLetterboxRow(st0);
+    if (darkStart) {
       let trim = 0;
       let idx = edgeIdx;
       while (trim < maxN) {
         const st = lineStats(lineAt(idx), length);
-        const hard = st.darkRatio >= DARK_RATIO && st.avgMax <= DARK_EDGE_AVG + 4;
-        if (hard || isSoftDark(st)) {
+        const keep = isCol ? isStillFlatBlack(st) : isStillLetterbox(st);
+        if (keep) {
           trim += 1;
           idx = fromStart ? idx + 1 : idx - 1;
           continue;
         }
         break;
       }
-      // 不再多吃过渡列：宁可留一丝边，也不裁进有画面像素
+      // 宁可留一丝边，也不裁进有画面像素
       return { trim, dark: true };
     }
     if (st0.pure) {
