@@ -4598,12 +4598,9 @@
           panel.classList.remove("is-tool-assets-loading");
           panel.removeAttribute("aria-busy");
         }
-        try {
-          // 便于重选同一文件也能触发 change
-          input.value = "";
-        } catch (_) {}
 
-        // 嵌套在 label 内（覆盖点击层）：交给浏览器原生，勿 preventDefault
+        // 嵌套在 label 内（覆盖点击层）：交给浏览器原生。
+        // 安卓上若在同一次 click 里先清空 value，系统选文件框会卡住很久才弹出。
         if (label.contains(input)) return;
 
         e.preventDefault();

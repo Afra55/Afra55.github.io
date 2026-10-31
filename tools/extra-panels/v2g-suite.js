@@ -14660,9 +14660,6 @@
         };
         if (vbbFile && !vbbFile.dataset.vbbBound) {
           vbbFile.dataset.vbbBound = "1";
-          vbbFile.addEventListener("click", () => {
-            vbbFile.value = "";
-          });
           const ingestFiles = (files) => {
             const keepOnFail = vbbNeedReselect;
             return loadVbbFiles(files).catch((err) => {
@@ -14672,7 +14669,12 @@
             });
           };
           vbbFile.addEventListener("change", (e) => {
-            ingestFiles(e.target.files);
+            const list = e.target.files;
+            // 先吃 FileList，再清空——勿在 click 里清（安卓会拖很久才弹出系统选文件）
+            if (list?.length) ingestFiles(list);
+            try {
+              e.target.value = "";
+            } catch (_) {}
           });
           // 懒加载前 early capture 的文件：绑定时 take，之后靠事件补吃
           const pending = window.DevToolsPendingFiles?.take?.("vbb");

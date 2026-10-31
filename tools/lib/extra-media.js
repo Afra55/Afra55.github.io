@@ -1084,21 +1084,35 @@
     return ffmpegWarmPromise;
   }
 
+  let ffmpegPrewarmTimer = 0;
   function scheduleFfmpegPrewarm() {
     if (window.DevToolsTemp?.isUnloading) return;
     if (ffmpegSkipAutoPrewarm) return;
     if (!isGifmakerActive()) return;
-    const run = () => {
-      prewarmFfmpegEngine().catch(() => {});
-      // 黑盒收尾才用 gifsicle：提前拉模块，避免长时编码后网络抖动导致 import 失败
-      injectGifsiclePreloadLink();
-      loadGifsicle().catch(() => {});
-    };
-    if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(run, { timeout: 1500 });
-    } else {
-      setTimeout(run, 300);
-    }
+    // 进面板后先让「选择视频」抢主线程：安卓上预热 WASM 会把系统选文件框拖到数秒后才弹出
+    window.clearTimeout(ffmpegPrewarmTimer);
+    const delayMs = (() => {
+      try {
+        const ua = navigator.userAgent || "";
+        if (/Android|HarmonyOS|HuaweiBrowser|MiuiBrowser|UCBrowser|QQBrowser/i.test(ua)) return 4500;
+      } catch (_) {}
+      return 1200;
+    })();
+    ffmpegPrewarmTimer = window.setTimeout(() => {
+      const run = () => {
+        prewarmFfmpegEngine().catch(() => {});
+        // gifsicle 再晚一点，别和引擎预热抢同一拍空闲
+        window.setTimeout(() => {
+          injectGifsiclePreloadLink();
+          loadGifsicle().catch(() => {});
+        }, 2500);
+      };
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(run, { timeout: 4000 });
+      } else {
+        run();
+      }
+    }, delayMs);
   }
 
   function bindFfmpegPrewarmTriggers() {

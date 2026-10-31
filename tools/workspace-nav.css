@@ -86,9 +86,11 @@ label.file-btn > input[type="file"] {
   margin: 0;
   padding: 0;
   border: 0;
-  opacity: 0;
+  /* 安卓 WebView：opacity:0 + font-size:0 偶发拖很久才出系统选文件 */
+  opacity: 0.01;
   cursor: pointer;
-  font-size: 0;
+  font-size: 16px;
+  color: transparent;
   clip: auto;
   overflow: hidden;
   z-index: 1;
