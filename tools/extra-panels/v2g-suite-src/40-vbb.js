@@ -4160,7 +4160,14 @@
           if (typeof detectSourceFps === "function" && vbbSourceFile) {
             singleSrcFps = Number(await detectSourceFps(vbbSourceFile).catch(() => 0)) || 0;
           }
-          const singleMeta = { srcW, srcH, srcFps: singleSrcFps };
+          const singleMeta = buildVbbFeatureMeta({
+            srcW,
+            srcH,
+            srcFps: singleSrcFps,
+            fileBytes: vbbSourceFile?.size || 0,
+            qualityFirst: vbbQualityFirstOn(),
+            crop: vbbCrop,
+          });
           for (let i = 0; i < ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = ranges[i];
@@ -4214,7 +4221,11 @@
               snapshotVbbEncodeSeed(encoded, {
                 srcW,
                 srcH,
+                effW: singleMeta.effW,
+                effH: singleMeta.effH,
                 srcFps: singleSrcFps || Number(encoded.srcFps) || 0,
+                fileBytes: singleMeta.fileBytes,
+                qualityFirst: singleMeta.qualityFirst,
               }),
               "blackbox"
             );
@@ -5161,8 +5172,6 @@
         let ok = skipOk.size;
         let doneCount = skipOk.size;
         const finishedIdx = new Set(skipOk);
-        // 沿用成功方案：仅当时长+源宽高+源帧率接近时复用（勿只按时长）
-        let reuseSeed = null;
         const pool = [];
         let conc = 1;
         try {
@@ -5226,23 +5235,7 @@
                 const f = Number(await detectSourceFps(item.file).catch(() => 0)) || 0;
                 if (f >= 5) item.srcFps = f;
               }
-              const itemMeta = {
-                srcW: Number(item.srcW) || 0,
-                srcH: Number(item.srcH) || 0,
-                srcFps: Number(item.srcFps) || 0,
-              };
-              const speedFac = vbbSpeedFactorForSpan(win.span);
-              const cachedSeed = loadVbbSpanScheme(win.span, speedFac, itemMeta);
-              const seedForItem =
-                cachedSeed ||
-                (reuseSeed &&
-                Math.abs((Number(reuseSeed.span) || 0) - (Number(win.span) || 0)) < 0.08 &&
-                Math.abs((Number(reuseSeed.speed) || 1) - speedFac) < 0.05 &&
-                vbbSeedFitsMeta(reuseSeed, itemMeta)
-                  ? reuseSeed
-                  : null);
               const t0 = performance.now();
-              const usedSeed = Boolean(seedForItem);
               let lastRealProgressAt = Date.now();
               let lastLocal = 0;
               let lastStallHintAt = 0;
@@ -5313,6 +5306,17 @@
                   item.duration
                 );
                 if (itemAborted()) throw new Error("已取消");
+                const itemMeta = buildVbbFeatureMeta({
+                  srcW: Number(item.srcW) || 0,
+                  srcH: Number(item.srcH) || 0,
+                  srcFps: Number(item.srcFps) || 0,
+                  fileBytes: item.file?.size || 0,
+                  qualityFirst: vbbQualityFirstOn(),
+                  crop: vbbCrop,
+                });
+                const speedFac = vbbSpeedFactorForSpan(prepared.span);
+                const seedForItem = loadVbbSpanScheme(prepared.span, speedFac, itemMeta);
+                const usedSeed = Boolean(seedForItem);
                 const encoded = await encodeBlackboxClip({
                   file: prepared.file,
                   startSec: prepared.startSec,
@@ -5320,10 +5324,10 @@
                   srcW: prepared.srcW,
                   srcH: prepared.srcH,
                   qualityFirst: vbbQualityFirstOn(),
-                  seed: seedForItem,
+                  seed: seedForItem || undefined,
                   speedLimitSec: vbbSpeedLimitSec(),
                   crop: vbbCrop,
-                  forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
+                  forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05 || speedFac > 1.01,
                   ffmpeg: ffmpegLease || null,
                   isAborted: itemAborted,
                   onProgress: (local, text) => {
@@ -5349,18 +5353,25 @@
                   },
                 });
                 if (abortVbb) throw new Error("已取消");
-                applyVbbClipEncoded(vbbClips[i], encoded);
+                applyVbbClipEncoded(
+                  vbbClips[i],
+                  encoded,
+                  usedSeed ? ["沿用方案"] : []
+                );
                 if (encoded && encoded.fps) {
-                  reuseSeed = {
-                    fps: encoded.fps,
-                    maxW: encoded.maxW,
-                    span: prepared.span,
-                    speed: Math.max(1, Number(encoded.speed) || 1),
-                    srcW: itemMeta.srcW,
-                    srcH: itemMeta.srcH,
-                    srcFps: itemMeta.srcFps || Number(encoded.srcFps) || 0,
-                  };
-                  saveVbbSpanScheme(prepared.span, reuseSeed, "blackbox");
+                  saveVbbSpanScheme(
+                    prepared.span,
+                    snapshotVbbEncodeSeed(encoded, {
+                      srcW: itemMeta.srcW,
+                      srcH: itemMeta.srcH,
+                      effW: itemMeta.effW,
+                      effH: itemMeta.effH,
+                      srcFps: itemMeta.srcFps || Number(encoded.srcFps) || 0,
+                      fileBytes: itemMeta.fileBytes,
+                      qualityFirst: itemMeta.qualityFirst,
+                    }),
+                    "blackbox"
+                  );
                 }
                 const elapsedSec = (performance.now() - t0) / 1000;
                 const editBits = [];
@@ -5825,7 +5836,6 @@
               await ensureFfmpegInputWritten(ff, vbbSourceFile, () => {});
             } catch (_) {}
           }
-          let firstSeed = null;
           vbbClips = plan.ranges.map((r) => ({
             start: r.start,
             span: r.span,
@@ -5849,7 +5859,14 @@
           if (!(execSrcFps >= 5) && typeof detectSourceFps === "function" && vbbSourceFile) {
             execSrcFps = Number(await detectSourceFps(vbbSourceFile).catch(() => 0)) || 0;
           }
-          const execMeta = { srcW, srcH, srcFps: execSrcFps };
+          const execMeta = buildVbbFeatureMeta({
+            srcW,
+            srcH,
+            srcFps: execSrcFps,
+            fileBytes: vbbSourceFile?.size || 0,
+            qualityFirst: vbbQualityFirstOn(),
+            crop: vbbCrop,
+          });
           for (let i = 0; i < plan.ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = plan.ranges[i];
@@ -5857,7 +5874,7 @@
             const reuse = resolveVbbSegmentReuse(
               plan.ranges,
               i,
-              firstSeed,
+              null,
               plan.encode,
               vbbSpeedFactorForSpan(r.span),
               execMeta
@@ -5868,7 +5885,7 @@
             const encodeTag = activeEncode === "sharp" ? "锐度" : activeEncode === "clarity" ? "清晰" : "";
             const clipLine = (extra = {}) =>
               vbbClipProgressLine(i, plan.ranges.length, {
-                reuse: Boolean(reuse.fromCache || (reuseSeed && i > 0)),
+                reuse: Boolean(reuse.fromCache),
                 ...extra,
               });
             const timeRange = `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`;
@@ -5984,7 +6001,6 @@
               // 与整段/批量同一套：挂 meta + gifNote（含画质），勿手写漏掉 gifskiQuality
               const extraBits = [];
               if (reuse.fromCache) extraBits.push("沿用方案");
-              else if (reuseSeed) extraBits.push("沿用#01");
               if (usedFallback) extraBits.push("超限");
               else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) {
                 extraBits.push(`已降宽${usedWidth}`);
@@ -5996,9 +6012,12 @@
                 usedFallback,
                 srcW,
                 srcH,
+                effW: execMeta.effW,
+                effH: execMeta.effH,
                 srcFps: execSrcFps || Number(encoded.srcFps) || 0,
+                fileBytes: execMeta.fileBytes,
+                qualityFirst: execMeta.qualityFirst,
               });
-              if (i === 0) firstSeed = seedSnap;
               saveVbbSpanScheme(r.span, seedSnap, usedFallback ? "blackbox" : activeEncode);
               setVbbClipJob(i, {
                 status: "done",
@@ -7172,11 +7191,13 @@
         },
         formatClipTitle: (c, idx) => formatVbbClipTitle(c, idx),
         formatClipMeta: (c, opts) => formatVbbClipMeta(c, opts || {}),
-        shouldReuseFirstPlan: (ranges, index) => shouldReuseVbbFirstPlan(ranges, index),
         loadSpanScheme: (span, speed, meta) => loadVbbSpanScheme(span, speed, meta),
         saveSpanScheme: (span, seed, enc) => saveVbbSpanScheme(span, seed, enc),
         spanSchemeKey: (span, speed, meta) => vbbSpanSchemeKey(span, speed, meta),
         seedFitsMeta: (seed, meta) => vbbSeedFitsMeta(seed, meta),
+        buildFeatureMeta: (opts) => buildVbbFeatureMeta(opts || {}),
+        fileSizeBucket: (bytes) => vbbFileSizeBucket(bytes),
+        spanBucket: (span) => vbbSpanBucket(span),
         estimateBlackbox: (span) => {
           if (!vbbAnalysis) return null;
           return estimateVbbBlackboxPlan(vbbAnalysis.bps15, span, vbbAnalysis.srcW);

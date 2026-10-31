@@ -1279,11 +1279,13 @@
           encodeInput = inName;
           if (aborted()) throw new Error("已取消");
   
-          // 大文件、或非片头窗：先按段 remux，避免整片反复解复用（失败则仍用原片+ss）
+          // 大文件、非片头窗、或压缩时长：先按段切出（倍速必须精确切，避免少帧再加速成「目标 30 却 21s」）
           const wantSeg =
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
-            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
+            (file.size >= FFMPEG_SEG_FILE_BYTES ||
+              Number(opts.startSec) > 0.05 ||
+              speed > 1.01);
           if (wantSeg) {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
@@ -2124,11 +2126,13 @@
           encodeInput = inName;
           if (aborted()) throw new Error("已取消");
 
-          // 大文件、或非片头窗：先按段 remux（失败则仍用原片+ss）
+          // 大文件、非片头窗、或压缩时长：先按段切出（倍速必须精确切）
           const wantSeg =
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
-            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
+            (file.size >= FFMPEG_SEG_FILE_BYTES ||
+              Number(opts.startSec) > 0.05 ||
+              speed > 1.01);
           if (wantSeg) {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
@@ -2261,10 +2265,9 @@
               fps < 18 - 0.01 && effSpanForMerge > V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
             const chunkTarget =
               chunkFrames > 0 ? effSpanForMerge * (n / Math.max(1, chunkFrames)) : effSpanForMerge;
-            const expectRatio = chunkFrames > 0 ? n / chunkFrames : 1;
-            const alignTarget = expectRatio >= 0.9 && chunkTarget > 0.05;
-            // 仅「压缩时长」倍速时才强行对准目标秒数；无倍速保持均匀 fps delay（可走 canPassFps，避免 60/70 交替顿挫）
-            const forceAlignSpan = alignTarget && speed > 1.01;
+            // 压缩时长：即使少帧也要把 delay 拉到目标秒数（避免 46→30 却播成 ~21）
+            // 无倍速保持均匀 fps delay（可走 canPassFps，避免 60/70 交替顿挫）
+            const forceAlignSpan = speed > 1.01 && chunkTarget > 0.05;
             if (allowStillMerge) {
               try {
                 const merged = mergeStaticFramesInPlace(view, n, stride, fps);
@@ -2364,12 +2367,16 @@
           );
           const playbackFps = gifEffectivePlaybackFps(fps);
           const frameRatio = frameCount > 0 ? actualFrames / frameCount : 1;
-          // 明显少帧且未拉满 delay 时，成片 span 按比例如实报，避免 UI 写 30s 实际 20s
+          // 压缩时长已强制对准目标秒数 → 仍报目标；无倍速少帧才按比例如实报
           const outSpan =
-            frameRatio >= 0.9 ? effSpan : Math.max(0.05, effSpan * Math.max(0.05, frameRatio));
+            speed > 1.01 || frameRatio >= 0.9
+              ? effSpan
+              : Math.max(0.05, effSpan * Math.max(0.05, frameRatio));
           if (frameRatio < 0.9) {
             vbbLog(
-              `[vbb-phase] gifski 少帧 ${actualFrames}/${frameCount} → 成片按 ${(outSpan).toFixed(1)}s 计（目标 ${effSpan.toFixed(1)}s）`
+              speed > 1.01
+                ? `[vbb-phase] gifski 少帧 ${actualFrames}/${frameCount} → delay 已拉到目标 ${effSpan.toFixed(1)}s`
+                : `[vbb-phase] gifski 少帧 ${actualFrames}/${frameCount} → 成片按 ${outSpan.toFixed(1)}s 计（目标 ${effSpan.toFixed(1)}s）`
             );
           }
           return {
@@ -2900,16 +2907,18 @@
         return { candidate, underBudget: false };
       }
   
-      function shouldReuseVbbFirstPlan(ranges, index) {
-        if (!Array.isArray(ranges) || index <= 0 || index >= ranges.length - 1) return false;
-        const a = Number(ranges[0]?.span) || 0;
-        const b = Number(ranges[index]?.span) || 0;
-        return a > 0 && Math.abs(a - b) < 0.08;
-      }
-  
-      const VBB_SPAN_SCHEME_KEY = "devtools-vbb-span-scheme-v1";
-      const VBB_SPAN_SCHEME_MAX = 48;
-  
+      /**
+       * 统一特征库（同轮内存 + 跨次 localStorage）：
+       * 时长桶 + 体积桶 + 有效分辨率 + 源帧率 + 加速 + 模式。
+       * 旧 firstSeed / 只按时长方案已移除，避免两套规则串味。
+       */
+      const VBB_FEATURE_SCHEME_KEY = "devtools-vbb-feature-scheme-v1";
+      const VBB_FEATURE_SCHEME_MAX = 64;
+      /** 特征键/匹配算法变更时递增；旧 span-scheme-v1 与低 ver 一律不命中 */
+      const VBB_FEATURE_SCHEME_VER = 1;
+      /** 同轮即时命中（不依赖 localStorage 读写次序） */
+      const vbbFeatureSchemeMem = new Map();
+
       /** 源帧率分桶：25 与 30 不可互沿用 */
       function vbbSrcFpsBucket(srcFps) {
         const src = Number(srcFps) || 0;
@@ -2930,60 +2939,97 @@
         return `${Math.round(w / 40) * 40}x${Math.round(h / 40) * 40}`;
       }
 
-      /**
-       * 沿用方案键：时长 + 加速 + 源尺寸桶 + 源帧率桶。
-       * 旧版只按时长 → 不同视频同秒数会误沿用（如 800 宽编到不相关片）。
-       */
-      function vbbSpanSchemeKey(span, speed = 1, meta = null) {
-        const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
-        const sp = Math.max(1, Number(speed) || 1);
-        // 加速与否分桶，避免「压时长开/关」互相沿用错误档位
-        let base = sp > 1.02 ? `${s.toFixed(1)}@x${sp.toFixed(2)}` : s.toFixed(1);
-        const size = vbbSchemeSizeBucket(meta?.srcW, meta?.srcH);
-        const fpsB = vbbSrcFpsBucket(meta?.srcFps);
-        if (size && fpsB) return `${base}#${size}|${fpsB}`;
-        // 缺元数据时不加后缀：刻意不命中带指纹的新缓存
-        return base;
+      /** 源体积粗档（MB）：相似片命中用，精确字节太碎 */
+      function vbbFileSizeBucket(fileBytes) {
+        const mb = (Number(fileBytes) || 0) / (1024 * 1024);
+        if (!(mb > 0)) return "";
+        if (mb < 5) return "0-5";
+        if (mb < 15) return "5-15";
+        if (mb < 40) return "15-40";
+        if (mb < 100) return "40-100";
+        return "100+";
       }
 
-      /** 内存 seed / 缓存条目是否与当前片「够像」才可沿用 */
+      /** 有效时长约 0.5s 一档 */
+      function vbbSpanBucket(span) {
+        const s = Math.max(0.5, Number(span) || 0.5);
+        return (Math.round(s * 2) / 2).toFixed(1);
+      }
+
+      /** 特征匹配用宽高：优先裁后有效尺寸 */
+      function vbbFeatureDims(meta) {
+        const ew = Number(meta?.effW) || 0;
+        const eh = Number(meta?.effH) || 0;
+        if (ew >= 16 && eh >= 16) return { w: ew, h: eh };
+        return { w: Number(meta?.srcW) || 0, h: Number(meta?.srcH) || 0 };
+      }
+
+      /**
+       * 特征键：时长桶 + 加速 + 有效分辨率 + 帧率 + 体积 + 模式。
+       * 缺任一指纹返回 ""（调用方拒绝读写，禁止只按时长误沿用）。
+       */
+      function vbbSpanSchemeKey(span, speed = 1, meta = null) {
+        const sp = Math.max(1, Number(speed) || 1);
+        const spanB = vbbSpanBucket(span);
+        const base = sp > 1.02 ? `${spanB}@x${sp.toFixed(2)}` : spanB;
+        const dims = vbbFeatureDims(meta);
+        const size = vbbSchemeSizeBucket(dims.w, dims.h);
+        const fpsB = vbbSrcFpsBucket(meta?.srcFps);
+        const vol = vbbFileSizeBucket(meta?.fileBytes);
+        const mode = meta?.qualityFirst ? "qf" : "bb";
+        if (!size || !fpsB || !vol) return "";
+        return `${base}#${size}|${fpsB}|${vol}|${mode}`;
+      }
+
+      /** 内存 / 持久条目与当前片是否够像 */
       function vbbSeedFitsMeta(seed, meta) {
         if (!seed?.fps || !meta) return false;
-        const sizeA = vbbSchemeSizeBucket(seed.srcW, seed.srcH);
-        const sizeB = vbbSchemeSizeBucket(meta.srcW, meta.srcH);
+        const dimsA = vbbFeatureDims(seed);
+        const dimsB = vbbFeatureDims(meta);
+        const sizeA = vbbSchemeSizeBucket(dimsA.w, dimsA.h);
+        const sizeB = vbbSchemeSizeBucket(dimsB.w, dimsB.h);
         if (!sizeA || !sizeB || sizeA !== sizeB) return false;
         const fpsA = vbbSrcFpsBucket(seed.srcFps);
         const fpsB = vbbSrcFpsBucket(meta.srcFps);
         if (!fpsA || !fpsB || fpsA !== fpsB) return false;
-        const sw = Number(seed.srcW) || 0;
-        const sh = Number(seed.srcH) || 0;
-        const mw = Number(meta.srcW) || 0;
-        const mh = Number(meta.srcH) || 0;
-        // 桶相同仍再卡相对误差，避免边界误并桶
+        const volA = vbbFileSizeBucket(seed.fileBytes);
+        const volB = vbbFileSizeBucket(meta.fileBytes);
+        if (!volA || !volB || volA !== volB) return false;
+        if (Boolean(seed.qualityFirst) !== Boolean(meta.qualityFirst)) return false;
+        const sw = dimsA.w;
+        const sh = dimsA.h;
+        const mw = dimsB.w;
+        const mh = dimsB.h;
         if (sw > 0 && mw > 0 && Math.abs(sw - mw) / Math.max(sw, mw) > 0.1) return false;
         if (sh > 0 && mh > 0 && Math.abs(sh - mh) / Math.max(sh, mh) > 0.1) return false;
         return true;
       }
-  
-      function loadVbbSpanSchemes() {
+
+      function loadVbbFeatureSchemes() {
         try {
-          const raw = localStorage.getItem(VBB_SPAN_SCHEME_KEY);
+          const raw = localStorage.getItem(VBB_FEATURE_SCHEME_KEY);
           return raw ? JSON.parse(raw) : {};
         } catch (_) {
           return {};
         }
       }
-  
-      /** 「沿用方案」缓存版本：编码参数/分配算法变更时递增，旧缓存自动失效（避免沿用旧的低帧率） */
-      const VBB_SPAN_SCHEME_VER = 8;
+
+      function purgeLegacyVbbSpanScheme() {
+        try {
+          localStorage.removeItem("devtools-vbb-span-scheme-v1");
+        } catch (_) {}
+      }
 
       function loadVbbSpanScheme(span, speed = 1, meta = null) {
-        // 无尺寸/帧率指纹时拒绝命中，避免「只按时长」误沿用
-        if (!vbbSchemeSizeBucket(meta?.srcW, meta?.srcH) || !vbbSrcFpsBucket(meta?.srcFps)) return null;
-        const hit = loadVbbSpanSchemes()[vbbSpanSchemeKey(span, speed, meta)];
+        const key = vbbSpanSchemeKey(span, speed, meta);
+        if (!key) return null;
+        const fromMem = vbbFeatureSchemeMem.get(key);
+        if (fromMem && Number(fromMem.fps) > 0 && Number(fromMem.ver) === VBB_FEATURE_SCHEME_VER) {
+          if (vbbSeedFitsMeta(fromMem, meta)) return fromMem;
+        }
+        const hit = loadVbbFeatureSchemes()[key];
         if (!hit || !(Number(hit.fps) > 0)) return null;
-        // 旧版本（编码参数不同）算出的档位不再沿用
-        if (Number(hit.ver) !== VBB_SPAN_SCHEME_VER) return null;
+        if (Number(hit.ver) !== VBB_FEATURE_SCHEME_VER) return null;
         if (!vbbSeedFitsMeta(hit, meta)) return null;
         return hit;
       }
@@ -2993,64 +3039,89 @@
         const meta = {
           srcW: Number(seed.srcW) || 0,
           srcH: Number(seed.srcH) || 0,
+          effW: Number(seed.effW) || Number(seed.srcW) || 0,
+          effH: Number(seed.effH) || Number(seed.srcH) || 0,
           srcFps: Number(seed.srcFps) || 0,
+          fileBytes: Number(seed.fileBytes) || 0,
+          qualityFirst: Boolean(seed.qualityFirst),
         };
-        // 缺指纹不写：宁可下次完整探测，也不留下「只按时长」的脏缓存
-        if (!vbbSchemeSizeBucket(meta.srcW, meta.srcH) || !vbbSrcFpsBucket(meta.srcFps)) return;
+        const speed = Math.max(1, Number(seed.speed) || 1);
+        const key = vbbSpanSchemeKey(span, speed, meta);
+        if (!key) return;
+        const entry = {
+          ver: VBB_FEATURE_SCHEME_VER,
+          fps: Number(seed.fps) || 15,
+          maxW: Math.max(64, Number(seed.maxW) || V2G_BLACKBOX_BASE_W),
+          compressRounds: Number(seed.compressRounds) || 0,
+          usedFallback: Boolean(seed.usedFallback),
+          speed,
+          srcW: meta.srcW,
+          srcH: meta.srcH,
+          effW: meta.effW,
+          effH: meta.effH,
+          srcFps: meta.srcFps,
+          fileBytes: meta.fileBytes,
+          qualityFirst: meta.qualityFirst,
+          encode: encode || "blackbox",
+          at: Date.now(),
+        };
+        vbbFeatureSchemeMem.set(key, entry);
         try {
-          const map = loadVbbSpanSchemes();
-          const speed = Math.max(1, Number(seed.speed) || 1);
-          const key = vbbSpanSchemeKey(span, speed, meta);
-          map[key] = {
-            ver: VBB_SPAN_SCHEME_VER,
-            fps: Number(seed.fps) || 15,
-            maxW: Math.max(64, Number(seed.maxW) || V2G_BLACKBOX_BASE_W),
-            compressRounds: Number(seed.compressRounds) || 0,
-            usedFallback: Boolean(seed.usedFallback),
-            speed,
-            srcW: meta.srcW,
-            srcH: meta.srcH,
-            srcFps: meta.srcFps,
-            encode: encode || "blackbox",
-            at: Date.now(),
-          };
+          purgeLegacyVbbSpanScheme();
+          const map = loadVbbFeatureSchemes();
+          map[key] = entry;
           const keys = Object.keys(map).sort((a, b) => (map[b].at || 0) - (map[a].at || 0));
-          while (keys.length > VBB_SPAN_SCHEME_MAX) delete map[keys.pop()];
-          localStorage.setItem(VBB_SPAN_SCHEME_KEY, JSON.stringify(map));
+          while (keys.length > VBB_FEATURE_SCHEME_MAX) delete map[keys.pop()];
+          localStorage.setItem(VBB_FEATURE_SCHEME_KEY, JSON.stringify(map));
         } catch (_) {}
       }
-  
-      function resolveVbbSegmentReuse(ranges, index, firstSeed, planEncode, speed = 1, meta = null) {
+
+      /** 同轮/跨次统一查找：只按特征键，不再走 firstSeed 特例 */
+      function resolveVbbSegmentReuse(ranges, index, _unusedFirstSeed, planEncode, speed = 1, meta = null) {
         const sp = Math.max(1, Number(speed) || 1);
         const cached = loadVbbSpanScheme(ranges[index]?.span, sp, meta);
         if (cached) {
           return { seed: cached, fromCache: true, encode: cached.encode || planEncode };
         }
-        const seedSp = Math.max(1, Number(firstSeed?.speed) || 1);
-        // 必须带元数据且通过相似度：禁止 meta 缺失时退回「只按时长沿用」
-        if (
-          firstSeed &&
-          meta &&
-          shouldReuseVbbFirstPlan(ranges, index) &&
-          Math.abs(seedSp - sp) < 0.05 &&
-          vbbSeedFitsMeta(firstSeed, meta)
-        ) {
-          return { seed: firstSeed, fromCache: false, encode: planEncode };
-        }
         return { seed: null, fromCache: false, encode: planEncode };
       }
-  
+
       function snapshotVbbEncodeSeed(encoded, extras = {}) {
         if (!encoded?.blob) return null;
+        const srcW = Math.max(0, Number(extras.srcW || encoded.srcW) || 0);
+        const srcH = Math.max(0, Number(extras.srcH || encoded.srcH) || 0);
+        const effW = Math.max(0, Number(extras.effW) || srcW);
+        const effH = Math.max(0, Number(extras.effH) || srcH);
         return {
           fps: Number(encoded.fps) || 15,
           maxW: Math.max(64, Number(encoded.maxW || extras.usedWidth || encoded.outW) || V2G_BLACKBOX_BASE_W),
           compressRounds: Number(encoded.compressRounds) || 0,
           usedFallback: Boolean(extras.usedFallback),
           speed: Math.max(1, Number(encoded.speed) || 1),
-          srcW: Math.max(0, Number(extras.srcW || encoded.srcW) || 0),
-          srcH: Math.max(0, Number(extras.srcH || encoded.srcH) || 0),
+          srcW,
+          srcH,
+          effW,
+          effH,
           srcFps: Math.max(0, Number(extras.srcFps || encoded.srcFps) || 0),
+          fileBytes: Math.max(0, Number(extras.fileBytes) || 0),
+          qualityFirst: Boolean(extras.qualityFirst),
+        };
+      }
+
+      /** 组装特征 meta（面板侧调用） */
+      function buildVbbFeatureMeta({ srcW, srcH, srcFps, fileBytes, qualityFirst, crop } = {}) {
+        const cw = crop && Number(crop.w) > 0 ? Number(crop.w) : 0;
+        const ch = crop && Number(crop.h) > 0 ? Number(crop.h) : 0;
+        const w = Number(srcW) || 0;
+        const h = Number(srcH) || 0;
+        return {
+          srcW: w,
+          srcH: h,
+          effW: cw || w,
+          effH: ch || h,
+          srcFps: Number(srcFps) || 0,
+          fileBytes: Number(fileBytes) || 0,
+          qualityFirst: Boolean(qualityFirst),
         };
       }
   
@@ -3401,8 +3472,8 @@
           allowWide: true, // 一键黑盒允许超过 720px（预算用不完时换清晰度）
           chunkCount: clipOpts.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
           ffmpeg: clipOpts.ffmpeg || null,
-          // 编辑裁剪后强制精确切段，预览/GIF 接点才不易因 copy 关键帧错位
-          forceAccurateCut: Boolean(clipOpts.forceAccurateCut),
+          // 编辑裁剪 / 压缩时长：强制精确切段，避免 copy 关键帧少切后再加速成短 GIF
+          forceAccurateCut: Boolean(clipOpts.forceAccurateCut) || speed > 1.01,
         };
 
         /**

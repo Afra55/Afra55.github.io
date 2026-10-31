@@ -207,13 +207,12 @@ assert(
   assert(/清理内存后继续/.test(vbbUi), "手机批量条间须清理内存再续");
   assert(/沿用帧率/.test(src), "seed 须只沿用帧率");
   assert(/忽略缓存宽/.test(src), "seed 不得直接从上次加宽后的宽度起编");
-  assert(/VBB_SPAN_SCHEME_VER\s*=\s*8/.test(src), "改 seed 相似度策略须 bump 缓存版本");
-  assert(/vbbSeedFitsMeta|vbbSchemeSizeBucket/.test(src), "沿用须校验源宽高/帧率");
+  assert(/VBB_FEATURE_SCHEME_VER\s*=\s*1/.test(src), "改 seed 特征策略须 bump 缓存版本");
+  assert(/vbbSeedFitsMeta|vbbSchemeSizeBucket|vbbFileSizeBucket/.test(src), "沿用须校验分辨率/帧率/体积");
   assert(/只按时长/.test(src), "须显式禁止只按时长沿用");
-  assert(
-    /firstSeed &&\s*meta &&\s*shouldReuseVbbFirstPlan/.test(src.replace(/\s+/g, " ")),
-    "firstSeed 沿用也必须带 meta，禁止缺省退回时长"
-  );
+  assert(/vbbFeatureSchemeMem/.test(src), "同轮须走内存特征库");
+  assert(!/shouldReuseVbbFirstPlan/.test(src), "旧 firstSeed 同轮逻辑须移除");
+  assert(/devtools-vbb-feature-scheme-v1/.test(src), "须换用新特征库键名");
   const gifskiCore = fs.readFileSync(path.join(__dirname, "ffmpeg-bridge/gifski-core.js"), "utf8");
   assert(!/srcSpan\s*\+\s*0\.05/.test(gifskiCore), "原生 gifski 不得再给片尾 +50ms");
   assert(/-ss"[\s\S]{0,80}opts\.startSec/.test(gifskiCore), "原生裁剪须有 -ss");
