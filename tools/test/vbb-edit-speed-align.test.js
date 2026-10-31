@@ -102,9 +102,9 @@ t("编码侧：crop 在 setpts 倍速之前（画面裁切坐标系不被加速�
   assert.ok(shared.includes("${cropFilter}${speedFilter}fps="));
 });
 
-t("原生桥：编辑起点 -ss + 片源 span，倍速只走 setpts", () => {
+t("原生桥：编辑起点 -ss + 片源 span（半开收尾），倍速只走 setpts", () => {
   assert.ok(/args\.push\("-ss", String\(opts\.startSec\)\)/.test(gifskiCore));
-  assert.ok(/args\.push\("-t", String\(opts\.span\)\)/.test(gifskiCore));
+  assert.ok(/args\.push\("-t", String\(Math\.max\(0\.05, opts\.span - pad\)\)\)/.test(gifskiCore));
   assert.ok(!/opts\.span\s*\*\s*opts\.speed/.test(gifskiCore));
   assert.ok(gifskiCore.includes("setpts=(PTS-STARTPTS)/${speed}") || gifskiCore.includes("setpts=(PTS-STARTPTS)/"));
 });

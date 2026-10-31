@@ -836,7 +836,8 @@
         const keep = Math.max(0.05, Number(keepSpan) || 0.05);
         const rep = Number(reported);
         const full = Math.max(0, Number(fullDuration) || 0);
-        if (rep > 0.05 && rep <= keep * 1.25 + 1) return rep;
+        // 编码窗不得超过 keep：预裁/拼接上报偏长时若用 rep，GIF 会比预览多几帧
+        if (rep > 0.05 && rep <= keep + 0.05) return rep;
         // 禁止：缺 duration / 回退成原片整段 → 倍速按长片算、短拼接片被压得过短
         if (full > 0 && Math.abs(rep - full) < 0.05 && keep < full * 0.9) return keep;
         return keep;
@@ -1047,8 +1048,8 @@
        */
       async function materializeVbbTrimClip(file, startSec, span, srcW, srcH, onProgress, ffmpegLease) {
         const start = Math.max(0, Number(startSec) || 0);
-        // 半开窗：略短半帧，避免预裁切再转 GIF 时片尾多出预览没有的帧
-        const dur = Math.max(0.05, (Number(span) || 0.05) - 1 / 60);
+        // 半开窗：略短半帧（≥1/60），避免预裁切再转 GIF 时片尾多出预览没有的帧
+        const dur = Math.max(0.05, (Number(span) || 0.05) - Math.max(1 / 60, 1 / 50));
         const keepW = Math.max(1, Math.round(Number(srcW) || 1));
         const keepH = Math.max(1, Math.round(Number(srcH) || 1));
         const cacheKey = vbbPrecutClipCacheKey(file, start, dur, keepW, keepH);
@@ -1194,6 +1195,7 @@
           }
         }
         // 保守：仅明显裁短才预裁；失败则静默回退旧 start/span（行为与改前一致）
+        const requestedSpan = span;
         if (!alreadyMaterialized && shouldPrecutVbbWindow(fullDur, startSec, span)) {
           try {
             const mat = await materializeVbbTrimClip(
@@ -1207,7 +1209,12 @@
             );
             outFile = mat.file;
             startSec = 0;
-            span = Math.max(VBB_MIN_SPAN, Number(mat.duration) || span);
+            // 禁止用上报时长撑长编码窗（编码器常略长于半开 keep → GIF 多几帧）
+            const reported = Number(mat.duration) || 0;
+            span = Math.max(
+              VBB_MIN_SPAN,
+              reported > 0.05 ? Math.min(requestedSpan, reported) : requestedSpan
+            );
             outW = mat.srcW;
             outH = mat.srcH;
             if (!cutNote) cutNote = `裁 ${span.toFixed(1)}s`;

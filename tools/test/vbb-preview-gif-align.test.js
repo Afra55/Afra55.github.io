@@ -97,6 +97,26 @@ t("编辑后仍 forceAccurateCut（精确切，不靠多删垫）", () => {
   assert.ok(vbb.includes("forceAccurateCut: Boolean(prepared.cutNote)"));
 });
 
+t("编码半开垫兼顾 GIF 帧与源帧", () => {
+  assert.ok(shared.includes("function vbbEncodeHalfOpenPadSec"));
+  const m = shared.match(/function vbbEncodeHalfOpenPadSec\([\s\S]*?\n      \}/);
+  assert.ok(m);
+  const box = {};
+  vm.runInNewContext(`${m[0]}\nthis.fn = vbbEncodeHalfOpenPadSec;`, box);
+  const pad15_30 = box.fn(15, 30);
+  const pad20_30 = box.fn(20, 30);
+  // 20fps GIF 时半个 GIF 帧 < 半个 30 源帧 → 必须抬到源帧半宽，否则片尾多帧
+  assert.ok(pad20_30 + 1e-9 >= 0.5 / 30, `pad20_30=${pad20_30}`);
+  assert.ok(pad15_30 + 1e-9 >= 0.5 / 15, `pad15_30=${pad15_30}`);
+});
+
+t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {
+  assert.ok(vbb.includes("禁止用上报时长撑长编码窗"));
+  assert.ok(/Math\.min\(\s*requestedSpan\s*,\s*reported\s*\)/.test(vbb));
+  assert.ok(vbb.includes("编码窗不得超过 keep"));
+  assert.ok(!/rep <= keep \* 1\.25/.test(vbb));
+});
+
 t("时长标签为保留（黄柄=成片）", () => {
   assert.ok(vtrim.includes("保留 ${formatClock(keepSpan)}") || /保留 \$\{formatClock\(keepSpan\)\}/.test(vtrim));
   assert.ok(!/成片 \$\{formatClock\(keepSpan\)\}/.test(vtrim));

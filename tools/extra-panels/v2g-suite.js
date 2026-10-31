@@ -1313,7 +1313,7 @@
         let encodeInput = inName;
         let encodeSs = startSec;
         // 半开：时长略短半帧，避免 -t/fps 滤镜在片尾多吐帧（预览无、GIF 却有）
-        const halfOpenPad = 0.5 / Math.max(8, fps);
+        const halfOpenPad = vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
         let encodeT = Math.max(0.05, span - halfOpenPad);
   
         try {
@@ -1610,6 +1610,18 @@
         const capped = raw > cap + 0.01;
         const effSpan = span / speed;
         return { speed, capped, targetSec: lim, effSpan };
+      }
+
+      /**
+       * 编码片尾半开垫（秒）：预览 keep 已按 1/srcFps 收尾，编码侧再收半帧，
+       * 避免 ffmpeg fps/-t 在边界再吐出黄柄上那一帧（预览无、GIF 却有）。
+       * 取 max(半个 GIF 帧, 半个源帧)，高帧 GIF + 低垫时仍够。
+       */
+      function vbbEncodeHalfOpenPadSec(gifFps, srcFps) {
+        const g = 0.5 / Math.max(8, Number(gifFps) || 15);
+        const src = Number(srcFps) || 0;
+        const s = src >= 5 && src <= 240 ? 0.5 / src : 0;
+        return Math.max(g, s, 1 / 120);
       }
 
       /**
@@ -1918,6 +1930,7 @@
         q.set("width", String(outW));
         q.set("quality", String(gifskiQuality));
         q.set("startSec", String(startSec));
+        // 片尾半开由桥 gifski-core 对 -t 收半帧；此处传 keep 窗长（已含预览 endKeep）
         q.set("span", String(span));
         q.set("speed", String(speed));
         if (Math.abs(bright) >= 0.01) q.set("brightness", String(bright));
@@ -2162,7 +2175,7 @@
         let segName = null;
         let encodeInput = inName;
         let encodeSs = startSec;
-        const halfOpenPad = 0.5 / Math.max(8, fps);
+        const halfOpenPad = vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
         let encodeT = Math.max(0.05, span - halfOpenPad);
 
         try {
@@ -3531,6 +3544,8 @@
           ffmpeg: clipOpts.ffmpeg || null,
           // 编辑裁剪 / 压缩时长：强制精确切段，避免 copy 关键帧少切后再加速成短 GIF
           forceAccurateCut: Boolean(clipOpts.forceAccurateCut) || speed > 1.01,
+          // 片尾半开垫用：与预览 keep 的源 fps 对齐
+          srcFps: Number(srcFps) || Number(clipOpts.srcFps) || 0,
         };
 
         /**
@@ -8498,7 +8513,8 @@
         const keep = Math.max(0.05, Number(keepSpan) || 0.05);
         const rep = Number(reported);
         const full = Math.max(0, Number(fullDuration) || 0);
-        if (rep > 0.05 && rep <= keep * 1.25 + 1) return rep;
+        // 编码窗不得超过 keep：预裁/拼接上报偏长时若用 rep，GIF 会比预览多几帧
+        if (rep > 0.05 && rep <= keep + 0.05) return rep;
         // 禁止：缺 duration / 回退成原片整段 → 倍速按长片算、短拼接片被压得过短
         if (full > 0 && Math.abs(rep - full) < 0.05 && keep < full * 0.9) return keep;
         return keep;
@@ -8709,8 +8725,8 @@
        */
       async function materializeVbbTrimClip(file, startSec, span, srcW, srcH, onProgress, ffmpegLease) {
         const start = Math.max(0, Number(startSec) || 0);
-        // 半开窗：略短半帧，避免预裁切再转 GIF 时片尾多出预览没有的帧
-        const dur = Math.max(0.05, (Number(span) || 0.05) - 1 / 60);
+        // 半开窗：略短半帧（≥1/60），避免预裁切再转 GIF 时片尾多出预览没有的帧
+        const dur = Math.max(0.05, (Number(span) || 0.05) - Math.max(1 / 60, 1 / 50));
         const keepW = Math.max(1, Math.round(Number(srcW) || 1));
         const keepH = Math.max(1, Math.round(Number(srcH) || 1));
         const cacheKey = vbbPrecutClipCacheKey(file, start, dur, keepW, keepH);
@@ -8856,6 +8872,7 @@
           }
         }
         // 保守：仅明显裁短才预裁；失败则静默回退旧 start/span（行为与改前一致）
+        const requestedSpan = span;
         if (!alreadyMaterialized && shouldPrecutVbbWindow(fullDur, startSec, span)) {
           try {
             const mat = await materializeVbbTrimClip(
@@ -8869,7 +8886,12 @@
             );
             outFile = mat.file;
             startSec = 0;
-            span = Math.max(VBB_MIN_SPAN, Number(mat.duration) || span);
+            // 禁止用上报时长撑长编码窗（编码器常略长于半开 keep → GIF 多几帧）
+            const reported = Number(mat.duration) || 0;
+            span = Math.max(
+              VBB_MIN_SPAN,
+              reported > 0.05 ? Math.min(requestedSpan, reported) : requestedSpan
+            );
             outW = mat.srcW;
             outH = mat.srcH;
             if (!cutNote) cutNote = `裁 ${span.toFixed(1)}s`;

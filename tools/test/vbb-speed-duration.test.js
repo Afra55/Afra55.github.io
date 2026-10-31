@@ -60,12 +60,14 @@ t("成片时长：接近目标用 span，少帧太多则按帧数如实报", () 
   assert.ok(short < 22 && short > 18, `short=${short}`);
 });
 
-t("原生桥 -t 用片源 span，禁止再 ×speed", () => {
+t("原生桥 -t 用片源 span 并半开收尾，禁止再 ×speed", () => {
   assert.ok(gifskiCore.includes("禁止再 ×speed") || gifskiCore.includes("勿再 ×speed") || gifskiCore.includes("禁止再"));
   assert.ok(!/opts\.span\s*\*\s*opts\.speed/.test(gifskiCore));
+  assert.ok(gifskiCore.includes("opts.span - pad") || /opts\.span\s*-\s*pad/.test(gifskiCore));
   const m = gifskiCore.match(/if \(opts\.span > 0\.05\) \{[\s\S]*?args\.push\("-t", String\(([^)]+)\)\)/);
   assert.ok(m, "missing -t push");
-  assert.strictEqual(m[1].trim(), "opts.span");
+  assert.ok(/opts\.span/.test(m[1]), "t 须基于 span");
+  assert.ok(/pad|Math\.max/.test(m[1]), "t 须半开收尾");
 });
 
 t("桥版本已递增（gifski-core 变更）", () => {
@@ -73,7 +75,7 @@ t("桥版本已递增（gifski-core 变更）", () => {
   const ver = adb.match(/const BRIDGE_VERSION = "([^"]+)"/);
   assert.ok(ver, "missing BRIDGE_VERSION");
   const parts = ver[1].split(".").map(Number);
-  assert.ok(parts[2] >= 87, `BRIDGE_VERSION=${ver[1]}`);
+  assert.ok(parts[2] >= 90, `BRIDGE_VERSION=${ver[1]}`);
 });
 
 t("resolveBlackboxSpeed：30s 目标；超上限标记 capped", () => {

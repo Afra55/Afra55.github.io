@@ -300,7 +300,9 @@ function buildFfmpegInputArgs(inputPath, opts) {
   if (opts.span > 0.05) {
     // 面板约定：span=片源窗长（秒），speed=倍速。-t 限制读取的片源时长，禁止再 ×speed
     // （否则 60s×2 去读 → 再 setpts/2，若文件不够长会少读，成片短于「压缩时长到」目标）
-    args.push("-t", String(opts.span));
+    // 再收半个输出帧，避免 fps 滤镜在半开边界多吐一帧（预览无、GIF 却有）
+    const pad = 0.5 / Math.max(8, Number(opts.fps) || 15);
+    args.push("-t", String(Math.max(0.05, opts.span - pad)));
   }
   return args;
 }
