@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.90";
+const BRIDGE_VERSION = "0.9.91";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4299,7 +4299,8 @@ async function shellCapture(serial, command, timeout = 15000) {
 }
 
 async function deviceSnapshot(serial) {
-  const info = await deviceInfo(serial);
+  // 只采快照字段：禁止再调完整 deviceInfo（会与「抓取信息」叠跑几十条 shell，adb 堵死、文件也列不出）
+  if (!serial) throw new Error("缺少设备 serial");
   const [
     foreground,
     meminfo,
@@ -4311,18 +4312,17 @@ async function deviceSnapshot(serial) {
     shellCapture(
       serial,
       "dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | head -n 5",
-      20000
+      12000
     ),
-    shellCapture(serial, "dumpsys meminfo -s | head -n 20", 20000),
-    shellCapture(serial, "top -n 1 -m 8 -q", 20000),
-    shellCapture(serial, "df -h /data /sdcard 2>/dev/null | head -n 10", 15000),
-    shellCapture(serial, "uptime", 8000),
-    shellCapture(serial, "settings get global stay_on_while_plugged_in", 8000),
+    shellCapture(serial, "dumpsys meminfo -s | head -n 20", 12000),
+    shellCapture(serial, "top -n 1 -m 8 -q", 12000),
+    shellCapture(serial, "df -h /data /sdcard 2>/dev/null | head -n 10", 10000),
+    shellCapture(serial, "uptime", 6000),
+    shellCapture(serial, "settings get global stay_on_while_plugged_in", 6000),
   ]);
 
   return {
     ok: true,
-    info,
     foreground: foreground || "—",
     meminfo: meminfo || "—",
     top: top || "—",

@@ -2569,23 +2569,57 @@
         }
       }
   
+      let adbSnapAbort = null;
+
       async function loadSnapshot({ silent = false } = {}) {
         const serial = requireCurrentSerial();
         const snapMeta = $("#adb-snap-meta");
         const out = $("#adb-snap-out");
+        const btn = $("#adb-snap-refresh");
+        // 取消上一次：抓信息时连点刷新不再叠请求把桥堵死
+        if (adbSnapAbort) {
+          try {
+            adbSnapAbort.abort();
+          } catch (_) {}
+        }
+        const ac = new AbortController();
+        adbSnapAbort = ac;
+        const timer = window.setTimeout(() => {
+          try {
+            ac.abort();
+          } catch (_) {}
+        }, 35000);
+        if (btn) btn.disabled = true;
         if (snapMeta) snapMeta.textContent = "加载中…";
-        const data = await adbFetch(`/device/snapshot?serial=${encodeURIComponent(serial)}`);
-        const text = [
-          `前台:\n${data.foreground || "—"}`,
-          `uptime: ${data.uptime || "—"}`,
-          `屏幕常亮(stay_on_while_plugged_in): ${data.stayOnWhilePluggedIn || "—"}`,
-          `\n磁盘:\n${data.disk || "—"}`,
-          `\n内存:\n${data.meminfo || "—"}`,
-          `\n进程:\n${data.top || "—"}`,
-        ].join("\n");
-        if (out) out.textContent = text;
-        if (snapMeta) snapMeta.textContent = "已更新";
-        if (!silent) toast("快照已刷新");
+        try {
+          const data = await adbFetch(`/device/snapshot?serial=${encodeURIComponent(serial)}`, {
+            signal: ac.signal,
+          });
+          if (ac.signal.aborted) return;
+          const text = [
+            `前台:\n${data.foreground || "—"}`,
+            `uptime: ${data.uptime || "—"}`,
+            `屏幕常亮(stay_on_while_plugged_in): ${data.stayOnWhilePluggedIn || "—"}`,
+            `\n磁盘:\n${data.disk || "—"}`,
+            `\n内存:\n${data.meminfo || "—"}`,
+            `\n进程:\n${data.top || "—"}`,
+          ].join("\n");
+          if (out) out.textContent = text;
+          if (snapMeta) snapMeta.textContent = "已更新";
+          if (!silent) toast("快照已刷新");
+        } catch (err) {
+          if (ac.signal.aborted || err?.name === "AbortError") {
+            if (snapMeta) snapMeta.textContent = "已取消或超时";
+            if (!silent) toast("快照已取消或超时，可再点刷新");
+            return;
+          }
+          if (snapMeta) snapMeta.textContent = "加载失败";
+          throw err;
+        } finally {
+          window.clearTimeout(timer);
+          if (adbSnapAbort === ac) adbSnapAbort = null;
+          if (btn) btn.disabled = false;
+        }
       }
   
       async function deviceControl(action) {
@@ -2665,10 +2699,11 @@
         adbSelected = serial;
         renderAdbDevices();
         resetFsHistory();
-        await loadAdbInfo(serial);
-        await loadFs("/");
-        if (adbTab === "apps") await loadApps();
-        if (adbTab === "info") await loadSnapshot({ silent: true }).catch(() => {});
+        // 信息 / 文件 / 快照并行：勿等「抓取信息」完才列目录（否则点文件一直没数据）
+        const tasks = [loadAdbInfo(serial), loadFs("/")];
+        if (adbTab === "apps") tasks.push(loadApps());
+        if (adbTab === "info") tasks.push(loadSnapshot({ silent: true }).catch(() => {}));
+        await Promise.all(tasks);
       }
   
       function markAdbBridgeConnected(data) {
@@ -2698,9 +2733,9 @@
         markAdbBridgeConnected(data);
         if (adbSelected) {
           try {
-            await loadAdbInfo(adbSelected);
             resetFsHistory();
-            await loadFs(adbFsPath?.value || "/");
+            // 与选设备一致：抓信息与列目录并行，避免信息慢时文件空白
+            await Promise.all([loadAdbInfo(adbSelected), loadFs(adbFsPath?.value || "/")]);
           } catch (err) {
             if (!silent) setError(adbError, err.message || String(err));
           }
