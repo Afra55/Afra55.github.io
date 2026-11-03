@@ -4866,19 +4866,22 @@
     toast(toastMsg || "已开始下载");
   }
 
-  /** 文本条目全文：卡片 textPreview 可能被 4000 字截断成「…」，以 blob 为准。 */
+  /** 文本条目全文：以 blob 为准（textPreview 可能 4000 字截断，卡片显示也可能只截 50 行）。 */
   async function resolveTextItemFull(item) {
     if (!item || item.type !== "text") return "";
-    const preview = String(item.textPreview || "");
-    const needBlob = !preview || /…\s*$/.test(preview);
-    if (!needBlob) return preview;
     try {
       const full = await (await loadBlob(item)).text();
       if (full != null && full !== "") return String(full);
     } catch (_) {
       /* fall through */
     }
-    return preview;
+    return String(item.textPreview || "");
+  }
+
+  function isTruncatedTextCard(item) {
+    if (!item || item.type !== "text") return false;
+    const lines = splitTextLines(foldDataImagesInText(String(item.textPreview || "")).displayText);
+    return lines.length > TEXT_CARD_LINES;
   }
 
   function truncatedMemoTextElFromSelection() {
@@ -4896,7 +4899,7 @@
   }
 
   /**
-   * 折叠卡片 DOM 只有前 N 行 +「…共 x 行」；键盘复制时改写为条目全文。
+   * 折叠卡片 DOM 只有前 N 行 +「…」；系统/右键「复制」会触发 copy 事件，这里改写为条目全文。
    * @returns {boolean} 是否已接管本次 copy
    */
   function rewriteCopyFromTruncatedMemo(e) {
@@ -4905,15 +4908,7 @@
     const id = textEl.dataset?.memoExpand;
     const item = id ? state.index.items.find((x) => x.id === id) : null;
     if (!item || item.type !== "text") return false;
-    const preview = String(item.textPreview || "");
-    // 预览未截断：同步写入全文（仍可能长于卡片折叠行数）
-    if (preview && !/…\s*$/.test(preview)) {
-      e.preventDefault();
-      e.clipboardData.setData("text/plain", preview);
-      toast("已复制全文");
-      return true;
-    }
-    // 预览本身带 …：阻止半截内容，异步从 blob 写剪贴板
+    // 先阻止浏览器把折叠半截写进剪贴板，再异步写入全文（blob）
     e.preventDefault();
     e.clipboardData.setData("text/plain", "");
     resolveTextItemFull(item)
@@ -4949,7 +4944,7 @@
           }
         }
         await navigator.clipboard.writeText(text);
-        toast("已复制文本");
+        toast(isTruncatedTextCard(item) ? "已复制全文" : "已复制文本");
         return;
       }
       if ((item.type === "image" || item.type === "gif") && navigator.clipboard?.write && window.ClipboardItem) {
@@ -6671,8 +6666,10 @@
     memoCtxItemId = item.id;
     const canCopy = canClipboardCopy(item);
     const bits = [];
-    if (canCopy) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="copy">复制</button>`);
-    else bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
+    if (canCopy) {
+      const copyLabel = isTruncatedTextCard(item) ? "复制全文" : "复制";
+      bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="copy">${copyLabel}</button>`);
+    } else bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
     itemSecondaryActions(item).forEach((act) => {
       if (!canCopy && act.id === "dl") return;
       const extra = act.emphasis ? " is-untemp" : act.danger ? " is-danger" : "";
@@ -7165,7 +7162,14 @@
     if (hit.closest("input, textarea, a")) return;
     const sel = window.getSelection?.();
     const selected = String(sel?.toString() || "");
-    if (selected && hit.closest(".memo-text:not(.is-truncated)") && sel.anchorNode && card.contains(sel.anchorNode)) {
+    const inText = hit.closest?.(".memo-text");
+    const truncatedText = hit.closest?.(".memo-text.is-truncated");
+    // 短文：有选区时用系统右键「复制」
+    if (selected && inText && !truncatedText && sel.anchorNode && card.contains(sel.anchorNode)) {
+      return;
+    }
+    // 折叠长文：有选区时也放行系统右键「复制」，由 copy 事件改写为全文
+    if (selected && truncatedText && sel.anchorNode && card.contains(sel.anchorNode)) {
       return;
     }
     const item = state.index.items.find((x) => x.id === card.dataset.memoId);
