@@ -81,7 +81,7 @@ FFmpeg 接口前缀：`/ff/*`（例如 `GET /ff/ops`、`POST /ff/jobs/run`）
 | POST | `/logcat/clear` | 清空 logcat 缓冲 |
 | POST | `/input` | 点击 / 长按 / 双击 / 滑动 / 按键 / 文本 |
 | GET | `/clipboard?serial=` | 拉取手机剪贴板（优先 scrcpy：复用镜像或后台 `video=false`；再回退 clipper / `service call`） |
-| POST | `/clipboard` | 推送剪贴板（机型相关） |
+| POST | `/clipboard` | 推送剪贴板（优先 scrcpy 等 ack；再回退 clipper / `service call`） |
 | GET | `/device/snapshot?serial=` | 状态快照 |
 | GET | `/device/perf?serial=` | CPU / 内存 / FPS 采样（≥0.9.0） |
 | GET | `/device/processes?serial=` | 进程列表（≥0.9.0） |

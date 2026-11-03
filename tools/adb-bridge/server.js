@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.94";
+const BRIDGE_VERSION = "0.9.95";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4418,7 +4418,23 @@ async function pushClipboard(serial, text) {
   if (!value) throw new Error("剪贴板内容为空");
   const errors = [];
 
-  // Try broadcast helpers / OEM clipper receivers first.
+  // 1) scrcpy：复用镜像或后台 video=false；等 clipboard_ack，避免假成功
+  try {
+    const viaScrcpy = await scrcpyMirror.pushClipboardText(
+      serial,
+      { adbSerial, adbPath: whichSync("adb") || "adb" },
+      value,
+      { timeoutMs: 10000 }
+    );
+    if (viaScrcpy?.ok) {
+      return { ok: true, method: viaScrcpy.method || "scrcpy", sequence: viaScrcpy.sequence || "" };
+    }
+    if (viaScrcpy?.error) errors.push(viaScrcpy.error);
+  } catch (err) {
+    errors.push(err.message || String(err));
+  }
+
+  // 2) clipper helper — 必须看到明确成功迹象，不能仅凭 Broadcast completed
   try {
     const { stdout, stderr } = await adbSerial(
       serial,
@@ -4435,15 +4451,18 @@ async function pushClipboard(serial, text) {
       { timeout: 15000 }
     );
     const out = `${stdout}\n${stderr}`;
-    if (!/Error|Exception|not found/i.test(out)) {
+    if (/Error|Exception|not found|Unable to find|unknown/i.test(out)) {
+      errors.push(out.trim().slice(0, 200));
+    } else if (/clipper|has extras|data=/i.test(out) && !/result=0\s*$/m.test(out.trim())) {
       return { ok: true, method: "clipper.broadcast", output: out.trim() };
+    } else {
+      errors.push("clipper 广播无可靠接收方");
     }
-    errors.push(out.trim());
   } catch (err) {
     errors.push(err.message || String(err));
   }
 
-  // service call clipboard (works on some Android versions; length-limited)
+  // 3) service call — 仅作末位尝试；现代 Android 常无效，不再当作默认成功
   try {
     const clipped = value.slice(0, 180);
     const { stdout, stderr } = await adbSerial(
@@ -4451,19 +4470,28 @@ async function pushClipboard(serial, text) {
       ["shell", `service call clipboard 2 i32 1 i32 1 s16 ${shellQuote(clipped)}`],
       { timeout: 15000 }
     );
-    return {
-      ok: true,
-      method: "service.call",
-      truncated: value.length > 180,
-      output: `${stdout}\n${stderr}`.trim(),
-      note: value.length > 180 ? "内容已截断到约 180 字符" : "",
-    };
+    const out = `${stdout}\n${stderr}`.trim();
+    if (/Exception|Error|SecurityException/i.test(out)) {
+      errors.push(out.slice(0, 200));
+    } else {
+      return {
+        ok: true,
+        method: "service.call",
+        truncated: value.length > 180,
+        output: out,
+        note:
+          (value.length > 180 ? "内容已截断到约 180 字符；" : "") +
+          "已尝试 service call（部分机型仍可能未生效，建议升级桥用 scrcpy）",
+      };
+    }
   } catch (err) {
     errors.push(err.message || String(err));
   }
 
   throw new Error(
-    `剪贴板推送失败（机型/系统限制）。可改用「输入文本」到当前焦点。${errors[0] ? `详情：${errors[0]}` : ""}`
+    `剪贴板推送失败。请确认本机桥 ≥0.9.95。也可改用「输入文本」到当前焦点。${
+      errors[0] ? `详情：${errors[0]}` : ""
+    }`
   );
 }
 

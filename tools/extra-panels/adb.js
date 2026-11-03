@@ -4872,8 +4872,64 @@
         }, 2000);
       }
   
-      async function pushPcClipboard() {
+      async function pushTextToDeviceClipboard(text, { viaLabel = "" } = {}) {
         const serial = requireCurrentSerial();
+        const value = String(text ?? "");
+        if (!value) throw new Error("剪贴板内容为空");
+        if ($("#adb-clip-text")) $("#adb-clip-text").value = value;
+
+        // 已开镜像：走控制通道并等 clipboard_ack
+        if (adbMirrorWs && adbMirrorWs.readyState === 1 && adbMirrorMeta?.control) {
+          toast("正在推送到手机剪贴板…");
+          const acked = await new Promise((resolve) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+              if (!settled) {
+                settled = true;
+                adbMirrorWs?.removeEventListener?.("message", onMsg);
+                resolve(false);
+              }
+            }, 4000);
+            const onMsg = (ev) => {
+              if (typeof ev.data !== "string") return;
+              let msg = null;
+              try {
+                msg = JSON.parse(ev.data);
+              } catch {
+                return;
+              }
+              if (msg?.type !== "clipboard_ack") return;
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              adbMirrorWs?.removeEventListener?.("message", onMsg);
+              resolve(true);
+            };
+            adbMirrorWs.addEventListener("message", onMsg);
+            if (!sendMirrorCtrl({ type: "clipboard", text: value, paste: false })) {
+              settled = true;
+              clearTimeout(timer);
+              adbMirrorWs?.removeEventListener?.("message", onMsg);
+              resolve(false);
+            }
+          });
+          if (acked) {
+            toast(viaLabel ? `已推送到手机剪贴板（${viaLabel}）` : "已推送到手机剪贴板（scrcpy）");
+            return;
+          }
+          // ack 超时则走 REST（桥侧可复用同一镜像会话）
+        }
+
+        toast("正在推送到手机剪贴板…");
+        const data = await adbFetch("/clipboard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial, text: value }),
+        });
+        toast(data?.note || (data?.method ? `已推送到手机剪贴板（${data.method}）` : "已推送到手机剪贴板"));
+      }
+
+      async function pushPcClipboard() {
         let text = "";
         try {
           text = await navigator.clipboard.readText();
@@ -4881,17 +4937,7 @@
           throw new Error("无法读取电脑剪贴板（请允许站点剪贴板权限）");
         }
         if (!String(text || "").trim()) throw new Error("电脑剪贴板为空");
-        if ($("#adb-clip-text")) $("#adb-clip-text").value = text;
-        if (sendMirrorCtrl({ type: "clipboard", text, paste: false })) {
-          toast("已经 scrcpy 推送剪贴板到手机");
-          return;
-        }
-        await adbFetch("/clipboard", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serial, text }),
-        });
-        toast("已推送电脑剪贴板到手机");
+        await pushTextToDeviceClipboard(text);
       }
   
       async function pushFilesToDeviceDownload(files) {
@@ -6893,25 +6939,9 @@
         }
         updateRecordTip();
   
-        $("#adb-clip-run")?.addEventListener("click", async () => {
-        try {
-        const text = $("#adb-clip-text")?.value || "";
-        if (sendMirrorCtrl({ type: "clipboard", text, paste: false })) {
-          toast("已经 scrcpy 推送剪贴板");
-          return;
-        }
-        const data = await adbFetch("/clipboard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-        serial: requireCurrentSerial(),
-        text,
-        }),
-        });
-        toast(data.note || "已推送剪贴板");
-        } catch (err) {
-        setError(adbError, err.message || String(err));
-        }
+        $("#adb-clip-run")?.addEventListener("click", () => {
+          pushTextToDeviceClipboard($("#adb-clip-text")?.value || "")
+            .catch((err) => setError(adbError, err.message || String(err)));
         });
   
         const ua = navigator.userAgent || "";
