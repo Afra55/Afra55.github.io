@@ -4866,10 +4866,79 @@
     toast(toastMsg || "已开始下载");
   }
 
+  /** 文本条目全文：卡片 textPreview 可能被 4000 字截断成「…」，以 blob 为准。 */
+  async function resolveTextItemFull(item) {
+    if (!item || item.type !== "text") return "";
+    const preview = String(item.textPreview || "");
+    const needBlob = !preview || /…\s*$/.test(preview);
+    if (!needBlob) return preview;
+    try {
+      const full = await (await loadBlob(item)).text();
+      if (full != null && full !== "") return String(full);
+    } catch (_) {
+      /* fall through */
+    }
+    return preview;
+  }
+
+  function truncatedMemoTextElFromSelection() {
+    const sel = window.getSelection?.();
+    if (!sel || sel.isCollapsed || sel.rangeCount < 1) return null;
+    const anchor = sel.anchorNode;
+    const focus = sel.focusNode;
+    const ae = anchor?.nodeType === 1 ? anchor : anchor?.parentElement;
+    const fe = focus?.nodeType === 1 ? focus : focus?.parentElement;
+    const textEl = ae?.closest?.(".memo-text.is-truncated");
+    if (!textEl || !itemList?.contains(textEl)) return null;
+    const textEl2 = fe?.closest?.(".memo-text.is-truncated");
+    if (textEl2 !== textEl) return null;
+    return textEl;
+  }
+
+  /**
+   * 折叠卡片 DOM 只有前 N 行 +「…共 x 行」；键盘复制时改写为条目全文。
+   * @returns {boolean} 是否已接管本次 copy
+   */
+  function rewriteCopyFromTruncatedMemo(e) {
+    const textEl = truncatedMemoTextElFromSelection();
+    if (!textEl || !e?.clipboardData) return false;
+    const id = textEl.dataset?.memoExpand;
+    const item = id ? state.index.items.find((x) => x.id === id) : null;
+    if (!item || item.type !== "text") return false;
+    const preview = String(item.textPreview || "");
+    // 预览未截断：同步写入全文（仍可能长于卡片折叠行数）
+    if (preview && !/…\s*$/.test(preview)) {
+      e.preventDefault();
+      e.clipboardData.setData("text/plain", preview);
+      toast("已复制全文");
+      return true;
+    }
+    // 预览本身带 …：阻止半截内容，异步从 blob 写剪贴板
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", "");
+    resolveTextItemFull(item)
+      .then(async (full) => {
+        const text = String(full || "");
+        if (!text) throw new Error("文本为空");
+        if (looksLikeDataUrlImage(text)) {
+          const file = await dataUrlToImageFile(text);
+          if (file && navigator.clipboard?.write && window.ClipboardItem) {
+            await navigator.clipboard.write([new ClipboardItem({ [file.type || "image/png"]: file })]);
+            toast("已复制图片");
+            return;
+          }
+        }
+        await navigator.clipboard.writeText(text);
+        toast("已复制全文");
+      })
+      .catch((err) => setError(memoError, err?.message || String(err) || "复制失败"));
+    return true;
+  }
+
   async function copyItem(item) {
     try {
       if (item.type === "text") {
-        const text = item.textPreview || (await (await loadBlob(item)).text());
+        const text = await resolveTextItemFull(item);
         // 历史误存成 data URL 文本时，复制成真正图片
         if (looksLikeDataUrlImage(text)) {
           const file = await dataUrlToImageFile(text);
@@ -7548,7 +7617,8 @@
 
   document.addEventListener(
     "copy",
-    () => {
+    (e) => {
+      rewriteCopyFromTruncatedMemo(e);
       markClipPendingHint();
       window.setTimeout(() => maybeCaptureClipboard(), 80);
     },

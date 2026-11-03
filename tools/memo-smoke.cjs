@@ -1882,6 +1882,15 @@ async function main() {
   if (!result.textLines?.hasLong || !result.textLines?.truncatedClass || !result.textLines?.moreHint || !result.textLines?.noLine60) {
     failed.push("text over 50 lines should truncate on card with preview hint");
   }
+  {
+    const memoSrc = fs.readFileSync(path.join(__dirname, "memo.js"), "utf8");
+    if (!/rewriteCopyFromTruncatedMemo|resolveTextItemFull/.test(memoSrc)) {
+      failed.push("truncated memo keyboard copy should rewrite clipboard to full text");
+    }
+    if (!/已复制全文/.test(memoSrc)) {
+      failed.push("truncated memo copy should toast 已复制全文");
+    }
+  }
   if (result.textLines && result.textLines.shortFull === false) {
     failed.push("short text should render fully without truncate class");
   }
