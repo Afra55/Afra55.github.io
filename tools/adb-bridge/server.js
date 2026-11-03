@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.92";
+const BRIDGE_VERSION = "0.9.93";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4236,49 +4236,100 @@ async function runInput(serial, body = {}) {
 }
 
 /**
- * Parse `service call clipboard N` Parcel hex dump into text.
- * Dword hex is display-endian; reverse each dword to recover UTF-16LE chars.
+ * Collect dword hex from `service call` Parcel dump → little-endian memory bytes.
+ * Supports both `0x00000000: aaaaaaaa bbbbbbbb` and compact `Parcel(aaaaaaaa bbbbbbbb ...)`.
  */
-function parseServiceCallClipboard(output) {
+function clipboardParcelToBuffer(output) {
   const raw = String(output || "");
   if (!/Result:\s*Parcel/i.test(raw)) return null;
   const hexValues = [];
-  const re = /0x[0-9a-fA-F]+:\s*((?:[0-9a-fA-F]{8}\s*)+)/gi;
+  const lineRe = /0x[0-9a-fA-F]+:\s*((?:[0-9a-fA-F]{8}\s*)+)/gi;
   let m;
-  while ((m = re.exec(raw))) {
+  while ((m = lineRe.exec(raw))) {
     hexValues.push(...m[1].trim().split(/\s+/).filter(Boolean));
   }
+  if (!hexValues.length) {
+    const compact = raw.match(/Parcel\s*\(\s*((?:[0-9a-fA-F]{8}\s*)+)/i);
+    if (compact) hexValues.push(...compact[1].trim().split(/\s+/).filter(Boolean));
+  }
   if (!hexValues.length) return null;
-  // Empty parcel: first two dwords zero and little else
-  if (hexValues.length <= 2 && hexValues.every((h) => /^0+$/i.test(h))) return "";
-  const body = hexValues.length > 2 ? hexValues.slice(2) : hexValues;
-  const codes = [];
-  for (const hexVal of body) {
+  const parts = [];
+  for (const hexVal of hexValues) {
     if (!/^[0-9a-fA-F]{8}$/i.test(hexVal)) continue;
-    const bytes = Buffer.from(hexVal, "hex");
-    const c1 = bytes[3] | (bytes[2] << 8);
-    const c2 = bytes[1] | (bytes[0] << 8);
-    if (c1) codes.push(c1);
-    if (c2) codes.push(c2);
+    const b = Buffer.from(hexVal, "hex");
+    // dump shows big-endian hex of little-endian dword → reverse to memory order
+    parts.push(Buffer.from([b[3], b[2], b[1], b[0]]));
   }
-  if (!codes.length) return "";
-  let text = "";
-  const CHUNK = 4096;
-  for (let i = 0; i < codes.length; i += CHUNK) {
-    text += String.fromCharCode.apply(null, codes.slice(i, i + CHUNK));
+  return parts.length ? Buffer.concat(parts) : null;
+}
+
+function isPlausibleClipboardString(s) {
+  const t = String(s || "");
+  if (!t) return false;
+  if (/Attempt to invoke|on a null object|SecurityException|NullPointerException/i.test(t)) return false;
+  if (/^(text\/[a-z0-9.+-]+|intent|vnd\.|content:\/\/)/i.test(t) && t.length < 48) return false;
+  // binder / parcel noise only
+  if (/^[\x00-\x08\x0b\x0c\x0e-\x1f]+$/.test(t)) return false;
+  return true;
+}
+
+/**
+ * Parse Android Parcel UTF-16 strings (int32 len + chars + null + pad4).
+ * Prefer the longest plausible clip text (ClipData often has mime then body).
+ */
+function parseServiceCallClipboard(output) {
+  const buf = clipboardParcelToBuffer(output);
+  if (!buf) return null;
+  if (buf.length <= 4 && buf.every((b) => b === 0)) return "";
+
+  const candidates = [];
+  for (let off = 0; off + 4 <= buf.length; off += 4) {
+    const len = buf.readInt32LE(off);
+    if (len === -1) continue; // null string
+    if (len < 0 || len > 256 * 1024) continue;
+    // chars (2*len) + null uint16 + pad to 4
+    const rawBytes = len * 2;
+    const withNull = rawBytes + 2;
+    const padded = (withNull + 3) & ~3;
+    if (off + 4 + Math.max(withNull, padded) > buf.length + 3) {
+      // allow missing padding at end of dump
+      if (off + 4 + rawBytes > buf.length) continue;
+    }
+    if (off + 4 + rawBytes > buf.length) continue;
+    // optional null terminator check when present
+    if (off + 4 + rawBytes + 2 <= buf.length) {
+      const term = buf.readUInt16LE(off + 4 + rawBytes);
+      if (term !== 0) continue;
+    }
+    let text = buf.toString("utf16le", off + 4, off + 4 + rawBytes);
+    text = text.replace(/\u0000/g, "").replace(/^\uFEFF/, "");
+    if (!text) {
+      candidates.push({ text: "", score: 0, off });
+      continue;
+    }
+    if (!isPlausibleClipboardString(text)) continue;
+    // score: prefer real content over mime labels
+    let score = text.length;
+    if (/^text\/plain$/i.test(text)) score = 1;
+    else if (/^text\//i.test(text) && text.length < 32) score = Math.min(score, 2);
+    candidates.push({ text, score, off });
   }
-  // ClipData parcels often prepend mime type noise
-  const mimeIdx = text.lastIndexOf("text/plain");
-  if (mimeIdx >= 0) text = text.slice(mimeIdx + "text/plain".length);
-  text = text.replace(/^(text\/[a-z0-9.+-]+)/i, "");
-  return text.replace(/^\uFEFF/, "").trim();
+
+  if (!candidates.length) {
+    // No length-prefixed string — empty clip / non-text parcel
+    return "";
+  }
+  candidates.sort((a, b) => b.score - a.score || b.off - a.off);
+  const best = candidates[0];
+  if (!best.score) return "";
+  return best.text.trim();
 }
 
 async function pullClipboard(serial) {
   if (!serial) throw new Error("缺少 serial");
   const errors = [];
 
-  // Optional clipper helper app
+  // Optional clipper helper app — only trust explicit data= payload (never broadcast result=0)
   try {
     const { stdout, stderr } = await adbSerial(
       serial,
@@ -4286,11 +4337,17 @@ async function pullClipboard(serial) {
       { timeout: 12000 }
     );
     const out = `${stdout}\n${stderr}`;
-    const m = out.match(/data="([\s\S]*?)"\s*(?:\}|$)/) || out.match(/result=([^ \n]+)/);
-    if (m && m[1] && !/Error|Exception|not found|null/i.test(m[1])) {
-      const text = m[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t");
-      if (text && text !== "0" && text !== "-1") {
+    const m =
+      out.match(/\bdata="((?:\\.|[^"\\])*)"/) ||
+      out.match(/\btext="((?:\\.|[^"\\])*)"/) ||
+      out.match(/\bclipboard="((?:\\.|[^"\\])*)"/);
+    if (m && m[1] != null) {
+      const text = m[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"');
+      if (text !== "" && isPlausibleClipboardString(text)) {
         return { ok: true, text, method: "clipper.get", empty: false };
+      }
+      if (text === "") {
+        return { ok: true, text: "", method: "clipper.get", empty: true };
       }
     }
     if (/Error|Exception|not found/i.test(out)) errors.push(out.trim().slice(0, 200));
@@ -4317,9 +4374,8 @@ async function pullClipboard(serial) {
         sawEmpty = true;
         continue;
       }
-      // Reject obvious binder error strings
-      if (/Attempt to invoke|on a null object|SecurityException/i.test(text)) {
-        errors.push(`service.call.${code}: ${text.slice(0, 120)}`);
+      if (!isPlausibleClipboardString(text)) {
+        errors.push(`service.call.${code}: 丢弃不可信内容`);
         continue;
       }
       return { ok: true, text, method: `service.call.${code}`, empty: false };

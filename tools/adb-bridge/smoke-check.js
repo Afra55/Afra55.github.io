@@ -121,11 +121,17 @@ async function main() {
     throw new Error("scrcpy-ctrl.js should skip UHID_OUTPUT without wiping the control buffer");
   }
   const serverSrc = fs.readFileSync(path.join(__dirname, "server.js"), "utf8");
-  if (!/async function pullClipboard|parseServiceCallClipboard/.test(serverSrc)) {
+  if (!/async function pullClipboard|parseServiceCallClipboard|clipboardParcelToBuffer/.test(serverSrc)) {
     throw new Error("server.js should implement pullClipboard via service call Parcel parse");
   }
   if (!/pathname === "\/clipboard".*GET|method === "GET"[\s\S]{0,80}\/clipboard|\/clipboard" && req\.method === "GET"/.test(serverSrc)) {
     throw new Error("server.js should expose GET /clipboard");
+  }
+  if (!/readInt32LE|utf16le|isPlausibleClipboardString/.test(serverSrc)) {
+    throw new Error("server.js clipboard parse must use length-prefixed UTF-16 Parcel strings");
+  }
+  if (/result=\(\[\^ \\n\]\+\)/.test(serverSrc) || /result=\(\[\^\\n\]\+\)/.test(serverSrc)) {
+    throw new Error("server.js must not treat broadcast result=0 as clipboard text");
   }
   if (/video_codec_options=i-frame-interval=1/.test(mirrorJs) && !/不要默认传 video_codec_options|启用 control|控制通道/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js must not force i-frame-interval=1 (breaks some OEM encoders)");

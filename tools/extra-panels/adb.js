@@ -280,10 +280,19 @@
         wait.resolve(text);
       }
 
+      function looksLikeClipboardJunk(text) {
+        const t = String(text ?? "");
+        // 旧解析会把 Parcel 整型误读成 "0"；broadcast result=0 也曾被误收
+        if (t === "0" || t === "-1") return true;
+        if (/^(null|true|false)$/i.test(t)) return true;
+        return false;
+      }
+
       async function pullPhoneClipboard() {
         const serial = requireCurrentSerial();
+        const usedMirror = sendMirrorCtrl({ type: "get_clipboard" });
         // 1) 镜像控制通道：等 scrcpy DEVICE_MSG_CLIPBOARD
-        if (sendMirrorCtrl({ type: "get_clipboard" })) {
+        if (usedMirror) {
           toast("已请求手机剪贴板…");
           const text = await new Promise((resolve) => {
             if (adbClipPullWait?.timer) clearTimeout(adbClipPullWait.timer);
@@ -299,10 +308,28 @@
             applyPulledClipboard(text, "scrcpy");
             return;
           }
+          // scrcpy 对空剪贴板不回包 → 超时；先试 REST，不可信则按空处理
         }
-        // 2) REST 回退：无需镜像（机型相关）
-        const data = await adbFetch(`/clipboard?serial=${encodeURIComponent(serial)}`);
-        applyPulledClipboard(data?.text ?? "", data?.method || "adb");
+        // 2) REST 回退（机型相关）；拒绝 Parcel 误解析垃圾
+        try {
+          const data = await adbFetch(`/clipboard?serial=${encodeURIComponent(serial)}`);
+          const text = data?.text ?? "";
+          if (looksLikeClipboardJunk(text)) {
+            if (usedMirror) {
+              applyPulledClipboard("", "scrcpy");
+              return;
+            }
+            throw new Error("ADB 拉取结果不可信（常见于系统限制）。请开启镜像后重试。");
+          }
+          applyPulledClipboard(text, data?.method || "adb");
+        } catch (err) {
+          if (usedMirror) {
+            // 镜像已请求过：空/超时比抛错更符合「没读到内容」
+            applyPulledClipboard("", "scrcpy");
+            return;
+          }
+          throw err;
+        }
       }
 
       function updateMirrorPowerUi() {
