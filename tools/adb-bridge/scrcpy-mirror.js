@@ -647,6 +647,9 @@ class MirrorSession {
       "send_device_meta=true",
       "send_frame_meta=true",
       "send_codec_meta=true",
+      // scrcpy 默认 clipboard_autosync=true 时，TYPE_GET_CLIPBOARD + COPY_KEY_NONE 会被服务端直接跳过，
+      // 导致面板「拉取手机剪贴板」永远无回包；关掉后显式 get_clipboard 才会推送当前剪贴板。
+      "clipboard_autosync=false",
       "cleanup=false",
       "power_on=true",
       "stay_awake=true",

@@ -21,6 +21,7 @@ const TYPE_RESET_VIDEO = 17;
 
 const DEVICE_MSG_CLIPBOARD = 0;
 const DEVICE_MSG_ACK_CLIPBOARD = 1;
+const DEVICE_MSG_UHID_OUTPUT = 2;
 
 const AMOTION_DOWN = 0;
 const AMOTION_UP = 1;
@@ -176,6 +177,13 @@ function parseDeviceMessage(buf) {
       consumed: 9,
       msg: { type: "clipboard_ack", sequence: buf.readBigUInt64BE(1).toString() },
     };
+  }
+  if (type === DEVICE_MSG_UHID_OUTPUT) {
+    if (buf.length < 5) return { consumed: 0 };
+    const size = buf.readUInt16BE(3);
+    if (buf.length < 5 + size) return { consumed: 0 };
+    // UHID 输出对浏览器镜像无用，丢弃载荷但保持控制流对齐
+    return { consumed: 5 + size, msg: null };
   }
   // Unknown: skip 1 byte to resync poorly; prefer stop
   return { consumed: -1 };

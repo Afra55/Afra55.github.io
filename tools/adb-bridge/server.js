@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.91";
+const BRIDGE_VERSION = "0.9.92";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4235,6 +4235,108 @@ async function runInput(serial, body = {}) {
   throw new Error("不支持的输入操作");
 }
 
+/**
+ * Parse `service call clipboard N` Parcel hex dump into text.
+ * Dword hex is display-endian; reverse each dword to recover UTF-16LE chars.
+ */
+function parseServiceCallClipboard(output) {
+  const raw = String(output || "");
+  if (!/Result:\s*Parcel/i.test(raw)) return null;
+  const hexValues = [];
+  const re = /0x[0-9a-fA-F]+:\s*((?:[0-9a-fA-F]{8}\s*)+)/gi;
+  let m;
+  while ((m = re.exec(raw))) {
+    hexValues.push(...m[1].trim().split(/\s+/).filter(Boolean));
+  }
+  if (!hexValues.length) return null;
+  // Empty parcel: first two dwords zero and little else
+  if (hexValues.length <= 2 && hexValues.every((h) => /^0+$/i.test(h))) return "";
+  const body = hexValues.length > 2 ? hexValues.slice(2) : hexValues;
+  const codes = [];
+  for (const hexVal of body) {
+    if (!/^[0-9a-fA-F]{8}$/i.test(hexVal)) continue;
+    const bytes = Buffer.from(hexVal, "hex");
+    const c1 = bytes[3] | (bytes[2] << 8);
+    const c2 = bytes[1] | (bytes[0] << 8);
+    if (c1) codes.push(c1);
+    if (c2) codes.push(c2);
+  }
+  if (!codes.length) return "";
+  let text = "";
+  const CHUNK = 4096;
+  for (let i = 0; i < codes.length; i += CHUNK) {
+    text += String.fromCharCode.apply(null, codes.slice(i, i + CHUNK));
+  }
+  // ClipData parcels often prepend mime type noise
+  const mimeIdx = text.lastIndexOf("text/plain");
+  if (mimeIdx >= 0) text = text.slice(mimeIdx + "text/plain".length);
+  text = text.replace(/^(text\/[a-z0-9.+-]+)/i, "");
+  return text.replace(/^\uFEFF/, "").trim();
+}
+
+async function pullClipboard(serial) {
+  if (!serial) throw new Error("缺少 serial");
+  const errors = [];
+
+  // Optional clipper helper app
+  try {
+    const { stdout, stderr } = await adbSerial(
+      serial,
+      ["shell", "am", "broadcast", "-a", "clipper.get"],
+      { timeout: 12000 }
+    );
+    const out = `${stdout}\n${stderr}`;
+    const m = out.match(/data="([\s\S]*?)"\s*(?:\}|$)/) || out.match(/result=([^ \n]+)/);
+    if (m && m[1] && !/Error|Exception|not found|null/i.test(m[1])) {
+      const text = m[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+      if (text && text !== "0" && text !== "-1") {
+        return { ok: true, text, method: "clipper.get", empty: false };
+      }
+    }
+    if (/Error|Exception|not found/i.test(out)) errors.push(out.trim().slice(0, 200));
+  } catch (err) {
+    errors.push(err.message || String(err));
+  }
+
+  // Transaction codes differ by API: try getPrimaryClip / legacy getText
+  let sawEmpty = false;
+  for (const code of [1, 2]) {
+    try {
+      const { stdout, stderr } = await adbSerial(
+        serial,
+        ["shell", `service call clipboard ${code}`],
+        { timeout: 15000 }
+      );
+      const out = `${stdout}\n${stderr}`;
+      const text = parseServiceCallClipboard(out);
+      if (text == null) {
+        errors.push(`service.call.${code}: 无法解析 Parcel`);
+        continue;
+      }
+      if (!text) {
+        sawEmpty = true;
+        continue;
+      }
+      // Reject obvious binder error strings
+      if (/Attempt to invoke|on a null object|SecurityException/i.test(text)) {
+        errors.push(`service.call.${code}: ${text.slice(0, 120)}`);
+        continue;
+      }
+      return { ok: true, text, method: `service.call.${code}`, empty: false };
+    } catch (err) {
+      errors.push(err.message || String(err));
+    }
+  }
+
+  if (sawEmpty) {
+    return { ok: true, text: "", method: "service.call", empty: true };
+  }
+
+  throw new Error(
+    `拉取剪贴板失败（机型/系统限制，可先开镜像再用 scrcpy 拉取）。${errors[0] ? `详情：${errors[0]}` : ""}`
+  );
+}
+
 async function pushClipboard(serial, text) {
   const value = String(text ?? "");
   if (!value) throw new Error("剪贴板内容为空");
@@ -6363,6 +6465,12 @@ async function handleApi(req, res, url) {
     if (url.pathname === "/input" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       sendJson(res, 200, await runInput(body.serial, body), origin);
+      return;
+    }
+
+    if (url.pathname === "/clipboard" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      sendJson(res, 200, await pullClipboard(serial), origin);
       return;
     }
 

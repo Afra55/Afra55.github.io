@@ -245,6 +245,8 @@
       let adbMirrorLocalRec = null;
       let adbMirrorLocalChunks = [];
       let adbMirrorDisplayOff = false;
+      /** @type {{ resolve: (text: string|null) => void, timer: any } | null} */
+      let adbClipPullWait = null;
       const ADB_STORE_MIRROR_QUALITY = "devtools-adb-mirror-quality";
       const ADB_STORE_MIRROR_AUDIO = "devtools-adb-mirror-audio";
       const ADB_STORE_MIRROR_TOUCHES = "devtools-adb-mirror-touches";
@@ -257,6 +259,50 @@
         } catch {
           return false;
         }
+      }
+
+      function applyPulledClipboard(text, via = "") {
+        const value = text == null ? "" : String(text);
+        if ($("#adb-clip-text")) $("#adb-clip-text").value = value;
+        if (value) {
+          navigator.clipboard?.writeText?.(value).catch(() => {});
+          toast(via ? `已同步手机剪贴板（${via}）` : "已同步手机剪贴板");
+        } else {
+          toast("手机剪贴板为空");
+        }
+      }
+
+      function settleClipPullWait(text) {
+        if (!adbClipPullWait) return;
+        const wait = adbClipPullWait;
+        adbClipPullWait = null;
+        if (wait.timer) clearTimeout(wait.timer);
+        wait.resolve(text);
+      }
+
+      async function pullPhoneClipboard() {
+        const serial = requireCurrentSerial();
+        // 1) 镜像控制通道：等 scrcpy DEVICE_MSG_CLIPBOARD
+        if (sendMirrorCtrl({ type: "get_clipboard" })) {
+          toast("已请求手机剪贴板…");
+          const text = await new Promise((resolve) => {
+            if (adbClipPullWait?.timer) clearTimeout(adbClipPullWait.timer);
+            const timer = setTimeout(() => {
+              if (adbClipPullWait) {
+                adbClipPullWait = null;
+                resolve(null);
+              }
+            }, 2800);
+            adbClipPullWait = { resolve, timer };
+          });
+          if (text != null) {
+            applyPulledClipboard(text, "scrcpy");
+            return;
+          }
+        }
+        // 2) REST 回退：无需镜像（机型相关）
+        const data = await adbFetch(`/clipboard?serial=${encodeURIComponent(serial)}`);
+        applyPulledClipboard(data?.text ?? "", data?.method || "adb");
       }
 
       function updateMirrorPowerUi() {
@@ -4002,6 +4048,7 @@
       }
   
       function stopMirrorPreview({ notifyBridge = true } = {}) {
+        settleClipPullWait(null);
         const serial = adbSelected;
         if (adbMirrorWs) {
           try {
@@ -4437,11 +4484,12 @@
                   return;
                 }
                 if (msg.type === "clipboard") {
-                  if ($("#adb-clip-text")) $("#adb-clip-text").value = msg.text || "";
-                  if (msg.text) {
-                    navigator.clipboard?.writeText?.(msg.text).catch(() => {});
-                    toast("已同步手机剪贴板");
+                  const clipText = msg.text == null ? "" : String(msg.text);
+                  if (adbClipPullWait) {
+                    settleClipPullWait(clipText);
+                    return;
                   }
+                  applyPulledClipboard(clipText, "scrcpy");
                   return;
                 }
                 if (msg.type === "clipboard_ack") {
@@ -6451,11 +6499,7 @@
         pushPcClipboard().catch((err) => setError(adbError, err.message || String(err)));
         });
         $("#adb-input-clip-pull")?.addEventListener("click", () => {
-          if (!sendMirrorCtrl({ type: "get_clipboard" })) {
-            toast("需镜像 + scrcpy 控制通道");
-            return;
-          }
-          toast("已请求手机剪贴板…");
+          pullPhoneClipboard().catch((err) => setError(adbError, err.message || String(err)));
         });
         $("#adb-mirror-power-off")?.addEventListener("click", () => {
           if (sendMirrorCtrl({ type: "display_power", on: false })) {
