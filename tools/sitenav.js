@@ -123,6 +123,13 @@
       tags: ["ai", "design", "skill", "css"],
     },
     {
+      id: "impeccable",
+      title: "Impeccable",
+      desc: "给编程 Agent 的设计词表与技能：polish/bolder/critique/audit 等指令，减少紫渐变、Inter、卡片套卡片等 AI 默认审美；含规则检测与 Cursor/Claude 等安装（Apache-2.0）。",
+      url: "https://github.com/pbakaus/impeccable",
+      tags: ["ai", "design", "skill", "github"],
+    },
+    {
       id: "tolaria",
       title: "Tolaria",
       desc: "桌面应用：管理 Markdown 知识库（TypeScript，refactoringhq）。",
