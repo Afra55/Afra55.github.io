@@ -598,6 +598,8 @@
         cutouts.findIndex((c) => a >= c.start - 0.05 && a <= c.end + 0.05)
       );
       if (selectedCutout < 0) selectedCutout = cutouts.length - 1;
+      // 新段默认调终点：下方 ±0.1 直接拉长/缩短删除区
+      cutNudgeEdge = "end";
       syncCutoutUi();
       updateLabels();
       // 落到删段前约 0.4s，方便再「跳到接点」后点底部播放核对（不自动播）
@@ -608,7 +610,11 @@
         : Math.max(startSec, a - 0.4);
       previewSeek(joinAt, { throttle: false });
       hapticLight();
-      toast(coarseUi() ? "已添加 · 拖红柄精调 · 可「跳到接点」再点播放" : "已添加删除段 · 拖红柄精调 · 可跳到接点后播放核对");
+      toast(
+        coarseUi()
+          ? "已添加 · 下方 ±0.1 精调 · 「跳到接点」后播放核对"
+          : "已添加删除段 · 下方 ±0.1 精调 · 可跳到接点后播放核对"
+      );
     }
 
     /** 跳到选中/首个删段接点前；不自动播放——须用户点底部播放 */
