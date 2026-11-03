@@ -1885,10 +1885,13 @@ async function main() {
   {
     const memoSrc = fs.readFileSync(path.join(__dirname, "memo.js"), "utf8");
     if (!/rewriteCopyFromTruncatedMemo|resolveTextItemFull/.test(memoSrc)) {
-      failed.push("truncated memo keyboard copy should rewrite clipboard to full text");
+      failed.push("truncated memo copy should rewrite clipboard to full text");
     }
-    if (!/已复制全文/.test(memoSrc)) {
-      failed.push("truncated memo copy should toast 已复制全文");
+    if (!/已复制全文|复制全文/.test(memoSrc)) {
+      failed.push("truncated memo copy should toast/label 复制全文");
+    }
+    if (!/折叠长文：有选区时也放行系统右键/.test(memoSrc)) {
+      failed.push("truncated memo should allow native context-menu copy then rewrite to full text");
     }
   }
   if (result.textLines && result.textLines.shortFull === false) {
