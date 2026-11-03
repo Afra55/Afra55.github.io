@@ -420,7 +420,14 @@ async function main() {
       };
       document.getElementById("memo-lightbox-close")?.click();
       await sleep(60);
+      const longCs = longCard ? getComputedStyle(longCard) : null;
+      out.textLines.truncatedSelectable = /text/i.test(longCs?.userSelect || longCs?.webkitUserSelect || "");
+      // 折叠正文单击不应预览（留给拖选）；点「…共 x 行」才预览
       longCard?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+      await sleep(350);
+      out.textLines.bodyClickNoPreview = !document.getElementById("memo-lightbox")?.open;
+      const moreHint = longCard?.querySelector?.(".memo-text-more");
+      moreHint?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
       await sleep(350);
       out.textLines.truncatedClickPreview = Boolean(document.getElementById("memo-lightbox")?.open);
       out.textLines.truncatedClickKind = document.getElementById("memo-lightbox")?.dataset?.previewKind === "text";
@@ -1900,8 +1907,14 @@ async function main() {
   if (result.textLines && !result.textLines.previewFull) {
     failed.push("text preview should show full content from blob");
   }
+  if (result.textLines && result.textLines.truncatedSelectable === false) {
+    failed.push("truncated long text should allow drag-select (user-select:text)");
+  }
+  if (result.textLines && result.textLines.bodyClickNoPreview === false) {
+    failed.push("truncated long text body click should not open preview (reserve for drag-select)");
+  }
   if (!result.textLines?.truncatedClickPreview || !result.textLines?.truncatedClickKind || result.textLines?.truncatedNoVideo === false) {
-    failed.push("truncated long text should still preview on single click");
+    failed.push("truncated long text should preview when clicking the … more hint");
   }
   if (
     !result.pinMove?.api ||

@@ -1507,9 +1507,10 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 
 .memo-text.is-truncated {
   position: relative;
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-user-drag: none;
 }
 
 .memo-text-more {
@@ -1520,6 +1521,9 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
   font-size: 0.82rem;
   font-weight: 600;
   letter-spacing: 0.01em;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .memo-text:hover {

@@ -2124,7 +2124,7 @@
       html: `${highlightEscaped(escapeHtml(shown), q)}\n<span class="memo-text-more">…共 ${lineCount} 行，点此预览全文</span>`,
       truncated: true,
       lineCount,
-      title: `已截断前 ${TEXT_CARD_LINES} 行 · 单击预览全文 · 双击编辑`,
+      title: `已截断前 ${TEXT_CARD_LINES} 行 · 拖选复制 / 点「…共 x 行」预览全文 · 双击编辑`,
       md: false,
       hasImgPlaceholders: folded.images.length > 0 || /\[图片\d+\]/.test(raw),
     };
@@ -6934,6 +6934,7 @@
         const item = state.index.items.find((x) => x.id === expandId);
         if (!item) return;
         const truncated = Boolean(t.closest?.(".memo-text.is-truncated"));
+        const hitMore = Boolean(t.closest?.(".memo-text-more"));
         if (e.detail >= 2) {
           clearTimeout(textClickTimer);
           textClickTimer = 0;
@@ -6941,8 +6942,10 @@
           else await openItemPreview(item);
           return;
         }
-        // 全文已在卡片里：单击不预览，方便拖选复制
+        // 未折叠：单击不预览，方便拖选复制
         if (!truncated) return;
+        // 折叠长文：正文可拖选；只有点「…共 x 行」才预览，避免单击打断选区
+        if (!hitMore) return;
         clearTimeout(textClickTimer);
         textClickTimer = setTimeout(() => {
           textClickTimer = 0;
