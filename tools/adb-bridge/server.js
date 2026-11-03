@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.93";
+const BRIDGE_VERSION = "0.9.94";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4329,7 +4329,27 @@ async function pullClipboard(serial) {
   if (!serial) throw new Error("缺少 serial");
   const errors = [];
 
-  // Optional clipper helper app — only trust explicit data= payload (never broadcast result=0)
+  // 1) scrcpy：已有镜像复用控制通道；否则后台短启 video=false 控制会话（无需开镜像 UI）
+  try {
+    const viaScrcpy = await scrcpyMirror.pullClipboardText(
+      serial,
+      { adbSerial, adbPath: whichSync("adb") || "adb" },
+      { timeoutMs: 10000 }
+    );
+    if (viaScrcpy?.ok) {
+      return {
+        ok: true,
+        text: viaScrcpy.text || "",
+        empty: Boolean(viaScrcpy.empty || !viaScrcpy.text),
+        method: viaScrcpy.method || "scrcpy",
+      };
+    }
+    if (viaScrcpy?.error) errors.push(viaScrcpy.error);
+  } catch (err) {
+    errors.push(err.message || String(err));
+  }
+
+  // 2) Optional clipper helper app — only trust explicit data= payload (never broadcast result=0)
   try {
     const { stdout, stderr } = await adbSerial(
       serial,
@@ -4355,7 +4375,7 @@ async function pullClipboard(serial) {
     errors.push(err.message || String(err));
   }
 
-  // Transaction codes differ by API: try getPrimaryClip / legacy getText
+  // 3) Transaction codes differ by API: try getPrimaryClip / legacy getText
   let sawEmpty = false;
   for (const code of [1, 2]) {
     try {
@@ -4389,7 +4409,7 @@ async function pullClipboard(serial) {
   }
 
   throw new Error(
-    `拉取剪贴板失败（机型/系统限制，可先开镜像再用 scrcpy 拉取）。${errors[0] ? `详情：${errors[0]}` : ""}`
+    `拉取剪贴板失败。${errors[0] ? `详情：${errors[0]}` : "请确认本机桥 ≥0.9.94 且手机已授权调试。"}`
   );
 }
 

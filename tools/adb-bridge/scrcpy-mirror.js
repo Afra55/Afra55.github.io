@@ -394,7 +394,32 @@ class SocketReader {
     this._flush();
   }
 
+  /** Unhook listeners without destroying the socket; return any unread bytes. */
+  detach() {
+    try {
+      this.socket.off("data", this.onData);
+      this.socket.off("error", this.onErr);
+      this.socket.off("close", this.onClose);
+    } catch {
+      /* ignore */
+    }
+    if (this.wait) {
+      clearTimeout(this.wait.timer);
+      try {
+        this.wait.reject(new Error("SocketReader detached"));
+      } catch {
+        /* ignore */
+      }
+      this.wait = null;
+    }
+    const left = this.total > 0 ? Buffer.concat(this.chunks, this.total) : Buffer.alloc(0);
+    this.chunks = [];
+    this.total = 0;
+    return left;
+  }
+
   destroy() {
+    this.detach();
     try {
       this.socket.destroy();
     } catch {
@@ -615,6 +640,8 @@ class MirrorSession {
     this.audioEnabled = false;
     this.clipboardSeq = 1n;
     this.controlBuf = Buffer.alloc(0);
+    /** @type {Array<(text: string|null) => void>} */
+    this.clipWaiters = [];
     this.quality = ctrl.resolveQuality(this.startOpts.quality);
   }
 
@@ -1114,6 +1141,39 @@ class MirrorSession {
     return this.writeControl(ctrl.encodeGetClipboard(0));
   }
 
+  /**
+   * Request current device clipboard over the live control socket.
+   * Resolves with text (possibly "") — scrcpy may omit a reply when empty/null.
+   */
+  requestClipboard(timeoutMs = 3000) {
+    return new Promise((resolve) => {
+      if (!this.controlSock || this.controlSock.destroyed || !this.controlEnabled) {
+        resolve({ ok: false, text: "", empty: true, method: "scrcpy-mirror", error: "无控制通道" });
+        return;
+      }
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.clipWaiters = this.clipWaiters.filter((w) => w !== onClip);
+        resolve(result);
+      };
+      const onClip = (text) => {
+        const value = text == null ? "" : String(text);
+        finish({ ok: true, text: value, empty: !value, method: "scrcpy-mirror" });
+      };
+      const timer = setTimeout(() => {
+        // 空剪贴板时服务端不回包
+        finish({ ok: true, text: "", empty: true, method: "scrcpy-mirror" });
+      }, Math.max(500, Number(timeoutMs) || 3000));
+      this.clipWaiters.push(onClip);
+      if (!this.getClipboard()) {
+        finish({ ok: false, text: "", empty: true, method: "scrcpy-mirror", error: "控制通道写入失败" });
+      }
+    });
+  }
+
   setDisplayPower(on) {
     return this.writeControl(ctrl.encodeDisplayPower(Boolean(on)));
   }
@@ -1205,7 +1265,19 @@ class MirrorSession {
         }
         if (!consumed) break;
         this.controlBuf = this.controlBuf.subarray(consumed);
-        if (msg) this.broadcastJson(msg);
+        if (msg) {
+          this.broadcastJson(msg);
+          if (msg.type === "clipboard" && this.clipWaiters.length) {
+            const waiters = this.clipWaiters.splice(0, this.clipWaiters.length);
+            for (const w of waiters) {
+              try {
+                w(msg.text == null ? "" : String(msg.text));
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+        }
       }
     });
     this.controlSock.on("error", () => {});
@@ -1533,6 +1605,221 @@ function handleUpgrade(req, socket, head, deps) {
   return true;
 }
 
+const clipPullInflight = new Map(); // serial -> Promise
+
+/**
+ * Headless scrcpy control-only clipboard pull (no video mirror UI).
+ * Uses video=false + control=true + clipboard_autosync=false.
+ */
+async function pullClipboardHeadless(serial, deps, timeoutMs = 8000) {
+  if (!serial) throw new Error("缺少 serial");
+  if (!deps?.adbSerial || !deps?.adbPath) throw new Error("缺少 adb 依赖");
+
+  const jar = await ensureServerJar();
+  await ensureRemoteJar(deps, serial, jar);
+
+  // 仅清理残留 server；调用方须保证当前无活跃镜像会话
+  try {
+    await deps.adbSerial(
+      serial,
+      [
+        "shell",
+        "pkill -f com.genymobile.scrcpy.Server 2>/dev/null; pkill -f devtools-scrcpy-server 2>/dev/null; true",
+      ],
+      { timeout: 8000 }
+    );
+  } catch {
+    /* ignore */
+  }
+
+  const scid = crypto.randomBytes(4).readUInt32BE(0) & 0x7fffffff;
+  const scidHex = scid.toString(16).padStart(8, "0");
+  const port = await setupAdbForward(deps, serial, scidHex);
+  const runner = await pickAppProcessRunner(deps, serial);
+  const shellCmd = [
+    `CLASSPATH=${REMOTE_JAR}`,
+    runner,
+    "/",
+    "com.genymobile.scrcpy.Server",
+    SCRCPY_VERSION,
+    `scid=${scidHex}`,
+    "log_level=info",
+    "video=false",
+    "audio=false",
+    "control=true",
+    "tunnel_forward=true",
+    "send_dummy_byte=true",
+    "clipboard_autosync=false",
+    "cleanup=false",
+    "power_on=false",
+    "stay_awake=false",
+  ].join(" ");
+
+  let proc = null;
+  let sock = null;
+  let errTail = "";
+  let exitCode = null;
+
+  const cleanup = async () => {
+    try {
+      sock?.destroy();
+    } catch {
+      /* ignore */
+    }
+    sock = null;
+    try {
+      proc?.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
+    proc = null;
+    try {
+      await deps.adbSerial(
+        serial,
+        [
+          "shell",
+          "pkill -f com.genymobile.scrcpy.Server 2>/dev/null; pkill -f devtools-scrcpy-server 2>/dev/null; true",
+        ],
+        { timeout: 8000 }
+      );
+    } catch {
+      /* ignore */
+    }
+    try {
+      await deps.adbSerial(serial, ["forward", "--remove", `tcp:${port}`], { timeout: 8000 });
+    } catch {
+      /* ignore */
+    }
+  };
+
+  try {
+    proc = spawn(deps.adbPath, ["-s", serial, "shell", shellCmd], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    proc.stderr.on("data", (d) => {
+      errTail = (errTail + d.toString("utf8")).slice(-2000);
+    });
+    proc.stdout.on("data", (d) => {
+      errTail = (errTail + d.toString("utf8")).slice(-2000);
+    });
+    proc.on("exit", (code) => {
+      exitCode = code;
+    });
+
+    // 等 server 就绪再连（与镜像握手一致；勿在 listen 前抢连）
+    {
+      const t0 = Date.now();
+      while (Date.now() - t0 < 5000) {
+        if (exitCode != null) {
+          throw new Error(`scrcpy-server 已退出${exitCode != null ? ` (code ${exitCode})` : ""}`);
+        }
+        if (/\[server\]\s*INFO:\s*Device:/i.test(errTail) || /INFO:\s*Device:/i.test(errTail)) {
+          await delay(120);
+          break;
+        }
+        await delay(80);
+      }
+    }
+
+    // video=false 时控制通道是首个 socket，会发 dummy byte
+    const { sock: controlSock, reader } = await connectUntilDummy(port, null, {
+      shouldAbort: () => exitCode != null,
+    });
+    sock = controlSock;
+    sock.setNoDelay(true);
+    // 卸掉 SocketReader，避免吃掉后续 DEVICE_MSG
+    let buf = reader.detach();
+
+    const want = ctrl.encodeGetClipboard(0);
+    await new Promise((resolve, reject) => {
+      sock.write(want, (err) => (err ? reject(err) : resolve()));
+    });
+
+    const text = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        cleanupListener();
+        // 空剪贴板不回包
+        resolve("");
+      }, Math.max(800, Number(timeoutMs) || 8000));
+      const pump = () => {
+        for (;;) {
+          const { consumed, msg } = ctrl.parseDeviceMessage(buf);
+          if (consumed < 0) {
+            buf = Buffer.alloc(0);
+            break;
+          }
+          if (!consumed) break;
+          buf = buf.subarray(consumed);
+          if (msg?.type === "clipboard") {
+            cleanupListener();
+            resolve(msg.text == null ? "" : String(msg.text));
+            return true;
+          }
+        }
+        return false;
+      };
+      if (pump()) return;
+      const onData = (chunk) => {
+        buf = Buffer.concat([buf, chunk]);
+        pump();
+      };
+      const onErr = (err) => {
+        cleanupListener();
+        reject(err || new Error("控制通道中断"));
+      };
+      const cleanupListener = () => {
+        clearTimeout(timer);
+        sock.off("data", onData);
+        sock.off("error", onErr);
+        sock.off("close", onErr);
+      };
+      sock.on("data", onData);
+      sock.on("error", onErr);
+      sock.on("close", onErr);
+    });
+
+    return {
+      ok: true,
+      text,
+      empty: !text,
+      method: "scrcpy-headless",
+    };
+  } catch (err) {
+    const detail = formatMirrorError(err.message || String(err), errTail, exitCode);
+    throw new Error(`scrcpy 后台拉取剪贴板失败：${detail}`);
+  } finally {
+    await cleanup();
+  }
+}
+
+/**
+ * Pull clipboard via live mirror control socket, or a short headless scrcpy session.
+ * Does not kill an active mirror session.
+ */
+async function pullClipboardText(serial, deps, opts = {}) {
+  const timeoutMs = opts.timeoutMs || 8000;
+  const existing = sessions.get(serial);
+  if (existing && !existing.closed) {
+    return existing.requestClipboard(timeoutMs);
+  }
+
+  const prev = clipPullInflight.get(serial);
+  if (prev) return prev;
+
+  const job = (async () => {
+    // 再确认：避免与刚启动的镜像竞态
+    const again = sessions.get(serial);
+    if (again && !again.closed) {
+      return again.requestClipboard(timeoutMs);
+    }
+    return pullClipboardHeadless(serial, deps, timeoutMs);
+  })().finally(() => {
+    if (clipPullInflight.get(serial) === job) clipPullInflight.delete(serial);
+  });
+  clipPullInflight.set(serial, job);
+  return job;
+}
+
 module.exports = {
   SCRCPY_VERSION,
   SCRCPY_SERVER_NAME,
@@ -1544,5 +1831,6 @@ module.exports = {
   jarStatus,
   deviceJarStatus,
   sessions,
+  pullClipboardText,
   QUALITY_PRESETS: ctrl.QUALITY_PRESETS,
 };

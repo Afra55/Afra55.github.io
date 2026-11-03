@@ -116,6 +116,12 @@ async function main() {
   if (!/clipboard_autosync=false/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js must set clipboard_autosync=false so get_clipboard returns text");
   }
+  if (!/pullClipboardText|pullClipboardHeadless|video=false/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should support headless clipboard pull without mirror UI");
+  }
+  if (!/requestClipboard|clipWaiters/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should expose requestClipboard on live sessions");
+  }
   const ctrlJs = fs.readFileSync(path.join(__dirname, "scrcpy-ctrl.js"), "utf8");
   if (!/DEVICE_MSG_UHID_OUTPUT/.test(ctrlJs)) {
     throw new Error("scrcpy-ctrl.js should skip UHID_OUTPUT without wiping the control buffer");
