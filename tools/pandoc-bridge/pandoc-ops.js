@@ -1882,11 +1882,11 @@ function findXelatexUnderMiktexTree(root, depth = 0) {
         continue;
       }
       if (!st.isDirectory()) {
-        if (name.toLowerCase() === want) return p;
+        if (names.some((n) => n.toLowerCase() === name.toLowerCase())) return p;
         continue;
       }
       // 只钻进可能含 MiKTeX 的目录
-      if (depth >= 2 && !/miktex|tex|bin|x64|win64|programs|package/i.test(name)) continue;
+      if (depth >= 2 && !/miktex|tex|bin|x64|win64|programs|package|texmfs|install/i.test(name)) continue;
       const hit = findXelatexUnderMiktexTree(p, depth + 1);
       if (hit) return hit;
     }
