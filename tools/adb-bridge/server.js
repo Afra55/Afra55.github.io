@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.107";
+const BRIDGE_VERSION = "0.9.108";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5733,13 +5733,23 @@ async function handleApi(req, res, url) {
 
     // 统一桥：Pandoc 转换 API 挂在 /pandoc/*
     if (url.pathname === "/pandoc" || url.pathname.startsWith("/pandoc/")) {
+      // 一进门就打日志，避免 Token/读 body 失败时黑窗完全无字
+      console.log(`[bridge] ← ${req.method} ${url.pathname}`);
       if (!pandocBridge?.handleRequest) {
+        console.log("[bridge] Pandoc 模块未加载（ZIP 缺 pandoc-bridge）");
         sendJson(res, 503, { ok: false, error: "未找到 Pandoc 模块（请用完整 ZIP，含 pandoc-bridge）" }, origin);
         return;
       }
       const stripped = url.pathname === "/pandoc" ? "/" : url.pathname.slice(7) || "/";
       const isPandocHealth = stripped === "/health" && req.method === "GET";
-      if (!isPandocHealth && req.method !== "OPTIONS") requireToken(req);
+      if (!isPandocHealth && req.method !== "OPTIONS") {
+        try {
+          requireToken(req);
+        } catch (err) {
+          console.log(`[bridge] Pandoc 鉴权失败：${err?.message || err}`);
+          throw err;
+        }
+      }
       const isConvert = stripped === "/convert" && req.method === "POST";
       const isInstall = stripped === "/install" && req.method === "POST";
       if (isConvert) {
@@ -5748,7 +5758,7 @@ async function handleApi(req, res, url) {
         beginBridgeBusy("pandoc-convert");
       } else if (isInstall) {
         console.log("");
-        console.log("[bridge] → Pandoc/XeLaTeX 安装 · 请看下方 [pandoc] 实时进度");
+        console.log("[bridge] → Pandoc/XeLaTeX 安装或指定路径 · 请看下方 [pandoc] 输出");
         beginBridgeBusy("pandoc-install");
       }
       wrapResWithCors(res, origin);

@@ -1141,7 +1141,10 @@ function writeXelatexOverridePath(input) {
 
 async function setXelatexPath(body = {}) {
   const input = String(body.path || body.xelatex || body.bin || "").trim();
+  console.log("[pandoc] ──── 指定路径模式（不会下载安装包）────");
+  console.log(`[pandoc] 用户填写：${input.slice(0, 240)}`);
   if (!input) {
+    console.log("[pandoc] 路径为空，结束");
     return {
       installed: false,
       message: "请提供 path（xelatex.exe 或 MiKTeX 目录）",
@@ -1150,8 +1153,14 @@ async function setXelatexPath(body = {}) {
   }
   try {
     const bin = writeXelatexOverridePath(input);
-    return finalizeXelatexProbe({ command: "user-path", output: bin, savedPath: bin });
+    console.log(`[pandoc] 解析成功，开始探测：${bin}`);
+    const result = await finalizeXelatexProbe({ command: "user-path", output: bin, savedPath: bin });
+    console.log(
+      `[pandoc] 指定路径结果：installed=${result.installed ? "是" : "否"} · ${result.bin || result.message || ""}`
+    );
+    return result;
   } catch (err) {
+    console.log(`[pandoc] 指定路径失败：${err?.message || err}`);
     return {
       installed: false,
       needsManual: true,
@@ -1843,42 +1852,61 @@ function findXelatexUnderMiktexTree(root, depth = 0) {
   return "";
 }
 
-/** 从卸载项 / MiKTeX 注册表读安装根目录 */
+/**
+ * 读 MiKTeX 相关注册表根目录。
+ * 禁止对 Uninstall 做 `reg query /s /f`：Windows 上可卡数十秒且黑窗完全无字。
+ */
 function readMiktexInstallRootsFromRegistry() {
   if (process.platform !== "win32") return [];
   const roots = [];
   try {
     const { execFileSync } = require("child_process");
-    const keys = [
-      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-      "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-      "HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-    ];
-    for (const key of keys) {
-      let out = "";
+    const tryQuery = (key) => {
       try {
-        out = execFileSync("reg", ["query", key, "/s", "/f", "MiKTeX", "/d"], {
+        console.log(`[pandoc] 读注册表 ${key} …`);
+        return execFileSync("reg", ["query", key], {
           encoding: "utf8",
           windowsHide: true,
-          timeout: 12000,
-          maxBuffer: 4 * 1024 * 1024,
+          timeout: 2500,
+          maxBuffer: 512 * 1024,
         });
       } catch (_) {
-        continue;
+        return "";
       }
+    };
+    // 仅查 MiKTeX 自己的键（体量小）；不扫整棵 Uninstall
+    for (const key of ["HKCU\\Software\\MiKTeX.org", "HKLM\\Software\\MiKTeX.org"]) {
+      const out = tryQuery(key);
       for (const line of String(out).split(/\r?\n/)) {
-        const m = line.match(/InstallLocation\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
+        const m = line.match(/^\s*(Install(Root|Location)|CommonInstall|UserInstall)\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
         if (m) {
-          const loc = m[1].trim().replace(/^"|"$/g, "");
+          const loc = m[3].trim().replace(/^"|"$/g, "");
           if (loc) roots.push(loc);
         }
       }
+      // 有子版本键时再浅查一层
+      for (const line of String(out).split(/\r?\n/)) {
+        const sub = line.match(/^HKEY_[^\s]+\\Software\\MiKTeX\.org\\(.+)/i);
+        if (!sub) continue;
+        const subOut = tryQuery(`${key}\\${sub[1]}`);
+        for (const l2 of String(subOut).split(/\r?\n/)) {
+          const m2 = l2.match(/^\s*(Install(Root|Location)|CommonInstall|UserInstall)\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
+          if (m2) {
+            const loc = m2[3].trim().replace(/^"|"$/g, "");
+            if (loc) roots.push(loc);
+          }
+        }
+      }
     }
-  } catch (_) {}
+  } catch (err) {
+    console.log(`[pandoc] 注册表浅查跳过：${err?.message || err}`);
+  }
+  if (roots.length) console.log(`[pandoc] 注册表候选目录 ${roots.length} 个`);
   return [...new Set(roots)];
 }
 
 async function locateXelatexBinary() {
+  console.log("[pandoc] 正在定位 xelatex…");
   // 装完 MiKTeX 后桥进程 PATH 常是旧的：先合并注册表 PATH
   refreshWindowsPathEnv();
 

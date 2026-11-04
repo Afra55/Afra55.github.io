@@ -112,25 +112,36 @@ async function handleRequest(req, res, opts = {}) {
       return;
     }
     if (pathname === "/install" && req.method === "POST") {
+      console.log("");
+      console.log("[pandoc] ← 已收到 /install 请求，正在读参数…");
       const body = parseJsonBody(await readBody(req));
       const pkg = String(body?.package || body?.pkg || "pandoc").toLowerCase();
+      const pathInput = String(body?.path || body?.xelatex || body?.bin || "").trim();
       const label =
-        pkg === "typst" ||
-        pkg === "pdf" ||
-        pkg === "pdf-engine" ||
-        pkg === "xelatex" ||
-        pkg === "miktex" ||
-        pkg === "latex"
-          ? "XeLaTeX（PDF 引擎）"
-          : "pandoc";
-      console.log("");
-      console.log(`[pandoc] ════ 开始安装 ${label} · 下方为实时进度 ════`);
+        pathInput
+          ? "指定 xelatex 路径"
+          : pkg === "typst" ||
+              pkg === "pdf" ||
+              pkg === "pdf-engine" ||
+              pkg === "xelatex" ||
+              pkg === "miktex" ||
+              pkg === "latex" ||
+              pkg === "xelatex-path" ||
+              pkg === "set-xelatex-path" ||
+              pkg === "set-path"
+            ? "XeLaTeX（PDF 引擎）"
+            : "pandoc";
+      if (pathInput) {
+        console.log(`[pandoc] ════ ${label} · 不会下载 · ${pathInput.slice(0, 160)} ════`);
+      } else {
+        console.log(`[pandoc] ════ 开始安装 ${label} · 下方为实时进度 ════`);
+      }
       const t0 = Date.now();
       try {
         const data = await installPackage(body);
         const sec = Math.round((Date.now() - t0) / 1000);
         console.log(
-          `[pandoc] ════ 安装结束 · ${sec}s · ${label} · installed=${data.installed ? "是" : "否"} ════`
+          `[pandoc] ════ 结束 · ${sec}s · ${label} · installed=${data.installed ? "是" : "否"} ════`
         );
         if (data.needsManual) {
           console.log(`[pandoc] 需手动安装：${data.command || data.message || ""}`);
