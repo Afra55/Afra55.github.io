@@ -5961,7 +5961,7 @@ a{color:${v.accent}}
                 body:
                   `${lastErr.message}\n\n` +
                   (attemptedInstall
-                    ? "若黑窗仍在下载 TinyTeX，请等结束后再导出；不要中途关桥。也可先用浏览器打印。"
+                    ? `${xelatexManualGuideText()}\n\n若黑窗仍在下载，可等结束后再导出；也可先用浏览器打印。`
                     : "可改用浏览器打印「另存为 PDF」（质量低于印刷级），或检查本机桥后重试。"),
                 okText: "浏览器打印",
               });
@@ -6215,24 +6215,55 @@ a{color:${v.accent}}
       downloadBlob(new Blob([bytes]), data.filename || `${slugify(title)}.${to}`);
     }
 
+    /** 弹框内：手动安装 XeLaTeX 说明（HTML） */
+    function xelatexManualGuideHtml() {
+      return (
+        `<div class="mdm-manual-install" style="margin-top:12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.55;background:rgba(0,0,0,.03)">` +
+        `<strong>网络不稳？可手动安装</strong>` +
+        `<ol style="margin:8px 0 0;padding-left:1.25em">` +
+        `<li><strong>Windows</strong>：打开 <a href="https://miktex.org/download" target="_blank" rel="noopener">MiKTeX 下载页</a> 安装（含 XeLaTeX）。或到 <a href="https://github.com/rstudio/tinytex-releases/releases" target="_blank" rel="noopener">TinyTeX Releases</a> 下 <code>TinyTeX-1-windows-*.exe</code>。</li>` +
+        `<li><strong>macOS</strong>：终端执行 <code>brew install --cask basictex</code>。</li>` +
+        `<li><strong>Linux</strong>：<code>sudo apt install texlive-xetex texlive-lang-chinese</code>。</li>` +
+        `<li>装完后<strong>重启本机桥</strong>，回到本页再导出 PDF。</li>` +
+        `</ol>` +
+        `<p class="hint tight" style="margin:8px 0 0">自动安装时请看黑窗：应出现「连接中 / 下载中 xx% / 解压」。若超过 1 分钟仍无新字，请用上面手动方式。</p>` +
+        `</div>`
+      );
+    }
+
+    function xelatexManualGuideText() {
+      return [
+        "【手动安装】",
+        "Windows：https://miktex.org/download （MiKTeX）或 https://github.com/rstudio/tinytex-releases/releases",
+        "macOS：brew install --cask basictex",
+        "Linux：sudo apt install texlive-xetex texlive-lang-chinese",
+        "装完后重启本机桥，再导出 PDF。",
+      ].join("\n");
+    }
+
     async function runXelatexInstall() {
       const box = els.modalBox;
       const t0 = Date.now();
       els.modal.hidden = false;
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在安装 XeLaTeX</strong></div>` +
-        `<p class="mdm-modal-body">本机桥正在安装印刷级 PDF 引擎 <strong>XeLaTeX</strong>。<br/>` +
-        `优先下载 <strong>TinyTeX</strong> 便携包（黑窗有百分比；约 50–250MB）。首次约 5–15 分钟，请勿关闭本页与黑窗。</p>` +
-        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-xelatex-install-progress">已用时 0 秒 · 安装中… · 请看本机桥黑窗</p></div>`;
+        `<div class="mdm-modal-body">` +
+        `<p>本机桥正在自动下载安装印刷级 PDF 引擎（TinyTeX / XeLaTeX，约 50–250MB，常要 5–15 分钟）。</p>` +
+        `<p class="hint tight">请<strong>不要关闭</strong>本页与本机桥黑窗。黑窗应陆续出现：连接中 → 下载百分比 → 解压。</p>` +
+        xelatexManualGuideHtml() +
+        `</div>` +
+        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-xelatex-install-progress">已用时 0 秒 · 已向本机桥发出安装请求…</p></div>`;
       els.modal.onclick = null;
       const timer = setInterval(() => {
         const el = document.getElementById("mdm-xelatex-install-progress");
         if (el) {
           const sec = Math.round((Date.now() - t0) / 1000);
           el.textContent =
-            sec < 20
-              ? `已用时 ${sec} 秒 · 正在探测/尝试安装… · 请看本机桥黑窗`
-              : `已用时 ${sec} 秒 · 仍在安装（体积较大属正常）… · 请看本机桥黑窗进度`;
+            sec < 15
+              ? `已用时 ${sec} 秒 · 正在连本机桥 / 拉取发布列表… · 请看黑窗`
+              : sec < 60
+                ? `已用时 ${sec} 秒 · 若黑窗有「下载中 xx%」即正常 · 也可按上方手动安装`
+                : `已用时 ${sec} 秒 · 仍在安装（体积大/网络慢属正常）· 黑窗无字请改手动安装`;
         }
       }, 1000);
       try {
@@ -6250,14 +6281,17 @@ a{color:${v.accent}}
           return;
         }
         const detail = String(data.message || data.output || "").trim().slice(0, 400);
+        const manual = String(data.manualInstall || xelatexManualGuideText()).trim();
         if (data.needsManual) {
           throw new Error(
-            detail
-              ? `${detail}${data.command ? `\n可手动：${data.command}` : ""}`
-              : `请手动安装：${data.command || "MiKTeX / BasicTeX / TinyTeX"}`
+            [detail || "自动安装未完成", data.command ? `命令参考：${data.command}` : "", manual]
+              .filter(Boolean)
+              .join("\n\n")
           );
         }
-        throw new Error(detail || "XeLaTeX 安装未完成（请看本机桥黑窗；若黑窗仍在下载请等结束再试）");
+        throw new Error(
+          [detail || "XeLaTeX 安装未完成（请看本机桥黑窗）", manual].filter(Boolean).join("\n\n")
+        );
       } finally {
         clearInterval(timer);
         closeModal();

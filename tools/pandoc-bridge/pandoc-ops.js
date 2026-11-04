@@ -243,8 +243,25 @@ async function locateTypstBinary() {
 function downloadToFile(url, dest, { logPrefix = "[pandoc]", timeout = 1800000 } = {}) {
   return new Promise((resolve, reject) => {
     const idleMs = Math.min(Math.max(Number(timeout) || 1800000, 60000), 1800000);
+    const t0 = Date.now();
+    let settled = false;
+    let gotData = false;
+    const beat = setInterval(() => {
+      if (settled || gotData) return;
+      const sec = Math.round((Date.now() - t0) / 1000);
+      console.log(`${logPrefix} …仍在连接/等待首包 · 已用时 ${sec}s · 请稍候（国内可能较慢）`);
+    }, 5000);
+    const finish = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(beat);
+      fn();
+    };
     const follow = (u, n = 0) => {
-      if (n > 10) return reject(new Error("下载重定向过多"));
+      if (n > 10) {
+        return finish(() => reject(new Error("下载重定向过多")));
+      }
+      console.log(`${logPrefix} 连接中… ${u.slice(0, 120)}${u.length > 120 ? "…" : ""}`);
       const mod = String(u).startsWith("https") ? https : http;
       const req = mod.get(
         u,
@@ -256,27 +273,34 @@ function downloadToFile(url, dest, { logPrefix = "[pandoc]", timeout = 1800000 }
           if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
             res.resume();
             const next = new URL(res.headers.location, u).href;
-            console.log(`${logPrefix} 跟随重定向…`);
+            console.log(`${logPrefix} 跟随重定向 → ${String(next).slice(0, 100)}…`);
             return follow(next, n + 1);
           }
           if (res.statusCode !== 200) {
             res.resume();
-            return reject(new Error(`下载失败 HTTP ${res.statusCode}`));
+            return finish(() => reject(new Error(`下载失败 HTTP ${res.statusCode}`)));
           }
           const total = Number(res.headers["content-length"]) || 0;
+          if (total > 0) {
+            console.log(`${logPrefix} 开始下载 · 共 ${(total / 1048576).toFixed(1)} MB`);
+          } else {
+            console.log(`${logPrefix} 开始下载 · 大小未知（将按已下 MB 显示）`);
+          }
           let got = 0;
           let lastLog = 0;
           fs.mkdirSync(path.dirname(dest), { recursive: true });
           const out = fs.createWriteStream(dest);
           res.on("data", (chunk) => {
+            gotData = true;
             got += chunk.length;
             const now = Date.now();
-            if (now - lastLog >= 400) {
+            if (now - lastLog >= 800) {
               lastLog = now;
               if (total > 0) {
                 const pct = Math.min(100, Math.round((got / total) * 100));
+                const bar = "#".repeat(Math.floor(pct / 5)) + "-".repeat(20 - Math.floor(pct / 5));
                 console.log(
-                  `${logPrefix} 下载中… ${pct}% · ${(got / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MB`
+                  `${logPrefix} 下载中 [${bar}] ${pct}% · ${(got / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MB`
                 );
               } else {
                 console.log(`${logPrefix} 下载中… ${(got / 1048576).toFixed(1)} MB`);
@@ -285,16 +309,18 @@ function downloadToFile(url, dest, { logPrefix = "[pandoc]", timeout = 1800000 }
           });
           res.pipe(out);
           out.on("finish", () => {
-            console.log(`${logPrefix} 下载完成 · ${(got / 1048576).toFixed(1)} MB`);
-            resolve({ bytes: got });
+            finish(() => {
+              console.log(`${logPrefix} 下载完成 · ${(got / 1048576).toFixed(1)} MB`);
+              resolve({ bytes: got });
+            });
           });
-          out.on("error", reject);
+          out.on("error", (err) => finish(() => reject(err)));
         }
       );
-      req.on("error", reject);
+      req.on("error", (err) => finish(() => reject(err)));
       req.on("timeout", () => {
         req.destroy();
-        reject(new Error("下载超时"));
+        finish(() => reject(new Error("下载超时")));
       });
     };
     follow(url);
@@ -1046,8 +1072,22 @@ function githubDownloadMirrors(url) {
   return [...new Set(out)];
 }
 
-function fetchJsonHttps(url, { timeout = 45000 } = {}) {
+function fetchJsonHttps(url, { timeout = 45000, logPrefix = "[pandoc]" } = {}) {
   return new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    let settled = false;
+    const beat = setInterval(() => {
+      if (settled) return;
+      console.log(
+        `${logPrefix} …等待网络响应 · 已用时 ${Math.round((Date.now() - t0) / 1000)}s · ${String(url).slice(0, 80)}`
+      );
+    }, 4000);
+    const done = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(beat);
+      fn();
+    };
     const mod = String(url).startsWith("https") ? https : http;
     const req = mod.get(
       url,
@@ -1061,27 +1101,31 @@ function fetchJsonHttps(url, { timeout = 45000 } = {}) {
       (res) => {
         if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
           res.resume();
-          return resolve(fetchJsonHttps(new URL(res.headers.location, url).href, { timeout }));
+          done(() => {});
+          return resolve(
+            fetchJsonHttps(new URL(res.headers.location, url).href, { timeout, logPrefix })
+          );
         }
         const chunks = [];
         res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
           const raw = Buffer.concat(chunks).toString("utf8");
           if (res.statusCode !== 200) {
-            return reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 120)}`));
+            return done(() => reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 120)}`)));
           }
           try {
-            resolve(JSON.parse(raw));
+            const json = JSON.parse(raw);
+            done(() => resolve(json));
           } catch (err) {
-            reject(err);
+            done(() => reject(err));
           }
         });
       }
     );
-    req.on("error", reject);
+    req.on("error", (err) => done(() => reject(err)));
     req.on("timeout", () => {
       req.destroy();
-      reject(new Error("请求超时"));
+      done(() => reject(new Error("请求超时")));
     });
   });
 }
@@ -1096,11 +1140,16 @@ async function resolveTinytexReleaseAsset() {
   );
   let release = null;
   let lastErr = null;
-  for (const api of apiCandidates) {
+  console.log(`[pandoc/tinytex] 共 ${apiCandidates.length} 个发布列表源，将逐个尝试…`);
+  for (let i = 0; i < apiCandidates.length; i++) {
+    const api = apiCandidates[i];
     try {
-      console.log(`[pandoc/tinytex] 读取发布列表… ${api}`);
-      release = await fetchJsonHttps(api, { timeout: 60000 });
-      if (release?.assets?.length) break;
+      console.log(`[pandoc/tinytex] (${i + 1}/${apiCandidates.length}) 读取发布列表…`);
+      release = await fetchJsonHttps(api, { timeout: 45000, logPrefix: "[pandoc/tinytex]" });
+      if (release?.assets?.length) {
+        console.log(`[pandoc/tinytex] 发布列表 OK · tag=${release.tag_name || "?"} · assets=${release.assets.length}`);
+        break;
+      }
     } catch (err) {
       lastErr = err;
       console.log(`[pandoc/tinytex] 发布列表失败：${err?.message || err}`);
@@ -1156,9 +1205,11 @@ async function resolveTinytexReleaseAsset() {
 async function downloadWithMirrors(url, dest, opts = {}) {
   const mirrors = githubDownloadMirrors(url);
   let lastErr = null;
-  for (const u of mirrors) {
+  console.log(`[pandoc/tinytex] 下载源 ${mirrors.length} 个，失败会自动换镜像`);
+  for (let i = 0; i < mirrors.length; i++) {
+    const u = mirrors[i];
     try {
-      console.log(`[pandoc/tinytex] 下载 ${u}`);
+      console.log(`[pandoc/tinytex] ▶ 镜像 ${i + 1}/${mirrors.length}`);
       await downloadToFile(u, dest, opts);
       // 防御：GitHub 假 200/镜像返回 HTML 错误页
       const st = fs.statSync(dest);
@@ -1171,13 +1222,39 @@ async function downloadWithMirrors(url, dest, opts = {}) {
       return u;
     } catch (err) {
       lastErr = err;
-      console.log(`[pandoc/tinytex] 下载失败：${err?.message || err}`);
+      console.log(`[pandoc/tinytex] ✖ 镜像 ${i + 1} 失败：${err?.message || err}`);
       try {
         fs.unlinkSync(dest);
       } catch (_) {}
     }
   }
   throw lastErr || new Error("所有镜像下载失败");
+}
+
+/** 给前端弹框用的手动安装说明（纯文本） */
+function xelatexManualInstallText() {
+  if (process.platform === "win32") {
+    return [
+      "【手动安装 XeLaTeX · Windows】",
+      "1) 打开 https://miktex.org/download 下载安装 MiKTeX（含 xelatex）",
+      "2) 或打开 https://github.com/rstudio/tinytex-releases/releases 下载 TinyTeX-1-windows-*.exe 并安装",
+      "3) 装完后重启本机桥，再回到网页导出 PDF",
+    ].join("\n");
+  }
+  if (process.platform === "darwin") {
+    return [
+      "【手动安装 XeLaTeX · macOS】",
+      "1) 终端执行：brew install --cask basictex",
+      "2) 或从 https://github.com/rstudio/tinytex-releases/releases 下载 TinyTeX-1-darwin-*.tar.xz",
+      "3) 装完后新开终端 / 重启本机桥，再导出 PDF",
+    ].join("\n");
+  }
+  return [
+    "【手动安装 XeLaTeX · Linux】",
+    "1) sudo apt install texlive-xetex texlive-lang-chinese",
+    "2) 或从 https://github.com/rstudio/tinytex-releases/releases 下载对应 TinyTeX-1-linux-*.tar.xz",
+    "3) 装完后重启本机桥，再导出 PDF",
+  ].join("\n");
 }
 
 async function extractTinytexArchive(archivePath, destDir, kind) {
@@ -1272,14 +1349,15 @@ async function installTinytexPortable() {
     asset.kind === "zip" ? "TinyTeX.zip" : asset.kind === "txz" ? "TinyTeX.tar.xz" : "TinyTeX.tar.gz";
   const archive = path.join(tmpDir, archiveName);
   const mb = asset.size ? `约 ${(asset.size / 1048576).toFixed(0)}MB` : "约 50–250MB";
-  console.log(`[pandoc/tinytex] 下载 ${asset.name || "TinyTeX"}（${mb}${asset.tag ? " · " + asset.tag : ""}）…`);
+  console.log(`[pandoc/tinytex] 选中资源：${asset.name || "TinyTeX"}（${mb}${asset.tag ? " · " + asset.tag : ""}）`);
+  console.log(`[pandoc/tinytex] 下一步：下载（黑窗会刷百分比）→ 解压 → 补宏包`);
   try {
     const used = await downloadWithMirrors(asset.url, archive, {
       logPrefix: "[pandoc/tinytex]",
       timeout: 1800000,
     });
     console.log(`[pandoc/tinytex] 下载完成 · ${used}`);
-    console.log(`[pandoc/tinytex] 正在解压到 ${destDir}`);
+    console.log(`[pandoc/tinytex] 正在解压到 ${destDir}（大文件可能需 1–3 分钟，请稍候）`);
     try {
       fs.rmSync(destDir, { recursive: true, force: true });
     } catch (_) {}
@@ -1427,6 +1505,7 @@ async function finalizeXelatexProbe(extra = {}) {
     pdf,
     package: "xelatex",
     bin: pdf.engines.xelatex?.bin || located || "",
+    manualInstall: xelatexManualInstallText(),
     ...extra,
   };
 }
@@ -1434,7 +1513,11 @@ async function finalizeXelatexProbe(extra = {}) {
 /** 安装 XeLaTeX：本机已有 → TinyTeX 便携（正确资源名）→ 再试 winget/brew */
 async function installXelatex() {
   const platform = process.platform;
-  console.log("[pandoc] 准备安装 XeLaTeX（印刷级唯一引擎；复杂图表 + 中文）…");
+  console.log("[pandoc] ════════════════════════════════════");
+  console.log("[pandoc] 准备安装 XeLaTeX（印刷级 PDF · 复杂图表/中文）");
+  console.log("[pandoc] 黑窗会持续输出：连接中 → 下载百分比 → 解压 → 宏包");
+  console.log("[pandoc] 若长时间无新字，请改用网页弹框里的「手动安装」说明");
+  console.log("[pandoc] ════════════════════════════════════");
 
   {
     const existing = await locateXelatexBinary();
@@ -1498,6 +1581,9 @@ async function installXelatex() {
     }
   }
 
+  const manual = xelatexManualInstallText();
+  console.log("[pandoc] 自动安装未完成。手动安装说明：");
+  console.log(manual);
   return {
     installed: false,
     needsManual: true,
@@ -1511,8 +1597,9 @@ async function installXelatex() {
     message:
       last.message ||
       last.output ||
-      "XeLaTeX 安装失败（请看黑窗；检查网络后重试，或手动装 MiKTeX/BasicTeX）",
+      "XeLaTeX 安装失败（请看黑窗；检查网络后重试，或按手动说明安装）",
     output: last.output || last.message || "",
+    manualInstall: manual,
     pdf: await probePdfEngines(),
   };
 }
