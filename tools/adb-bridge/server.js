@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.114";
+const BRIDGE_VERSION = "0.9.115";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -229,42 +229,35 @@ function resolveXelatexUserPath(input) {
   return "";
 }
 
-/** 在疑似 MiKTeX 目录里找 miktex.exe / mpm.exe，用于补装 xetex */
+/** 仅在用户给出的路径附近找 miktex.exe（不扫 Program Files / 全盘） */
 function findMiktexCliNear(input) {
   const raw = String(input || "").trim().replace(/^["']|["']$/g, "");
-  // 用户直接贴了 miktex.exe / mpm.exe
+  if (!raw) return "";
   try {
-    if (raw && fs.existsSync(raw) && fs.statSync(raw).isFile()) {
+    if (fs.existsSync(raw) && fs.statSync(raw).isFile()) {
       const base = path.basename(raw).toLowerCase();
       if (base === "miktex.exe" || base === "mpm.exe") return raw;
     }
   } catch (_) {}
   const seeds = [];
-  if (raw) {
-    try {
-      if (fs.existsSync(raw)) {
-        const st = fs.statSync(raw);
-        seeds.push(st.isFile() ? path.dirname(raw) : raw);
-      }
-    } catch (_) {}
+  try {
+    if (raw && fs.existsSync(raw)) {
+      const st = fs.statSync(raw);
+      seeds.push(st.isFile() ? path.dirname(raw) : raw);
+    }
+  } catch (_) {}
+  // 仅用户路径上下一两级
+  const more = [];
+  for (const s of seeds) {
+    more.push(s, path.join(s, "miktex", "bin", "x64"), path.join(s, "bin", "x64"), path.dirname(s));
   }
-  const la = process.env.LOCALAPPDATA || "";
-  const pf = process.env.ProgramFiles || "C:\\Program Files";
-  seeds.push(
-    path.join(pf, "MiKTeX"),
-    la ? path.join(la, "Programs", "MiKTeX") : "",
-    ...seeds.map((s) => path.join(s, "miktex", "bin", "x64")),
-    ...seeds.map((s) => path.join(s, "bin", "x64"))
-  );
-  const cliNames = ["miktex.exe", "mpm.exe", "initexmf.exe"];
-  for (const root of seeds.filter(Boolean)) {
+  const cliNames = ["miktex.exe", "mpm.exe"];
+  for (const root of [...new Set(more.filter(Boolean))]) {
     for (const name of cliNames) {
-      for (const rel of [name, path.join("miktex", "bin", "x64", name), path.join("bin", "x64", name)]) {
-        const p = path.join(root, rel);
-        try {
-          if (fs.existsSync(p)) return p;
-        } catch (_) {}
-      }
+      const p = path.join(root, name);
+      try {
+        if (fs.existsSync(p)) return p;
+      } catch (_) {}
     }
   }
   return "";
@@ -430,8 +423,8 @@ async function setXelatexPathInBridge(body = {}) {
       installed: false,
       needsManual: true,
       message: cli
-        ? `${binDir} 现有：${listed || "（无）"}。请搜 miktex-xetex.exe（不是 xelatex.exe）。找到后把该全路径贴回来。`
-        : "请全盘搜索 miktex-xetex.exe（现行 MiKTeX 真实引擎文件名；xelatex.exe 只是可选链接）",
+        ? `${binDir} 现有：${listed || "（无）"}。请粘贴 miktex-xetex.exe 全路径（或把该文件拷到桥目录 bin\\）。`
+        : "桥目录没有引擎。请在弹框粘贴 miktex-xetex.exe 全路径，或 bin\\x64 目录（不扫全盘）。",
     };
   }
   bin = ensureNamedXelatexShim(bin);
