@@ -6339,9 +6339,9 @@ a{color:${v.accent}}
       const tiny = String(hints.tinytexDir || "").trim() || "<桥目录>/bin/tinytex";
       const root = String(hints.bridgeRoot || "").trim() || "<桥目录>";
       return [
-        "找不到 xelatex.exe：打开 MiKTeX Console → Packages → 搜索 miktex-xetex → Install",
-        "或命令行：miktex packages install miktex-xetex",
-        "【还没装 MiKTeX】https://miktex.org/download → Basic Installer → 装完应有 …\\miktex\\bin\\x64\\xelatex.exe → 重启桥",
+        "包已装仍无 xelatex.exe：普通用户 cmd 在 miktex.exe 目录执行 miktex links install 与 miktex fndb refresh，再 dir *latex*.exe",
+        "若提示 elevated privileges：不要用管理员窗口；到 MiKTeX Console 的 Install root\\miktex\\bin\\x64 查找",
+        "【还没装 MiKTeX】https://miktex.org/download → Basic → 应有 xelatex.exe → 重启桥",
         `备用 TinyTeX：解压到 ${tiny}（桥根 ${root}），需有 bin\\windows\\xelatex.exe`,
         "macOS：brew install --cask basictex；Linux：sudo apt install texlive-xetex texlive-lang-chinese",
       ].join("\n");
