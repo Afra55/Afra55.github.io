@@ -13,7 +13,7 @@ const {
   probePdfEngines,
 } = require("./pandoc-ops");
 
-const BRIDGE_VERSION = "0.1.6";
+const BRIDGE_VERSION = "0.1.7";
 const FEATURES = { pandoc: true, importToMarkdown: true, printPdf: true };
 
 function readBody(req, limit = 96 * 1024 * 1024, { onProgress } = {}) {

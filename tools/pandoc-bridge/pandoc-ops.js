@@ -8,6 +8,8 @@
 
 const { execFile, spawn } = require("child_process");
 const fs = require("fs");
+const http = require("http");
+const https = require("https");
 const os = require("os");
 const path = require("path");
 
@@ -87,64 +89,34 @@ function runCmd(file, args, { input, timeout = 300000, cwd } = {}) {
 }
 
 /**
- * 安装类命令：把 stdout/stderr 实时打到桥黑窗（含 \r 进度行），并每 12s 心跳。
- * winget/brew 下载条否则会被 execFile 吃掉，黑窗像卡住。
+ * 安装类命令：stdio 继承到桥黑窗。
+ * winget 在 pipe 模式下几乎不吐进度，黑窗会像卡住；inherit 才能看见下载条。
  */
-function runCmdLive(file, args, { timeout = 900000, cwd, logPrefix = "[pandoc]" } = {}) {
+function runCmdInherit(file, args, { timeout = 900000, cwd, logPrefix = "[pandoc]" } = {}) {
   const label = [file, ...(args || [])].join(" ");
   console.log(`${logPrefix} ▶ ${label}`);
+  console.log(`${logPrefix} （安装器输出直接显示在下方；若长时间无字请稍候）`);
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
       cwd,
       windowsHide: false,
       shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, // 尽量让安装器多吐进度
-        TERM: process.env.TERM || "xterm-256color",
-        FORCE_COLOR: process.env.FORCE_COLOR || "0",
-      },
+      stdio: ["ignore", "inherit", "inherit"],
     });
-    let stdout = "";
-    let stderr = "";
     let settled = false;
     const t0 = Date.now();
-    let lastEmit = 0;
-
-    const emitChunk = (chunk, isErr) => {
-      const s = String(chunk || "");
-      if (isErr) stderr += s;
-      else stdout += s;
-      // winget 常用 \r 刷新同一行；按 \r / \n 切开逐条打黑窗
-      const parts = s.split(/\r?\n|\r/);
-      for (const part of parts) {
-        const line = String(part || "")
-          .replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
-          .trim();
-        if (!line) continue;
-        // 节流极短重复，避免刷屏，但仍保证进度可见
-        const now = Date.now();
-        if (now - lastEmit < 80 && line.length < 8) continue;
-        lastEmit = now;
-        console.log(`${logPrefix} ${line}`);
-      }
-    };
-
-    child.stdout?.on("data", (d) => emitChunk(d, false));
-    child.stderr?.on("data", (d) => emitChunk(d, true));
-
     const beat = setInterval(() => {
       const sec = Math.round((Date.now() - t0) / 1000);
-      console.log(`${logPrefix} …安装进行中 · 已用时 ${sec}s（上方为安装器实时输出）`);
-    }, 12000);
-
+      console.log(`${logPrefix} …仍在安装 · 已用时 ${sec}s`);
+    }, 8000);
     const timer = setTimeout(() => {
       try {
         child.kill();
       } catch (_) {}
       finish(() => {
         const err = new Error("安装超时");
-        err.stdout = stdout;
-        err.stderr = stderr || "timeout";
+        err.stdout = "";
+        err.stderr = "timeout";
         reject(err);
       });
     }, timeout);
@@ -159,28 +131,254 @@ function runCmdLive(file, args, { timeout = 900000, cwd, logPrefix = "[pandoc]" 
 
     child.on("error", (err) => {
       finish(() => {
-        err.stdout = stdout;
-        err.stderr = stderr || err.message;
+        err.stdout = "";
+        err.stderr = err.message;
         reject(err);
       });
     });
     child.on("close", (code) => {
       finish(() => {
         const sec = Math.round((Date.now() - t0) / 1000);
-        if (code === 0) {
-          console.log(`${logPrefix} ✔ 命令完成 · ${sec}s`);
-          resolve({ stdout, stderr, code: 0 });
-          return;
-        }
-        console.log(`${logPrefix} ✖ 命令失败 · exit=${code} · ${sec}s`);
-        const err = new Error(`exit ${code}`);
-        err.stdout = stdout;
-        err.stderr = stderr;
-        err.code = code;
-        reject(err);
+        // winget「已安装」有时非 0；交给后续探测判断成败
+        console.log(`${logPrefix} ✔ 命令结束 · exit=${code} · ${sec}s`);
+        resolve({ stdout: "", stderr: "", code: code == null ? 1 : code });
       });
     });
   });
+}
+
+/** @deprecated 兼容旧调用；安装请用 runCmdInherit */
+function runCmdLive(file, args, opts = {}) {
+  return runCmdInherit(file, args, opts);
+}
+
+function typstBridgeBinDir() {
+  return path.join(resolveBridgeRoot(), "bin", "typst");
+}
+
+function typstBridgeBinPath() {
+  const exe = process.platform === "win32" ? "typst.exe" : "typst";
+  return path.join(typstBridgeBinDir(), exe);
+}
+
+/** 递归找 typst 可执行文件（限制深度，避免扫盘） */
+function findTypstInDir(dir, depth = 0) {
+  if (!dir || depth > 4) return "";
+  try {
+    if (!fs.existsSync(dir)) return "";
+    const want = process.platform === "win32" ? "typst.exe" : "typst";
+    const direct = path.join(dir, want);
+    if (fs.existsSync(direct)) return direct;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === want) return path.join(dir, name);
+      const p = path.join(dir, name);
+      let st;
+      try {
+        st = fs.statSync(p);
+      } catch (_) {
+        continue;
+      }
+      if (!st.isDirectory()) continue;
+      if (/node_modules|\.git|__pycache__/i.test(name)) continue;
+      const hit = findTypstInDir(p, depth + 1);
+      if (hit) return hit;
+    }
+  } catch (_) {}
+  return "";
+}
+
+async function whereCmd(name) {
+  if (process.platform === "win32") {
+    try {
+      const { stdout } = await runCmd("where.exe", [name], { timeout: 12000 });
+      return (
+        String(stdout || "")
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .find((s) => s && fs.existsSync(s)) || ""
+      );
+    } catch (_) {
+      return "";
+    }
+  }
+  try {
+    const { stdout } = await runCmd("which", [name], { timeout: 12000 });
+    const p = String(stdout || "").trim().split(/\r?\n/)[0] || "";
+    return p && fs.existsSync(p) ? p : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+/** 尽量找到本机 typst；优先桥自带目录 */
+async function locateTypstBinary() {
+  const local = typstBridgeBinPath();
+  if (fs.existsSync(local)) return local;
+
+  for (const c of resolveCmdCandidates("typst")) {
+    try {
+      if ((c.includes(path.sep) || c.includes("/")) && fs.existsSync(c)) return c;
+    } catch (_) {}
+  }
+
+  const fromWhere = await whereCmd(process.platform === "win32" ? "typst.exe" : "typst");
+  if (fromWhere) return fromWhere;
+
+  if (process.platform === "win32") {
+    const la = process.env.LOCALAPPDATA || "";
+    if (la) {
+      const hit = findTypstInDir(path.join(la, "Microsoft", "WinGet", "Packages"));
+      if (hit) return hit;
+      const hit2 = findTypstInDir(path.join(la, "Microsoft", "WinGet", "Links"));
+      if (hit2) return hit2;
+    }
+    const scoop = path.join(process.env.USERPROFILE || "", "scoop", "apps", "typst");
+    const hit3 = findTypstInDir(scoop);
+    if (hit3) return hit3;
+  }
+
+  return "";
+}
+
+function downloadToFile(url, dest, { logPrefix = "[pandoc]" } = {}) {
+  return new Promise((resolve, reject) => {
+    const follow = (u, n = 0) => {
+      if (n > 10) return reject(new Error("下载重定向过多"));
+      const mod = String(u).startsWith("https") ? https : http;
+      const req = mod.get(
+        u,
+        {
+          headers: { "User-Agent": "devtools-bridge-pandoc", Accept: "*/*" },
+          timeout: 120000,
+        },
+        (res) => {
+          if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+            res.resume();
+            const next = new URL(res.headers.location, u).href;
+            console.log(`${logPrefix} 跟随重定向…`);
+            return follow(next, n + 1);
+          }
+          if (res.statusCode !== 200) {
+            res.resume();
+            return reject(new Error(`下载失败 HTTP ${res.statusCode}`));
+          }
+          const total = Number(res.headers["content-length"]) || 0;
+          let got = 0;
+          let lastLog = 0;
+          fs.mkdirSync(path.dirname(dest), { recursive: true });
+          const out = fs.createWriteStream(dest);
+          res.on("data", (chunk) => {
+            got += chunk.length;
+            const now = Date.now();
+            if (now - lastLog >= 400) {
+              lastLog = now;
+              if (total > 0) {
+                const pct = Math.min(100, Math.round((got / total) * 100));
+                console.log(
+                  `${logPrefix} 下载中… ${pct}% · ${(got / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MB`
+                );
+              } else {
+                console.log(`${logPrefix} 下载中… ${(got / 1048576).toFixed(1)} MB`);
+              }
+            }
+          });
+          res.pipe(out);
+          out.on("finish", () => {
+            console.log(`${logPrefix} 下载完成 · ${(got / 1048576).toFixed(1)} MB`);
+            resolve({ bytes: got });
+          });
+          out.on("error", reject);
+        }
+      );
+      req.on("error", reject);
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("下载超时"));
+      });
+    };
+    follow(url);
+  });
+}
+
+function typstReleaseAsset() {
+  const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
+  if (process.platform === "win32") {
+    return {
+      url: `https://github.com/typst/typst/releases/latest/download/typst-${arch}-pc-windows-msvc.zip`,
+      kind: "zip",
+    };
+  }
+  if (process.platform === "darwin") {
+    return {
+      url: `https://github.com/typst/typst/releases/latest/download/typst-${arch}-apple-darwin.tar.xz`,
+      kind: "tarxz",
+    };
+  }
+  return {
+    url: `https://github.com/typst/typst/releases/latest/download/typst-${arch}-unknown-linux-musl.tar.xz`,
+    kind: "tarxz",
+  };
+}
+
+async function extractTypstArchive(archivePath, destDir, kind) {
+  fs.mkdirSync(destDir, { recursive: true });
+  if (kind === "zip") {
+    if (process.platform === "win32") {
+      await runCmdInherit(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-Command",
+          `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`,
+        ],
+        { timeout: 180000, logPrefix: "[pandoc/typst]" }
+      );
+      return;
+    }
+    await runCmd("unzip", ["-o", archivePath, "-d", destDir], { timeout: 180000 });
+    return;
+  }
+  // tar.xz
+  await runCmd("tar", ["-xJf", archivePath, "-C", destDir], { timeout: 180000 });
+}
+
+/** 从 GitHub Release 下载便携 Typst 到桥目录（有明确百分比进度） */
+async function installTypstPortable() {
+  const asset = typstReleaseAsset();
+  const destDir = typstBridgeBinDir();
+  const tmpDir = makeBridgeTemp("typst-dl-");
+  const archive = path.join(tmpDir, asset.kind === "zip" ? "typst.zip" : "typst.tar.xz");
+  console.log(`[pandoc/typst] 改为下载官方便携包（黑窗可见百分比）…`);
+  console.log(`[pandoc/typst] ${asset.url}`);
+  try {
+    await downloadToFile(asset.url, archive, { logPrefix: "[pandoc/typst]" });
+    console.log(`[pandoc/typst] 正在解压到 ${destDir}`);
+    await extractTypstArchive(archive, destDir, asset.kind);
+    // zip/tar 往往带一层目录，把 typst 提到 destDir
+    let bin = findTypstInDir(destDir);
+    if (bin && path.dirname(bin) !== destDir) {
+      const target = typstBridgeBinPath();
+      try {
+        fs.copyFileSync(bin, target);
+        bin = target;
+      } catch (_) {}
+    }
+    if (!bin || !fs.existsSync(bin)) {
+      bin = await locateTypstBinary();
+    }
+    if (!bin) throw new Error("解压后未找到 typst 可执行文件");
+    try {
+      fs.chmodSync(bin, 0o755);
+    } catch (_) {}
+    resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
+    resolveCmdBin._cache.typst = bin;
+    console.log(`[pandoc/typst] 便携包就绪 · ${bin}`);
+    return { ok: true, bin, command: `portable:${asset.url}` };
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch (_) {}
+  }
 }
 
 let cachedBin = null;
@@ -238,6 +436,9 @@ function makeBridgeTemp(prefix) {
 function resolveCmdCandidates(name) {
   const n = String(name || "").trim();
   const candidates = [];
+  if (n === "typst") {
+    candidates.push(typstBridgeBinPath());
+  }
   if (process.platform === "win32") {
     const la = process.env.LOCALAPPDATA || "";
     const pf = process.env.ProgramFiles || "C:\\Program Files";
@@ -293,10 +494,17 @@ function resolveCmdBin(name, { refresh = false } = {}) {
 }
 
 async function probeCmd(name) {
-  const bin = resolveCmdBin(name, { refresh: true });
+  let bin = resolveCmdBin(name, { refresh: true });
+  if (name === "typst") {
+    const located = await locateTypstBinary();
+    if (located) {
+      bin = located;
+      resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
+      resolveCmdBin._cache.typst = located;
+    }
+  }
   try {
-    const args = name === "typst" ? ["--version"] : ["--version"];
-    const { stdout, stderr } = await runCmd(bin, args, { timeout: 12000 });
+    const { stdout, stderr } = await runCmd(bin, ["--version"], { timeout: 12000 });
     const line = String(stdout || stderr || "")
       .split(/\r?\n/)
       .find((s) => s.trim()) || name;
@@ -455,6 +663,14 @@ function writeExportImages(tmp, images) {
   }
 }
 
+/** pandoc --pdf-engine 优先用绝对路径（桥目录便携 typst 不在 PATH） */
+function pdfEngineCliArg(engineName, pdfInfo) {
+  const name = String(engineName || "").trim();
+  const bin = String(pdfInfo?.engines?.[name]?.bin || "").trim();
+  if (bin && (bin.includes(path.sep) || bin.includes("/")) && fs.existsSync(bin)) return bin;
+  return name;
+}
+
 /** 印刷级 PDF：Pandoc + Typst/XeLaTeX/… */
 async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine = "" } = {}) {
   const pdfInfo = await probePdfEngines();
@@ -477,7 +693,8 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   fs.writeFileSync(inPath, String(text || ""), "utf8");
   writeExportImages(tmp, images);
 
-  const args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${engine}`, "-o", outPath];
+  const engineCli = pdfEngineCliArg(engine, pdfInfo);
+  const args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${engineCli}`, "-o", outPath];
   // 中文/CJK：Xe/LuaLaTeX 用 CJKmainfont；Typst 用 mainfont
   if (engine === "xelatex" || engine === "lualatex") {
     args.push("-V", `CJKmainfont=${cjkFont}`, "-V", `mainfont=${cjkFont}`, "--pdf-engine-opt=-interaction=nonstopmode");
@@ -486,7 +703,7 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   }
   if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
 
-  console.log(`[pandoc] 印刷级 PDF · engine=${engine} · font=${cjkFont} · tmp=${tmp}`);
+  console.log(`[pandoc] 印刷级 PDF · engine=${engine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp}`);
   try {
     await runCmd(resolvePandocBin(), args, { cwd: tmp, timeout: 900000 });
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 20) {
@@ -616,7 +833,8 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngi
             : "可安装 typst 或 texlive-xetex";
       throw new Error(`未找到印刷级 PDF 引擎（Typst / XeLaTeX）。${hint}`);
     }
-    args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${usedPdfEngine}`, "-o", outPath, inPath];
+    const engineCli = pdfEngineCliArg(usedPdfEngine, pdfInfo);
+    args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${engineCli}`, "-o", outPath, inPath];
   } else {
     args = ["-f", fromFmt, "-t", toFmt];
     if (outIsMd) args.push("--wrap=none");
@@ -685,9 +903,9 @@ async function wingetInstall(id) {
       message: "未找到 winget（Windows 10 1809+ 自带）",
     };
   }
-  console.log(`[pandoc] winget 安装 ${id}（进度见下方实时输出）…`);
+  console.log(`[pandoc] winget 安装 ${id}（进度直接刷在黑窗）…`);
   try {
-    const { stdout, stderr } = await runCmdLive(
+    const { code } = await runCmdInherit(
       "winget",
       [
         "install",
@@ -700,10 +918,15 @@ async function wingetInstall(id) {
       ],
       { timeout: 900000, logPrefix: "[pandoc/winget]" }
     );
-    return { output: `${stdout}\n${stderr}`.trim().slice(-2000), command: `winget install --id ${id} -e` };
-  } catch (err) {
     return {
-      output: `${err?.stdout || ""}\n${err?.stderr || ""}`.trim().slice(-2000),
+      output: `winget exit=${code}`,
+      command: `winget install --id ${id} -e`,
+      wingetCode: code,
+    };
+  } catch (err) {
+    console.log(`[pandoc/winget] 异常：${err?.message || err}`);
+    return {
+      output: `${err?.stderr || err?.message || ""}`.trim().slice(-2000),
       command: `winget install --id ${id} -e`,
     };
   }
@@ -744,75 +967,95 @@ async function installPandoc() {
   };
 }
 
-/** 安装 Typst（印刷级 PDF 首选引擎，体积远小于完整 TeX） */
+async function finalizeTypstProbe(extra = {}) {
+  resolveCmdBin("typst", { refresh: true });
+  const located = await locateTypstBinary();
+  if (located) {
+    resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
+    resolveCmdBin._cache.typst = located;
+  }
+  const pdf = await probePdfEngines();
+  const ok = !!pdf.engines.typst?.ok;
+  console.log(
+    `[pandoc] Typst 探测：${ok ? "已就绪 · " + (pdf.engines.typst?.bin || located || "") : "仍未找到"} · preferred=${pdf.preferred || "-"}`
+  );
+  return { installed: ok, pdf, package: "typst", bin: pdf.engines.typst?.bin || located || "", ...extra };
+}
+
+/** 安装 Typst：winget/brew → 深搜 → GitHub 便携包（带下载百分比） */
 async function installTypst() {
   const platform = process.platform;
   console.log("[pandoc] 准备安装 Typst（PDF 引擎）…");
-  if (platform === "win32") {
-    const r = await wingetInstall("Typst.Typst");
-    resolveCmdBin("typst", { refresh: true });
-    let pdf = await probePdfEngines();
-    let ok = !!pdf.engines.typst?.ok;
-    // winget 刚装完偶发 Links 尚未写出：稍等再探一次
-    if (!ok) {
-      console.log("[pandoc] Typst 尚未探测到，2s 后重试…");
-      await new Promise((r2) => setTimeout(r2, 2000));
-      resolveCmdBin("typst", { refresh: true });
-      pdf = await probePdfEngines();
-      ok = !!pdf.engines.typst?.ok;
+
+  // 已有则直接成功
+  {
+    const existing = await locateTypstBinary();
+    if (existing) {
+      console.log(`[pandoc] 已找到 Typst：${existing}`);
+      return finalizeTypstProbe({ command: "already-present", output: existing });
     }
-    console.log(
-      `[pandoc] Typst 探测：${ok ? "已就绪 · " + (pdf.engines.typst?.bin || "") : "仍未找到"} · preferred=${pdf.preferred || "-"}`
-    );
-    return {
-      ...r,
-      installed: ok,
-      pdf,
-      package: "typst",
-    };
   }
-  if (platform === "darwin") {
-    if (await hasCmd("brew")) {
-      try {
-        const { stdout, stderr } = await runCmdLive("brew", ["install", "typst"], {
-          timeout: 900000,
-          logPrefix: "[pandoc/brew]",
-        });
-        resolveCmdBin("typst", { refresh: true });
-        const pdf = await probePdfEngines();
-        const ok = !!pdf.engines.typst?.ok;
-        console.log(`[pandoc] Typst 探测：${ok ? "已就绪" : "仍未找到"}`);
-        return {
-          installed: ok,
-          output: `${stdout}\n${stderr}`.trim().slice(-2000),
-          pdf,
-          command: "brew install typst",
-          package: "typst",
-        };
-      } catch (err) {
-        return {
-          installed: false,
-          output: `${err?.stderr || err?.message || ""}`.slice(-2000),
-          command: "brew install typst",
-          package: "typst",
-        };
+
+  let last = { command: "", output: "" };
+
+  if (platform === "win32") {
+    if (await hasCmd("winget")) {
+      last = await wingetInstall("Typst.Typst");
+      console.log("[pandoc] winget 结束，正在定位 typst.exe…");
+      await new Promise((r) => setTimeout(r, 1500));
+      let hit = await locateTypstBinary();
+      if (!hit) {
+        await new Promise((r) => setTimeout(r, 2500));
+        hit = await locateTypstBinary();
       }
+      if (hit) return finalizeTypstProbe(last);
+      console.log("[pandoc] winget 后仍未定位到 typst，改下官方便携包…");
+    } else {
+      console.log("[pandoc] 无 winget，改下官方便携包…");
     }
+  } else if (platform === "darwin" && (await hasCmd("brew"))) {
+    try {
+      last = {
+        command: "brew install typst",
+        output: "",
+      };
+      await runCmdInherit("brew", ["install", "typst"], {
+        timeout: 900000,
+        logPrefix: "[pandoc/brew]",
+      });
+      const hit = await locateTypstBinary();
+      if (hit) return finalizeTypstProbe(last);
+      console.log("[pandoc] brew 后仍未定位到 typst，改下官方便携包…");
+    } catch (err) {
+      last.output = String(err?.message || err);
+      console.log(`[pandoc/brew] 失败：${last.output}`);
+    }
+  }
+
+  try {
+    const portable = await installTypstPortable();
+    return finalizeTypstProbe({
+      command: portable.command,
+      output: portable.bin,
+    });
+  } catch (err) {
+    const msg = String(err?.message || err);
+    console.log(`[pandoc/typst] 便携包安装失败：${msg}`);
     return {
       installed: false,
       needsManual: true,
-      command: "brew install typst",
-      message: "未找到 Homebrew",
       package: "typst",
+      command:
+        platform === "win32"
+          ? "winget install --id Typst.Typst -e"
+          : platform === "darwin"
+            ? "brew install typst"
+            : "请按 https://github.com/typst/typst 安装",
+      message: msg || "Typst 安装失败",
+      output: last.output || msg,
+      pdf: await probePdfEngines(),
     };
   }
-  return {
-    installed: false,
-    needsManual: true,
-    command: "请按 https://github.com/typst/typst 安装 typst，或 sudo apt install typst（若源可用）",
-    message: "Linux 请手动安装 Typst",
-    package: "typst",
-  };
 }
 
 async function installPackage(body = {}) {

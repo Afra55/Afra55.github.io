@@ -6169,8 +6169,8 @@ a{color:${v.accent}}
       els.modal.hidden = false;
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在安装 Typst</strong></div>` +
-        `<p class="mdm-modal-body">本机桥正在下载安装 Typst（印刷级 PDF 引擎，通常几十 MB）。请勿关闭本页。<br/>详细下载进度请看<strong>本机桥黑窗</strong>（会实时刷 winget/brew 输出）。</p>` +
-        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-typst-install-progress">已用时 0 秒 · 安装中… · 黑窗可见实时进度</p></div>`;
+        `<p class="mdm-modal-body">本机桥正在安装 Typst（印刷级 PDF 引擎）。请勿关闭本页。<br/>黑窗会先尝试 winget/brew；若找不到会<strong>下载官方便携包并显示百分比</strong>。</p>` +
+        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-typst-install-progress">已用时 0 秒 · 安装中… · 请看本机桥黑窗</p></div>`;
       els.modal.onclick = null;
       const timer = setInterval(() => {
         const el = document.getElementById("mdm-typst-install-progress");
