@@ -6061,12 +6061,14 @@ a{color:${v.accent}}
       els.modal.hidden = false;
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在安装 Typst</strong></div>` +
-        `<p class="mdm-modal-body">本机桥正在安装 Typst（印刷级 PDF 引擎，通常几十 MB）。请勿关闭本页。</p>` +
-        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-typst-install-progress">已用时 0 秒 · 安装中…</p></div>`;
+        `<p class="mdm-modal-body">本机桥正在下载安装 Typst（印刷级 PDF 引擎，通常几十 MB）。请勿关闭本页。<br/>详细下载进度请看<strong>本机桥黑窗</strong>（会实时刷 winget/brew 输出）。</p>` +
+        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-typst-install-progress">已用时 0 秒 · 安装中… · 黑窗可见实时进度</p></div>`;
       els.modal.onclick = null;
       const timer = setInterval(() => {
         const el = document.getElementById("mdm-typst-install-progress");
-        if (el) el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒 · 安装中请稍候…`;
+        if (el) {
+          el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒 · 安装中… · 请看本机桥黑窗进度`;
+        }
       }, 1000);
       try {
         const res = await fetch(`${baseUrl()}/pandoc/install`, {
@@ -6095,12 +6097,14 @@ a{color:${v.accent}}
       els.modal.hidden = false;
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在安装 pandoc</strong></div>` +
-        `<p class="mdm-modal-body">本机桥正在下载并安装 pandoc（约 100–150MB，通常 1–3 分钟，最长 15 分钟）。请勿关闭本页。</p>` +
-        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-pandoc-install-progress">已用时 0 秒 · 安装中…</p></div>`;
+        `<p class="mdm-modal-body">本机桥正在下载并安装 pandoc（约 100–150MB，通常 1–3 分钟，最长 15 分钟）。请勿关闭本页。<br/>详细下载进度请看<strong>本机桥黑窗</strong>。</p>` +
+        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-pandoc-install-progress">已用时 0 秒 · 安装中… · 黑窗可见实时进度</p></div>`;
       els.modal.onclick = null; // 安装中禁止点遮罩关闭
       const timer = setInterval(() => {
         const el = document.getElementById("mdm-pandoc-install-progress");
-        if (el) el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒 · 安装中请稍候…`;
+        if (el) {
+          el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒 · 安装中… · 请看本机桥黑窗进度`;
+        }
       }, 1000);
       try {
         const res = await fetch(`${baseUrl()}/pandoc/install`, {

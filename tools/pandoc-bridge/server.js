@@ -13,7 +13,7 @@ const {
   probePdfEngines,
 } = require("./pandoc-ops");
 
-const BRIDGE_VERSION = "0.1.4";
+const BRIDGE_VERSION = "0.1.5";
 const FEATURES = { pandoc: true, importToMarkdown: true, printPdf: true };
 
 function readBody(req, limit = 96 * 1024 * 1024, { onProgress } = {}) {
@@ -105,8 +105,28 @@ async function handleRequest(req, res, opts = {}) {
     }
     if (pathname === "/install" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req));
-      const data = await installPackage(body);
-      sendJson(res, 200, { ok: true, ...data });
+      const pkg = String(body?.package || body?.pkg || "pandoc").toLowerCase();
+      const label =
+        pkg === "typst" || pkg === "pdf" || pkg === "pdf-engine" ? "Typst（PDF 引擎）" : "pandoc";
+      console.log("");
+      console.log(`[pandoc] ════ 开始安装 ${label} · 下方为实时进度 ════`);
+      const t0 = Date.now();
+      try {
+        const data = await installPackage(body);
+        const sec = Math.round((Date.now() - t0) / 1000);
+        console.log(
+          `[pandoc] ════ 安装结束 · ${sec}s · ${label} · installed=${data.installed ? "是" : "否"} ════`
+        );
+        if (data.needsManual) {
+          console.log(`[pandoc] 需手动安装：${data.command || data.message || ""}`);
+        }
+        console.log("");
+        sendJson(res, 200, { ok: true, ...data });
+      } catch (err) {
+        console.log(`[pandoc] 安装失败 · ${err?.message || err}`);
+        console.log("");
+        throw err;
+      }
       return;
     }
     sendJson(res, 404, { ok: false, error: "未知接口" });

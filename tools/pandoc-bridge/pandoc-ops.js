@@ -6,7 +6,7 @@
  * - 文件模式：docx/odt/epub/html/… → Markdown 或其它格式（文档互转：Word↔PDF 等）
  */
 
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -83,6 +83,103 @@ function runCmd(file, args, { input, timeout = 300000, cwd } = {}) {
       child.stdin.write(input);
       child.stdin.end();
     }
+  });
+}
+
+/**
+ * 安装类命令：把 stdout/stderr 实时打到桥黑窗（含 \r 进度行），并每 12s 心跳。
+ * winget/brew 下载条否则会被 execFile 吃掉，黑窗像卡住。
+ */
+function runCmdLive(file, args, { timeout = 900000, cwd, logPrefix = "[pandoc]" } = {}) {
+  const label = [file, ...(args || [])].join(" ");
+  console.log(`${logPrefix} ▶ ${label}`);
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, {
+      cwd,
+      windowsHide: false,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, // 尽量让安装器多吐进度
+        TERM: process.env.TERM || "xterm-256color",
+        FORCE_COLOR: process.env.FORCE_COLOR || "0",
+      },
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const t0 = Date.now();
+    let lastEmit = 0;
+
+    const emitChunk = (chunk, isErr) => {
+      const s = String(chunk || "");
+      if (isErr) stderr += s;
+      else stdout += s;
+      // winget 常用 \r 刷新同一行；按 \r / \n 切开逐条打黑窗
+      const parts = s.split(/\r?\n|\r/);
+      for (const part of parts) {
+        const line = String(part || "")
+          .replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
+          .trim();
+        if (!line) continue;
+        // 节流极短重复，避免刷屏，但仍保证进度可见
+        const now = Date.now();
+        if (now - lastEmit < 80 && line.length < 8) continue;
+        lastEmit = now;
+        console.log(`${logPrefix} ${line}`);
+      }
+    };
+
+    child.stdout?.on("data", (d) => emitChunk(d, false));
+    child.stderr?.on("data", (d) => emitChunk(d, true));
+
+    const beat = setInterval(() => {
+      const sec = Math.round((Date.now() - t0) / 1000);
+      console.log(`${logPrefix} …安装进行中 · 已用时 ${sec}s（上方为安装器实时输出）`);
+    }, 12000);
+
+    const timer = setTimeout(() => {
+      try {
+        child.kill();
+      } catch (_) {}
+      finish(() => {
+        const err = new Error("安装超时");
+        err.stdout = stdout;
+        err.stderr = stderr || "timeout";
+        reject(err);
+      });
+    }, timeout);
+
+    function finish(fn) {
+      if (settled) return;
+      settled = true;
+      clearInterval(beat);
+      clearTimeout(timer);
+      fn();
+    }
+
+    child.on("error", (err) => {
+      finish(() => {
+        err.stdout = stdout;
+        err.stderr = stderr || err.message;
+        reject(err);
+      });
+    });
+    child.on("close", (code) => {
+      finish(() => {
+        const sec = Math.round((Date.now() - t0) / 1000);
+        if (code === 0) {
+          console.log(`${logPrefix} ✔ 命令完成 · ${sec}s`);
+          resolve({ stdout, stderr, code: 0 });
+          return;
+        }
+        console.log(`${logPrefix} ✖ 命令失败 · exit=${code} · ${sec}s`);
+        const err = new Error(`exit ${code}`);
+        err.stdout = stdout;
+        err.stderr = stderr;
+        err.code = code;
+        reject(err);
+      });
+    });
   });
 }
 
@@ -572,8 +669,9 @@ async function wingetInstall(id) {
       message: "未找到 winget（Windows 10 1809+ 自带）",
     };
   }
+  console.log(`[pandoc] winget 安装 ${id}（进度见下方实时输出）…`);
   try {
-    const { stdout, stderr } = await runCmd(
+    const { stdout, stderr } = await runCmdLive(
       "winget",
       [
         "install",
@@ -584,7 +682,7 @@ async function wingetInstall(id) {
         "--accept-package-agreements",
         "--disable-interactivity",
       ],
-      { timeout: 900000 }
+      { timeout: 900000, logPrefix: "[pandoc/winget]" }
     );
     return { output: `${stdout}\n${stderr}`.trim().slice(-2000), command: `winget install --id ${id} -e` };
   } catch (err) {
@@ -597,18 +695,24 @@ async function wingetInstall(id) {
 
 async function installPandoc() {
   const platform = process.platform;
+  console.log("[pandoc] 准备安装 pandoc…");
   if (platform === "win32") {
     const r = await wingetInstall("JohnMacFarlane.Pandoc");
     resolvePandocBin({ refresh: true });
     const p = await checkPandoc();
+    console.log(`[pandoc] pandoc 探测：${p.ok ? "已就绪 " + (p.version || "") : "仍未找到"}`);
     return { ...r, installed: p.ok, pandoc: p };
   }
   if (platform === "darwin") {
     if (await hasCmd("brew")) {
       try {
-        const { stdout, stderr } = await runCmd("brew", ["install", "pandoc"], { timeout: 900000 });
+        const { stdout, stderr } = await runCmdLive("brew", ["install", "pandoc"], {
+          timeout: 900000,
+          logPrefix: "[pandoc/brew]",
+        });
         resolvePandocBin({ refresh: true });
         const p = await checkPandoc();
+        console.log(`[pandoc] pandoc 探测：${p.ok ? "已就绪 " + (p.version || "") : "仍未找到"}`);
         return { installed: p.ok, output: `${stdout}\n${stderr}`.trim().slice(-2000), pandoc: p, command: "brew install pandoc" };
       } catch (err) {
         return { installed: false, output: `${err?.stderr || err?.message || ""}`.slice(-2000), command: "brew install pandoc" };
@@ -627,13 +731,16 @@ async function installPandoc() {
 /** 安装 Typst（印刷级 PDF 首选引擎，体积远小于完整 TeX） */
 async function installTypst() {
   const platform = process.platform;
+  console.log("[pandoc] 准备安装 Typst（PDF 引擎）…");
   if (platform === "win32") {
     const r = await wingetInstall("Typst.Typst");
     resolveCmdBin("typst", { refresh: true });
     const pdf = await probePdfEngines();
+    const ok = !!pdf.engines.typst?.ok;
+    console.log(`[pandoc] Typst 探测：${ok ? "已就绪" : "仍未找到"} · preferred=${pdf.preferred || "-"}`);
     return {
       ...r,
-      installed: !!pdf.engines.typst?.ok,
+      installed: ok,
       pdf,
       package: "typst",
     };
@@ -641,11 +748,16 @@ async function installTypst() {
   if (platform === "darwin") {
     if (await hasCmd("brew")) {
       try {
-        const { stdout, stderr } = await runCmd("brew", ["install", "typst"], { timeout: 900000 });
+        const { stdout, stderr } = await runCmdLive("brew", ["install", "typst"], {
+          timeout: 900000,
+          logPrefix: "[pandoc/brew]",
+        });
         resolveCmdBin("typst", { refresh: true });
         const pdf = await probePdfEngines();
+        const ok = !!pdf.engines.typst?.ok;
+        console.log(`[pandoc] Typst 探测：${ok ? "已就绪" : "仍未找到"}`);
         return {
-          installed: !!pdf.engines.typst?.ok,
+          installed: ok,
           output: `${stdout}\n${stderr}`.trim().slice(-2000),
           pdf,
           command: "brew install typst",
