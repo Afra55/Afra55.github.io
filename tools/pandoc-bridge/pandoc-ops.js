@@ -245,6 +245,22 @@ function resolveCmdCandidates(name) {
       if (la) {
         candidates.push(path.join(la, "Microsoft", "WinGet", "Links", "typst.exe"));
         candidates.push(path.join(la, "Programs", "typst", "typst.exe"));
+        // winget 常装到 Packages\Typst.Typst_*\typst.exe，装完 PATH 未刷新也能找到
+        try {
+          const pkgRoot = path.join(la, "Microsoft", "WinGet", "Packages");
+          if (fs.existsSync(pkgRoot)) {
+            for (const d of fs.readdirSync(pkgRoot)) {
+              if (!/typst/i.test(d)) continue;
+              const base = path.join(pkgRoot, d);
+              candidates.push(path.join(base, "typst.exe"));
+              try {
+                for (const sub of fs.readdirSync(base)) {
+                  candidates.push(path.join(base, sub, "typst.exe"));
+                }
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
       }
       candidates.push(path.join(pf, "Typst", "typst.exe"));
       candidates.push("typst.exe");
@@ -735,9 +751,19 @@ async function installTypst() {
   if (platform === "win32") {
     const r = await wingetInstall("Typst.Typst");
     resolveCmdBin("typst", { refresh: true });
-    const pdf = await probePdfEngines();
-    const ok = !!pdf.engines.typst?.ok;
-    console.log(`[pandoc] Typst 探测：${ok ? "已就绪" : "仍未找到"} · preferred=${pdf.preferred || "-"}`);
+    let pdf = await probePdfEngines();
+    let ok = !!pdf.engines.typst?.ok;
+    // winget 刚装完偶发 Links 尚未写出：稍等再探一次
+    if (!ok) {
+      console.log("[pandoc] Typst 尚未探测到，2s 后重试…");
+      await new Promise((r2) => setTimeout(r2, 2000));
+      resolveCmdBin("typst", { refresh: true });
+      pdf = await probePdfEngines();
+      ok = !!pdf.engines.typst?.ok;
+    }
+    console.log(
+      `[pandoc] Typst 探测：${ok ? "已就绪 · " + (pdf.engines.typst?.bin || "") : "仍未找到"} · preferred=${pdf.preferred || "-"}`
+    );
     return {
       ...r,
       installed: ok,

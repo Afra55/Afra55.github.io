@@ -5895,48 +5895,76 @@ a{color:${v.accent}}
           return;
         }
         if (fmt === "pdf") {
-          // 印刷级：本机 Pandoc + Typst/XeLaTeX；缺引擎则自动下载安装，不再拦着用
+          // 先探测再装：避免一点击就 /convert → 立刻失败 → 误报「自动安装未完成」
+          let attemptedInstall = false;
           let lastErr = null;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              await exportViaPandoc(text, "pdf", title, attempt > 0);
-              toast("已导出印刷级 PDF");
+          try {
+            const ready = await ensurePrintPdfReady({
+              onInstallStart: () => {
+                attemptedInstall = true;
+              },
+            });
+            if (!ready.ok) {
+              lastErr = new Error(ready.error || "印刷级 PDF 环境未就绪");
+              const okPrint = await confirmModal({
+                title: attemptedInstall ? "引擎未装好，改用浏览器打印？" : "无法印刷级导出，改用浏览器打印？",
+                body:
+                  `${lastErr.message}\n\n` +
+                  (attemptedInstall
+                    ? "自动安装未成功（详情见本机桥黑窗）。可改用浏览器打印「另存为 PDF」，或装好后重试。"
+                    : "可改用浏览器打印「另存为 PDF」（质量低于印刷级），或检查本机桥后重试。"),
+                okText: "浏览器打印",
+              });
+              if (!okPrint) throw lastErr;
+              const html = await buildExportHtml(text);
+              const w = window.open("", "_blank");
+              if (!w) throw new Error("弹窗被拦截，无法打印");
+              w.document.write(standaloneHtml(title, html));
+              w.document.close();
+              w.focus();
+              setTimeout(() => w.print(), 300);
               return;
-            } catch (err) {
-              lastErr = err;
-              const msg = String(err?.message || err);
-              const needPandoc = /未找到 pandoc|not found.*pandoc|ENOENT.*pandoc/i.test(msg);
-              const needEngine = /未找到印刷级 PDF 引擎|Typst|XeLaTeX|pdf-engine/i.test(msg);
-              if (attempt === 0 && needPandoc) {
-                toast("未找到 pandoc，开始自动安装…");
-                await runPandocInstall();
-                continue;
-              }
-              if (attempt < 2 && needEngine) {
-                toast("缺少 PDF 引擎，开始下载安装 Typst…");
-                await runTypstInstall();
-                continue;
-              }
-              break;
             }
+            await exportViaPandoc(text, "pdf", title, true);
+            toast("已导出印刷级 PDF");
+            return;
+          } catch (err) {
+            lastErr = err;
+            const msg = String(err?.message || err);
+            // 转换阶段仍报缺引擎：再装一次 Typst 后重试（装完 PATH 偶发未刷新）
+            if (/未找到印刷级 PDF 引擎|未找到.*Typst|pdf-engine/i.test(msg)) {
+              try {
+                attemptedInstall = true;
+                toast("仍缺 PDF 引擎，继续安装 Typst…");
+                await runTypstInstall();
+                await exportViaPandoc(text, "pdf", title, true);
+                toast("已导出印刷级 PDF");
+                return;
+              } catch (err2) {
+                lastErr = err2;
+              }
+            }
+            const failMsg = String(lastErr?.message || lastErr || "导出失败");
+            if (/本机桥未启动|未找到本机桥|Failed to fetch/i.test(failMsg)) throw lastErr;
+            const okPrint = await confirmModal({
+              title: "导出失败，改用浏览器打印？",
+              body:
+                `${failMsg}\n\n` +
+                (attemptedInstall
+                  ? "若黑窗里安装已结束仍失败，可先用浏览器打印，或重启桥后再试。"
+                  : "可改用浏览器打印「另存为 PDF」，或查看本机桥黑窗错误后重试。"),
+              okText: "浏览器打印",
+            });
+            if (!okPrint) throw lastErr || new Error(failMsg);
+            const html = await buildExportHtml(text);
+            const w = window.open("", "_blank");
+            if (!w) throw new Error("弹窗被拦截，无法打印");
+            w.document.write(standaloneHtml(title, html));
+            w.document.close();
+            w.focus();
+            setTimeout(() => w.print(), 300);
+            return;
           }
-          const failMsg = String(lastErr?.message || lastErr || "导出失败");
-          const okPrint = await confirmModal({
-            title: "引擎未就绪，改用浏览器打印？",
-            body:
-              `${failMsg}\n\n` +
-              "自动安装未完成。可改用浏览器打印「另存为 PDF」（质量低于印刷级），或稍后重试导出。",
-            okText: "浏览器打印",
-          });
-          if (!okPrint) throw lastErr || new Error(failMsg);
-          const html = await buildExportHtml(text);
-          const w = window.open("", "_blank");
-          if (!w) throw new Error("弹窗被拦截，无法打印");
-          w.document.write(standaloneHtml(title, html));
-          w.document.close();
-          w.focus();
-          setTimeout(() => w.print(), 300);
-          return;
         }
         if (fmt === "png") {
           await ensureVendor("html2canvas");
@@ -5998,6 +6026,82 @@ a{color:${v.accent}}
       return out;
     }
 
+    async function fetchPandocJson(pathname) {
+      const res = await fetch(`${baseUrl()}${pathname}`, {
+        headers: { "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+      });
+      const data = await res.json().catch(() => null);
+      return { res, data };
+    }
+
+    /** 探测 pandoc + 印刷级 PDF 引擎是否就绪 */
+    async function probePrintPdfEnv() {
+      try {
+        const { res, data } = await fetchPandocJson("/pandoc/health");
+        if (!res.ok || !data) return { bridgeOk: false, pandocOk: false, printReady: false };
+        const pandocOk = !!data.pandoc?.ok;
+        const printReady = !!(data.features?.printPdf || data.pandoc?.pdf?.printReady);
+        const preferred = data.features?.preferredPdfEngine || data.pandoc?.pdf?.preferred || "";
+        return { bridgeOk: true, pandocOk, printReady, preferred, version: data.pandoc?.version || "" };
+      } catch (_) {
+        return { bridgeOk: false, pandocOk: false, printReady: false };
+      }
+    }
+
+    async function probePdfEnginesOnly() {
+      try {
+        const { res, data } = await fetchPandocJson("/pandoc/pdf-engines");
+        if (!res.ok || !data?.ok) return { printReady: false, preferred: "" };
+        return {
+          printReady: !!data.printReady,
+          preferred: data.preferred || "",
+          engines: data.engines || {},
+        };
+      } catch (_) {
+        return { printReady: false, preferred: "" };
+      }
+    }
+
+    /**
+     * 导出 PDF 前：缺 pandoc / 缺 Typst 则先安装，成功后再允许 /convert。
+     * @returns {Promise<{ ok: boolean, error?: string, preferred?: string }>}
+     */
+    async function ensurePrintPdfReady({ onInstallStart } = {}) {
+      let env = await probePrintPdfEnv();
+      if (!env.bridgeOk) {
+        showBridgeHelpModal("导出印刷级 PDF");
+        return { ok: false, error: "本机桥未启动" };
+      }
+      if (!env.pandocOk) {
+        onInstallStart?.();
+        toast("未找到 pandoc，开始自动安装…");
+        await runPandocInstall();
+        env = await probePrintPdfEnv();
+        if (!env.pandocOk) {
+          return { ok: false, error: "pandoc 安装后仍未就绪（请看黑窗，或手动安装后重试）" };
+        }
+      }
+      if (!env.printReady) {
+        onInstallStart?.();
+        toast("缺少 PDF 引擎，开始下载安装 Typst…");
+        await runTypstInstall();
+        const pdf = await probePdfEnginesOnly();
+        if (!pdf.printReady) {
+          env = await probePrintPdfEnv();
+        } else {
+          env.printReady = true;
+          env.preferred = pdf.preferred;
+        }
+        if (!env.printReady) {
+          return {
+            ok: false,
+            error: "Typst 安装后仍未探测到 PDF 引擎（请看黑窗完整输出；Windows 可重启桥后再试）",
+          };
+        }
+      }
+      return { ok: true, preferred: env.preferred || "" };
+    }
+
     async function exportViaPandoc(text, to, title, retried = false) {
       // 图表先烤成 PNG 再交给 Pandoc，Word/PDF/EPUB 等才能按图显示
       const baked = await bakeChartsForExport(text, { mode: "file" }).catch(() => ({
@@ -6034,11 +6138,7 @@ a{color:${v.accent}}
           showBridgeHelpModal("导出为 Pandoc 格式");
           throw new Error(msg);
         }
-        // PDF：缺 pandoc / 缺引擎一律抛给 exportCurrent 自动下载安装（不弹确认拦着）
-        if (to === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX|pdf-engine|未找到 pandoc|not found.*pandoc|ENOENT/i.test(msg)) {
-          throw new Error(msg);
-        }
-        if (!retried && /pandoc/i.test(msg) && /未找到|not found|ENOENT|未安装/i.test(msg)) {
+        if (!retried && to !== "pdf" && /pandoc/i.test(msg) && /未找到|not found|ENOENT|未安装/i.test(msg)) {
           const ok = await confirmModal({
             title: "安装 pandoc",
             body: "导出该格式需要 pandoc，当前未安装。现在用本机桥自动安装？（Windows/macOS 支持，约 100–150MB）",
@@ -6078,12 +6178,17 @@ a{color:${v.accent}}
         });
         const data = await res.json().catch(() => null);
         if (!data?.ok) throw new Error(data?.error || "安装请求失败");
-        if (data.installed) {
-          toast("Typst 已安装，正在重试导出…");
+        // 再探测一次，避免 winget 成功但 PATH 未刷新时误报
+        const pdf = await probePdfEnginesOnly();
+        if (data.installed || pdf.printReady) {
+          toast("Typst 已就绪，继续导出…");
           return;
         }
-        if (data.needsManual) throw new Error(`请手动安装：${data.command || "typst"}`);
-        throw new Error(data.message || data.output || "Typst 安装未完成");
+        if (data.needsManual) {
+          throw new Error(`请手动安装：${data.command || "typst"}`);
+        }
+        const detail = String(data.message || data.output || "").trim().slice(0, 300);
+        throw new Error(detail || "Typst 安装未完成（请看本机桥黑窗）");
       } finally {
         clearInterval(timer);
         closeModal();

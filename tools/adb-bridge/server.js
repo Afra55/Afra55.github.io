@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.96";
+const BRIDGE_VERSION = "0.9.97";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5741,10 +5741,15 @@ async function handleApi(req, res, url) {
       const isPandocHealth = stripped === "/health" && req.method === "GET";
       if (!isPandocHealth && req.method !== "OPTIONS") requireToken(req);
       const isConvert = stripped === "/convert" && req.method === "POST";
+      const isInstall = stripped === "/install" && req.method === "POST";
       if (isConvert) {
         console.log("");
         console.log("[bridge] → Pandoc 文档转换 · 请看下方 [pandoc] 进度");
         beginBridgeBusy("pandoc-convert");
+      } else if (isInstall) {
+        console.log("");
+        console.log("[bridge] → Pandoc/Typst 安装 · 请看下方 [pandoc] 实时进度");
+        beginBridgeBusy("pandoc-install");
       }
       wrapResWithCors(res, origin);
       try {
@@ -5755,6 +5760,7 @@ async function handleApi(req, res, url) {
         });
       } finally {
         if (isConvert) endBridgeBusy("pandoc-convert");
+        if (isInstall) endBridgeBusy("pandoc-install");
       }
       return;
     }
