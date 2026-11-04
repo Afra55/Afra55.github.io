@@ -6297,21 +6297,17 @@ a{color:${v.accent}}
         )}</code>`;
       return (
         `<div class="mdm-manual-install" style="margin-top:4px;padding:12px 14px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.6;background:rgba(0,0,0,.03)">` +
-        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.15)"><strong>有 miktex.exe、没有 xelatex.exe</strong>＝还差引擎宏包。用下面任一方式补装即可。</p>` +
-        `<p style="margin:0 0 6px"><strong>方式 A · 命令一行（推荐）</strong></p>` +
+        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.15)"><strong>包显示 already installed 但仍无 xelatex.exe？</strong>多半是可执行链接没建好，或管理员/普通用户装到了两套目录。</p>` +
+        `<p style="margin:0 0 6px"><strong>请按顺序在 miktex.exe 同目录执行（用普通用户 cmd，不要「以管理员」）</strong></p>` +
         `<ol style="margin:0 0 10px;padding-left:1.25em">` +
-        `<li>在资源管理器打开 <code>miktex.exe</code> 所在文件夹（一般是 <code>…\\miktex\\bin\\x64</code>）</li>` +
-        `<li>地址栏输入 <code>cmd</code> 回车</li>` +
-        `<li>执行：<code>miktex packages install miktex-xetex</code></li>` +
-        `<li>完成后同目录应出现 <code>xelatex.exe</code> → <strong>重启本机桥</strong> →「我已装好，重新探测」</li>` +
+        `<li>资源管理器打开 <code>miktex.exe</code> 所在文件夹 → 地址栏输入 <code>cmd</code></li>` +
+        `<li><code>miktex links install</code></li>` +
+        `<li><code>miktex fndb refresh</code></li>` +
+        `<li><code>dir *latex*.exe</code> —— 应能看到 <code>xelatex.exe</code></li>` +
+        `<li>若仍没有：开始菜单打开 <strong>MiKTeX Console</strong>，看窗口标题/设置里的 <strong>Install root</strong>，到<strong>那个</strong>目录下的 <code>miktex\\bin\\x64</code> 再 <code>dir *latex*.exe</code></li>` +
+        `<li>找到后<strong>重启本机桥</strong>再探测</li>` +
         `</ol>` +
-        `<p style="margin:0 0 6px"><strong>方式 B · MiKTeX Console</strong></p>` +
-        `<ol style="margin:0 0 10px;padding-left:1.25em">` +
-        `<li>开始菜单打开 <strong>MiKTeX Console</strong> → <strong>Packages</strong></li>` +
-        `<li>搜索 <code>miktex-xetex</code> → <strong>Install</strong></li>` +
-        `<li>重启本机桥再探测</li>` +
-        `</ol>` +
-        `<p class="hint tight" style="margin:0 0 10px">也可把 <code>miktex.exe</code> 的完整路径贴进下方输入框点「使用此路径」，桥 ≥0.9.111 会尝试自动补装。</p>` +
+        `<p class="hint tight" style="margin:0 0 10px">出现 <code>security risk: running with elevated privileges</code> 时，请关掉管理员 cmd，用普通窗口重做上面步骤。</p>` +
         `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.12)"><strong>若连 MiKTeX Console 都没有</strong>：请先完整安装，再重启桥探测。</p>` +
         `<p style="margin:0 0 6px"><strong>还没装 MiKTeX？Windows 只走这一条</strong></p>` +
         `<ol style="margin:0;padding-left:1.25em">` +
