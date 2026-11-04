@@ -5913,7 +5913,7 @@ a{color:${v.accent}}
                 body:
                   `${lastErr.message}\n\n` +
                   (attemptedInstall
-                    ? "自动安装未成功（详情见本机桥黑窗）。可改用浏览器打印「另存为 PDF」，或装好后重试。"
+                    ? "自动安装未成功（请看本机桥黑窗完整输出）。XeLaTeX 体积较大，首次可能要 5–15 分钟；若黑窗仍在下载请等结束后再点导出。也可改用浏览器打印。"
                     : "可改用浏览器打印「另存为 PDF」（质量低于印刷级），或检查本机桥后重试。"),
                 okText: "浏览器打印",
               });
@@ -6089,7 +6089,7 @@ a{color:${v.accent}}
       }
       if (!env.printReady) {
         onInstallStart?.();
-        toast("缺少 PDF 引擎，开始安装 XeLaTeX（MiKTeX，体积较大）…");
+        toast("缺少 PDF 引擎，开始安装 XeLaTeX（可能需下载 TinyTeX，请看黑窗）…");
         try {
           await runXelatexInstall();
         } catch (err) {
@@ -6105,7 +6105,8 @@ a{color:${v.accent}}
         if (!env.printReady) {
           return {
             ok: false,
-            error: "XeLaTeX 安装后仍未探测到（请看黑窗；Windows 可打开 MiKTeX Console 初始化后重启桥）",
+            error:
+              "XeLaTeX 安装后仍未探测到（请看黑窗完整输出；若黑窗还在下载请等结束后重启桥再导出）",
           };
         }
       }
@@ -6172,13 +6173,18 @@ a{color:${v.accent}}
       els.modal.hidden = false;
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在安装 XeLaTeX</strong></div>` +
-        `<p class="mdm-modal-body">本机桥正在安装印刷级 PDF 引擎 <strong>XeLaTeX</strong>（Windows：MiKTeX；macOS：BasicTeX）。体积较大（约数百 MB～1GB+），请勿关闭本页。<br/>详细进度请看<strong>本机桥黑窗</strong>。</p>` +
+        `<p class="mdm-modal-body">本机桥正在安装印刷级 PDF 引擎 <strong>XeLaTeX</strong>。<br/>` +
+        `顺序：本机已有 → winget 用户级 MiKTeX → <strong>TinyTeX 便携包</strong>（黑窗有下载百分比）。首次约 5–15 分钟，请勿关闭本页。</p>` +
         `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-xelatex-install-progress">已用时 0 秒 · 安装中… · 请看本机桥黑窗</p></div>`;
       els.modal.onclick = null;
       const timer = setInterval(() => {
         const el = document.getElementById("mdm-xelatex-install-progress");
         if (el) {
-          el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒 · 安装中… · 请看本机桥黑窗进度`;
+          const sec = Math.round((Date.now() - t0) / 1000);
+          el.textContent =
+            sec < 20
+              ? `已用时 ${sec} 秒 · 正在探测/尝试安装… · 请看本机桥黑窗`
+              : `已用时 ${sec} 秒 · 仍在安装（体积较大属正常）… · 请看本机桥黑窗进度`;
         }
       }, 1000);
       try {
@@ -6195,11 +6201,15 @@ a{color:${v.accent}}
           toast("XeLaTeX 已就绪，继续导出…");
           return;
         }
+        const detail = String(data.message || data.output || "").trim().slice(0, 400);
         if (data.needsManual) {
-          throw new Error(`请手动安装：${data.command || "MiKTeX / BasicTeX"}`);
+          throw new Error(
+            detail
+              ? `${detail}${data.command ? `\n可手动：${data.command}` : ""}`
+              : `请手动安装：${data.command || "MiKTeX / BasicTeX / TinyTeX"}`
+          );
         }
-        const detail = String(data.message || data.output || "").trim().slice(0, 300);
-        throw new Error(detail || "XeLaTeX 安装未完成（请看本机桥黑窗）");
+        throw new Error(detail || "XeLaTeX 安装未完成（请看本机桥黑窗；若黑窗仍在下载请等结束再试）");
       } finally {
         clearInterval(timer);
         closeModal();

@@ -240,8 +240,9 @@ async function locateTypstBinary() {
   return "";
 }
 
-function downloadToFile(url, dest, { logPrefix = "[pandoc]" } = {}) {
+function downloadToFile(url, dest, { logPrefix = "[pandoc]", timeout = 1800000 } = {}) {
   return new Promise((resolve, reject) => {
+    const idleMs = Math.min(Math.max(Number(timeout) || 1800000, 60000), 1800000);
     const follow = (u, n = 0) => {
       if (n > 10) return reject(new Error("下载重定向过多"));
       const mod = String(u).startsWith("https") ? https : http;
@@ -249,7 +250,7 @@ function downloadToFile(url, dest, { logPrefix = "[pandoc]" } = {}) {
         u,
         {
           headers: { "User-Agent": "devtools-bridge-pandoc", Accept: "*/*" },
-          timeout: 120000,
+          timeout: idleMs,
         },
         (res) => {
           if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
@@ -441,7 +442,9 @@ function resolveCmdCandidates(name) {
     const pf = process.env.ProgramFiles || "C:\\Program Files";
     const pf86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
     if (n === "xelatex") {
-      for (const root of [pf, pf86, la ? path.join(la, "Programs") : ""]) {
+      const tiny = findXelatexInTinytex(tinytexBridgeRoot());
+      if (tiny) candidates.push(tiny);
+      for (const root of [pf, pf86, la ? path.join(la, "Programs") : "", la || ""]) {
         if (!root) continue;
         candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "x64", "xelatex.exe"));
         candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "win64", "xelatex.exe"));
@@ -453,6 +456,8 @@ function resolveCmdCandidates(name) {
     }
   } else {
     if (n === "xelatex") {
+      const tiny = findXelatexInTinytex(tinytexBridgeRoot());
+      if (tiny) candidates.push(tiny);
       candidates.push(
         "/Library/TeX/texbin/xelatex",
         "/usr/local/texlive/2025/bin/universal-darwin/xelatex",
@@ -910,7 +915,7 @@ async function convert(body = {}) {
   return convertFromText(body);
 }
 
-async function wingetInstall(id) {
+async function wingetInstall(id, extraArgs = []) {
   if (!(await hasCmd("winget"))) {
     return {
       installed: false,
@@ -919,7 +924,8 @@ async function wingetInstall(id) {
       message: "未找到 winget（Windows 10 1809+ 自带）",
     };
   }
-  console.log(`[pandoc] winget 安装 ${id}（进度直接刷在黑窗）…`);
+  const extras = Array.isArray(extraArgs) ? extraArgs.filter(Boolean) : [];
+  console.log(`[pandoc] winget 安装 ${id}${extras.length ? " " + extras.join(" ") : ""}（进度直接刷在黑窗）…`);
   try {
     const { code } = await runCmdInherit(
       "winget",
@@ -931,12 +937,13 @@ async function wingetInstall(id) {
         "--accept-source-agreements",
         "--accept-package-agreements",
         "--disable-interactivity",
+        ...extras,
       ],
-      { timeout: 900000, logPrefix: "[pandoc/winget]" }
+      { timeout: 1800000, logPrefix: "[pandoc/winget]" }
     );
     return {
       output: `winget exit=${code}`,
-      command: `winget install --id ${id} -e`,
+      command: `winget install --id ${id} -e ${extras.join(" ")}`.trim(),
       wingetCode: code,
     };
   } catch (err) {
@@ -945,6 +952,208 @@ async function wingetInstall(id) {
       output: `${err?.stderr || err?.message || ""}`.trim().slice(-2000),
       command: `winget install --id ${id} -e`,
     };
+  }
+}
+
+/** 安装后刷新进程 PATH（winget/MiKTeX 常改注册表但不更新当前桥进程） */
+function refreshWindowsPathEnv() {
+  if (process.platform !== "win32") return;
+  try {
+    const { execFileSync } = require("child_process");
+    const read = (key) => {
+      try {
+        const out = execFileSync("reg", ["query", key, "/v", "Path"], {
+          encoding: "utf8",
+          windowsHide: true,
+          timeout: 8000,
+        });
+        const m = String(out).match(/Path\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
+        return m ? m[1].trim() : "";
+      } catch (_) {
+        return "";
+      }
+    };
+    const machine = read("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");
+    const user = read("HKCU\\Environment");
+    const cur = process.env.PATH || "";
+    const merged = [user, machine, cur].filter(Boolean).join(";");
+    if (merged) process.env.PATH = merged;
+    console.log("[pandoc] 已刷新进程 PATH（合并用户/系统）");
+  } catch (err) {
+    console.log(`[pandoc] PATH 刷新跳过：${err?.message || err}`);
+  }
+}
+
+function tinytexBridgeRoot() {
+  return path.join(resolveBridgeRoot(), "bin", "tinytex");
+}
+
+/** 在 TinyTeX 解压目录里找 xelatex */
+function findXelatexInTinytex(root, depth = 0) {
+  if (!root || depth > 5) return "";
+  try {
+    if (!fs.existsSync(root)) return "";
+    const want = process.platform === "win32" ? "xelatex.exe" : "xelatex";
+    const direct = path.join(root, want);
+    if (fs.existsSync(direct)) return direct;
+    // 常见布局：bin/windows、bin/universal-darwin、bin/x86_64-linux
+    for (const rel of ["bin/windows", "bin/universal-darwin", "bin/x86_64-linux", "bin/aarch64-linux"]) {
+      const p = path.join(root, rel, want);
+      if (fs.existsSync(p)) return p;
+    }
+    for (const name of fs.readdirSync(root)) {
+      if (name === want) return path.join(root, name);
+      const p = path.join(root, name);
+      let st;
+      try {
+        st = fs.statSync(p);
+      } catch (_) {
+        continue;
+      }
+      if (!st.isDirectory()) continue;
+      if (/node_modules|\.git|__pycache__/i.test(name)) continue;
+      const hit = findXelatexInTinytex(p, depth + 1);
+      if (hit) return hit;
+    }
+  } catch (_) {}
+  return "";
+}
+
+function tinytexBinDirFromXelatex(xelatexBin) {
+  return xelatexBin ? path.dirname(xelatexBin) : "";
+}
+
+function prependPath(dir) {
+  if (!dir) return;
+  const cur = process.env.PATH || "";
+  const parts = cur.split(path.delimiter);
+  if (parts.includes(dir)) return;
+  process.env.PATH = `${dir}${path.delimiter}${cur}`;
+}
+
+function tinytexReleaseAsset() {
+  if (process.platform === "win32") {
+    return {
+      url: "https://github.com/rstudio/tinytex-releases/releases/latest/download/TinyTeX-1.zip",
+      kind: "zip",
+    };
+  }
+  if (process.platform === "darwin") {
+    return {
+      url: "https://github.com/rstudio/tinytex-releases/releases/latest/download/TinyTeX-1.tgz",
+      kind: "tgz",
+    };
+  }
+  return {
+    url: "https://github.com/rstudio/tinytex-releases/releases/latest/download/TinyTeX-1.tgz",
+    kind: "tgz",
+  };
+}
+
+async function extractTinytexArchive(archivePath, destDir, kind) {
+  fs.mkdirSync(destDir, { recursive: true });
+  if (kind === "zip") {
+    if (process.platform === "win32") {
+      await runCmdInherit(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-Command",
+          `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`,
+        ],
+        { timeout: 600000, logPrefix: "[pandoc/tinytex]" }
+      );
+      return;
+    }
+    await runCmd("unzip", ["-o", archivePath, "-d", destDir], { timeout: 600000 });
+    return;
+  }
+  await runCmd("tar", ["-xzf", archivePath, "-C", destDir], { timeout: 600000 });
+}
+
+/** Pandoc + XeLaTeX + 中文常用宏包（TinyTeX 精简包需补装） */
+async function ensureTinytexPandocPackages(xelatexBin) {
+  const binDir = tinytexBinDirFromXelatex(xelatexBin);
+  if (!binDir) return;
+  prependPath(binDir);
+  const pkgs = [
+    "latex-bin",
+    "xetex",
+    "fontspec",
+    "xecjk",
+    "ctex",
+    "geometry",
+    "fancyhdr",
+    "setspace",
+    "booktabs",
+    "longtable",
+    "fancyvrb",
+    "hyperref",
+    "xcolor",
+    "graphics",
+    "tools",
+    "amsmath",
+    "unicode-math",
+    "lm",
+    "lm-math",
+  ];
+  console.log("[pandoc/tinytex] 补装 Pandoc/中文常用宏包（黑窗可见）…");
+  try {
+    if (process.platform === "win32") {
+      // .bat 必须经 cmd，否则 spawn shell:false 会立刻失败
+      await runCmdInherit("cmd.exe", ["/d", "/s", "/c", "tlmgr install " + pkgs.join(" ")], {
+        timeout: 1800000,
+        cwd: binDir,
+        logPrefix: "[pandoc/tlmgr]",
+      });
+    } else {
+      const tlmgr = path.join(binDir, "tlmgr");
+      await runCmdInherit(fs.existsSync(tlmgr) ? tlmgr : "tlmgr", ["install", ...pkgs], {
+        timeout: 1800000,
+        cwd: binDir,
+        logPrefix: "[pandoc/tlmgr]",
+      });
+    }
+  } catch (err) {
+    console.log(`[pandoc/tlmgr] 部分宏包可能已存在或失败：${err?.message || err}`);
+  }
+}
+
+/**
+ * 下载 TinyTeX 到桥目录（自带 xelatex；黑窗有下载百分比）。
+ * 比 winget MiKTeX 更稳：不需要管理员，也不会因 UAC 几秒就失败。
+ */
+async function installTinytexPortable() {
+  const asset = tinytexReleaseAsset();
+  const destDir = tinytexBridgeRoot();
+  const tmpDir = makeBridgeTemp("tinytex-dl-");
+  const archive = path.join(tmpDir, asset.kind === "zip" ? "TinyTeX.zip" : "TinyTeX.tgz");
+  console.log("[pandoc/tinytex] 下载精简 TeX（含 XeLaTeX，约 100–200MB+）…");
+  console.log(`[pandoc/tinytex] ${asset.url}`);
+  try {
+    await downloadToFile(asset.url, archive, { logPrefix: "[pandoc/tinytex]", timeout: 1800000 });
+    console.log(`[pandoc/tinytex] 正在解压到 ${destDir}`);
+    try {
+      fs.rmSync(destDir, { recursive: true, force: true });
+    } catch (_) {}
+    fs.mkdirSync(destDir, { recursive: true });
+    await extractTinytexArchive(archive, destDir, asset.kind);
+    let bin = findXelatexInTinytex(destDir);
+    if (!bin) {
+      // 解压可能多一层 TinyTeX/
+      bin = findXelatexInTinytex(destDir);
+    }
+    if (!bin) throw new Error("解压后未找到 xelatex");
+    prependPath(path.dirname(bin));
+    resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
+    resolveCmdBin._cache.xelatex = bin;
+    await ensureTinytexPandocPackages(bin);
+    console.log(`[pandoc/tinytex] 就绪 · ${bin}`);
+    return { bin, command: `tinytex-portable:${asset.url}`, destDir };
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch (_) {}
   }
 }
 
@@ -1005,20 +1214,39 @@ async function installTypst() {
 }
 
 async function locateXelatexBinary() {
+  // 桥自带 TinyTeX 优先
+  {
+    const tiny = findXelatexInTinytex(tinytexBridgeRoot());
+    if (tiny) {
+      prependPath(path.dirname(tiny));
+      return tiny;
+    }
+  }
   const candidates = [];
   if (process.platform === "win32") {
     const la = process.env.LOCALAPPDATA || "";
     const pf = process.env.ProgramFiles || "C:\\Program Files";
     const pf86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
-    for (const root of [pf, pf86, la ? path.join(la, "Programs") : ""]) {
+    const home = process.env.USERPROFILE || "";
+    for (const root of [pf, pf86, la ? path.join(la, "Programs") : "", la, home]) {
       if (!root) continue;
       candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "x64", "xelatex.exe"));
       candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "win64", "xelatex.exe"));
       candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "xelatex.exe"));
     }
+    // TinyTeX 默认用户目录
+    if (home) {
+      candidates.push(path.join(home, "AppData", "Roaming", "TinyTeX", "bin", "windows", "xelatex.exe"));
+      candidates.push(path.join(home, ".TinyTeX", "bin", "windows", "xelatex.exe"));
+    }
     candidates.push("xelatex.exe");
   } else {
+    const home = os.homedir();
     candidates.push(
+      path.join(home, ".TinyTeX", "bin", "universal-darwin", "xelatex"),
+      path.join(home, ".TinyTeX", "bin", "x86_64-linux", "xelatex"),
+      path.join(home, ".TinyTeX", "bin", "aarch64-linux", "xelatex"),
+      path.join(home, "Library", "TinyTeX", "bin", "universal-darwin", "xelatex"),
       "/Library/TeX/texbin/xelatex",
       "/usr/local/texlive/2025/bin/universal-darwin/xelatex",
       "/usr/local/texlive/2024/bin/universal-darwin/xelatex",
@@ -1030,7 +1258,10 @@ async function locateXelatexBinary() {
   }
   for (const c of candidates) {
     try {
-      if ((c.includes(path.sep) || c.includes("/")) && fs.existsSync(c)) return c;
+      if ((c.includes(path.sep) || c.includes("/")) && fs.existsSync(c)) {
+        prependPath(path.dirname(c));
+        return c;
+      }
     } catch (_) {}
   }
   return whereCmd(process.platform === "win32" ? "xelatex.exe" : "xelatex");
@@ -1057,10 +1288,10 @@ async function finalizeXelatexProbe(extra = {}) {
   };
 }
 
-/** 安装 XeLaTeX（Windows: MiKTeX；macOS: BasicTeX；体积大，黑窗可见进度） */
+/** 安装 XeLaTeX：先试本机已有 → winget 用户级 MiKTeX → 失败则 TinyTeX 便携包（有下载进度） */
 async function installXelatex() {
   const platform = process.platform;
-  console.log("[pandoc] 准备安装 XeLaTeX（印刷级唯一引擎，适合复杂图表/中文）…");
+  console.log("[pandoc] 准备安装 XeLaTeX（印刷级唯一引擎；复杂图表 + 中文）…");
 
   {
     const existing = await locateXelatexBinary();
@@ -1070,86 +1301,70 @@ async function installXelatex() {
     }
   }
 
-  if (platform === "win32") {
-    if (!(await hasCmd("winget"))) {
-      return {
-        installed: false,
-        needsManual: true,
-        package: "xelatex",
-        command: "winget install --id MiKTeX.MiKTeX -e",
-        message: "未找到 winget，请手动安装 MiKTeX（含 XeLaTeX）",
-        pdf: await probePdfEngines(),
-      };
-    }
-    console.log("[pandoc] 通过 winget 安装 MiKTeX（约数百 MB～1GB+，请看黑窗）…");
-    const r = await wingetInstall("MiKTeX.MiKTeX");
-    console.log("[pandoc] MiKTeX winget 结束，定位 xelatex…");
-    await new Promise((res) => setTimeout(res, 2000));
+  let last = { command: "", output: "", message: "" };
+
+  // Windows：先 winget --scope user（避免管理员 UAC 几秒就失败），再 TinyTeX 便携
+  if (platform === "win32" && (await hasCmd("winget"))) {
+    console.log("[pandoc] 尝试 winget 用户级安装 MiKTeX（无需管理员）…");
+    last = await wingetInstall("MiKTeX.MiKTeX", ["--scope", "user"]);
+    refreshWindowsPathEnv();
+    await new Promise((res) => setTimeout(res, 1500));
     let hit = await locateXelatexBinary();
     if (!hit) {
-      await new Promise((res) => setTimeout(res, 4000));
+      await new Promise((res) => setTimeout(res, 2500));
       hit = await locateXelatexBinary();
     }
-    if (hit) return finalizeXelatexProbe(r);
-    return {
-      ...r,
-      installed: false,
-      needsManual: true,
-      package: "xelatex",
-      message: "MiKTeX 安装后仍未找到 xelatex，请重启桥或打开 MiKTeX Console 完成初始化后再试",
-      pdf: await probePdfEngines(),
-    };
+    if (hit) return finalizeXelatexProbe(last);
+    console.log("[pandoc] winget 用户级后仍未找到 xelatex，改下 TinyTeX 便携包…");
+  } else if (platform === "win32") {
+    console.log("[pandoc] 无 winget，改下 TinyTeX 便携包…");
   }
 
-  if (platform === "darwin") {
-    if (!(await hasCmd("brew"))) {
-      return {
-        installed: false,
-        needsManual: true,
-        package: "xelatex",
-        command: "brew install --cask basictex",
-        message: "未找到 Homebrew",
-        pdf: await probePdfEngines(),
-      };
-    }
+  if (platform === "darwin" && (await hasCmd("brew"))) {
     try {
-      console.log("[pandoc] brew cask 安装 BasicTeX（含 XeLaTeX，体积较大）…");
+      console.log("[pandoc] 尝试 brew cask 安装 BasicTeX…");
       await runCmdInherit("brew", ["install", "--cask", "basictex"], {
         timeout: 1800000,
         logPrefix: "[pandoc/brew]",
       });
-      // BasicTeX 装完路径常在 /Library/TeX/texbin
       process.env.PATH = `/Library/TeX/texbin:${process.env.PATH || ""}`;
+      last = { command: "brew install --cask basictex", output: "" };
       const hit = await locateXelatexBinary();
-      if (hit) return finalizeXelatexProbe({ command: "brew install --cask basictex" });
-      return {
-        installed: false,
-        needsManual: true,
-        package: "xelatex",
-        command: "brew install --cask basictex && eval \"$(/usr/libexec/path_helper)\"",
-        message: "BasicTeX 已装但未找到 xelatex，请新开终端/重启桥后再试",
-        pdf: await probePdfEngines(),
-      };
+      if (hit) return finalizeXelatexProbe(last);
+      console.log("[pandoc] BasicTeX 后仍未定位，改下 TinyTeX 便携包…");
     } catch (err) {
-      return {
-        installed: false,
-        needsManual: true,
-        package: "xelatex",
-        command: "brew install --cask basictex",
-        message: String(err?.message || err),
-        pdf: await probePdfEngines(),
-      };
+      last = { command: "brew install --cask basictex", output: String(err?.message || err), message: String(err?.message || err) };
+      console.log(`[pandoc/brew] 失败：${last.output}，改下 TinyTeX…`);
     }
   }
 
-  return {
-    installed: false,
-    needsManual: true,
-    package: "xelatex",
-    command: "sudo apt install texlive-xetex texlive-lang-chinese   # 或等价发行版包",
-    message: "Linux 请手动安装 XeLaTeX（texlive-xetex）",
-    pdf: await probePdfEngines(),
-  };
+  // 主回退：TinyTeX 便携（下载有百分比，不会「几秒假失败」）
+  try {
+    const portable = await installTinytexPortable();
+    refreshWindowsPathEnv();
+    prependPath(path.dirname(portable.bin));
+    return finalizeXelatexProbe({
+      command: portable.command,
+      output: portable.bin,
+    });
+  } catch (err) {
+    const msg = String(err?.message || err);
+    console.log(`[pandoc/tinytex] 便携包安装失败：${msg}`);
+    return {
+      installed: false,
+      needsManual: true,
+      package: "xelatex",
+      command:
+        platform === "win32"
+          ? "winget install --id MiKTeX.MiKTeX -e --scope user"
+          : platform === "darwin"
+            ? "brew install --cask basictex"
+            : "sudo apt install texlive-xetex texlive-lang-chinese",
+      message: msg || "XeLaTeX 安装失败（请看黑窗；也可手动装 MiKTeX/BasicTeX）",
+      output: last.output || msg,
+      pdf: await probePdfEngines(),
+    };
+  }
 }
 
 async function installPackage(body = {}) {
