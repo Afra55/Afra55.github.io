@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.108";
+const BRIDGE_VERSION = "0.9.109";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -118,6 +118,155 @@ function loadPandocBridge() {
 const pandocBridge = loadPandocBridge();
 if (!pandocBridge) {
   console.warn("未找到 Pandoc 模块（可选）：完整 ZIP 请包含 pandoc-bridge/server.js + pandoc-ops.js");
+}
+
+/** 桥根目录（与 pandoc-ops.resolveBridgeRoot 对齐，保证 xelatex-path.txt 同一处） */
+function bridgeRootDir() {
+  const fromEnv = String(process.env.ADB_BRIDGE_DIR || process.env.DEVTOOLS_BRIDGE_DIR || "").trim();
+  if (fromEnv) {
+    try {
+      if (fs.existsSync(fromEnv)) return path.resolve(fromEnv);
+    } catch (_) {}
+  }
+  // ZIP：server.js 与 pandoc-bridge/ 同级；仓库：tools/adb-bridge → 根为 tools/
+  if (fs.existsSync(path.join(__dirname, "pandoc-bridge"))) return path.resolve(__dirname);
+  if (fs.existsSync(path.join(__dirname, "..", "pandoc-bridge"))) return path.resolve(__dirname, "..");
+  return path.resolve(__dirname);
+}
+
+/** 把用户填的 MiKTeX 目录 / xelatex.exe 解析成可执行文件 */
+function resolveXelatexUserPath(input) {
+  const raw = String(input || "").trim().replace(/^["']|["']$/g, "");
+  if (!raw) return "";
+  try {
+    if (!fs.existsSync(raw)) return "";
+    const st = fs.statSync(raw);
+    const want = process.platform === "win32" ? "xelatex.exe" : "xelatex";
+    if (st.isFile()) {
+      const base = path.basename(raw).toLowerCase();
+      if (base === want.toLowerCase() || base === "miktex-xelatex.exe") return raw;
+      return "";
+    }
+    if (!st.isDirectory()) return "";
+    for (const rel of [
+      want,
+      path.join("miktex", "bin", "x64", want),
+      path.join("miktex", "bin", "win64", want),
+      path.join("miktex", "bin", want),
+      path.join("bin", "x64", want),
+      path.join("bin", "win64", want),
+      path.join("bin", "windows", want),
+      path.join("bin", want),
+    ]) {
+      const p = path.join(raw, rel);
+      if (fs.existsSync(p)) return p;
+    }
+    // 浅扫一层子目录（自定义安装常见）
+    for (const name of fs.readdirSync(raw).slice(0, 80)) {
+      if (!/miktex|tex|bin/i.test(name)) continue;
+      const sub = path.join(raw, name);
+      try {
+        if (!fs.statSync(sub).isDirectory()) continue;
+      } catch (_) {
+        continue;
+      }
+      for (const rel of [
+        path.join("miktex", "bin", "x64", want),
+        path.join("bin", "x64", want),
+        path.join("bin", want),
+        want,
+      ]) {
+        const p = path.join(sub, rel);
+        if (fs.existsSync(p)) return p;
+      }
+    }
+  } catch (_) {}
+  return "";
+}
+
+/**
+ * 在统一桥内记住 xelatex 路径（不依赖 pandoc-bridge 路由表）。
+ * 旧 ZIP 只有旧 pandoc/server.js 时，/set-xelatex-path 会「未知接口」——此函数专治。
+ */
+async function setXelatexPathInBridge(body = {}) {
+  const input = String(body.path || body.xelatex || body.bin || "").trim();
+  console.log("[bridge] ──── 指定 xelatex 路径（桥内处理）────");
+  console.log(`[bridge] 用户填写：${input.slice(0, 240)}`);
+  if (!input) {
+    return { installed: false, message: "请提供 path（xelatex.exe 或 MiKTeX 目录）", needsManual: true };
+  }
+
+  // 优先复用新版 pandoc-ops（含探测/hints）
+  try {
+    const opsCandidates = [
+      path.join(__dirname, "pandoc-bridge", "pandoc-ops.js"),
+      path.join(__dirname, "..", "pandoc-bridge", "pandoc-ops.js"),
+    ];
+    for (const opsPath of opsCandidates) {
+      if (!fs.existsSync(opsPath)) continue;
+      // 清缓存以便更新后立刻生效
+      try {
+        delete require.cache[require.resolve(opsPath)];
+      } catch (_) {}
+      const ops = require(opsPath);
+      if (typeof ops.setXelatexPath === "function") {
+        console.log("[bridge] 使用 pandoc-ops.setXelatexPath");
+        return await ops.setXelatexPath({ path: input });
+      }
+    }
+  } catch (err) {
+    console.log(`[bridge] pandoc-ops 指定路径不可用，改用内置：${err?.message || err}`);
+  }
+
+  const bin = resolveXelatexUserPath(input);
+  if (!bin) {
+    console.log("[bridge] 路径下未找到 xelatex.exe");
+    return {
+      installed: false,
+      needsManual: true,
+      message:
+        "路径无效：请填 xelatex.exe 全路径，或含 miktex\\bin\\x64\\xelatex.exe 的 MiKTeX 目录",
+    };
+  }
+  const root = bridgeRootDir();
+  const outFile = path.join(root, "bin", "xelatex-path.txt");
+  try {
+    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+    fs.writeFileSync(outFile, bin + "\n", "utf8");
+  } catch (err) {
+    console.log(`[bridge] 写入路径文件失败：${err?.message || err}`);
+  }
+  // 刷新当前进程 PATH，旧版探测/where 也能找到
+  const dir = path.dirname(bin);
+  const cur = process.env.PATH || "";
+  if (!cur.split(path.delimiter).includes(dir)) {
+    process.env.PATH = `${dir}${path.delimiter}${cur}`;
+  }
+  console.log(`[bridge] 已记住并加入 PATH：${bin}`);
+
+  let versionOk = false;
+  try {
+    await execFileAsync(bin, ["--version"], { timeout: 20000, windowsHide: true });
+    versionOk = true;
+  } catch (err) {
+    console.log(`[bridge] --version 异常（文件仍在则判就绪）：${err?.message || err}`);
+  }
+  const installed = versionOk || fs.existsSync(bin);
+  return {
+    installed,
+    bin,
+    savedPath: bin,
+    command: "user-path",
+    output: bin,
+    pdf: {
+      printReady: installed,
+      preferred: installed ? "xelatex" : "",
+      engines: {
+        xelatex: { ok: installed, bin, version: versionOk ? "xelatex" : "xelatex (on disk)" },
+      },
+    },
+    message: installed ? "" : "已记录路径但探测失败",
+  };
 }
 function loadDoclingBridge() {
   const candidates = [
@@ -5735,13 +5884,13 @@ async function handleApi(req, res, url) {
     if (url.pathname === "/pandoc" || url.pathname.startsWith("/pandoc/")) {
       // 一进门就打日志，避免 Token/读 body 失败时黑窗完全无字
       console.log(`[bridge] ← ${req.method} ${url.pathname}`);
-      if (!pandocBridge?.handleRequest) {
-        console.log("[bridge] Pandoc 模块未加载（ZIP 缺 pandoc-bridge）");
-        sendJson(res, 503, { ok: false, error: "未找到 Pandoc 模块（请用完整 ZIP，含 pandoc-bridge）" }, origin);
-        return;
-      }
       const stripped = url.pathname === "/pandoc" ? "/" : url.pathname.slice(7) || "/";
       const isPandocHealth = stripped === "/health" && req.method === "GET";
+      const isSetXelatexPath =
+        (stripped === "/set-xelatex-path" || stripped === "/set-engine-path") && req.method === "POST";
+      const isConvert = stripped === "/convert" && req.method === "POST";
+      const isInstall = stripped === "/install" && req.method === "POST";
+
       if (!isPandocHealth && req.method !== "OPTIONS") {
         try {
           requireToken(req);
@@ -5750,18 +5899,64 @@ async function handleApi(req, res, url) {
           throw err;
         }
       }
-      const isConvert = stripped === "/convert" && req.method === "POST";
-      const isInstall = stripped === "/install" && req.method === "POST";
+      wrapResWithCors(res, origin);
+
+      // 指定路径：在统一桥内直接处理，避免旧 pandoc-bridge 回「未知接口」
+      if (isSetXelatexPath) {
+        console.log("[bridge] → 指定 xelatex 路径（桥内处理，不经 pandoc 路由表）");
+        const body = parseJsonBody(await readBody(req, 1024 * 1024));
+        const data = await setXelatexPathInBridge(body);
+        sendJson(res, 200, { ok: true, ...data }, origin);
+        return;
+      }
+
+      if (isInstall) {
+        const raw = await readBody(req, 1024 * 1024);
+        const body = parseJsonBody(raw);
+        const pathInput = String(body.path || body.xelatex || body.bin || "").trim();
+        if (pathInput) {
+          console.log("[bridge] → /install 带 path，桥内指定路径（跳过 pandoc 路由）");
+          beginBridgeBusy("pandoc-install");
+          try {
+            const data = await setXelatexPathInBridge(body);
+            sendJson(res, 200, { ok: true, ...data }, origin);
+          } finally {
+            endBridgeBusy("pandoc-install");
+          }
+          return;
+        }
+        // 普通安装：body 已读，交给 pandoc 时带 preloadedBody
+        if (!pandocBridge?.handleRequest) {
+          console.log("[bridge] Pandoc 模块未加载（ZIP 缺 pandoc-bridge）");
+          sendJson(res, 503, { ok: false, error: "未找到 Pandoc 模块（请用完整 ZIP，含 pandoc-bridge）" }, origin);
+          return;
+        }
+        console.log("");
+        console.log("[bridge] → Pandoc/XeLaTeX 安装 · 请看下方 [pandoc] 输出");
+        beginBridgeBusy("pandoc-install");
+        try {
+          await pandocBridge.handleRequest(req, res, {
+            pathname: stripped,
+            alreadyAuthed: true,
+            embedded: true,
+            preloadedBody: body,
+          });
+        } finally {
+          endBridgeBusy("pandoc-install");
+        }
+        return;
+      }
+
+      if (!pandocBridge?.handleRequest) {
+        console.log("[bridge] Pandoc 模块未加载（ZIP 缺 pandoc-bridge）");
+        sendJson(res, 503, { ok: false, error: "未找到 Pandoc 模块（请用完整 ZIP，含 pandoc-bridge）" }, origin);
+        return;
+      }
       if (isConvert) {
         console.log("");
         console.log("[bridge] → Pandoc 文档转换 · 请看下方 [pandoc] 进度");
         beginBridgeBusy("pandoc-convert");
-      } else if (isInstall) {
-        console.log("");
-        console.log("[bridge] → Pandoc/XeLaTeX 安装或指定路径 · 请看下方 [pandoc] 输出");
-        beginBridgeBusy("pandoc-install");
       }
-      wrapResWithCors(res, origin);
       try {
         await pandocBridge.handleRequest(req, res, {
           pathname: stripped,
@@ -5770,7 +5965,6 @@ async function handleApi(req, res, url) {
         });
       } finally {
         if (isConvert) endBridgeBusy("pandoc-convert");
-        if (isInstall) endBridgeBusy("pandoc-install");
       }
       return;
     }

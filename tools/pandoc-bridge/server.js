@@ -114,7 +114,8 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname === "/install" && req.method === "POST") {
       console.log("");
       console.log("[pandoc] ← 已收到 /install 请求，正在读参数…");
-      const body = parseJsonBody(await readBody(req));
+      const body =
+        opts.preloadedBody != null ? opts.preloadedBody : parseJsonBody(await readBody(req));
       const pkg = String(body?.package || body?.pkg || "pandoc").toLowerCase();
       const pathInput = String(body?.path || body?.xelatex || body?.bin || "").trim();
       const label =

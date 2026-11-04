@@ -6373,10 +6373,10 @@ a{color:${v.accent}}
         `<p class="hint tight" style="margin:0 0 8px">已装过却仍提示？先<strong>关掉黑窗重启本机桥</strong>；或装在自定义目录时，在下方<strong>填写路径</strong>。</p>` +
         `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:rgba(0,0,0,.03)">` +
         `<p style="margin:0 0 6px"><strong>指定本机 XeLaTeX / MiKTeX 位置</strong></p>` +
-        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.108。点「使用此路径」时黑窗应立刻出现「指定路径」；若完全无字 = 桥未连通或未更新。</p>` +
+        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.109。若仍提示「未知接口」= 桥未更新成功，请重新下载完整包并替换后启动。</p>` +
         `<p class="hint tight" style="margin:0 0 6px">${escapeHtml(pathHint)}</p>` +
         `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 C:\\Program Files\\MiKTeX 或 …\\miktex\\bin\\x64\\xelatex.exe" value="${escapeHtml(
-          savedPath
+          savedPath || (typeof localStorage !== "undefined" ? localStorage.getItem("mdm-xelatex-path") || "" : "")
         )}" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid var(--line,#cbd5e1);font:inherit" />` +
         `<p id="mdm-xelatex-path-msg" class="hint tight" style="margin:6px 0 0;min-height:1.2em"></p>` +
         `</div>` +
@@ -6448,18 +6448,45 @@ a{color:${v.accent}}
                   ? `桥版本 ${ver} · 正在提交路径（黑窗应立刻出现「指定路径」字样）…`
                   : "正在提交路径（请看黑窗）…";
               }
-              const res = await fetch(`${baseUrl()}/pandoc/install`, {
-                method: "POST",
-                headers,
-                body: JSON.stringify({ package: "xelatex", path: pathVal }),
-              });
-              const data = await res.json().catch(() => null);
-              if (!res.ok || !data?.ok) {
-                const errText = String(data?.error || data?.message || `HTTP ${res.status}`);
-                if (/未知接口/i.test(errText)) {
-                  throw new Error("本机桥版本过旧，请更新并重启到 ≥0.9.108 后再填路径");
+              try {
+                localStorage.setItem("mdm-xelatex-path", pathVal);
+              } catch (_) {}
+              // 两路由都试：新桥在 adb-bridge 内直接处理，不再依赖 pandoc「未知接口」
+              const payloads = [
+                { url: `${baseUrl()}/pandoc/install`, body: { package: "xelatex", path: pathVal } },
+                { url: `${baseUrl()}/pandoc/set-xelatex-path`, body: { path: pathVal } },
+              ];
+              let data = null;
+              let lastErr = "";
+              for (const p of payloads) {
+                try {
+                  const res = await fetch(p.url, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify(p.body),
+                  });
+                  const jd = await res.json().catch(() => null);
+                  const errText = String(jd?.error || jd?.message || (!res.ok ? `HTTP ${res.status}` : ""));
+                  if (/未知接口/i.test(errText)) {
+                    lastErr = errText;
+                    continue;
+                  }
+                  if (!res.ok || !jd?.ok) {
+                    lastErr = errText || `HTTP ${res.status}`;
+                    continue;
+                  }
+                  data = jd;
+                  break;
+                } catch (err) {
+                  lastErr = String(err?.message || err);
                 }
-                throw new Error(errText);
+              }
+              if (!data) {
+                throw new Error(
+                  /未知接口/i.test(lastErr)
+                    ? "本机桥仍是旧版（未知接口）。请更新并完全重启桥到 ≥0.9.109，硬刷新网页后再试"
+                    : lastErr || "指定路径失败"
+                );
               }
               if (data.installed || data.pdf?.printReady) {
                 toast(`已使用：${data.bin || data.savedPath || data.output || pathVal}`);
@@ -6469,7 +6496,7 @@ a{color:${v.accent}}
               if (msg) {
                 msg.textContent = String(
                   data.message ||
-                    "未识别到 xelatex。请确认路径下有 miktex\\bin\\x64\\xelatex.exe；黑窗若完全无字请更新重启桥 ≥0.9.108"
+                    "未识别到 xelatex。请确认路径下有 miktex\\bin\\x64\\xelatex.exe；并更新重启桥 ≥0.9.109"
                 ).slice(0, 240);
               }
             } catch (err) {
