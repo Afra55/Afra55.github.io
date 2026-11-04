@@ -85,9 +85,9 @@
   /** 本地导出（不经 Pandoc）也算「该路径最高质量」 */
   const EXPORT_LOCAL = {
     md: { engine: "local", note: "原文 + 资源 ZIP" },
-    "html-standalone": { engine: "local", note: "预览渲染内联资源" },
-    pdf: { engine: "bridge-pandoc", note: "印刷级 PDF（Typst/XeLaTeX）；失败再浏览器打印" },
-    png: { engine: "local", note: "html2canvas 单文件；画布内最高 scale，分块拼接" },
+    "html-standalone": { engine: "local", note: "预览渲染内联资源；Mermaid 烤成图" },
+    pdf: { engine: "bridge-pandoc", note: "印刷级 PDF（Typst/XeLaTeX）；Mermaid 先栅格化；缺引擎自动装；失败再浏览器打印" },
+    png: { engine: "local", note: "html2canvas 单文件；Mermaid 先出图；画布内最高 scale" },
   };
 
   function extOf(name) {
