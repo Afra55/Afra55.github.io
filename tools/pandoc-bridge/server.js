@@ -11,6 +11,7 @@ const {
   convert,
   installPackage,
   probePdfEngines,
+  setXelatexPath,
 } = require("./pandoc-ops");
 
 const BRIDGE_VERSION = "0.1.7";
@@ -76,6 +77,13 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname === "/pdf-engines" && req.method === "GET") {
       const pdf = await probePdfEngines();
       sendJson(res, 200, { ok: true, ...pdf });
+      return;
+    }
+    if (pathname === "/set-xelatex-path" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req));
+      console.log(`[pandoc] 收到用户指定 xelatex 路径：${String(body?.path || "").slice(0, 200)}`);
+      const data = await setXelatexPath(body);
+      sendJson(res, 200, { ok: true, ...data });
       return;
     }
     if (pathname === "/convert" && req.method === "POST") {

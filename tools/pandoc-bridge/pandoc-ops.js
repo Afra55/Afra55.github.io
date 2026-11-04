@@ -564,10 +564,16 @@ function xelatexInstallHints() {
       : process.platform === "darwin"
         ? `bin${sep}universal-darwin${sep}xelatex`
         : `bin${sep}x86_64-linux${sep}xelatex`;
+  const saved = readXelatexOverridePath();
   return {
     bridgeRoot,
     tinytexDir,
     xelatexExample: `${tinytexDir}${sep}...${sep}${xelatexRel}`,
+    savedXelatexPath: saved || "",
+    pathHint:
+      process.platform === "win32"
+        ? "可填 xelatex.exe 全路径，或 MiKTeX 目录（例如 C:\\Program Files\\MiKTeX 或 %LOCALAPPDATA%\\Programs\\MiKTeX）"
+        : "可填 xelatex 全路径，或 TeX 发行版目录",
     releasesUrl: "https://github.com/rstudio/tinytex-releases/releases",
     miktexUrl: "https://miktex.org/download",
     platform: process.platform,
@@ -1060,6 +1066,99 @@ function refreshWindowsPathEnv() {
 
 function tinytexBridgeRoot() {
   return path.join(resolveBridgeRoot(), "bin", "tinytex");
+}
+
+/** 用户手动指定的 xelatex 路径（装在非默认目录时） */
+function xelatexOverridePathFile() {
+  return path.join(resolveBridgeRoot(), "bin", "xelatex-path.txt");
+}
+
+function readXelatexOverridePath() {
+  try {
+    const f = xelatexOverridePathFile();
+    if (!fs.existsSync(f)) return "";
+    return String(fs.readFileSync(f, "utf8") || "").trim().split(/\r?\n/)[0] || "";
+  } catch (_) {
+    return "";
+  }
+}
+
+/**
+ * 把用户填写的路径解析成 xelatex 可执行文件。
+ * 可填：xelatex.exe 全路径，或 MiKTeX/TinyTeX 根目录 / bin 目录。
+ */
+function resolveXelatexFromUserPath(input) {
+  const raw = String(input || "").trim().replace(/^["']|["']$/g, "");
+  if (!raw) return "";
+  try {
+    if (!fs.existsSync(raw)) return "";
+    const st = fs.statSync(raw);
+    const want = process.platform === "win32" ? "xelatex.exe" : "xelatex";
+    if (st.isFile()) {
+      const base = path.basename(raw).toLowerCase();
+      if (base === want.toLowerCase() || base === "miktex-xelatex.exe") return raw;
+      return "";
+    }
+    if (st.isDirectory()) {
+      for (const rel of [
+        want,
+        path.join("miktex", "bin", "x64", want),
+        path.join("miktex", "bin", "win64", want),
+        path.join("miktex", "bin", want),
+        path.join("bin", "x64", want),
+        path.join("bin", "win64", want),
+        path.join("bin", "windows", want),
+        path.join("bin", "universal-darwin", want),
+        path.join("bin", "x86_64-linux", want),
+        path.join("bin", "aarch64-linux", want),
+        path.join("bin", want),
+      ]) {
+        const p = path.join(raw, rel);
+        if (fs.existsSync(p)) return p;
+      }
+      return findXelatexUnderMiktexTree(raw, 0) || findXelatexInTinytex(raw);
+    }
+  } catch (_) {}
+  return "";
+}
+
+function writeXelatexOverridePath(input) {
+  const resolved = resolveXelatexFromUserPath(input);
+  if (!resolved) {
+    throw new Error(
+      "路径无效：请填写 xelatex.exe 的完整路径，或 MiKTeX 安装目录（内含 miktex\\bin\\x64\\xelatex.exe）"
+    );
+  }
+  const f = xelatexOverridePathFile();
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, resolved + "\n", "utf8");
+  prependPath(path.dirname(resolved));
+  resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
+  resolveCmdBin._cache.xelatex = resolved;
+  console.log(`[pandoc] 已记住用户指定的 xelatex：${resolved}`);
+  return resolved;
+}
+
+async function setXelatexPath(body = {}) {
+  const input = String(body.path || body.xelatex || body.bin || "").trim();
+  if (!input) {
+    return {
+      installed: false,
+      message: "请提供 path（xelatex.exe 或 MiKTeX 目录）",
+      installHints: xelatexInstallHints(),
+    };
+  }
+  try {
+    const bin = writeXelatexOverridePath(input);
+    return finalizeXelatexProbe({ command: "user-path", output: bin, savedPath: bin });
+  } catch (err) {
+    return {
+      installed: false,
+      needsManual: true,
+      message: String(err?.message || err),
+      installHints: xelatexInstallHints(),
+    };
+  }
 }
 
 /** 在 TinyTeX 解压目录里找 xelatex */
@@ -1783,6 +1882,20 @@ async function locateXelatexBinary() {
   // 装完 MiKTeX 后桥进程 PATH 常是旧的：先合并注册表 PATH
   refreshWindowsPathEnv();
 
+  // 用户手动指定的路径优先（自定义安装目录）
+  {
+    const saved = readXelatexOverridePath();
+    if (saved) {
+      const hit = resolveXelatexFromUserPath(saved) || (fs.existsSync(saved) ? saved : "");
+      if (hit) {
+        prependPath(path.dirname(hit));
+        console.log(`[pandoc] 定位 xelatex（用户指定）：${hit}`);
+        return hit;
+      }
+      console.log(`[pandoc] 用户指定路径失效：${saved}`);
+    }
+  }
+
   // 桥自带 TinyTeX 优先
   {
     const tiny = findXelatexInTinytex(tinytexBridgeRoot());
@@ -2069,6 +2182,7 @@ async function installPackage(body = {}) {
 module.exports = {
   checkPandoc,
   convert,
+  setXelatexPath,
   convertFromFile,
   convertFromText,
   convertToPrintPdf,

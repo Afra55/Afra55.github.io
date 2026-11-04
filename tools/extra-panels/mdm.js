@@ -6357,6 +6357,10 @@ a{color:${v.accent}}
         }
         if (pdf.installHints) h = { ...h, ...pdf.installHints };
       } catch (_) {}
+      const savedPath = String(h.savedXelatexPath || "").trim();
+      const pathHint =
+        String(h.pathHint || "").trim() ||
+        "可填 xelatex.exe 全路径，或 MiKTeX 安装目录";
       const bodyHtml =
         (errLine
           ? `<p style="margin:0 0 10px;color:var(--danger,#b91c1c)"><strong>原因：</strong>${escapeHtml(
@@ -6366,18 +6370,87 @@ a{color:${v.accent}}
         (probeDetail
           ? `<p class="hint tight" style="margin:0 0 8px">${escapeHtml(probeDetail.slice(0, 300))}</p>`
           : "") +
-        `<p class="hint tight" style="margin:0 0 8px">已装过 MiKTeX 却仍提示？先<strong>关掉黑窗重启本机桥</strong>再点「重新探测」。否则按下面步骤安装。</p>` +
+        `<p class="hint tight" style="margin:0 0 8px">已装过却仍提示？先<strong>关掉黑窗重启本机桥</strong>；或装在自定义目录时，在下方<strong>填写路径</strong>。</p>` +
+        `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:rgba(0,0,0,.03)">` +
+        `<p style="margin:0 0 6px"><strong>指定本机 XeLaTeX / MiKTeX 位置</strong></p>` +
+        `<p class="hint tight" style="margin:0 0 6px">${escapeHtml(pathHint)}</p>` +
+        `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 C:\\Program Files\\MiKTeX 或 …\\miktex\\bin\\x64\\xelatex.exe" value="${escapeHtml(
+          savedPath
+        )}" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid var(--line,#cbd5e1);font:inherit" />` +
+        `<p id="mdm-xelatex-path-msg" class="hint tight" style="margin:6px 0 0;min-height:1.2em"></p>` +
+        `</div>` +
         xelatexManualGuideHtml(h);
-      const choice = await confirmModalHtml({
-        title: "引擎未装好 — 请手动安装 XeLaTeX",
-        bodyHtml,
-        okText: "浏览器打印",
-        altText: "我已装好，重新探测",
-        cancelText: "关闭",
+
+      return new Promise((resolve) => {
+        const box = els.modalBox;
+        box.innerHTML =
+          `<div class="mdm-modal-head"><strong>引擎未装好 — 请手动安装或指定路径</strong></div>` +
+          `<div class="mdm-modal-body" style="max-height:min(62vh,520px);overflow:auto;text-align:left">${bodyHtml}</div>` +
+          `<div class="mdm-modal-foot" style="flex-wrap:wrap;gap:8px">` +
+          `<button type="button" class="ghost-btn" data-cf="no">关闭</button>` +
+          `<button type="button" class="ghost-btn" data-cf="alt">我已装好，重新探测</button>` +
+          `<button type="button" class="primary-btn" data-cf="savepath">使用此路径</button>` +
+          `<button type="button" class="secondary-btn" data-cf="yes">浏览器打印</button>` +
+          `</div>`;
+        els.modal.hidden = false;
+        const done = (v) => {
+          closeModal();
+          resolve(v);
+        };
+        els.modal.onclick = (e) => {
+          if (e.target === els.modal) done("cancel");
+        };
+        box.onclick = async (e) => {
+          const b = e.target.closest?.("[data-cf]");
+          if (!b) return;
+          const act = b.dataset.cf;
+          if (act === "savepath") {
+            const input = box.querySelector("#mdm-xelatex-path");
+            const msg = box.querySelector("#mdm-xelatex-path-msg");
+            const pathVal = String(input?.value || "").trim();
+            if (!pathVal) {
+              if (msg) msg.textContent = "请先粘贴 xelatex.exe 或 MiKTeX 目录路径";
+              return;
+            }
+            if (msg) msg.textContent = "正在保存并探测…";
+            b.disabled = true;
+            try {
+              const res = await fetch(`${baseUrl()}/pandoc/set-xelatex-path`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Adb-Token": token(),
+                  "X-Ffmpeg-Token": token(),
+                },
+                body: JSON.stringify({ path: pathVal }),
+              });
+              const data = await res.json().catch(() => null);
+              if (!res.ok || !data?.ok) {
+                throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+              }
+              if (data.installed || data.pdf?.printReady) {
+                toast(`已使用：${data.bin || data.savedPath || pathVal}`);
+                done("retry");
+                return;
+              }
+              if (msg) {
+                msg.textContent = String(data.message || "路径已记录但仍未探测到，请检查路径或重启桥").slice(
+                  0,
+                  200
+                );
+              }
+            } catch (err) {
+              if (msg) msg.textContent = String(err?.message || err).slice(0, 200);
+            } finally {
+              b.disabled = false;
+            }
+            return;
+          }
+          if (act === "yes") done("print");
+          else if (act === "alt") done("retry");
+          else done("cancel");
+        };
       });
-      if (choice === "yes") return "print";
-      if (choice === "alt") return "retry";
-      return "cancel";
     }
 
     async function runXelatexInstall() {
