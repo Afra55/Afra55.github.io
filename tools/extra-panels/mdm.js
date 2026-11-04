@@ -6360,7 +6360,7 @@ a{color:${v.accent}}
       const savedPath = String(h.savedXelatexPath || "").trim();
       const pathHint =
         String(h.pathHint || "").trim() ||
-        "可填 xelatex.exe 全路径，或 MiKTeX 安装目录";
+        "要找的是 xelatex.exe（不是 miktex.exe）。可填该文件全路径，或填到 MiKTeX 安装目录让桥自动找。";
       const bodyHtml =
         (errLine
           ? `<p style="margin:0 0 10px;color:var(--danger,#b91c1c)"><strong>原因：</strong>${escapeHtml(
@@ -6374,8 +6374,9 @@ a{color:${v.accent}}
         `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:rgba(0,0,0,.03)">` +
         `<p style="margin:0 0 6px"><strong>指定本机 XeLaTeX / MiKTeX 位置</strong></p>` +
         `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.109。若仍提示「未知接口」= 桥未更新成功，请重新下载完整包并替换后启动。</p>` +
+        `<p style="margin:0 0 6px;padding:8px 10px;border-radius:6px;background:rgba(59,130,246,.1)"><strong>注意：文件名是 <code>xelatex.exe</code></strong>，不是 <code>miktex.exe</code>。常见位置：<code>…\\MiKTeX\\miktex\\bin\\x64\\xelatex.exe</code></p>` +
         `<p class="hint tight" style="margin:0 0 6px">${escapeHtml(pathHint)}</p>` +
-        `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 C:\\Program Files\\MiKTeX 或 …\\miktex\\bin\\x64\\xelatex.exe" value="${escapeHtml(
+        `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 …\\miktex\\bin\\x64\\xelatex.exe 或 C:\\Program Files\\MiKTeX" value="${escapeHtml(
           savedPath || (typeof localStorage !== "undefined" ? localStorage.getItem("mdm-xelatex-path") || "" : "")
         )}" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid var(--line,#cbd5e1);font:inherit" />` +
         `<p id="mdm-xelatex-path-msg" class="hint tight" style="margin:6px 0 0;min-height:1.2em"></p>` +
@@ -6410,7 +6411,7 @@ a{color:${v.accent}}
             const msg = box.querySelector("#mdm-xelatex-path-msg");
             const pathVal = String(input?.value || "").trim();
             if (!pathVal) {
-              if (msg) msg.textContent = "请先粘贴 xelatex.exe 或 MiKTeX 目录路径";
+              if (msg) msg.textContent = "请先粘贴 xelatex.exe 全路径（不是 miktex.exe），或 MiKTeX 安装目录";
               return;
             }
             if (msg) msg.textContent = "先检查本机桥连通…";

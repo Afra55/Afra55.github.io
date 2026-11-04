@@ -572,7 +572,7 @@ function xelatexInstallHints() {
     savedXelatexPath: saved || "",
     pathHint:
       process.platform === "win32"
-        ? "可填 xelatex.exe 全路径，或 MiKTeX 目录（例如 C:\\Program Files\\MiKTeX 或 %LOCALAPPDATA%\\Programs\\MiKTeX）"
+        ? "要找 xelatex.exe（不是 miktex.exe）。例：…\\MiKTeX\\miktex\\bin\\x64\\xelatex.exe，或填 MiKTeX 安装目录"
         : "可填 xelatex 全路径，或 TeX 发行版目录",
     releasesUrl: "https://github.com/rstudio/tinytex-releases/releases",
     miktexUrl: "https://miktex.org/download",
