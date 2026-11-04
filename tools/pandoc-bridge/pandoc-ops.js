@@ -1031,23 +1031,153 @@ function prependPath(dir) {
   process.env.PATH = `${dir}${path.delimiter}${cur}`;
 }
 
-function tinytexReleaseAsset() {
+/** GitHub 资源镜像（国内直连常失败；依次尝试） */
+function githubDownloadMirrors(url) {
+  const u = String(url || "").trim();
+  if (!u) return [];
+  const out = [u];
+  if (/^https:\/\/github\.com\//i.test(u) || /^https:\/\/release-assets\.githubusercontent\.com\//i.test(u)) {
+    out.push(`https://ghfast.top/${u}`);
+    out.push(`https://mirror.ghproxy.com/${u}`);
+  }
+  if (/^https:\/\/github\.com\//i.test(u)) {
+    out.push(u.replace(/^https:\/\/github\.com\//i, "https://gitmirror.com/github.com/"));
+  }
+  return [...new Set(out)];
+}
+
+function fetchJsonHttps(url, { timeout = 45000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const mod = String(url).startsWith("https") ? https : http;
+    const req = mod.get(
+      url,
+      {
+        headers: {
+          "User-Agent": "devtools-bridge-pandoc",
+          Accept: "application/vnd.github+json",
+        },
+        timeout,
+      },
+      (res) => {
+        if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+          res.resume();
+          return resolve(fetchJsonHttps(new URL(res.headers.location, url).href, { timeout }));
+        }
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          const raw = Buffer.concat(chunks).toString("utf8");
+          if (res.statusCode !== 200) {
+            return reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 120)}`));
+          }
+          try {
+            resolve(JSON.parse(raw));
+          } catch (err) {
+            reject(err);
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("请求超时"));
+    });
+  });
+}
+
+/**
+ * 解析当前平台可用的 TinyTeX 资源。
+ * 注意：旧链接 TinyTeX-1.zip / TinyTeX-1.tgz 已 404，必须按 release assets 实名下载。
+ */
+async function resolveTinytexReleaseAsset() {
+  const apiCandidates = githubDownloadMirrors(
+    "https://api.github.com/repos/rstudio/tinytex-releases/releases/latest"
+  );
+  let release = null;
+  let lastErr = null;
+  for (const api of apiCandidates) {
+    try {
+      console.log(`[pandoc/tinytex] 读取发布列表… ${api}`);
+      release = await fetchJsonHttps(api, { timeout: 60000 });
+      if (release?.assets?.length) break;
+    } catch (err) {
+      lastErr = err;
+      console.log(`[pandoc/tinytex] 发布列表失败：${err?.message || err}`);
+    }
+  }
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  if (!assets.length) {
+    throw new Error(`无法获取 TinyTeX 发布列表（${lastErr?.message || "无资源"}）`);
+  }
+
+  const pick = (re) => assets.find((a) => re.test(String(a.name || "")));
+  /** @type {{ name?: string, browser_download_url?: string, size?: number } | undefined} */
+  let hit;
   if (process.platform === "win32") {
-    return {
-      url: "https://github.com/rstudio/tinytex-releases/releases/latest/download/TinyTeX-1.zip",
-      kind: "zip",
-    };
+    // 便携包优先（tar.gz / zip）；避开需交互的 .exe
+    hit =
+      pick(/^TinyTeX-1-tar-v?[\d.]+\.gz$/i) ||
+      pick(/^TinyTeX-1-tar-.*\.gz$/i) ||
+      pick(/^TinyTeX-v[\d.]+\.zip$/i) ||
+      pick(/^TinyTeX-.*\.zip$/i);
+  } else if (process.platform === "darwin") {
+    hit =
+      pick(/^TinyTeX-1-darwin-.*\.tar\.xz$/i) ||
+      pick(/^TinyTeX-darwin-.*\.tar\.xz$/i);
+  } else {
+    const arch = process.arch === "arm64" ? "arm64" : "x86_64";
+    hit =
+      pick(new RegExp(`^TinyTeX-1-linux-${arch}-.*\\.tar\\.xz$`, "i")) ||
+      pick(new RegExp(`^TinyTeX-linux-${arch}-.*\\.tar\\.xz$`, "i")) ||
+      pick(/^TinyTeX-1-linuxmusl-x86_64-.*\.tar\.xz$/i);
   }
-  if (process.platform === "darwin") {
-    return {
-      url: "https://github.com/rstudio/tinytex-releases/releases/latest/download/TinyTeX-1.tgz",
-      kind: "tgz",
-    };
+  if (!hit?.browser_download_url) {
+    const names = assets.map((a) => a.name).filter(Boolean).slice(0, 12).join(", ");
+    throw new Error(`无匹配当前系统的 TinyTeX 包。可用：${names}`);
   }
+
+  const name = String(hit.name || "");
+  let kind = "tgz";
+  if (/\.zip$/i.test(name)) kind = "zip";
+  else if (/\.tar\.xz$/i.test(name)) kind = "txz";
+  else if (/\.exe$/i.test(name)) kind = "exe";
+  else if (/\.gz$/i.test(name)) kind = "tgz";
+
   return {
-    url: "https://github.com/rstudio/tinytex-releases/releases/latest/download/TinyTeX-1.tgz",
-    kind: "tgz",
+    url: String(hit.browser_download_url),
+    name,
+    kind,
+    size: Number(hit.size) || 0,
+    tag: String(release.tag_name || ""),
   };
+}
+
+async function downloadWithMirrors(url, dest, opts = {}) {
+  const mirrors = githubDownloadMirrors(url);
+  let lastErr = null;
+  for (const u of mirrors) {
+    try {
+      console.log(`[pandoc/tinytex] 下载 ${u}`);
+      await downloadToFile(u, dest, opts);
+      // 防御：GitHub 假 200/镜像返回 HTML 错误页
+      const st = fs.statSync(dest);
+      if (st.size < 1024 * 1024) {
+        const head = fs.readFileSync(dest, "utf8").slice(0, 80);
+        if (/<!doctype html|<html|Not Found|404/i.test(head)) {
+          throw new Error(`下载内容异常（${st.size}B）：${head.slice(0, 40)}`);
+        }
+      }
+      return u;
+    } catch (err) {
+      lastErr = err;
+      console.log(`[pandoc/tinytex] 下载失败：${err?.message || err}`);
+      try {
+        fs.unlinkSync(dest);
+      } catch (_) {}
+    }
+  }
+  throw lastErr || new Error("所有镜像下载失败");
 }
 
 async function extractTinytexArchive(archivePath, destDir, kind) {
@@ -1068,7 +1198,18 @@ async function extractTinytexArchive(archivePath, destDir, kind) {
     await runCmd("unzip", ["-o", archivePath, "-d", destDir], { timeout: 600000 });
     return;
   }
-  await runCmd("tar", ["-xzf", archivePath, "-C", destDir], { timeout: 600000 });
+  if (kind === "txz") {
+    await runCmdInherit("tar", ["-xJf", archivePath, "-C", destDir], {
+      timeout: 600000,
+      logPrefix: "[pandoc/tinytex]",
+    });
+    return;
+  }
+  // TinyTeX-1-tar-*.gz：本质是 tar.gz
+  await runCmdInherit("tar", ["-xzf", archivePath, "-C", destDir], {
+    timeout: 600000,
+    logPrefix: "[pandoc/tinytex]",
+  });
 }
 
 /** Pandoc + XeLaTeX + 中文常用宏包（TinyTeX 精简包需补装） */
@@ -1124,32 +1265,34 @@ async function ensureTinytexPandocPackages(xelatexBin) {
  * 比 winget MiKTeX 更稳：不需要管理员，也不会因 UAC 几秒就失败。
  */
 async function installTinytexPortable() {
-  const asset = tinytexReleaseAsset();
+  const asset = await resolveTinytexReleaseAsset();
   const destDir = tinytexBridgeRoot();
   const tmpDir = makeBridgeTemp("tinytex-dl-");
-  const archive = path.join(tmpDir, asset.kind === "zip" ? "TinyTeX.zip" : "TinyTeX.tgz");
-  console.log("[pandoc/tinytex] 下载精简 TeX（含 XeLaTeX，约 100–200MB+）…");
-  console.log(`[pandoc/tinytex] ${asset.url}`);
+  const archiveName =
+    asset.kind === "zip" ? "TinyTeX.zip" : asset.kind === "txz" ? "TinyTeX.tar.xz" : "TinyTeX.tar.gz";
+  const archive = path.join(tmpDir, archiveName);
+  const mb = asset.size ? `约 ${(asset.size / 1048576).toFixed(0)}MB` : "约 50–250MB";
+  console.log(`[pandoc/tinytex] 下载 ${asset.name || "TinyTeX"}（${mb}${asset.tag ? " · " + asset.tag : ""}）…`);
   try {
-    await downloadToFile(asset.url, archive, { logPrefix: "[pandoc/tinytex]", timeout: 1800000 });
+    const used = await downloadWithMirrors(asset.url, archive, {
+      logPrefix: "[pandoc/tinytex]",
+      timeout: 1800000,
+    });
+    console.log(`[pandoc/tinytex] 下载完成 · ${used}`);
     console.log(`[pandoc/tinytex] 正在解压到 ${destDir}`);
     try {
       fs.rmSync(destDir, { recursive: true, force: true });
     } catch (_) {}
     fs.mkdirSync(destDir, { recursive: true });
     await extractTinytexArchive(archive, destDir, asset.kind);
-    let bin = findXelatexInTinytex(destDir);
-    if (!bin) {
-      // 解压可能多一层 TinyTeX/
-      bin = findXelatexInTinytex(destDir);
-    }
-    if (!bin) throw new Error("解压后未找到 xelatex");
+    const bin = findXelatexInTinytex(destDir);
+    if (!bin) throw new Error("解压后未找到 xelatex（请看黑窗解压路径）");
     prependPath(path.dirname(bin));
     resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
     resolveCmdBin._cache.xelatex = bin;
     await ensureTinytexPandocPackages(bin);
     console.log(`[pandoc/tinytex] 就绪 · ${bin}`);
-    return { bin, command: `tinytex-portable:${asset.url}`, destDir };
+    return { bin, command: `tinytex-portable:${asset.name}`, destDir };
   } finally {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -1288,7 +1431,7 @@ async function finalizeXelatexProbe(extra = {}) {
   };
 }
 
-/** 安装 XeLaTeX：先试本机已有 → winget 用户级 MiKTeX → 失败则 TinyTeX 便携包（有下载进度） */
+/** 安装 XeLaTeX：本机已有 → TinyTeX 便携（正确资源名）→ 再试 winget/brew */
 async function installXelatex() {
   const platform = process.platform;
   console.log("[pandoc] 准备安装 XeLaTeX（印刷级唯一引擎；复杂图表 + 中文）…");
@@ -1303,21 +1446,36 @@ async function installXelatex() {
 
   let last = { command: "", output: "", message: "" };
 
-  // Windows：先 winget --scope user（避免管理员 UAC 几秒就失败），再 TinyTeX 便携
-  if (platform === "win32" && (await hasCmd("winget"))) {
-    console.log("[pandoc] 尝试 winget 用户级安装 MiKTeX（无需管理员）…");
-    last = await wingetInstall("MiKTeX.MiKTeX", ["--scope", "user"]);
+  // 优先 TinyTeX：旧版 TinyTeX-1.zip 已 404，会几秒假失败；现按 release 实名 + 镜像下载
+  try {
+    const portable = await installTinytexPortable();
     refreshWindowsPathEnv();
-    await new Promise((res) => setTimeout(res, 1500));
+    prependPath(path.dirname(portable.bin));
+    return finalizeXelatexProbe({
+      command: portable.command,
+      output: portable.bin,
+    });
+  } catch (err) {
+    last = {
+      command: "tinytex-portable",
+      output: String(err?.message || err),
+      message: String(err?.message || err),
+    };
+    console.log(`[pandoc/tinytex] 便携包失败：${last.message}，尝试系统包管理器…`);
+  }
+
+  if (platform === "win32" && (await hasCmd("winget"))) {
+    console.log("[pandoc] 尝试 winget 用户级安装 MiKTeX…");
+    const r = await wingetInstall("MiKTeX.MiKTeX", ["--scope", "user"]);
+    last = { ...last, ...r };
+    refreshWindowsPathEnv();
+    await new Promise((res) => setTimeout(res, 2000));
     let hit = await locateXelatexBinary();
     if (!hit) {
-      await new Promise((res) => setTimeout(res, 2500));
+      await new Promise((res) => setTimeout(res, 3000));
       hit = await locateXelatexBinary();
     }
     if (hit) return finalizeXelatexProbe(last);
-    console.log("[pandoc] winget 用户级后仍未找到 xelatex，改下 TinyTeX 便携包…");
-  } else if (platform === "win32") {
-    console.log("[pandoc] 无 winget，改下 TinyTeX 便携包…");
   }
 
   if (platform === "darwin" && (await hasCmd("brew"))) {
@@ -1331,40 +1489,32 @@ async function installXelatex() {
       last = { command: "brew install --cask basictex", output: "" };
       const hit = await locateXelatexBinary();
       if (hit) return finalizeXelatexProbe(last);
-      console.log("[pandoc] BasicTeX 后仍未定位，改下 TinyTeX 便携包…");
     } catch (err) {
-      last = { command: "brew install --cask basictex", output: String(err?.message || err), message: String(err?.message || err) };
-      console.log(`[pandoc/brew] 失败：${last.output}，改下 TinyTeX…`);
+      last = {
+        command: "brew install --cask basictex",
+        output: String(err?.message || err),
+        message: String(err?.message || err),
+      };
     }
   }
 
-  // 主回退：TinyTeX 便携（下载有百分比，不会「几秒假失败」）
-  try {
-    const portable = await installTinytexPortable();
-    refreshWindowsPathEnv();
-    prependPath(path.dirname(portable.bin));
-    return finalizeXelatexProbe({
-      command: portable.command,
-      output: portable.bin,
-    });
-  } catch (err) {
-    const msg = String(err?.message || err);
-    console.log(`[pandoc/tinytex] 便携包安装失败：${msg}`);
-    return {
-      installed: false,
-      needsManual: true,
-      package: "xelatex",
-      command:
-        platform === "win32"
-          ? "winget install --id MiKTeX.MiKTeX -e --scope user"
-          : platform === "darwin"
-            ? "brew install --cask basictex"
-            : "sudo apt install texlive-xetex texlive-lang-chinese",
-      message: msg || "XeLaTeX 安装失败（请看黑窗；也可手动装 MiKTeX/BasicTeX）",
-      output: last.output || msg,
-      pdf: await probePdfEngines(),
-    };
-  }
+  return {
+    installed: false,
+    needsManual: true,
+    package: "xelatex",
+    command:
+      platform === "win32"
+        ? "winget install --id MiKTeX.MiKTeX -e --scope user"
+        : platform === "darwin"
+          ? "brew install --cask basictex"
+          : "sudo apt install texlive-xetex texlive-lang-chinese",
+    message:
+      last.message ||
+      last.output ||
+      "XeLaTeX 安装失败（请看黑窗；检查网络后重试，或手动装 MiKTeX/BasicTeX）",
+    output: last.output || last.message || "",
+    pdf: await probePdfEngines(),
+  };
 }
 
 async function installPackage(body = {}) {

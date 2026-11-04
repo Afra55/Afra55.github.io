@@ -5961,7 +5961,7 @@ a{color:${v.accent}}
                 body:
                   `${lastErr.message}\n\n` +
                   (attemptedInstall
-                    ? "自动安装未成功（请看本机桥黑窗完整输出）。XeLaTeX 体积较大，首次可能要 5–15 分钟；若黑窗仍在下载请等结束后再点导出。也可改用浏览器打印。"
+                    ? "若黑窗仍在下载 TinyTeX，请等结束后再导出；不要中途关桥。也可先用浏览器打印。"
                     : "可改用浏览器打印「另存为 PDF」（质量低于印刷级），或检查本机桥后重试。"),
                 okText: "浏览器打印",
               });
@@ -6222,7 +6222,7 @@ a{color:${v.accent}}
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在安装 XeLaTeX</strong></div>` +
         `<p class="mdm-modal-body">本机桥正在安装印刷级 PDF 引擎 <strong>XeLaTeX</strong>。<br/>` +
-        `顺序：本机已有 → winget 用户级 MiKTeX → <strong>TinyTeX 便携包</strong>（黑窗有下载百分比）。首次约 5–15 分钟，请勿关闭本页。</p>` +
+        `优先下载 <strong>TinyTeX</strong> 便携包（黑窗有百分比；约 50–250MB）。首次约 5–15 分钟，请勿关闭本页与黑窗。</p>` +
         `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-xelatex-install-progress">已用时 0 秒 · 安装中… · 请看本机桥黑窗</p></div>`;
       els.modal.onclick = null;
       const timer = setInterval(() => {
