@@ -6002,7 +6002,7 @@ a{color:${v.accent}}
                     toast("已导出印刷级 PDF");
                     return;
                   }
-                  toast("仍未探测到引擎，请确认已解压到桥目录并重启桥");
+                  toast("仍未探测到引擎：请完全退出并重启本机桥后再试");
                   throw new Error(again.error || lastErr.message);
                 }
                 if (act !== "print") throw lastErr;
@@ -6297,13 +6297,13 @@ a{color:${v.accent}}
         )}</code>`;
       return (
         `<div class="mdm-manual-install" style="margin-top:4px;padding:12px 14px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.6;background:rgba(0,0,0,.03)">` +
-        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.12)"><strong>Windows 只需走下面「推荐」这一条</strong>：去 MiKTeX 官网下安装器，双击安装即可。不必同时下两个链接。</p>` +
-        `<p style="margin:0 0 6px"><strong>推荐 · Windows：MiKTeX 安装器</strong></p>` +
+        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.12)"><strong>若你已经装过 MiKTeX</strong>：请先<strong>完全退出本机桥黑窗再重新启动</strong>，然后点「我已装好，重新探测」。装完不重启桥时，旧进程读不到新 PATH，会一直报未装好。</p>` +
+        `<p style="margin:0 0 6px"><strong>还没装？Windows 只走这一条</strong></p>` +
         `<ol style="margin:0;padding-left:1.25em">` +
         `<li>打开 <a href="${escapeHtml(miktex)}" target="_blank" rel="noopener">https://miktex.org/download</a></li>` +
         `<li>下载 <strong>Windows Installer</strong>（Basic 或 Net Installer 都可以），<strong>双击运行安装</strong></li>` +
         `<li>安装时如有选项：选「Install missing packages on-the-fly: Yes」更省事</li>` +
-        `<li>装完后<strong>关掉并重新启动本机桥</strong>，回到本页点「我已装好，重新探测」或再导出 PDF</li>` +
+        `<li>装完后<strong>关掉并重新启动本机桥</strong>，再点「我已装好，重新探测」或导出 PDF</li>` +
         `</ol>` +
         `<p style="margin:12px 0 6px"><strong>其它系统</strong></p>` +
         `<ul style="margin:0;padding-left:1.25em">` +
@@ -6346,13 +6346,27 @@ a{color:${v.accent}}
       }
       h = h || {};
       const errLine = String(error || "").trim();
+      let probeDetail = "";
+      try {
+        const pdf = await probePdfEnginesOnly();
+        const xe = pdf?.engines?.xelatex;
+        if (xe && !xe.ok) {
+          probeDetail = `探测详情：bin=${xe.bin || "?"} · ${xe.error || "未找到 xelatex"}`;
+        } else if (xe?.ok) {
+          probeDetail = `探测已通过：${xe.bin || xe.version || "xelatex"}（若仍失败请重试导出）`;
+        }
+        if (pdf.installHints) h = { ...h, ...pdf.installHints };
+      } catch (_) {}
       const bodyHtml =
         (errLine
           ? `<p style="margin:0 0 10px;color:var(--danger,#b91c1c)"><strong>原因：</strong>${escapeHtml(
               errLine.slice(0, 500)
             )}</p>`
           : "") +
-        `<p class="hint tight" style="margin:0 0 8px">自动安装未完成或仍探测不到引擎。请按下面<strong>完整步骤</strong>手动安装，尤其注意「文件放哪里」。</p>` +
+        (probeDetail
+          ? `<p class="hint tight" style="margin:0 0 8px">${escapeHtml(probeDetail.slice(0, 300))}</p>`
+          : "") +
+        `<p class="hint tight" style="margin:0 0 8px">已装过 MiKTeX 却仍提示？先<strong>关掉黑窗重启本机桥</strong>再点「重新探测」。否则按下面步骤安装。</p>` +
         xelatexManualGuideHtml(h);
       const choice = await confirmModalHtml({
         title: "引擎未装好 — 请手动安装 XeLaTeX",

@@ -526,14 +526,31 @@ async function probeCmd(name) {
       resolveCmdBin._cache.xelatex = located;
     }
   }
+  const absOnDisk =
+    bin && (bin.includes(path.sep) || bin.includes("/")) && fs.existsSync(bin);
   try {
-    const { stdout, stderr } = await runCmd(bin, ["--version"], { timeout: 12000 });
+    // MiKTeX 首次冷启动可能较慢；装完未刷 PATH 时用绝对路径探测
+    const { stdout, stderr } = await runCmd(bin, ["--version"], { timeout: 45000 });
     const line = String(stdout || stderr || "")
       .split(/\r?\n/)
       .find((s) => s.trim()) || name;
     return { ok: true, bin, version: line.trim().slice(0, 120) };
-  } catch (_) {
-    return { ok: false, bin, error: `未找到 ${name}` };
+  } catch (err) {
+    // 文件已在磁盘上：视为已安装（--version 偶发超时/弹窗/缺 DLL 不应再报「未装好」）
+    if (name === "xelatex" && absOnDisk) {
+      console.log(
+        `[pandoc] xelatex 文件存在但 --version 异常（仍判就绪）：${bin} · ${err?.message || err}`
+      );
+      return {
+        ok: true,
+        bin,
+        version: "xelatex (on disk)",
+        warn: String(err?.message || err).slice(0, 160),
+      };
+    }
+    const detail = String(err?.stderr || err?.message || err || "").trim().slice(0, 200);
+    console.log(`[pandoc] 探测 ${name} 失败 · bin=${bin} · ${detail || "未找到"}`);
+    return { ok: false, bin, error: detail || `未找到 ${name}` };
   }
 }
 
@@ -559,11 +576,16 @@ function xelatexInstallHints() {
 }
 
 async function probePdfEngines() {
+  // 每次探测前刷新 PATH，避免「已装 MiKTeX 但桥仍报未装好」
+  refreshWindowsPathEnv();
   const engines = {};
   for (const name of PDF_ENGINE_ORDER) {
     engines[name] = await probeCmd(name);
   }
   const preferred = PDF_ENGINE_ORDER.find((n) => engines[n]?.ok) || "";
+  if (!preferred && process.platform === "win32") {
+    console.log("[pandoc] XeLaTeX 未就绪：请确认已安装 MiKTeX，并完全退出后重启本机桥再点「重新探测」");
+  }
   return {
     engines,
     preferred,
@@ -1674,7 +1696,93 @@ async function installTypst() {
   return installXelatex();
 }
 
+/** 在目录树里找 miktex\\bin\\*\\xelatex.exe（限制深度，避免全盘扫描） */
+function findXelatexUnderMiktexTree(root, depth = 0) {
+  if (!root || depth > 7) return "";
+  try {
+    if (!fs.existsSync(root)) return "";
+    const want = "xelatex.exe";
+    const direct = path.join(root, want);
+    if (fs.existsSync(direct)) return direct;
+    // 标准布局：…/miktex/bin/x64/xelatex.exe
+    for (const rel of [
+      path.join("miktex", "bin", "x64", want),
+      path.join("miktex", "bin", "win64", want),
+      path.join("miktex", "bin", want),
+      path.join("bin", "x64", want),
+      path.join("bin", "win64", want),
+      path.join("bin", want),
+    ]) {
+      const p = path.join(root, rel);
+      if (fs.existsSync(p)) return p;
+    }
+    let entries;
+    try {
+      entries = fs.readdirSync(root);
+    } catch (_) {
+      return "";
+    }
+    for (const name of entries) {
+      if (/node_modules|\.git|__pycache__|\$Recycle|WindowsApps/i.test(name)) continue;
+      const p = path.join(root, name);
+      let st;
+      try {
+        st = fs.statSync(p);
+      } catch (_) {
+        continue;
+      }
+      if (!st.isDirectory()) {
+        if (name.toLowerCase() === want) return p;
+        continue;
+      }
+      // 只钻进可能含 MiKTeX 的目录
+      if (depth >= 2 && !/miktex|tex|bin|x64|win64|programs|package/i.test(name)) continue;
+      const hit = findXelatexUnderMiktexTree(p, depth + 1);
+      if (hit) return hit;
+    }
+  } catch (_) {}
+  return "";
+}
+
+/** 从卸载项 / MiKTeX 注册表读安装根目录 */
+function readMiktexInstallRootsFromRegistry() {
+  if (process.platform !== "win32") return [];
+  const roots = [];
+  try {
+    const { execFileSync } = require("child_process");
+    const keys = [
+      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+      "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+      "HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    ];
+    for (const key of keys) {
+      let out = "";
+      try {
+        out = execFileSync("reg", ["query", key, "/s", "/f", "MiKTeX", "/d"], {
+          encoding: "utf8",
+          windowsHide: true,
+          timeout: 12000,
+          maxBuffer: 4 * 1024 * 1024,
+        });
+      } catch (_) {
+        continue;
+      }
+      for (const line of String(out).split(/\r?\n/)) {
+        const m = line.match(/InstallLocation\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
+        if (m) {
+          const loc = m[1].trim().replace(/^"|"$/g, "");
+          if (loc) roots.push(loc);
+        }
+      }
+    }
+  } catch (_) {}
+  return [...new Set(roots)];
+}
+
 async function locateXelatexBinary() {
+  // 装完 MiKTeX 后桥进程 PATH 常是旧的：先合并注册表 PATH
+  refreshWindowsPathEnv();
+
   // 桥自带 TinyTeX 优先
   {
     const tiny = findXelatexInTinytex(tinytexBridgeRoot());
@@ -1689,7 +1797,9 @@ async function locateXelatexBinary() {
     const pf = process.env.ProgramFiles || "C:\\Program Files";
     const pf86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
     const home = process.env.USERPROFILE || "";
-    for (const root of [pf, pf86, la ? path.join(la, "Programs") : "", la, home]) {
+    const pd = process.env.ProgramData || "C:\\ProgramData";
+
+    for (const root of [pf, pf86, la ? path.join(la, "Programs") : "", la, home, pd]) {
       if (!root) continue;
       candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "x64", "xelatex.exe"));
       candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "win64", "xelatex.exe"));
@@ -1700,23 +1810,75 @@ async function locateXelatexBinary() {
       candidates.push(path.join(home, "AppData", "Roaming", "TinyTeX", "bin", "windows", "xelatex.exe"));
       candidates.push(path.join(home, ".TinyTeX", "bin", "windows", "xelatex.exe"));
     }
-    candidates.push("xelatex.exe");
-  } else {
-    const home = os.homedir();
-    candidates.push(
-      path.join(home, ".TinyTeX", "bin", "universal-darwin", "xelatex"),
-      path.join(home, ".TinyTeX", "bin", "x86_64-linux", "xelatex"),
-      path.join(home, ".TinyTeX", "bin", "aarch64-linux", "xelatex"),
-      path.join(home, "Library", "TinyTeX", "bin", "universal-darwin", "xelatex"),
-      "/Library/TeX/texbin/xelatex",
-      "/usr/local/texlive/2025/bin/universal-darwin/xelatex",
-      "/usr/local/texlive/2024/bin/universal-darwin/xelatex",
-      "/usr/local/texlive/2025/bin/x86_64-linux/xelatex",
-      "/usr/local/texlive/2024/bin/x86_64-linux/xelatex",
-      "/usr/bin/xelatex",
-      "xelatex"
-    );
+    for (const c of candidates) {
+      try {
+        if (fs.existsSync(c)) {
+          prependPath(path.dirname(c));
+          console.log(`[pandoc] 定位 xelatex（固定路径）：${c}`);
+          return c;
+        }
+      } catch (_) {}
+    }
+
+    // 注册表 InstallLocation / WinGet 包目录 / Programs 下浅扫
+    const scanRoots = [
+      ...readMiktexInstallRootsFromRegistry(),
+      la ? path.join(la, "Programs", "MiKTeX") : "",
+      path.join(pf, "MiKTeX"),
+      path.join(pf86, "MiKTeX"),
+      la ? path.join(la, "Microsoft", "WinGet", "Packages") : "",
+      home ? path.join(home, "scoop", "apps", "miktex") : "",
+      home ? path.join(home, "scoop", "apps", "latex") : "",
+    ].filter(Boolean);
+
+    for (const root of scanRoots) {
+      // WinGet Packages：先只扫名字含 miktex 的子目录
+      try {
+        if (/WinGet\\Packages$/i.test(root) && fs.existsSync(root)) {
+          for (const name of fs.readdirSync(root)) {
+            if (!/miktex/i.test(name)) continue;
+            const hit = findXelatexUnderMiktexTree(path.join(root, name), 0);
+            if (hit) {
+              prependPath(path.dirname(hit));
+              console.log(`[pandoc] 定位 xelatex（WinGet）：${hit}`);
+              return hit;
+            }
+          }
+          continue;
+        }
+      } catch (_) {}
+      const hit = findXelatexUnderMiktexTree(root, 0);
+      if (hit) {
+        prependPath(path.dirname(hit));
+        console.log(`[pandoc] 定位 xelatex（扫描）：${hit}`);
+        return hit;
+      }
+    }
+
+    const fromWhere = await whereCmd("xelatex.exe");
+    if (fromWhere) {
+      prependPath(path.dirname(fromWhere));
+      console.log(`[pandoc] 定位 xelatex（where）：${fromWhere}`);
+      return fromWhere;
+    }
+    console.log("[pandoc] 未在常见路径 / PATH 找到 xelatex.exe（若刚装完请完全退出并重启本机桥）");
+    return "";
   }
+
+  const home = os.homedir();
+  candidates.push(
+    path.join(home, ".TinyTeX", "bin", "universal-darwin", "xelatex"),
+    path.join(home, ".TinyTeX", "bin", "x86_64-linux", "xelatex"),
+    path.join(home, ".TinyTeX", "bin", "aarch64-linux", "xelatex"),
+    path.join(home, "Library", "TinyTeX", "bin", "universal-darwin", "xelatex"),
+    "/Library/TeX/texbin/xelatex",
+    "/usr/local/texlive/2025/bin/universal-darwin/xelatex",
+    "/usr/local/texlive/2024/bin/universal-darwin/xelatex",
+    "/usr/local/texlive/2025/bin/x86_64-linux/xelatex",
+    "/usr/local/texlive/2024/bin/x86_64-linux/xelatex",
+    "/usr/bin/xelatex",
+    "xelatex"
+  );
   for (const c of candidates) {
     try {
       if ((c.includes(path.sep) || c.includes("/")) && fs.existsSync(c)) {
@@ -1725,7 +1887,7 @@ async function locateXelatexBinary() {
       }
     } catch (_) {}
   }
-  return whereCmd(process.platform === "win32" ? "xelatex.exe" : "xelatex");
+  return whereCmd("xelatex");
 }
 
 async function finalizeXelatexProbe(extra = {}) {
