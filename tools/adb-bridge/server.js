@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.113";
+const BRIDGE_VERSION = "0.9.114";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -134,20 +134,51 @@ function bridgeRootDir() {
   return path.resolve(__dirname);
 }
 
-/** 把用户填的 MiKTeX 目录 / xelatex.exe 解析成可执行文件 */
+/** 现行 MiKTeX 二进制包实际文件是 miktex-xetex.exe；xelatex.exe 只是 links 别名，常缺失 */
+const MIKTEX_XELATEX_NAMES =
+  process.platform === "win32"
+    ? ["xelatex.exe", "miktex-xelatex.exe", "miktex-xetex.exe"]
+    : ["xelatex", "miktex-xelatex", "miktex-xetex"];
+
+/**
+ * Pandoc 认的是名为 xelatex 的引擎。
+ * 若只有 miktex-xetex.exe：复制一份叫 xelatex.exe 到桥 bin（argv0=xelatex 才会载入 XeLaTeX 格式）。
+ */
+function ensureNamedXelatexShim(enginePath) {
+  const src = String(enginePath || "").trim();
+  if (!src || !fs.existsSync(src)) return "";
+  const base = path.basename(src).toLowerCase();
+  if (base === "xelatex.exe" || base === "xelatex") return src;
+  const shimDir = path.join(bridgeRootDir(), "bin");
+  const shim = path.join(shimDir, process.platform === "win32" ? "xelatex.exe" : "xelatex");
+  try {
+    fs.mkdirSync(shimDir, { recursive: true });
+    let needCopy = true;
+    try {
+      if (fs.existsSync(shim) && fs.statSync(shim).size === fs.statSync(src).size) needCopy = false;
+    } catch (_) {}
+    if (needCopy) fs.copyFileSync(src, shim);
+    console.log(`[bridge] 引擎实体是 ${base}；已生成 Pandoc 用 ${shim}`);
+    return shim;
+  } catch (err) {
+    console.log(`[bridge] 无法生成 xelatex shim（${err?.message || err}），仍用 ${src}`);
+    return src;
+  }
+}
+
+/** 把用户填的 MiKTeX 目录 / 引擎 exe 解析成可执行文件 */
 function resolveXelatexUserPath(input) {
   const raw = String(input || "").trim().replace(/^["']|["']$/g, "");
   if (!raw) return "";
   try {
     if (!fs.existsSync(raw)) return "";
     const st = fs.statSync(raw);
-    const want = process.platform === "win32" ? "xelatex.exe" : "xelatex";
     if (st.isFile()) {
       const base = path.basename(raw).toLowerCase();
-      if (base === want.toLowerCase() || base === "miktex-xelatex.exe") return raw;
-      // 用户常贴 miktex.exe：同目录若已有引擎直接用；否则交给补装逻辑
+      if (MIKTEX_XELATEX_NAMES.some((n) => n.toLowerCase() === base)) return raw;
+      // 用户常贴 miktex.exe：同目录找真实引擎
       if (base === "miktex.exe" || base === "mpm.exe" || base === "initexmf.exe") {
-        for (const name of ["xelatex.exe", "miktex-xelatex.exe"]) {
+        for (const name of MIKTEX_XELATEX_NAMES) {
           const p = path.join(path.dirname(raw), name);
           if (fs.existsSync(p)) return p;
         }
@@ -156,9 +187,7 @@ function resolveXelatexUserPath(input) {
       return "";
     }
     if (!st.isDirectory()) return "";
-    const names =
-      process.platform === "win32" ? [want, "miktex-xelatex.exe"] : [want, "miktex-xelatex"];
-    for (const exe of names) {
+    for (const exe of MIKTEX_XELATEX_NAMES) {
       for (const rel of [
         exe,
         path.join("miktex", "bin", "x64", exe),
@@ -168,6 +197,8 @@ function resolveXelatexUserPath(input) {
         path.join("bin", "win64", exe),
         path.join("bin", "windows", exe),
         path.join("bin", exe),
+        // 便携版常见
+        path.join("texmfs", "install", "miktex", "bin", "x64", exe),
       ]) {
         const p = path.join(raw, rel);
         if (fs.existsSync(p)) return p;
@@ -175,21 +206,23 @@ function resolveXelatexUserPath(input) {
     }
     // 浅扫一层子目录（自定义安装常见）
     for (const name of fs.readdirSync(raw).slice(0, 80)) {
-      if (!/miktex|tex|bin/i.test(name)) continue;
+      if (!/miktex|tex|bin|texmfs|install/i.test(name)) continue;
       const sub = path.join(raw, name);
       try {
         if (!fs.statSync(sub).isDirectory()) continue;
       } catch (_) {
         continue;
       }
-      for (const rel of [
-        path.join("miktex", "bin", "x64", want),
-        path.join("bin", "x64", want),
-        path.join("bin", want),
-        want,
-      ]) {
-        const p = path.join(sub, rel);
-        if (fs.existsSync(p)) return p;
+      for (const exe of MIKTEX_XELATEX_NAMES) {
+        for (const rel of [
+          path.join("miktex", "bin", "x64", exe),
+          path.join("bin", "x64", exe),
+          path.join("bin", exe),
+          exe,
+        ]) {
+          const p = path.join(sub, rel);
+          if (fs.existsSync(p)) return p;
+        }
       }
     }
   } catch (_) {}
@@ -252,7 +285,7 @@ function listLatexLikeInDir(binDir) {
 
 /** 从 miktex.exe 所在目录向上浅扫找 xelatex */
 function findXelatexNearMiktexCli(cliPath) {
-  const names = ["xelatex.exe", "miktex-xelatex.exe"];
+  const names = MIKTEX_XELATEX_NAMES;
   const start = path.dirname(cliPath);
   const queue = [start];
   const seen = new Set();
@@ -342,7 +375,7 @@ async function tryInstallMiktexXetex(nearPath) {
   const hit = findXelatexNearMiktexCli(cli);
   if (hit) {
     console.log(`[bridge] 找到引擎：${hit}`);
-    return hit;
+    return ensureNamedXelatexShim(hit);
   }
   return "";
 }
@@ -383,13 +416,13 @@ async function setXelatexPathInBridge(body = {}) {
 
   let bin = resolveXelatexUserPath(input);
   if (!bin) {
-    console.log("[bridge] 路径下未找到 xelatex.exe，尝试用 miktex.exe 补装 miktex-xetex…");
-    console.log("[bridge] （有 miktex.exe 即可：会执行 packages install miktex-xetex）");
+    console.log("[bridge] 未找到引擎，尝试补装/链接…");
+    console.log("[bridge] 提示：现行包实体文件是 miktex-xetex.exe，不一定有 xelatex.exe");
     const tried = await tryInstallMiktexXetex(input);
     bin = resolveXelatexUserPath(input) || tried;
   }
   if (!bin) {
-    console.log("[bridge] 仍无 xelatex.exe");
+    console.log("[bridge] 仍无 XeTeX 引擎");
     const cli = findMiktexCliNear(input);
     const binDir = cli ? path.dirname(cli) : "";
     const listed = binDir ? listLatexLikeInDir(binDir).join(", ") : "";
@@ -397,10 +430,11 @@ async function setXelatexPathInBridge(body = {}) {
       installed: false,
       needsManual: true,
       message: cli
-        ? `miktex-xetex 可能已装，但 ${binDir} 里仍无 xelatex.exe（现有：${listed || "无 latex 相关文件"}）。请用【普通用户】cmd（不要管理员）在该目录执行：miktex links install  然后：miktex fndb refresh  再 dir *latex*.exe。若 security risk / elevated 提示，说明装到了另一套目录，请在「开始菜单 → MiKTeX Console」看 Install root，到对应 bin\\x64 找。`
-        : "没有 xelatex.exe。有 miktex.exe 时在其目录用普通用户执行：miktex links install && miktex fndb refresh",
+        ? `${binDir} 现有：${listed || "（无）"}。请搜 miktex-xetex.exe（不是 xelatex.exe）。找到后把该全路径贴回来。`
+        : "请全盘搜索 miktex-xetex.exe（现行 MiKTeX 真实引擎文件名；xelatex.exe 只是可选链接）",
     };
   }
+  bin = ensureNamedXelatexShim(bin);
   const root = bridgeRootDir();
   const outFile = path.join(root, "bin", "xelatex-path.txt");
   try {

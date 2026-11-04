@@ -572,7 +572,7 @@ function xelatexInstallHints() {
     savedXelatexPath: saved || "",
     pathHint:
       process.platform === "win32"
-        ? "要找 xelatex.exe（不是 miktex.exe）。例：…\\MiKTeX\\miktex\\bin\\x64\\xelatex.exe，或填 MiKTeX 安装目录"
+        ? "现行请搜 miktex-xetex.exe（包内真实文件）；xelatex.exe 可能不存在。也可填 miktex.exe 所在的 bin\\x64 目录"
         : "可填 xelatex 全路径，或 TeX 发行版目录",
     releasesUrl: "https://github.com/rstudio/tinytex-releases/releases",
     miktexUrl: "https://miktex.org/download",
@@ -1083,9 +1083,37 @@ function readXelatexOverridePath() {
   }
 }
 
+/** 现行 MiKTeX 包内实体多为 miktex-xetex.exe；xelatex.exe 仅为 links 别名 */
+const MIKTEX_ENGINE_NAMES =
+  process.platform === "win32"
+    ? ["xelatex.exe", "miktex-xelatex.exe", "miktex-xetex.exe"]
+    : ["xelatex", "miktex-xelatex", "miktex-xetex"];
+
+function ensurePandocXelatexShim(enginePath) {
+  const src = String(enginePath || "").trim();
+  if (!src || !fs.existsSync(src)) return "";
+  const base = path.basename(src).toLowerCase();
+  if (base === "xelatex.exe" || base === "xelatex") return src;
+  const shimDir = path.join(resolveBridgeRoot(), "bin");
+  const shim = path.join(shimDir, process.platform === "win32" ? "xelatex.exe" : "xelatex");
+  try {
+    fs.mkdirSync(shimDir, { recursive: true });
+    let need = true;
+    try {
+      if (fs.existsSync(shim) && fs.statSync(shim).size === fs.statSync(src).size) need = false;
+    } catch (_) {}
+    if (need) fs.copyFileSync(src, shim);
+    console.log(`[pandoc] 引擎实体 ${base} → Pandoc shim ${shim}`);
+    return shim;
+  } catch (err) {
+    console.log(`[pandoc] shim 失败（${err?.message || err}），仍用 ${src}`);
+    return src;
+  }
+}
+
 /**
- * 把用户填写的路径解析成 xelatex 可执行文件。
- * 可填：xelatex.exe 全路径，或 MiKTeX/TinyTeX 根目录 / bin 目录。
+ * 把用户填写的路径解析成引擎可执行文件。
+ * 可填：xelatex.exe / miktex-xetex.exe，或 MiKTeX/TinyTeX 根目录。
  */
 function resolveXelatexFromUserPath(input) {
   const raw = String(input || "").trim().replace(/^["']|["']$/g, "");
@@ -1093,16 +1121,19 @@ function resolveXelatexFromUserPath(input) {
   try {
     if (!fs.existsSync(raw)) return "";
     const st = fs.statSync(raw);
-    const want = process.platform === "win32" ? "xelatex.exe" : "xelatex";
     if (st.isFile()) {
       const base = path.basename(raw).toLowerCase();
-      if (base === want.toLowerCase() || base === "miktex-xelatex.exe") return raw;
+      if (MIKTEX_ENGINE_NAMES.some((n) => n.toLowerCase() === base)) return raw;
+      if (base === "miktex.exe" || base === "mpm.exe") {
+        for (const name of MIKTEX_ENGINE_NAMES) {
+          const p = path.join(path.dirname(raw), name);
+          if (fs.existsSync(p)) return p;
+        }
+      }
       return "";
     }
     if (st.isDirectory()) {
-      const names =
-        process.platform === "win32" ? [want, "miktex-xelatex.exe"] : [want, "miktex-xelatex"];
-      for (const exe of names) {
+      for (const exe of MIKTEX_ENGINE_NAMES) {
         for (const rel of [
           exe,
           path.join("miktex", "bin", "x64", exe),
@@ -1111,6 +1142,7 @@ function resolveXelatexFromUserPath(input) {
           path.join("bin", "x64", exe),
           path.join("bin", "win64", exe),
           path.join("bin", "windows", exe),
+          path.join("texmfs", "install", "miktex", "bin", "x64", exe),
           path.join("bin", "universal-darwin", exe),
           path.join("bin", "x86_64-linux", exe),
           path.join("bin", "aarch64-linux", exe),
@@ -1127,19 +1159,20 @@ function resolveXelatexFromUserPath(input) {
 }
 
 function writeXelatexOverridePath(input) {
-  const resolved = resolveXelatexFromUserPath(input);
+  let resolved = resolveXelatexFromUserPath(input);
   if (!resolved) {
     throw new Error(
-      "目录里没有 xelatex.exe。请用 MiKTeX Console → Packages 安装 miktex-xetex；或重装 Basic。装完应有 …\\miktex\\bin\\x64\\xelatex.exe"
+      "未找到引擎。请搜索 miktex-xetex.exe（现行 MiKTeX 真实文件名；xelatex.exe 可能不存在），或填 MiKTeX 的 bin\\x64 目录"
     );
   }
+  resolved = ensurePandocXelatexShim(resolved);
   const f = xelatexOverridePathFile();
   fs.mkdirSync(path.dirname(f), { recursive: true });
   fs.writeFileSync(f, resolved + "\n", "utf8");
   prependPath(path.dirname(resolved));
   resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
   resolveCmdBin._cache.xelatex = resolved;
-  console.log(`[pandoc] 已记住用户指定的 xelatex：${resolved}`);
+  console.log(`[pandoc] 已记住用户指定的引擎：${resolved}`);
   return resolved;
 }
 
@@ -1808,25 +1841,30 @@ async function installTypst() {
   return installXelatex();
 }
 
-/** 在目录树里找 miktex\\bin\\*\\xelatex.exe（限制深度，避免全盘扫描） */
+/** 在目录树里找 miktex\\bin\\*\\(xelatex|miktex-xetex).exe（限制深度） */
 function findXelatexUnderMiktexTree(root, depth = 0) {
   if (!root || depth > 7) return "";
   try {
     if (!fs.existsSync(root)) return "";
-    const want = "xelatex.exe";
-    const direct = path.join(root, want);
-    if (fs.existsSync(direct)) return direct;
-    // 标准布局：…/miktex/bin/x64/xelatex.exe
-    for (const rel of [
-      path.join("miktex", "bin", "x64", want),
-      path.join("miktex", "bin", "win64", want),
-      path.join("miktex", "bin", want),
-      path.join("bin", "x64", want),
-      path.join("bin", "win64", want),
-      path.join("bin", want),
-    ]) {
-      const p = path.join(root, rel);
-      if (fs.existsSync(p)) return p;
+    const names = ["xelatex.exe", "miktex-xelatex.exe", "miktex-xetex.exe"];
+    for (const want of names) {
+      const direct = path.join(root, want);
+      if (fs.existsSync(direct)) return direct;
+    }
+    // 标准布局：…/miktex/bin/x64/…
+    for (const want of names) {
+      for (const rel of [
+        path.join("miktex", "bin", "x64", want),
+        path.join("miktex", "bin", "win64", want),
+        path.join("miktex", "bin", want),
+        path.join("bin", "x64", want),
+        path.join("bin", "win64", want),
+        path.join("bin", want),
+        path.join("texmfs", "install", "miktex", "bin", "x64", want),
+      ]) {
+        const p = path.join(root, rel);
+        if (fs.existsSync(p)) return p;
+      }
     }
     let entries;
     try {
@@ -1920,16 +1958,22 @@ async function locateXelatexBinary() {
     if (saved) {
       const hit = resolveXelatexFromUserPath(saved) || (fs.existsSync(saved) ? saved : "");
       if (hit) {
-        prependPath(path.dirname(hit));
-        console.log(`[pandoc] 定位 xelatex（用户指定）：${hit}`);
-        return hit;
+        const use = ensurePandocXelatexShim(hit);
+        prependPath(path.dirname(use));
+        console.log(`[pandoc] 定位引擎（用户指定）：${use}`);
+        return use;
       }
       console.log(`[pandoc] 用户指定路径失效：${saved}`);
     }
   }
 
-  // 桥自带 TinyTeX 优先
+  // 桥目录 shim / TinyTeX
   {
+    const shim = path.join(resolveBridgeRoot(), "bin", process.platform === "win32" ? "xelatex.exe" : "xelatex");
+    if (fs.existsSync(shim)) {
+      prependPath(path.dirname(shim));
+      return shim;
+    }
     const tiny = findXelatexInTinytex(tinytexBridgeRoot());
     if (tiny) {
       prependPath(path.dirname(tiny));
@@ -1946,9 +1990,11 @@ async function locateXelatexBinary() {
 
     for (const root of [pf, pf86, la ? path.join(la, "Programs") : "", la, home, pd]) {
       if (!root) continue;
-      candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "x64", "xelatex.exe"));
-      candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "win64", "xelatex.exe"));
-      candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "xelatex.exe"));
+      for (const exe of ["xelatex.exe", "miktex-xelatex.exe", "miktex-xetex.exe"]) {
+        candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "x64", exe));
+        candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "win64", exe));
+        candidates.push(path.join(root, "MiKTeX", "miktex", "bin", exe));
+      }
     }
     // TinyTeX 默认用户目录
     if (home) {
@@ -1958,9 +2004,10 @@ async function locateXelatexBinary() {
     for (const c of candidates) {
       try {
         if (fs.existsSync(c)) {
-          prependPath(path.dirname(c));
-          console.log(`[pandoc] 定位 xelatex（固定路径）：${c}`);
-          return c;
+          const use = ensurePandocXelatexShim(c);
+          prependPath(path.dirname(use));
+          console.log(`[pandoc] 定位引擎（固定路径）：${use}`);
+          return use;
         }
       } catch (_) {}
     }
@@ -1984,9 +2031,10 @@ async function locateXelatexBinary() {
             if (!/miktex/i.test(name)) continue;
             const hit = findXelatexUnderMiktexTree(path.join(root, name), 0);
             if (hit) {
-              prependPath(path.dirname(hit));
-              console.log(`[pandoc] 定位 xelatex（WinGet）：${hit}`);
-              return hit;
+              const use = ensurePandocXelatexShim(hit);
+              prependPath(path.dirname(use));
+              console.log(`[pandoc] 定位引擎（WinGet）：${use}`);
+              return use;
             }
           }
           continue;

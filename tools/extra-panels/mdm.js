@@ -6297,17 +6297,14 @@ a{color:${v.accent}}
         )}</code>`;
       return (
         `<div class="mdm-manual-install" style="margin-top:4px;padding:12px 14px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.6;background:rgba(0,0,0,.03)">` +
-        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.15)"><strong>包显示 already installed 但仍无 xelatex.exe？</strong>多半是可执行链接没建好，或管理员/普通用户装到了两套目录。</p>` +
-        `<p style="margin:0 0 6px"><strong>请按顺序在 miktex.exe 同目录执行（用普通用户 cmd，不要「以管理员」）</strong></p>` +
+        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.15)"><strong>不是记错路径——文件名可能根本不叫 xelatex.exe</strong>。现行 MiKTeX 二进制包里真实文件是 <code>miktex-xetex.exe</code>；<code>xelatex.exe</code> 只是可选链接，很多安装里没有。</p>` +
+        `<p style="margin:0 0 6px"><strong>请立刻搜这个名字</strong></p>` +
         `<ol style="margin:0 0 10px;padding-left:1.25em">` +
-        `<li>资源管理器打开 <code>miktex.exe</code> 所在文件夹 → 地址栏输入 <code>cmd</code></li>` +
-        `<li><code>miktex links install</code></li>` +
-        `<li><code>miktex fndb refresh</code></li>` +
-        `<li><code>dir *latex*.exe</code> —— 应能看到 <code>xelatex.exe</code></li>` +
-        `<li>若仍没有：开始菜单打开 <strong>MiKTeX Console</strong>，看窗口标题/设置里的 <strong>Install root</strong>，到<strong>那个</strong>目录下的 <code>miktex\\bin\\x64</code> 再 <code>dir *latex*.exe</code></li>` +
-        `<li>找到后<strong>重启本机桥</strong>再探测</li>` +
+        `<li>资源管理器全盘搜索：<code>miktex-xetex.exe</code></li>` +
+        `<li>或在 <code>miktex.exe</code> 同目录执行：<code>dir miktex-xetex.exe</code></li>` +
+        `<li>找到后把 <strong>miktex-xetex.exe 的完整路径</strong> 贴进下方输入框 →「使用此路径」（桥会自动生成 Pandoc 要用的 xelatex 别名）</li>` +
+        `<li>若连 <code>miktex-xetex.exe</code> 都没有：在同目录执行 <code>miktex packages install miktex-xetex</code>（普通用户，不要管理员）后再搜一次</li>` +
         `</ol>` +
-        `<p class="hint tight" style="margin:0 0 10px">出现 <code>security risk: running with elevated privileges</code> 时，请关掉管理员 cmd，用普通窗口重做上面步骤。</p>` +
         `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.12)"><strong>若连 MiKTeX Console 都没有</strong>：请先完整安装，再重启桥探测。</p>` +
         `<p style="margin:0 0 6px"><strong>还没装 MiKTeX？Windows 只走这一条</strong></p>` +
         `<ol style="margin:0;padding-left:1.25em">` +
@@ -6385,10 +6382,10 @@ a{color:${v.accent}}
         `<p class="hint tight" style="margin:0 0 8px">已装过却仍提示？先<strong>关掉黑窗重启本机桥</strong>；或装在自定义目录时，在下方<strong>填写路径</strong>。</p>` +
         `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:rgba(0,0,0,.03)">` +
         `<p style="margin:0 0 6px"><strong>指定本机 XeLaTeX / MiKTeX 位置</strong></p>` +
-        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.111。可填 <code>xelatex.exe</code>，或直接填 <code>miktex.exe</code> 路径让桥自动补装引擎。</p>` +
-        `<p style="margin:0 0 6px;padding:8px 10px;border-radius:6px;background:rgba(59,130,246,.1)"><strong>最终需要 <code>xelatex.exe</code></strong>。只有 <code>miktex.exe</code> 时先执行：<code>miktex packages install miktex-xetex</code></p>` +
+        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.114。优先填 <code>miktex-xetex.exe</code> 全路径。</p>` +
+        `<p style="margin:0 0 6px;padding:8px 10px;border-radius:6px;background:rgba(59,130,246,.1)"><strong>请搜 / 填写：<code>miktex-xetex.exe</code></strong>（不是 xelatex.exe）</p>` +
         `<p class="hint tight" style="margin:0 0 6px">${escapeHtml(pathHint)}</p>` +
-        `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 …\\miktex\\bin\\x64\\xelatex.exe 或 C:\\Program Files\\MiKTeX" value="${escapeHtml(
+        `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 …\\miktex\\bin\\x64\\miktex-xetex.exe" value="${escapeHtml(
           savedPath || (typeof localStorage !== "undefined" ? localStorage.getItem("mdm-xelatex-path") || "" : "")
         )}" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid var(--line,#cbd5e1);font:inherit" />` +
         `<p id="mdm-xelatex-path-msg" class="hint tight" style="margin:6px 0 0;min-height:1.2em"></p>` +
