@@ -6297,21 +6297,22 @@ a{color:${v.accent}}
         )}</code>`;
       return (
         `<div class="mdm-manual-install" style="margin-top:4px;padding:12px 14px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.6;background:rgba(0,0,0,.03)">` +
-        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.15)"><strong>不是记错路径——文件名可能根本不叫 xelatex.exe</strong>。现行 MiKTeX 二进制包里真实文件是 <code>miktex-xetex.exe</code>；<code>xelatex.exe</code> 只是可选链接，很多安装里没有。</p>` +
-        `<p style="margin:0 0 6px"><strong>请立刻搜这个名字</strong></p>` +
+        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.15)"><strong>桥不会全盘搜索</strong>（费时）。只认：① 你填写的路径 ② 桥目录 <code>bin\\</code>。现行引擎文件名多为 <code>miktex-xetex.exe</code>。</p>` +
+        `<p style="margin:0 0 6px"><strong>怎么填路径（推荐）</strong></p>` +
         `<ol style="margin:0 0 10px;padding-left:1.25em">` +
-        `<li>资源管理器全盘搜索：<code>miktex-xetex.exe</code></li>` +
-        `<li>或在 <code>miktex.exe</code> 同目录执行：<code>dir miktex-xetex.exe</code></li>` +
-        `<li>找到后把 <strong>miktex-xetex.exe 的完整路径</strong> 贴进下方输入框 →「使用此路径」（桥会自动生成 Pandoc 要用的 xelatex 别名）</li>` +
-        `<li>若连 <code>miktex-xetex.exe</code> 都没有：在同目录执行 <code>miktex packages install miktex-xetex</code>（普通用户，不要管理员）后再搜一次</li>` +
+        `<li>打开你安装 MiKTeX 时选的目录（或开始菜单右键 MiKTeX Console → 打开文件位置）</li>` +
+        `<li>进入 <code>miktex\\bin\\x64</code>，找到 <code>miktex-xetex.exe</code>（或 <code>miktex.exe</code> 同目录）</li>` +
+        `<li>把该 <strong>exe 全路径</strong> 或整个 <code>bin\\x64</code> 目录贴进下方 →「使用此路径」</li>` +
         `</ol>` +
-        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.12)"><strong>若连 MiKTeX Console 都没有</strong>：请先完整安装，再重启桥探测。</p>` +
-        `<p style="margin:0 0 6px"><strong>还没装 MiKTeX？Windows 只走这一条</strong></p>` +
+        `<p style="margin:0 0 6px"><strong>或者放进桥目录</strong></p>` +
+        `<ol style="margin:0 0 10px;padding-left:1.25em">` +
+        `<li>把 <code>miktex-xetex.exe</code> 复制到桥解压目录的 <code>bin\\</code>（没有就新建）</li>` +
+        `<li>重启本机桥，再点「我已装好，重新探测」</li>` +
+        `</ol>` +
+        `<p style="margin:0 0 6px"><strong>还没装 MiKTeX？</strong></p>` +
         `<ol style="margin:0;padding-left:1.25em">` +
-        `<li>打开 <a href="${escapeHtml(miktex)}" target="_blank" rel="noopener">https://miktex.org/download</a></li>` +
-        `<li>下载 <strong>Windows Installer（Basic）</strong>，双击安装</li>` +
-        `<li>安装时选「Install missing packages on-the-fly: Yes」</li>` +
-        `<li>装完确认存在 <code>…\\miktex\\bin\\x64\\xelatex.exe</code>，再<strong>重启本机桥</strong></li>` +
+        `<li>打开 <a href="${escapeHtml(miktex)}" target="_blank" rel="noopener">https://miktex.org/download</a> 装 Basic</li>` +
+        `<li>装完按上面「怎么填路径」把 <code>miktex-xetex.exe</code> 贴进来即可</li>` +
         `</ol>` +
         `<p style="margin:12px 0 6px"><strong>其它系统</strong></p>` +
         `<ul style="margin:0;padding-left:1.25em">` +
@@ -6336,10 +6337,9 @@ a{color:${v.accent}}
       const tiny = String(hints.tinytexDir || "").trim() || "<桥目录>/bin/tinytex";
       const root = String(hints.bridgeRoot || "").trim() || "<桥目录>";
       return [
-        "包已装仍无 xelatex.exe：普通用户 cmd 在 miktex.exe 目录执行 miktex links install 与 miktex fndb refresh，再 dir *latex*.exe",
-        "若提示 elevated privileges：不要用管理员窗口；到 MiKTeX Console 的 Install root\\miktex\\bin\\x64 查找",
-        "【还没装 MiKTeX】https://miktex.org/download → Basic → 应有 xelatex.exe → 重启桥",
-        `备用 TinyTeX：解压到 ${tiny}（桥根 ${root}），需有 bin\\windows\\xelatex.exe`,
+        "桥不扫全盘：请粘贴 miktex-xetex.exe 全路径，或 bin\\x64 目录；或把引擎拷到桥目录 bin\\",
+        "【还没装】https://miktex.org/download → Basic → 装完把 miktex-xetex.exe 路径贴进弹框",
+        `备用 TinyTeX：解压到 ${tiny}（桥根 ${root}）`,
         "macOS：brew install --cask basictex；Linux：sudo apt install texlive-xetex texlive-lang-chinese",
       ].join("\n");
     }
@@ -6379,11 +6379,10 @@ a{color:${v.accent}}
         (probeDetail
           ? `<p class="hint tight" style="margin:0 0 8px">${escapeHtml(probeDetail.slice(0, 300))}</p>`
           : "") +
-        `<p class="hint tight" style="margin:0 0 8px">已装过却仍提示？先<strong>关掉黑窗重启本机桥</strong>；或装在自定义目录时，在下方<strong>填写路径</strong>。</p>` +
+        `<p class="hint tight" style="margin:0 0 8px">桥目录没有引擎时，请在下方<strong>手动填写路径</strong>（不会全盘搜索）。</p>` +
         `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:rgba(0,0,0,.03)">` +
-        `<p style="margin:0 0 6px"><strong>指定本机 XeLaTeX / MiKTeX 位置</strong></p>` +
-        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.114。优先填 <code>miktex-xetex.exe</code> 全路径。</p>` +
-        `<p style="margin:0 0 6px;padding:8px 10px;border-radius:6px;background:rgba(59,130,246,.1)"><strong>请搜 / 填写：<code>miktex-xetex.exe</code></strong>（不是 xelatex.exe）</p>` +
+        `<p style="margin:0 0 6px"><strong>填写引擎位置</strong></p>` +
+        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.115。填 <code>miktex-xetex.exe</code> 全路径，或 <code>bin\\x64</code> 目录。</p>` +
         `<p class="hint tight" style="margin:0 0 6px">${escapeHtml(pathHint)}</p>` +
         `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 …\\miktex\\bin\\x64\\miktex-xetex.exe" value="${escapeHtml(
           savedPath || (typeof localStorage !== "undefined" ? localStorage.getItem("mdm-xelatex-path") || "" : "")
