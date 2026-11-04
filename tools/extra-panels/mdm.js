@@ -5596,13 +5596,16 @@ body{max-width:820px;margin:2rem auto;padding:0 1rem;line-height:1.7;background:
 pre{background:${v.panel};padding:.8rem;border-radius:8px;overflow:auto}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre code{background:none}
-table{border-collapse:collapse}th,td{border:1px solid ${v.line};padding:.35rem .6rem}
-img{max-width:100%}blockquote{border-left:3px solid ${v.line};margin:0;padding-left:1rem;color:${v.muted}}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid ${v.line};padding:.35rem .6rem}
+img{max-width:100%;height:auto}blockquote{border-left:3px solid ${v.line};margin:0;padding-left:1rem;color:${v.muted}}
 a{color:${v.accent}}
 .toc{border:1px solid ${v.line};border-radius:8px;padding:.6rem .9rem;margin-bottom:1.4rem}
 .toc ul{margin:.35rem 0 0;padding-left:1.2rem}
 .toc-l2{padding-left:.8rem}.toc-l3,.toc-l4,.toc-l5,.toc-l6{padding-left:1.6rem}
-@media print{@page{margin:18mm 16mm}body{max-width:none;margin:0;padding:0}pre,table,blockquote,img{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
+.mdm-mermaid,figure{margin:1rem 0;text-align:center}
+.mdm-mermaid svg,figure img{max-width:100%;height:auto}
+.katex-display{overflow-x:auto;overflow-y:hidden}
+@media print{@page{margin:18mm 16mm}body{max-width:none;margin:0;padding:0;background:#fff;color:#111}pre,table,blockquote,img,.mdm-mermaid{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
 </style></head><body>${buildToc(bodyHtml)}${bodyHtml}</body></html>`;
     }
 
@@ -5727,12 +5730,145 @@ a{color:${v.accent}}
       return { canvas: out, scale, tiles: Math.max(1, tiles) };
     }
 
+    /** 解析 mermaid SVG 串为 DOM，供序列化/量尺寸 */
+    function parseSvgMarkup(svgHtml) {
+      const holder = document.createElement("div");
+      holder.innerHTML = String(svgHtml || "");
+      return holder.querySelector("svg");
+    }
+
+    async function ensureMermaidLib() {
+      if (window.mermaid) return true;
+      try {
+        if (!mermaidLoading) mermaidLoading = window.DevToolsLazy?.loadVendor?.("mermaid");
+        await mermaidLoading;
+      } catch (_) {
+        return false;
+      }
+      return Boolean(window.mermaid);
+    }
+
+    /** 导出用浅色主题渲染，避免暗色图在 Word/PDF 里发黑难认 */
+    async function renderMermaidSourceToSvg(src) {
+      const code = String(src || "").trim();
+      if (!code) throw new Error("空图表");
+      const cacheKey = `export::${code}`;
+      const cached = state.mermaidCache.get(cacheKey) || state.mermaidCache.get(code);
+      if (cached && !/Syntax error in text/i.test(cached)) return cached;
+      if (!(await ensureMermaidLib())) throw new Error("Mermaid 未加载");
+      try {
+        window.mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          suppressErrorRendering: true,
+          theme: "default",
+        });
+      } catch (_) {}
+      const stage = ensureMermaidStage();
+      const id = `mmdx${Math.random().toString(36).slice(2, 9)}`;
+      try {
+        const { svg } = stage
+          ? await window.mermaid.render(id, code, stage)
+          : await window.mermaid.render(id, code);
+        scrubMermaidErrorArtifacts(id);
+        if (!svg || /Syntax error in text/i.test(svg)) throw new Error("图表语法有误");
+        state.mermaidCache.set(cacheKey, svg);
+        if (state.mermaidCache.size > 80) {
+          const first = state.mermaidCache.keys().next().value;
+          state.mermaidCache.delete(first);
+        }
+        return svg;
+      } catch (err) {
+        scrubMermaidErrorArtifacts(id);
+        throw err;
+      } finally {
+        clearMermaidStage();
+      }
+    }
+
+    async function svgMarkupToPngBase64(svgHtml) {
+      const el = parseSvgMarkup(svgHtml);
+      const markup = el ? mermaidSvgForExport(el) : String(svgHtml || "");
+      let blob = null;
+      try {
+        blob = await rasterizeSvgMarkup(markup, "image/png", 2);
+      } catch (_) {}
+      if (!blob || blob.size < 32) {
+        blob = await rasterizeSvgMarkupHtml2Canvas(markup, "image/png", 2);
+      }
+      if (!blob || blob.size < 32) throw new Error("图表栅格化失败");
+      const dataUrl = await blobToDataUrl(blob);
+      return (dataUrl.split(",")[1] || "").trim();
+    }
+
+    /**
+     * 把 ```mermaid 烤成图片，Pandoc/HTML/长图才能按「图表」显示而不是代码块。
+     * @param {string} mdText
+     * @param {{ mode?: "file"|"data" }} [opts] file=assets/ 路径+images；data=内联 data URL
+     */
+    async function bakeChartsForExport(mdText, opts = {}) {
+      const src = String(mdText || "");
+      const mode = opts.mode === "data" ? "data" : "file";
+      const re = /```mermaid[ \t]*\r?\n([\s\S]*?)```/gi;
+      /** @type {{ index: number, end: number, body: string }[]} */
+      const hits = [];
+      let m;
+      while ((m = re.exec(src))) {
+        hits.push({ index: m.index, end: re.lastIndex, body: String(m[1] || "") });
+      }
+      if (!hits.length) return { text: src, images: [], chartCount: 0, failed: 0 };
+
+      toast(`正在渲染 ${hits.length} 个图表…`);
+      const images = [];
+      let out = "";
+      let cursor = 0;
+      let chartCount = 0;
+      let failed = 0;
+      let n = 0;
+      for (const hit of hits) {
+        out += src.slice(cursor, hit.index);
+        cursor = hit.end;
+        const code = hit.body.trim();
+        if (!code) {
+          out += src.slice(hit.index, hit.end);
+          continue;
+        }
+        n += 1;
+        try {
+          const svgRaw = await renderMermaidSourceToSvg(code);
+          const b64 = await svgMarkupToPngBase64(svgRaw);
+          const alt = `图表${n}`;
+          if (mode === "data") {
+            out += `\n\n![${alt}](data:image/png;base64,${b64})\n\n`;
+          } else {
+            const path = `assets/mdm-chart-${n}.png`;
+            images.push({ path, dataBase64: b64 });
+            out += `\n\n![${alt}](${path})\n\n`;
+          }
+          chartCount += 1;
+        } catch (err) {
+          failed += 1;
+          // 失败保留源码块，避免整篇导出中断
+          out += src.slice(hit.index, hit.end);
+          console.warn("[mdm] mermaid export failed", err);
+        }
+      }
+      out += src.slice(cursor);
+      if (chartCount) toast(`已嵌入 ${chartCount} 个图表${failed ? `（${failed} 个失败保留源码）` : ""}`);
+      return { text: out, images, chartCount, failed };
+    }
+
+    async function buildExportHtml(text) {
+      await ensureKatex().catch(() => false);
+      const baked = await bakeChartsForExport(text, { mode: "data" });
+      return inlineAssetsForExport(renderMarkdown(baked.text));
+    }
+
     async function exportCurrent(fmt, target) {
       const item = target?.item || findItem(state.currentId);
       if (!item) return;
       const text = target && target.text != null ? target.text : getEditorText();
       const title = item.title || "document";
-      const html = await inlineAssetsForExport(renderMarkdown(text));
       try {
         if (fmt === "md") {
           const mdText = buildFrontMatterBlock(item, text);
@@ -5753,7 +5889,9 @@ a{color:${v.accent}}
           return;
         }
         if (fmt === "html-standalone") {
+          const html = await buildExportHtml(text);
           downloadBlob(new Blob([standaloneHtml(title, html)], { type: "text/html;charset=utf-8" }), `${slugify(title)}.html`);
+          toast("已导出 HTML（图表已嵌入）");
           return;
         }
         if (fmt === "pdf") {
@@ -5791,6 +5929,7 @@ a{color:${v.accent}}
             okText: "浏览器打印",
           });
           if (!okPrint) throw lastErr || new Error(failMsg);
+          const html = await buildExportHtml(text);
           const w = window.open("", "_blank");
           if (!w) throw new Error("弹窗被拦截，无法打印");
           w.document.write(standaloneHtml(title, html));
@@ -5802,21 +5941,16 @@ a{color:${v.accent}}
         if (fmt === "png") {
           await ensureVendor("html2canvas");
           if (typeof window.html2canvas !== "function") throw new Error("截图库加载失败（请检查网络后重试）");
-          // 预览不可见时（纯编辑模式）克隆到屏幕外再截图，否则会得到空白图
-          let target = els.preview;
-          let tmp = null;
-          const invisible = !els.preview || els.preview.offsetParent === null || els.preview.clientWidth < 10;
-          if (invisible) {
-            tmp = document.createElement("div");
-            tmp.className = "markdown-body";
-            tmp.style.cssText = "position:fixed;left:-10000px;top:0;width:820px;background:#fff;color:#111;padding:16px";
-            tmp.innerHTML = els.preview ? els.preview.innerHTML : "";
-            document.body.appendChild(tmp);
-            target = tmp;
-          }
+          // 先把 mermaid 烤进 HTML，避免预览未渲染/纯编辑模式只出代码块
+          const bakedHtml = await buildExportHtml(text);
+          const tmp = document.createElement("div");
+          tmp.className = "markdown-body";
+          tmp.style.cssText =
+            "position:fixed;left:-10000px;top:0;width:820px;background:#fff;color:#111;padding:16px;box-sizing:border-box";
+          tmp.innerHTML = bakedHtml;
+          document.body.appendChild(tmp);
           try {
-            // 单文件 + 尽量满清晰：在画布上限内取最高 scale；高清分块截取再拼成一张（不下载多文件）
-            const { canvas, scale, tiles } = await capturePreviewAsOnePng(target);
+            const { canvas, scale, tiles } = await capturePreviewAsOnePng(tmp);
             await new Promise((res, rej) =>
               canvas.toBlob((b) => {
                 if (!b) {
@@ -5834,7 +5968,7 @@ a{color:${v.accent}}
               toast(`已导出单张长图（尽量满清晰 · ${pct}%；受浏览器画布上限限制）`);
             }
           } finally {
-            if (tmp) tmp.remove();
+            tmp.remove();
           }
           return;
         }
@@ -5865,7 +5999,14 @@ a{color:${v.accent}}
     }
 
     async function exportViaPandoc(text, to, title, retried = false) {
-      const images = await collectReferencedAssetsWithData(text).catch(() => []);
+      // 图表先烤成 PNG 再交给 Pandoc，Word/PDF/EPUB 等才能按图显示
+      const baked = await bakeChartsForExport(text, { mode: "file" }).catch(() => ({
+        text,
+        images: [],
+        chartCount: 0,
+      }));
+      const assetImages = await collectReferencedAssetsWithData(baked.text).catch(() => []);
+      const images = [...assetImages, ...(baked.images || [])];
       const plan =
         typeof QR.exportPandocPlan === "function" ? QR.exportPandocPlan(to) : { from: "gfm", args: [] };
       let res;
@@ -5874,7 +6015,7 @@ a{color:${v.accent}}
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
           body: JSON.stringify({
-            text,
+            text: baked.text,
             to,
             from: plan.from || "gfm",
             title,
