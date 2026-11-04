@@ -5757,38 +5757,40 @@ a{color:${v.accent}}
           return;
         }
         if (fmt === "pdf") {
-          // 印刷级：本机 Pandoc + Typst/XeLaTeX；失败再浏览器打印回退
-          try {
-            await exportViaPandoc(text, "pdf", title);
-            toast("已导出印刷级 PDF");
-            return;
-          } catch (err) {
-            const msg = String(err?.message || err);
-            if (/未找到印刷级 PDF 引擎|Typst|XeLaTeX|pdf-engine|未找到 pandoc/i.test(msg)) {
-              const okInstall = await confirmModal({
-                title: "安装 Typst（印刷级 PDF）",
-                body:
-                  "印刷级 PDF 需要 Typst（推荐，体积小）或 XeLaTeX。\n\n" +
-                  "现在用本机桥一键安装 Typst？安装后将重试导出。\n" +
-                  "取消则改用浏览器打印（非印刷级）。",
-                okText: "安装 Typst",
-              });
-              if (okInstall) {
-                await runTypstInstall();
-                await exportViaPandoc(text, "pdf", title);
-                toast("已导出印刷级 PDF");
-                return;
+          // 印刷级：本机 Pandoc + Typst/XeLaTeX；缺引擎则自动下载安装，不再拦着用
+          let lastErr = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              await exportViaPandoc(text, "pdf", title, attempt > 0);
+              toast("已导出印刷级 PDF");
+              return;
+            } catch (err) {
+              lastErr = err;
+              const msg = String(err?.message || err);
+              const needPandoc = /未找到 pandoc|not found.*pandoc|ENOENT.*pandoc/i.test(msg);
+              const needEngine = /未找到印刷级 PDF 引擎|Typst|XeLaTeX|pdf-engine/i.test(msg);
+              if (attempt === 0 && needPandoc) {
+                toast("未找到 pandoc，开始自动安装…");
+                await runPandocInstall();
+                continue;
               }
-              const okPrint = await confirmModal({
-                title: "改用浏览器打印？",
-                body: "将打开打印对话框，可「另存为 PDF」。质量低于 Typst/XeLaTeX 印刷级。",
-                okText: "浏览器打印",
-              });
-              if (!okPrint) throw err;
-            } else {
-              throw err;
+              if (attempt < 2 && needEngine) {
+                toast("缺少 PDF 引擎，开始下载安装 Typst…");
+                await runTypstInstall();
+                continue;
+              }
+              break;
             }
           }
+          const failMsg = String(lastErr?.message || lastErr || "导出失败");
+          const okPrint = await confirmModal({
+            title: "引擎未就绪，改用浏览器打印？",
+            body:
+              `${failMsg}\n\n` +
+              "自动安装未完成。可改用浏览器打印「另存为 PDF」（质量低于印刷级），或稍后重试导出。",
+            okText: "浏览器打印",
+          });
+          if (!okPrint) throw lastErr || new Error(failMsg);
           const w = window.open("", "_blank");
           if (!w) throw new Error("弹窗被拦截，无法打印");
           w.document.write(standaloneHtml(title, html));
@@ -5891,6 +5893,10 @@ a{color:${v.accent}}
           showBridgeHelpModal("导出为 Pandoc 格式");
           throw new Error(msg);
         }
+        // PDF：缺 pandoc / 缺引擎一律抛给 exportCurrent 自动下载安装（不弹确认拦着）
+        if (to === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX|pdf-engine|未找到 pandoc|not found.*pandoc|ENOENT/i.test(msg)) {
+          throw new Error(msg);
+        }
         if (!retried && /pandoc/i.test(msg) && /未找到|not found|ENOENT|未安装/i.test(msg)) {
           const ok = await confirmModal({
             title: "安装 pandoc",
@@ -5901,13 +5907,6 @@ a{color:${v.accent}}
             await runPandocInstall();
             return await exportViaPandoc(text, to, title, true);
           }
-        }
-        if (
-          !retried &&
-          to === "pdf" &&
-          /印刷级 PDF 引擎|Typst|XeLaTeX|pdf-engine/i.test(msg)
-        ) {
-          throw new Error(msg); // 交给 exportCurrent 弹 Typst 安装
         }
         throw new Error(msg);
       }

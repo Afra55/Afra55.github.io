@@ -203,33 +203,19 @@
               <span class="vtrim-playhead" id="${p("playhead")}" aria-hidden="true"></span>
             </div>
           </div>
-          <div class="btn-row tool-actions vtrim-nudge" id="${p("trim-nudge")}" aria-label="微调时长（可长按）">
-            <button type="button" class="ghost-btn" id="${p("nudge-start-m")}" title="片头 −0.1s，可长按">片头−</button>
-            <button type="button" class="ghost-btn" id="${p("nudge-start-p")}" title="片头 +0.1s，可长按">片头+</button>
-            <button type="button" class="ghost-btn" id="${p("nudge-end-m")}" title="片尾 −0.1s，可长按">片尾−</button>
-            <button type="button" class="ghost-btn" id="${p("nudge-end-p")}" title="片尾 +0.1s，可长按">片尾+</button>
+          <div class="btn-row tool-actions vtrim-nudge" id="${p("trim-nudge")}" aria-label="微调（可长按）">
+            <button type="button" class="ghost-btn" id="${p("nudge-start-m")}" data-nudge-role="start-m" title="片头 −0.1s，可长按">片头−</button>
+            <button type="button" class="ghost-btn" id="${p("nudge-start-p")}" data-nudge-role="start-p" title="片头 +0.1s，可长按">片头+</button>
+            <button type="button" class="ghost-btn" id="${p("nudge-end-m")}" data-nudge-role="end-m" title="片尾 −0.1s，可长按">片尾−</button>
+            <button type="button" class="ghost-btn" id="${p("nudge-end-p")}" data-nudge-role="end-p" title="片尾 +0.1s，可长按">片尾+</button>
           </div>
+          <p class="hint tight vtrim-cut-nudge-label" id="${p("cut-nudge-label")}" hidden>点选红段后，用上方片头/片尾按钮 ±0.1 精调</p>
           <div class="vtrim-cut-panel" id="${p("cut-panel")}" hidden>
             <div class="btn-row tool-actions vtrim-cut-tools" id="${p("cut-tools")}" aria-label="删中间">
               <button type="button" class="secondary-btn" id="${p("cut-add")}" title="从进度条当前位置起添加删除区（当前帧=删除起点；红柄两端所见帧都会删）">添加删除段</button>
               <button type="button" class="secondary-btn" id="${p("cut-play-join")}" title="跳到删段接点前（不自动播放），再点底部播放核对">跳到接点</button>
               <button type="button" class="ghost-btn" id="${p("cut-del")}" title="删除当前选中的删除段" disabled>删选中段</button>
               <button type="button" class="ghost-btn" id="${p("cut-clear")}" title="清空全部删除段">清空</button>
-            </div>
-            <div class="vtrim-cut-nudge" id="${p("cut-nudge")}" aria-label="微调删除段">
-              <div class="vtrim-cut-nudge-head">
-                <p class="hint tight vtrim-cut-nudge-label" id="${p("cut-nudge-label")}">点选红段后可 ±0.1 精调</p>
-                <span class="seg vtrim-cut-nudge-focus" id="${p("cut-nudge-focus")}" role="group" aria-label="微调哪一端">
-                  <button type="button" class="seg-btn is-active" data-cut-nudge-edge="start">调起点</button>
-                  <button type="button" class="seg-btn" data-cut-nudge-edge="end">调终点</button>
-                </span>
-              </div>
-              <div class="btn-row tool-actions vtrim-nudge vtrim-cut-nudge-btns" aria-label="微调红段（可长按）">
-                <button type="button" class="ghost-btn" id="${p("nudge-cut-m1")}" disabled title="−1s，可长按">−1s</button>
-                <button type="button" class="ghost-btn" id="${p("nudge-cut-m01")}" disabled title="−0.1s，可长按">−0.1</button>
-                <button type="button" class="ghost-btn" id="${p("nudge-cut-p01")}" disabled title="+0.1s，可长按">+0.1</button>
-                <button type="button" class="ghost-btn" id="${p("nudge-cut-p1")}" disabled title="+1s，可长按">+1s</button>
-              </div>
             </div>
           </div>
         </div>
@@ -363,19 +349,16 @@
     const trimNudge = $("trim-nudge");
     const cutPanel = $("cut-panel");
     const cutTools = $("cut-tools");
-    const cutNudge = $("cut-nudge");
     const cutNudgeLabel = $("cut-nudge-label");
-    const cutNudgeFocus = $("cut-nudge-focus");
     const cutAddBtn = $("cut-add");
     const cutPlayJoinBtn = $("cut-play-join");
     const cutDelBtn = $("cut-del");
     const cutClearBtn = $("cut-clear");
-    const cutNudgeBtns = [
-      $("nudge-cut-m1"),
-      $("nudge-cut-m01"),
-      $("nudge-cut-p01"),
-      $("nudge-cut-p1"),
-    ].filter(Boolean);
+    const nudgeStartM = $("nudge-start-m");
+    const nudgeStartP = $("nudge-start-p");
+    const nudgeEndM = $("nudge-end-m");
+    const nudgeEndP = $("nudge-end-p");
+    const sharedNudgeBtns = [nudgeStartM, nudgeStartP, nudgeEndM, nudgeEndP].filter(Boolean);
     const coarseUi = () => {
       try {
         return window.matchMedia("(pointer: coarse), (max-width: 640px)").matches;
@@ -413,8 +396,6 @@
     /** @type {{ start: number, end: number }[]} */
     let cutouts = [];
     let selectedCutout = -1;
-    /** 删中间微调端：start=红段起点 / end=红段终点 */
-    let cutNudgeEdge = "start";
     const initMode = String(opts.initialMode || "trim");
     let editMode = initMode === "crop" || initMode === "cut" ? initMode : "trim";
     let drag = null;
@@ -458,10 +439,12 @@
       const showTimeline = editMode === "trim" || editMode === "cut";
       if (trimTools) trimTools.hidden = !showTimeline;
       if (cropPanel) cropPanel.hidden = editMode !== "crop";
-      if (trimNudge) trimNudge.hidden = editMode !== "trim";
+      // 修剪 / 删中间共用时间轴下方同一排 ±0.1 按钮（手机不用往下翻）
+      if (trimNudge) trimNudge.hidden = !(editMode === "trim" || editMode === "cut");
       if (cutPanel) cutPanel.hidden = editMode !== "cut";
       if (cutTools) cutTools.hidden = editMode !== "cut";
-      if (cutNudge) cutNudge.hidden = editMode !== "cut";
+      if (cutNudgeLabel) cutNudgeLabel.hidden = editMode !== "cut";
+      syncSharedNudgeLabels();
       if (modeHint) {
         const phone = coarseUi();
         modeHint.textContent =
@@ -471,8 +454,8 @@
               : "拖绿框 · 双击重置 · 底部/空格播放"
             : editMode === "cut"
               ? phone
-                ? "添加红段 → 点选 → 下方 ±0.1 精调 · 「跳到接点」后播放核对"
-                : "添加删除段 → 点选红段 → ±0.1 精调 · 「跳到接点」后播放核对"
+                ? "添加红段 → 点选 → 用片头/片尾 ±0.1 · 「跳到接点」后播放"
+                : "添加删除段 → 点选红段 → 片头/片尾 ±0.1 · 「跳到接点」后播放核对"
               : phone
                 ? "拖黄柄裁片头片尾 · 点底部播放 · 下方可微调"
                 : "拖黄柄裁片头片尾 · 底部/空格播放 · ←/→ 微调进度";
@@ -485,6 +468,35 @@
       handleEnd?.classList.toggle("is-locked", editMode === "cut");
       syncCutoutUi();
       scheduleCropLive();
+    }
+
+    /** 同一排按钮：修剪=片头/片尾；删中间=红段起点/终点 */
+    function syncSharedNudgeLabels() {
+      const cut = editMode === "cut";
+      const map = cut
+        ? {
+            "start-m": { text: "起点−", title: "红段起点 −0.1s，可长按" },
+            "start-p": { text: "起点+", title: "红段起点 +0.1s，可长按" },
+            "end-m": { text: "终点−", title: "红段终点 −0.1s，可长按" },
+            "end-p": { text: "终点+", title: "红段终点 +0.1s，可长按" },
+          }
+        : {
+            "start-m": { text: "片头−", title: "片头 −0.1s，可长按" },
+            "start-p": { text: "片头+", title: "片头 +0.1s，可长按" },
+            "end-m": { text: "片尾−", title: "片尾 −0.1s，可长按" },
+            "end-p": { text: "片尾+", title: "片尾 +0.1s，可长按" },
+          };
+      for (const btn of sharedNudgeBtns) {
+        const role = btn.dataset.nudgeRole || "";
+        const conf = map[role];
+        if (!conf) continue;
+        btn.textContent = conf.text;
+        btn.title = conf.title;
+      }
+      if (trimNudge) {
+        trimNudge.setAttribute("aria-label", cut ? "微调红段（可长按）" : "微调时长（可长按）");
+        trimNudge.classList.toggle("is-cut-nudge", cut);
+      }
     }
 
     function syncMuteUi() {
@@ -529,28 +541,33 @@
       if (selectedCutout >= cutouts.length) selectedCutout = cutouts.length ? cutouts.length - 1 : -1;
     }
 
-    function syncCutNudgeFocusUi() {
-      cutNudgeFocus?.querySelectorAll("[data-cut-nudge-edge]").forEach((btn) => {
-        btn.classList.toggle("is-active", btn.dataset.cutNudgeEdge === cutNudgeEdge);
-      });
-    }
-
     function syncCutoutUi() {
-      const hasSel = editMode === "cut" && selectedCutout >= 0 && selectedCutout < cutouts.length;
+      const inCut = editMode === "cut";
+      const hasSel = inCut && selectedCutout >= 0 && selectedCutout < cutouts.length;
       if (cutDelBtn) cutDelBtn.disabled = !hasSel;
-      for (const btn of cutNudgeBtns) btn.disabled = !hasSel;
+      // 删中间时：未选中红段则禁用共用 ± 按钮；修剪模式始终可用
+      if (inCut) {
+        for (const btn of sharedNudgeBtns) btn.disabled = !hasSel;
+      } else if (editMode === "trim") {
+        for (const btn of sharedNudgeBtns) btn.disabled = false;
+      }
       if (cutNudgeLabel) {
-        if (!hasSel) {
+        if (!inCut) {
+          cutNudgeLabel.hidden = true;
+        } else if (!hasSel) {
+          cutNudgeLabel.hidden = false;
           cutNudgeLabel.textContent =
-            cutouts.length > 0 ? `已有 ${cutouts.length} 段 · 点选红段后 ±0.1 精调` : "点选红段后可 ±0.1 精调";
+            cutouts.length > 0
+              ? `已有 ${cutouts.length} 段 · 点选红段后，用上方起点/终点 ±0.1`
+              : "点选红段后，用上方起点/终点 ±0.1 精调";
         } else {
+          cutNudgeLabel.hidden = false;
           const c = cutouts[selectedCutout];
-          const edgeLab = cutNudgeEdge === "end" ? "终点" : "起点";
-          const t = cutNudgeEdge === "end" ? Number(c?.end) || 0 : Number(c?.start) || 0;
-          cutNudgeLabel.textContent = `第 ${selectedCutout + 1}/${cutouts.length} 段 · ${edgeLab} ${formatClock(t)}`;
+          cutNudgeLabel.textContent = `第 ${selectedCutout + 1}/${cutouts.length} 段 · 起点 ${formatClock(
+            Number(c?.start) || 0
+          )} · 终点 ${formatClock(Number(c?.end) || 0)}`;
         }
       }
-      syncCutNudgeFocusUi();
       paintCutouts();
     }
 
@@ -598,8 +615,6 @@
         cutouts.findIndex((c) => a >= c.start - 0.05 && a <= c.end + 0.05)
       );
       if (selectedCutout < 0) selectedCutout = cutouts.length - 1;
-      // 新段默认调终点：下方 ±0.1 直接拉长/缩短删除区
-      cutNudgeEdge = "end";
       syncCutoutUi();
       updateLabels();
       // 落到删段前约 0.4s，方便再「跳到接点」后点底部播放核对（不自动播）
@@ -612,8 +627,8 @@
       hapticLight();
       toast(
         coarseUi()
-          ? "已添加 · 下方 ±0.1 精调 · 「跳到接点」后播放核对"
-          : "已添加删除段 · 下方 ±0.1 精调 · 可跳到接点后播放核对"
+          ? "已添加 · 用上方起点/终点 ±0.1 · 「跳到接点」后播放"
+          : "已添加删除段 · 用片头/片尾位按钮 ±0.1 · 可跳到接点后播放核对"
       );
     }
 
@@ -677,16 +692,16 @@
       updateLabels();
     }
 
-    /** 对选中红段的当前端点做 ± 步进（与预览/成片同一套 cutouts） */
-    function nudgeSelectedCutout(delta) {
+    /** 对选中红段端点做 ± 步进（与预览/成片同一套 cutouts） */
+    function nudgeSelectedCutout(edge, delta) {
       if (selectedCutout < 0 || selectedCutout >= cutouts.length) {
         toast("先点选一条红段");
         return false;
       }
+      const kind = edge === "end" ? "end" : "start";
       const c = cutouts[selectedCutout];
-      const edge = cutNudgeEdge === "end" ? "end" : "start";
-      const cur = edge === "end" ? Number(c.end) || 0 : Number(c.start) || 0;
-      setCutoutEdge(selectedCutout, edge, quantizeTrimSec(cur + delta));
+      const cur = kind === "end" ? Number(c.end) || 0 : Number(c.start) || 0;
+      setCutoutEdge(selectedCutout, kind, quantizeTrimSec(cur + delta));
       return true;
     }
 
@@ -1917,32 +1932,38 @@
       // 避免 click 再触发一次
       btn.addEventListener("click", (e) => e.preventDefault());
     }
-    bindNudgeHold($("nudge-start-m"), () => setStart(startSec - 0.1, { immediateSeek: true }), "start");
-    bindNudgeHold($("nudge-start-p"), () => setStart(startSec + 0.1, { immediateSeek: true }), "start");
-    bindNudgeHold($("nudge-end-m"), () => setEnd(endSec - 0.1, { immediateSeek: true }), "end");
-    bindNudgeHold($("nudge-end-p"), () => setEnd(endSec + 0.1, { immediateSeek: true }), "end");
-    const cutNudgeKind = () => (cutNudgeEdge === "end" ? "cut-end" : "cut-start");
-    bindNudgeHold($("nudge-cut-m1"), () => nudgeSelectedCutout(-1), cutNudgeKind);
-    bindNudgeHold($("nudge-cut-m01"), () => nudgeSelectedCutout(-0.1), cutNudgeKind);
-    bindNudgeHold($("nudge-cut-p01"), () => nudgeSelectedCutout(0.1), cutNudgeKind);
-    bindNudgeHold($("nudge-cut-p1"), () => nudgeSelectedCutout(1), cutNudgeKind);
-    cutNudgeFocus?.addEventListener("click", (e) => {
-      const btn = e.target.closest?.("[data-cut-nudge-edge]");
-      if (!btn) return;
-      const edge = btn.dataset.cutNudgeEdge === "end" ? "end" : "start";
-      cutNudgeEdge = edge;
-      syncCutNudgeFocusUi();
-      if (selectedCutout >= 0 && selectedCutout < cutouts.length) {
-        const c = cutouts[selectedCutout];
-        const t = edge === "end" ? Number(c.end) || 0 : Number(c.start) || 0;
-        previewSeek(t, { throttle: false });
-        syncCutoutUi();
-        hapticLight();
-      } else {
-        syncCutoutUi();
-        toast("先点选一条红段");
-      }
-    });
+    bindNudgeHold(
+      nudgeStartM,
+      () => {
+        if (editMode === "cut") nudgeSelectedCutout("start", -0.1);
+        else setStart(startSec - 0.1, { immediateSeek: true });
+      },
+      () => (editMode === "cut" ? "cut-start" : "start")
+    );
+    bindNudgeHold(
+      nudgeStartP,
+      () => {
+        if (editMode === "cut") nudgeSelectedCutout("start", 0.1);
+        else setStart(startSec + 0.1, { immediateSeek: true });
+      },
+      () => (editMode === "cut" ? "cut-start" : "start")
+    );
+    bindNudgeHold(
+      nudgeEndM,
+      () => {
+        if (editMode === "cut") nudgeSelectedCutout("end", -0.1);
+        else setEnd(endSec - 0.1, { immediateSeek: true });
+      },
+      () => (editMode === "cut" ? "cut-end" : "end")
+    );
+    bindNudgeHold(
+      nudgeEndP,
+      () => {
+        if (editMode === "cut") nudgeSelectedCutout("end", 0.1);
+        else setEnd(endSec + 0.1, { immediateSeek: true });
+      },
+      () => (editMode === "cut" ? "cut-end" : "end")
+    );
     cutAddBtn?.addEventListener("click", () => addCutoutAtPlayhead());
     cutPlayJoinBtn?.addEventListener("click", () => {
       seekCutJoinPreview().catch((err) => toast(err?.message || String(err) || "跳转失败"));
@@ -2002,8 +2023,7 @@
         timeline?.classList.remove("is-dragging");
       } else if (kind === "cut-start" || kind === "cut-end") {
         selectedCutout = Number(hit.cutIndex) || 0;
-        cutNudgeEdge = kind === "cut-end" ? "end" : "start";
-        syncCutNudgeFocusUi();
+        syncCutoutUi();
         drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout, samples: [] };
         timeline?.setPointerCapture?.(e.pointerId);
         pushDragSample(t);

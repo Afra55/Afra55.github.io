@@ -457,9 +457,9 @@
 .vtrim-cutout-handle-end { left: 100%; }
 .vtrim-cut-panel {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.4rem;
   width: 100%;
-  margin-top: 0.35rem;
+  margin-top: 0.3rem;
 }
 .vtrim-cut-panel[hidden] {
   display: none !important;
@@ -476,55 +476,20 @@
   min-height: 2.6rem;
   flex: 1 1 auto;
 }
-.vtrim-cut-nudge {
-  display: grid;
-  gap: 0.4rem;
-  width: 100%;
-  padding: 0.55rem 0.6rem 0.6rem;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, #e85d5d 42%, var(--line, #334));
-  background:
-    linear-gradient(
-      165deg,
-      color-mix(in srgb, #e85d5d 14%, transparent),
-      color-mix(in srgb, var(--panel, #121826) 92%, #1a2230)
-    );
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffb4b4 18%, transparent);
-  touch-action: manipulation;
-}
-.vtrim-cut-nudge[hidden] {
-  display: none !important;
-}
-.vtrim-cut-nudge-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem 0.65rem;
-}
+/* 删中间复用时间轴下同一排 ± 按钮时的轻提示 */
 .vtrim-cut-nudge-label {
-  margin: 0;
-  flex: 1 1 8rem;
-  min-width: 0;
+  margin: 0.15rem 0 0;
   font-variant-numeric: tabular-nums;
   color: color-mix(in srgb, #ffd0d0 88%, var(--text, #e8eef8));
 }
-.vtrim-cut-nudge-focus {
-  flex: 0 0 auto;
+.vtrim-cut-nudge-label[hidden] {
+  display: none !important;
 }
-.vtrim-cut-nudge-focus .seg-btn {
-  min-height: 2.2rem;
-  padding-inline: 0.75rem;
+.vtrim-nudge.is-cut-nudge .ghost-btn:not(:disabled) {
+  border-color: color-mix(in srgb, #e85d5d 45%, var(--line, #334));
+  background: color-mix(in srgb, #e85d5d 12%, transparent);
 }
-.vtrim-cut-nudge-focus .seg-btn.is-active {
-  background: color-mix(in srgb, #e85d5d 78%, #1a1010);
-  color: #fff7f7;
-  border-color: color-mix(in srgb, #ff9a9a 55%, transparent);
-}
-.vtrim-cut-nudge-btns {
-  margin: 0;
-}
-.vtrim-cut-nudge-btns .ghost-btn:disabled {
+.vtrim-nudge.is-cut-nudge .ghost-btn:disabled {
   opacity: 0.38;
 }
 .vtrim-stage.is-mode-cut .vtrim-window { cursor: grab; }
@@ -769,36 +734,18 @@ body.vtrim-editor-open {
     flex: 1 1 calc(50% - 0.25rem);
     min-height: 2.6rem;
   }
-  .vtrim-editor-body .vtrim-cut-nudge {
-    padding: 0.6rem 0.55rem 0.65rem;
-    border-radius: 14px;
-  }
-  .vtrim-editor-body .vtrim-cut-nudge-head {
-    gap: 0.45rem;
-  }
   .vtrim-editor-body .vtrim-cut-nudge-label {
     font-size: 0.8rem;
     line-height: 1.35;
   }
-  .vtrim-editor-body .vtrim-cut-nudge-focus {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-  .vtrim-editor-body .vtrim-cut-nudge-focus .seg-btn {
-    min-height: 2.55rem;
-    font-size: 0.9rem;
-  }
-  .vtrim-editor-body .vtrim-cut-nudge-btns .ghost-btn {
-    min-height: 2.75rem;
-    font-size: 0.9rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-  }
   .vtrim-editor-body .vtrim-nudge .ghost-btn {
-    min-height: 2.5rem;
-    font-size: 0.82rem;
+    min-height: 2.65rem;
+    font-size: 0.86rem;
+    font-weight: 600;
     padding: 0.45rem 0.15rem;
+  }
+  .vtrim-editor-body .vtrim-nudge.is-cut-nudge .ghost-btn {
+    min-height: 2.75rem;
   }
   .vtrim-transport {
     flex-wrap: wrap;
