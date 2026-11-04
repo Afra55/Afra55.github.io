@@ -6297,16 +6297,21 @@ a{color:${v.accent}}
         )}</code>`;
       return (
         `<div class="mdm-manual-install" style="margin-top:4px;padding:12px 14px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.6;background:rgba(0,0,0,.03)">` +
-        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.15)"><strong>找不到 xelatex.exe？</strong>说明 XeLaTeX 引擎包还没装上（只有控制台不够）。按下面「补装引擎」做。</p>` +
-        `<p style="margin:0 0 6px"><strong>补装引擎（已有 MiKTeX Console 时）</strong></p>` +
+        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.15)"><strong>有 miktex.exe、没有 xelatex.exe</strong>＝还差引擎宏包。用下面任一方式补装即可。</p>` +
+        `<p style="margin:0 0 6px"><strong>方式 A · 命令一行（推荐）</strong></p>` +
         `<ol style="margin:0 0 10px;padding-left:1.25em">` +
-        `<li>开始菜单打开 <strong>MiKTeX Console</strong></li>` +
-        `<li>左侧点 <strong>Packages</strong>（宏包）</li>` +
-        `<li>搜索 <code>miktex-xetex</code> 或 <code>xetex</code> → 选中 → <strong>Install</strong></li>` +
-        `<li>装完后到 <code>…\\MiKTeX\\miktex\\bin\\x64\\</code> 应出现 <code>xelatex.exe</code>（也可搜 <code>miktex-xelatex.exe</code>）</li>` +
-        `<li><strong>关掉并重启本机桥</strong>，再点「我已装好，重新探测」</li>` +
+        `<li>在资源管理器打开 <code>miktex.exe</code> 所在文件夹（一般是 <code>…\\miktex\\bin\\x64</code>）</li>` +
+        `<li>地址栏输入 <code>cmd</code> 回车</li>` +
+        `<li>执行：<code>miktex packages install miktex-xetex</code></li>` +
+        `<li>完成后同目录应出现 <code>xelatex.exe</code> → <strong>重启本机桥</strong> →「我已装好，重新探测」</li>` +
         `</ol>` +
-        `<p class="hint tight" style="margin:0 0 10px">也可在「命令提示符」执行：<code>miktex packages install miktex-xetex</code></p>` +
+        `<p style="margin:0 0 6px"><strong>方式 B · MiKTeX Console</strong></p>` +
+        `<ol style="margin:0 0 10px;padding-left:1.25em">` +
+        `<li>开始菜单打开 <strong>MiKTeX Console</strong> → <strong>Packages</strong></li>` +
+        `<li>搜索 <code>miktex-xetex</code> → <strong>Install</strong></li>` +
+        `<li>重启本机桥再探测</li>` +
+        `</ol>` +
+        `<p class="hint tight" style="margin:0 0 10px">也可把 <code>miktex.exe</code> 的完整路径贴进下方输入框点「使用此路径」，桥 ≥0.9.111 会尝试自动补装。</p>` +
         `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.12)"><strong>若连 MiKTeX Console 都没有</strong>：请先完整安装，再重启桥探测。</p>` +
         `<p style="margin:0 0 6px"><strong>还没装 MiKTeX？Windows 只走这一条</strong></p>` +
         `<ol style="margin:0;padding-left:1.25em">` +
@@ -6384,8 +6389,8 @@ a{color:${v.accent}}
         `<p class="hint tight" style="margin:0 0 8px">已装过却仍提示？先<strong>关掉黑窗重启本机桥</strong>；或装在自定义目录时，在下方<strong>填写路径</strong>。</p>` +
         `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:rgba(0,0,0,.03)">` +
         `<p style="margin:0 0 6px"><strong>指定本机 XeLaTeX / MiKTeX 位置</strong></p>` +
-        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.109。若仍提示「未知接口」= 桥未更新成功，请重新下载完整包并替换后启动。</p>` +
-        `<p style="margin:0 0 6px;padding:8px 10px;border-radius:6px;background:rgba(59,130,246,.1)"><strong>要找 <code>xelatex.exe</code></strong>（也认 <code>miktex-xelatex.exe</code>），不是 <code>miktex.exe</code>。若整个电脑搜不到：按下方「补装引擎」装 <code>miktex-xetex</code> 宏包。</p>` +
+        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.111。可填 <code>xelatex.exe</code>，或直接填 <code>miktex.exe</code> 路径让桥自动补装引擎。</p>` +
+        `<p style="margin:0 0 6px;padding:8px 10px;border-radius:6px;background:rgba(59,130,246,.1)"><strong>最终需要 <code>xelatex.exe</code></strong>。只有 <code>miktex.exe</code> 时先执行：<code>miktex packages install miktex-xetex</code></p>` +
         `<p class="hint tight" style="margin:0 0 6px">${escapeHtml(pathHint)}</p>` +
         `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 …\\miktex\\bin\\x64\\xelatex.exe 或 C:\\Program Files\\MiKTeX" value="${escapeHtml(
           savedPath || (typeof localStorage !== "undefined" ? localStorage.getItem("mdm-xelatex-path") || "" : "")

@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.110";
+const BRIDGE_VERSION = "0.9.111";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -145,6 +145,14 @@ function resolveXelatexUserPath(input) {
     if (st.isFile()) {
       const base = path.basename(raw).toLowerCase();
       if (base === want.toLowerCase() || base === "miktex-xelatex.exe") return raw;
+      // 用户常贴 miktex.exe：同目录若已有引擎直接用；否则交给补装逻辑
+      if (base === "miktex.exe" || base === "mpm.exe" || base === "initexmf.exe") {
+        for (const name of ["xelatex.exe", "miktex-xelatex.exe"]) {
+          const p = path.join(path.dirname(raw), name);
+          if (fs.existsSync(p)) return p;
+        }
+        return "";
+      }
       return "";
     }
     if (!st.isDirectory()) return "";
@@ -293,17 +301,20 @@ async function setXelatexPathInBridge(body = {}) {
 
   let bin = resolveXelatexUserPath(input);
   if (!bin) {
-    console.log("[bridge] 路径下未找到 xelatex.exe，尝试用 MiKTeX 补装 miktex-xetex…");
+    console.log("[bridge] 路径下未找到 xelatex.exe，尝试用 miktex.exe 补装 miktex-xetex…");
+    console.log("[bridge] （有 miktex.exe 即可：会执行 packages install miktex-xetex）");
     const tried = await tryInstallMiktexXetex(input);
     bin = resolveXelatexUserPath(input) || tried;
   }
   if (!bin) {
     console.log("[bridge] 仍无 xelatex.exe");
+    const cli = findMiktexCliNear(input);
     return {
       installed: false,
       needsManual: true,
-      message:
-        "目录里没有 xelatex.exe。请打开 MiKTeX Console → Packages → 安装 miktex-xetex；或重装 Basic 安装包。装完应出现 …\\miktex\\bin\\x64\\xelatex.exe",
+      message: cli
+        ? `已找到 ${cli}，但补装后仍无 xelatex.exe。请在该目录打开命令提示符执行：miktex packages install miktex-xetex`
+        : "目录里没有 xelatex.exe。有 miktex.exe 时请执行：miktex packages install miktex-xetex；或 MiKTeX Console → Packages → 装 miktex-xetex",
     };
   }
   const root = bridgeRootDir();
