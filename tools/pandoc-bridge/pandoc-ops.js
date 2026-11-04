@@ -38,8 +38,8 @@ const EXT = {
   native: "native",
 };
 
-/** 印刷级 PDF 引擎优先级：Typst > XeLaTeX > LuaLaTeX > pdfLaTeX > wkhtmltopdf */
-const PDF_ENGINE_ORDER = ["typst", "xelatex", "lualatex", "pdflatex", "wkhtmltopdf"];
+/** 印刷级 PDF：只保留效果最好的 XeLaTeX（复杂图表 + 中文排版） */
+const PDF_ENGINE_ORDER = ["xelatex"];
 
 /** 文件 → Markdown 时的 -f 映射（结构化文档优先 Pandoc） */
 const FILE_FROM = {
@@ -436,39 +436,31 @@ function makeBridgeTemp(prefix) {
 function resolveCmdCandidates(name) {
   const n = String(name || "").trim();
   const candidates = [];
-  if (n === "typst") {
-    candidates.push(typstBridgeBinPath());
-  }
   if (process.platform === "win32") {
     const la = process.env.LOCALAPPDATA || "";
     const pf = process.env.ProgramFiles || "C:\\Program Files";
-    if (n === "typst") {
-      if (la) {
-        candidates.push(path.join(la, "Microsoft", "WinGet", "Links", "typst.exe"));
-        candidates.push(path.join(la, "Programs", "typst", "typst.exe"));
-        // winget 常装到 Packages\Typst.Typst_*\typst.exe，装完 PATH 未刷新也能找到
-        try {
-          const pkgRoot = path.join(la, "Microsoft", "WinGet", "Packages");
-          if (fs.existsSync(pkgRoot)) {
-            for (const d of fs.readdirSync(pkgRoot)) {
-              if (!/typst/i.test(d)) continue;
-              const base = path.join(pkgRoot, d);
-              candidates.push(path.join(base, "typst.exe"));
-              try {
-                for (const sub of fs.readdirSync(base)) {
-                  candidates.push(path.join(base, sub, "typst.exe"));
-                }
-              } catch (_) {}
-            }
-          }
-        } catch (_) {}
+    const pf86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+    if (n === "xelatex") {
+      for (const root of [pf, pf86, la ? path.join(la, "Programs") : ""]) {
+        if (!root) continue;
+        candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "x64", "xelatex.exe"));
+        candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "win64", "xelatex.exe"));
+        candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "xelatex.exe"));
       }
-      candidates.push(path.join(pf, "Typst", "typst.exe"));
-      candidates.push("typst.exe");
+      candidates.push("xelatex.exe");
     } else {
       candidates.push(`${n}.exe`);
     }
   } else {
+    if (n === "xelatex") {
+      candidates.push(
+        "/Library/TeX/texbin/xelatex",
+        "/usr/local/texlive/2025/bin/universal-darwin/xelatex",
+        "/usr/local/texlive/2024/bin/universal-darwin/xelatex",
+        "/usr/local/texlive/2025/bin/x86_64-linux/xelatex",
+        "/usr/local/texlive/2024/bin/x86_64-linux/xelatex"
+      );
+    }
     candidates.push(`/opt/homebrew/bin/${n}`, `/usr/local/bin/${n}`, `/usr/bin/${n}`, n);
   }
   candidates.push(n);
@@ -495,12 +487,12 @@ function resolveCmdBin(name, { refresh = false } = {}) {
 
 async function probeCmd(name) {
   let bin = resolveCmdBin(name, { refresh: true });
-  if (name === "typst") {
-    const located = await locateTypstBinary();
+  if (name === "xelatex") {
+    const located = await locateXelatexBinary();
     if (located) {
       bin = located;
       resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
-      resolveCmdBin._cache.typst = located;
+      resolveCmdBin._cache.xelatex = located;
     }
   }
   try {
@@ -663,7 +655,7 @@ function writeExportImages(tmp, images) {
   }
 }
 
-/** pandoc --pdf-engine 优先用绝对路径（桥目录便携 typst 不在 PATH） */
+/** pandoc --pdf-engine 优先用绝对路径（MiKTeX 装完 PATH 未刷新也能找到） */
 function pdfEngineCliArg(engineName, pdfInfo) {
   const name = String(engineName || "").trim();
   const bin = String(pdfInfo?.engines?.[name]?.bin || "").trim();
@@ -671,19 +663,20 @@ function pdfEngineCliArg(engineName, pdfInfo) {
   return name;
 }
 
-/** 印刷级 PDF：Pandoc + Typst/XeLaTeX/… */
+/** 印刷级 PDF：仅 XeLaTeX（复杂图表 + 中文） */
 async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine = "" } = {}) {
   const pdfInfo = await probePdfEngines();
-  const engine = String(pdfEngine || pdfInfo.preferred || "").trim();
-  if (!engine || !pdfInfo.engines[engine]?.ok) {
+  const engine = String(pdfEngine || pdfInfo.preferred || "").trim() || "xelatex";
+  if (!pdfInfo.engines.xelatex?.ok && !pdfInfo.engines[engine]?.ok) {
     const hint =
       process.platform === "win32"
-        ? '可点「一键安装 Typst」或 winget install --id Typst.Typst -e'
+        ? "可一键安装 MiKTeX（XeLaTeX）或 winget install --id MiKTeX.MiKTeX -e"
         : process.platform === "darwin"
-          ? "可 brew install typst"
-          : "可安装 typst 或 texlive-xetex";
-    throw new Error(`未找到印刷级 PDF 引擎（Typst / XeLaTeX）。${hint}`);
+          ? "可 brew install --cask basictex"
+          : "请安装 texlive-xetex";
+    throw new Error(`未找到印刷级 PDF 引擎（XeLaTeX）。${hint}`);
   }
+  const useEngine = pdfInfo.engines.xelatex?.ok ? "xelatex" : engine;
 
   const tmp = makeBridgeTemp("mdm-pdf-");
   const inPath = path.join(tmp, "in.md");
@@ -693,28 +686,32 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   fs.writeFileSync(inPath, String(text || ""), "utf8");
   writeExportImages(tmp, images);
 
-  const engineCli = pdfEngineCliArg(engine, pdfInfo);
+  const engineCli = pdfEngineCliArg(useEngine, pdfInfo);
   const args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${engineCli}`, "-o", outPath];
-  // 中文/CJK：Xe/LuaLaTeX 用 CJKmainfont；Typst 用 mainfont
-  if (engine === "xelatex" || engine === "lualatex") {
-    args.push("-V", `CJKmainfont=${cjkFont}`, "-V", `mainfont=${cjkFont}`, "--pdf-engine-opt=-interaction=nonstopmode");
-  } else if (engine === "typst") {
-    args.push("-V", `mainfont=${cjkFont}`);
-  }
+  // 中文 + 页边距；复杂图表依赖前端先烤成高清 PNG
+  args.push(
+    "-V",
+    `CJKmainfont=${cjkFont}`,
+    "-V",
+    `mainfont=${cjkFont}`,
+    "-V",
+    "geometry:margin=2cm",
+    "--pdf-engine-opt=-interaction=nonstopmode"
+  );
   if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
 
-  console.log(`[pandoc] 印刷级 PDF · engine=${engine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp}`);
+  console.log(`[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp}`);
   try {
     await runCmd(resolvePandocBin(), args, { cwd: tmp, timeout: 900000 });
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 20) {
-      throw new Error("PDF 输出为空（请检查字体与 Typst/LaTeX 是否完整）");
+      throw new Error("PDF 输出为空（请检查字体与 XeLaTeX/MiKTeX 是否完整）");
     }
     const buf = fs.readFileSync(outPath);
     return {
       dataBase64: buf.toString("base64"),
       filename: `${safeBase(title)}.pdf`,
       engine: "pandoc",
-      pdfEngine: engine,
+      pdfEngine: useEngine,
       quality: "print",
       from: fromFmt,
       to: "pdf",
@@ -823,18 +820,37 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngi
   let usedPdfEngine = "";
   if (toFmt === "pdf") {
     const pdfInfo = await probePdfEngines();
-    usedPdfEngine = String(pdfEngine || pdfInfo.preferred || "").trim();
+    usedPdfEngine = pdfInfo.engines.xelatex?.ok
+      ? "xelatex"
+      : String(pdfEngine || pdfInfo.preferred || "").trim();
     if (!usedPdfEngine || !pdfInfo.engines[usedPdfEngine]?.ok) {
       const hint =
         process.platform === "win32"
-          ? '可点「一键安装 Typst」或 winget install --id Typst.Typst -e'
+          ? "可一键安装 MiKTeX（XeLaTeX）或 winget install --id MiKTeX.MiKTeX -e"
           : process.platform === "darwin"
-            ? "可 brew install typst"
-            : "可安装 typst 或 texlive-xetex";
-      throw new Error(`未找到印刷级 PDF 引擎（Typst / XeLaTeX）。${hint}`);
+            ? "可 brew install --cask basictex"
+            : "请安装 texlive-xetex";
+      throw new Error(`未找到印刷级 PDF 引擎（XeLaTeX）。${hint}`);
     }
     const engineCli = pdfEngineCliArg(usedPdfEngine, pdfInfo);
-    args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${engineCli}`, "-o", outPath, inPath];
+    const { main: cjkFont } = cjkFontVars();
+    args = [
+      "-f",
+      fromFmt,
+      "-t",
+      "pdf",
+      `--pdf-engine=${engineCli}`,
+      "-V",
+      `CJKmainfont=${cjkFont}`,
+      "-V",
+      `mainfont=${cjkFont}`,
+      "-V",
+      "geometry:margin=2cm",
+      "--pdf-engine-opt=-interaction=nonstopmode",
+      "-o",
+      outPath,
+      inPath,
+    ];
   } else {
     args = ["-f", fromFmt, "-t", toFmt];
     if (outIsMd) args.push("--wrap=none");
@@ -982,85 +998,173 @@ async function finalizeTypstProbe(extra = {}) {
   return { installed: ok, pdf, package: "typst", bin: pdf.engines.typst?.bin || located || "", ...extra };
 }
 
-/** 安装 Typst：winget/brew → 深搜 → GitHub 便携包（带下载百分比） */
+/** @deprecated 印刷级 PDF 已改为仅 XeLaTeX；保留符号以免旧调用崩 */
 async function installTypst() {
-  const platform = process.platform;
-  console.log("[pandoc] 准备安装 Typst（PDF 引擎）…");
+  console.log("[pandoc] 印刷级 PDF 仅保留 XeLaTeX，改走 MiKTeX/xelatex 安装…");
+  return installXelatex();
+}
 
-  // 已有则直接成功
+async function locateXelatexBinary() {
+  const candidates = [];
+  if (process.platform === "win32") {
+    const la = process.env.LOCALAPPDATA || "";
+    const pf = process.env.ProgramFiles || "C:\\Program Files";
+    const pf86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+    for (const root of [pf, pf86, la ? path.join(la, "Programs") : ""]) {
+      if (!root) continue;
+      candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "x64", "xelatex.exe"));
+      candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "win64", "xelatex.exe"));
+      candidates.push(path.join(root, "MiKTeX", "miktex", "bin", "xelatex.exe"));
+    }
+    candidates.push("xelatex.exe");
+  } else {
+    candidates.push(
+      "/Library/TeX/texbin/xelatex",
+      "/usr/local/texlive/2025/bin/universal-darwin/xelatex",
+      "/usr/local/texlive/2024/bin/universal-darwin/xelatex",
+      "/usr/local/texlive/2025/bin/x86_64-linux/xelatex",
+      "/usr/local/texlive/2024/bin/x86_64-linux/xelatex",
+      "/usr/bin/xelatex",
+      "xelatex"
+    );
+  }
+  for (const c of candidates) {
+    try {
+      if ((c.includes(path.sep) || c.includes("/")) && fs.existsSync(c)) return c;
+    } catch (_) {}
+  }
+  return whereCmd(process.platform === "win32" ? "xelatex.exe" : "xelatex");
+}
+
+async function finalizeXelatexProbe(extra = {}) {
+  resolveCmdBin("xelatex", { refresh: true });
+  const located = await locateXelatexBinary();
+  if (located) {
+    resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
+    resolveCmdBin._cache.xelatex = located;
+  }
+  const pdf = await probePdfEngines();
+  const ok = !!pdf.engines.xelatex?.ok;
+  console.log(
+    `[pandoc] XeLaTeX 探测：${ok ? "已就绪 · " + (pdf.engines.xelatex?.bin || located || "") : "仍未找到"}`
+  );
+  return {
+    installed: ok,
+    pdf,
+    package: "xelatex",
+    bin: pdf.engines.xelatex?.bin || located || "",
+    ...extra,
+  };
+}
+
+/** 安装 XeLaTeX（Windows: MiKTeX；macOS: BasicTeX；体积大，黑窗可见进度） */
+async function installXelatex() {
+  const platform = process.platform;
+  console.log("[pandoc] 准备安装 XeLaTeX（印刷级唯一引擎，适合复杂图表/中文）…");
+
   {
-    const existing = await locateTypstBinary();
+    const existing = await locateXelatexBinary();
     if (existing) {
-      console.log(`[pandoc] 已找到 Typst：${existing}`);
-      return finalizeTypstProbe({ command: "already-present", output: existing });
+      console.log(`[pandoc] 已找到 XeLaTeX：${existing}`);
+      return finalizeXelatexProbe({ command: "already-present", output: existing });
     }
   }
-
-  let last = { command: "", output: "" };
 
   if (platform === "win32") {
-    if (await hasCmd("winget")) {
-      last = await wingetInstall("Typst.Typst");
-      console.log("[pandoc] winget 结束，正在定位 typst.exe…");
-      await new Promise((r) => setTimeout(r, 1500));
-      let hit = await locateTypstBinary();
-      if (!hit) {
-        await new Promise((r) => setTimeout(r, 2500));
-        hit = await locateTypstBinary();
-      }
-      if (hit) return finalizeTypstProbe(last);
-      console.log("[pandoc] winget 后仍未定位到 typst，改下官方便携包…");
-    } else {
-      console.log("[pandoc] 无 winget，改下官方便携包…");
-    }
-  } else if (platform === "darwin" && (await hasCmd("brew"))) {
-    try {
-      last = {
-        command: "brew install typst",
-        output: "",
+    if (!(await hasCmd("winget"))) {
+      return {
+        installed: false,
+        needsManual: true,
+        package: "xelatex",
+        command: "winget install --id MiKTeX.MiKTeX -e",
+        message: "未找到 winget，请手动安装 MiKTeX（含 XeLaTeX）",
+        pdf: await probePdfEngines(),
       };
-      await runCmdInherit("brew", ["install", "typst"], {
-        timeout: 900000,
-        logPrefix: "[pandoc/brew]",
-      });
-      const hit = await locateTypstBinary();
-      if (hit) return finalizeTypstProbe(last);
-      console.log("[pandoc] brew 后仍未定位到 typst，改下官方便携包…");
-    } catch (err) {
-      last.output = String(err?.message || err);
-      console.log(`[pandoc/brew] 失败：${last.output}`);
     }
-  }
-
-  try {
-    const portable = await installTypstPortable();
-    return finalizeTypstProbe({
-      command: portable.command,
-      output: portable.bin,
-    });
-  } catch (err) {
-    const msg = String(err?.message || err);
-    console.log(`[pandoc/typst] 便携包安装失败：${msg}`);
+    console.log("[pandoc] 通过 winget 安装 MiKTeX（约数百 MB～1GB+，请看黑窗）…");
+    const r = await wingetInstall("MiKTeX.MiKTeX");
+    console.log("[pandoc] MiKTeX winget 结束，定位 xelatex…");
+    await new Promise((res) => setTimeout(res, 2000));
+    let hit = await locateXelatexBinary();
+    if (!hit) {
+      await new Promise((res) => setTimeout(res, 4000));
+      hit = await locateXelatexBinary();
+    }
+    if (hit) return finalizeXelatexProbe(r);
     return {
+      ...r,
       installed: false,
       needsManual: true,
-      package: "typst",
-      command:
-        platform === "win32"
-          ? "winget install --id Typst.Typst -e"
-          : platform === "darwin"
-            ? "brew install typst"
-            : "请按 https://github.com/typst/typst 安装",
-      message: msg || "Typst 安装失败",
-      output: last.output || msg,
+      package: "xelatex",
+      message: "MiKTeX 安装后仍未找到 xelatex，请重启桥或打开 MiKTeX Console 完成初始化后再试",
       pdf: await probePdfEngines(),
     };
   }
+
+  if (platform === "darwin") {
+    if (!(await hasCmd("brew"))) {
+      return {
+        installed: false,
+        needsManual: true,
+        package: "xelatex",
+        command: "brew install --cask basictex",
+        message: "未找到 Homebrew",
+        pdf: await probePdfEngines(),
+      };
+    }
+    try {
+      console.log("[pandoc] brew cask 安装 BasicTeX（含 XeLaTeX，体积较大）…");
+      await runCmdInherit("brew", ["install", "--cask", "basictex"], {
+        timeout: 1800000,
+        logPrefix: "[pandoc/brew]",
+      });
+      // BasicTeX 装完路径常在 /Library/TeX/texbin
+      process.env.PATH = `/Library/TeX/texbin:${process.env.PATH || ""}`;
+      const hit = await locateXelatexBinary();
+      if (hit) return finalizeXelatexProbe({ command: "brew install --cask basictex" });
+      return {
+        installed: false,
+        needsManual: true,
+        package: "xelatex",
+        command: "brew install --cask basictex && eval \"$(/usr/libexec/path_helper)\"",
+        message: "BasicTeX 已装但未找到 xelatex，请新开终端/重启桥后再试",
+        pdf: await probePdfEngines(),
+      };
+    } catch (err) {
+      return {
+        installed: false,
+        needsManual: true,
+        package: "xelatex",
+        command: "brew install --cask basictex",
+        message: String(err?.message || err),
+        pdf: await probePdfEngines(),
+      };
+    }
+  }
+
+  return {
+    installed: false,
+    needsManual: true,
+    package: "xelatex",
+    command: "sudo apt install texlive-xetex texlive-lang-chinese   # 或等价发行版包",
+    message: "Linux 请手动安装 XeLaTeX（texlive-xetex）",
+    pdf: await probePdfEngines(),
+  };
 }
 
 async function installPackage(body = {}) {
   const pkg = String(body.package || body.pkg || "pandoc").toLowerCase();
-  if (pkg === "typst" || pkg === "pdf" || pkg === "pdf-engine") return installTypst();
+  // 印刷级 PDF 只认 XeLaTeX；旧前端传 typst 也改走 xelatex
+  if (
+    pkg === "typst" ||
+    pkg === "pdf" ||
+    pkg === "pdf-engine" ||
+    pkg === "xelatex" ||
+    pkg === "miktex" ||
+    pkg === "latex"
+  ) {
+    return installXelatex();
+  }
   return installPandoc();
 }
 
@@ -1072,6 +1176,7 @@ module.exports = {
   convertToPrintPdf,
   installPandoc,
   installTypst,
+  installXelatex,
   installPackage,
   probePdfEngines,
   resolvePandocBin,

@@ -69,7 +69,7 @@ async function handleRequest(req, res, opts = {}) {
           printPdf: !!pandoc?.pdf?.printReady,
           preferredPdfEngine: pandoc?.pdf?.preferred || null,
         },
-        note: "Pandoc：结构化互转；PDF 印刷级优先 Typst / XeLaTeX",
+        note: "Pandoc：结构化互转；PDF 印刷级仅 XeLaTeX",
       });
       return;
     }
@@ -107,7 +107,14 @@ async function handleRequest(req, res, opts = {}) {
       const body = parseJsonBody(await readBody(req));
       const pkg = String(body?.package || body?.pkg || "pandoc").toLowerCase();
       const label =
-        pkg === "typst" || pkg === "pdf" || pkg === "pdf-engine" ? "Typst（PDF 引擎）" : "pandoc";
+        pkg === "typst" ||
+        pkg === "pdf" ||
+        pkg === "pdf-engine" ||
+        pkg === "xelatex" ||
+        pkg === "miktex" ||
+        pkg === "latex"
+          ? "XeLaTeX（PDF 引擎）"
+          : "pandoc";
       console.log("");
       console.log(`[pandoc] ════ 开始安装 ${label} · 下方为实时进度 ════`);
       const t0 = Date.now();

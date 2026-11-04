@@ -75,7 +75,7 @@
     org: { from: "gfm", args: [] },
     opml: { from: "gfm", args: [] },
     html: { from: "gfm", args: ["--standalone", "--embed-resources"] },
-    pdf: { from: "gfm", args: ["--pdf-engine=typst|xelatex"], note: "印刷级：Typst > XeLaTeX" },
+    pdf: { from: "gfm", args: ["--pdf-engine=xelatex"], note: "印刷级：仅 XeLaTeX" },
     asciidoc: { from: "gfm", args: [] },
     plain: { from: "gfm", args: [] },
     gfm: { from: "gfm", args: ["--wrap=none"] },
@@ -86,7 +86,7 @@
   const EXPORT_LOCAL = {
     md: { engine: "local", note: "原文 + 资源 ZIP" },
     "html-standalone": { engine: "local", note: "预览渲染内联资源；Mermaid 烤成图" },
-    pdf: { engine: "bridge-pandoc", note: "印刷级 PDF（Typst/XeLaTeX）；Mermaid 先栅格化；缺引擎自动装；失败再浏览器打印" },
+    pdf: { engine: "bridge-pandoc", note: "印刷级 PDF（仅 XeLaTeX）；Mermaid 先高清栅格化；缺引擎自动装 MiKTeX；失败再浏览器打印" },
     png: { engine: "local", note: "html2canvas 单文件；Mermaid 先出图；画布内最高 scale" },
   };
 

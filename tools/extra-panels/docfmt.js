@@ -280,12 +280,12 @@
         return await once();
       } catch (err) {
         const msg = String(err?.message || err);
-        if (toFmt === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX/i.test(msg)) {
-          log("未找到 Typst，尝试一键安装…");
+        if (toFmt === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX|MiKTeX/i.test(msg)) {
+          log("未找到 XeLaTeX，尝试一键安装 MiKTeX…");
           await bridgeFetch("/pandoc/install", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ package: "typst" }),
+            body: JSON.stringify({ package: "xelatex" }),
           });
           return once();
         }
@@ -312,12 +312,12 @@
         return await once();
       } catch (err) {
         const msg = String(err?.message || err);
-        if (toFmt === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX/i.test(msg)) {
-          log("未找到 Typst，尝试一键安装…");
+        if (toFmt === "pdf" && /印刷级 PDF 引擎|Typst|XeLaTeX|MiKTeX/i.test(msg)) {
+          log("未找到 XeLaTeX，尝试一键安装 MiKTeX…");
           await bridgeFetch("/pandoc/install", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ package: "typst" }),
+            body: JSON.stringify({ package: "xelatex" }),
           });
           return once();
         }

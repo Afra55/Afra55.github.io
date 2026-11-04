@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.98";
+const BRIDGE_VERSION = "0.9.99";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -5748,7 +5748,7 @@ async function handleApi(req, res, url) {
         beginBridgeBusy("pandoc-convert");
       } else if (isInstall) {
         console.log("");
-        console.log("[bridge] → Pandoc/Typst 安装 · 请看下方 [pandoc] 实时进度");
+        console.log("[bridge] → Pandoc/XeLaTeX 安装 · 请看下方 [pandoc] 实时进度");
         beginBridgeBusy("pandoc-install");
       }
       wrapResWithCors(res, origin);

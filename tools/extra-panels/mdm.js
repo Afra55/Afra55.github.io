@@ -21,7 +21,7 @@
   const DEFAULT_TAG_NAME = "默认";
 
   const PANDOC_FORMATS = [
-    ["pdf", "PDF（印刷级 · Typst/XeLaTeX）"],
+    ["pdf", "PDF（印刷级 · XeLaTeX）"],
     ["docx", "Word (.docx)"],
     ["odt", "OpenDocument (.odt)"],
     ["epub", "EPUB (.epub)"],
@@ -5786,15 +5786,16 @@ a{color:${v.accent}}
       }
     }
 
-    async function svgMarkupToPngBase64(svgHtml) {
+    async function svgMarkupToPngBase64(svgHtml, scale = 2) {
       const el = parseSvgMarkup(svgHtml);
       const markup = el ? mermaidSvgForExport(el) : String(svgHtml || "");
+      const s = Math.max(1, Number(scale) || 2);
       let blob = null;
       try {
-        blob = await rasterizeSvgMarkup(markup, "image/png", 2);
+        blob = await rasterizeSvgMarkup(markup, "image/png", s);
       } catch (_) {}
       if (!blob || blob.size < 32) {
-        blob = await rasterizeSvgMarkupHtml2Canvas(markup, "image/png", 2);
+        blob = await rasterizeSvgMarkupHtml2Canvas(markup, "image/png", s);
       }
       if (!blob || blob.size < 32) throw new Error("图表栅格化失败");
       const dataUrl = await blobToDataUrl(blob);
@@ -5804,11 +5805,12 @@ a{color:${v.accent}}
     /**
      * 把 ```mermaid 烤成图片，Pandoc/HTML/长图才能按「图表」显示而不是代码块。
      * @param {string} mdText
-     * @param {{ mode?: "file"|"data" }} [opts] file=assets/ 路径+images；data=内联 data URL
+     * @param {{ mode?: "file"|"data", scale?: number }} [opts] file=assets/ 路径+images；data=内联 data URL；PDF 用更高 scale
      */
     async function bakeChartsForExport(mdText, opts = {}) {
       const src = String(mdText || "");
       const mode = opts.mode === "data" ? "data" : "file";
+      const scale = Math.max(1, Number(opts.scale) || 2);
       const re = /```mermaid[ \t]*\r?\n([\s\S]*?)```/gi;
       /** @type {{ index: number, end: number, body: string }[]} */
       const hits = [];
@@ -5836,7 +5838,7 @@ a{color:${v.accent}}
         n += 1;
         try {
           const svgRaw = await renderMermaidSourceToSvg(code);
-          const b64 = await svgMarkupToPngBase64(svgRaw);
+          const b64 = await svgMarkupToPngBase64(svgRaw, scale);
           const alt = `图表${n}`;
           if (mode === "data") {
             out += `\n\n![${alt}](data:image/png;base64,${b64})\n\n`;
@@ -5931,12 +5933,12 @@ a{color:${v.accent}}
           } catch (err) {
             lastErr = err;
             const msg = String(err?.message || err);
-            // 转换阶段仍报缺引擎：再装一次 Typst 后重试（装完 PATH 偶发未刷新）
-            if (/未找到印刷级 PDF 引擎|未找到.*Typst|pdf-engine/i.test(msg)) {
+            // 转换阶段仍报缺引擎：再装一次 XeLaTeX 后重试（装完 PATH 偶发未刷新）
+            if (/未找到印刷级 PDF 引擎|未找到.*XeLaTeX|未找到.*Typst|pdf-engine|MiKTeX/i.test(msg)) {
               try {
                 attemptedInstall = true;
-                toast("仍缺 PDF 引擎，继续安装 Typst…");
-                await runTypstInstall();
+                toast("仍缺 PDF 引擎，继续安装 XeLaTeX（MiKTeX）…");
+                await runXelatexInstall();
                 await exportViaPandoc(text, "pdf", title, true);
                 toast("已导出印刷级 PDF");
                 return;
@@ -6063,7 +6065,7 @@ a{color:${v.accent}}
     }
 
     /**
-     * 导出 PDF 前：缺 pandoc / 缺 Typst 则先安装，成功后再允许 /convert。
+     * 导出 PDF 前：缺 pandoc / 缺 XeLaTeX 则先安装，成功后再允许 /convert。
      * @returns {Promise<{ ok: boolean, error?: string, preferred?: string }>}
      */
     async function ensurePrintPdfReady({ onInstallStart } = {}) {
@@ -6087,11 +6089,11 @@ a{color:${v.accent}}
       }
       if (!env.printReady) {
         onInstallStart?.();
-        toast("缺少 PDF 引擎，开始下载安装 Typst…");
+        toast("缺少 PDF 引擎，开始安装 XeLaTeX（MiKTeX，体积较大）…");
         try {
-          await runTypstInstall();
+          await runXelatexInstall();
         } catch (err) {
-          return { ok: false, error: String(err?.message || err || "Typst 安装失败") };
+          return { ok: false, error: String(err?.message || err || "XeLaTeX 安装失败") };
         }
         const pdf = await probePdfEnginesOnly();
         if (!pdf.printReady) {
@@ -6103,7 +6105,7 @@ a{color:${v.accent}}
         if (!env.printReady) {
           return {
             ok: false,
-            error: "Typst 安装后仍未探测到 PDF 引擎（请看黑窗完整输出；Windows 可重启桥后再试）",
+            error: "XeLaTeX 安装后仍未探测到（请看黑窗；Windows 可打开 MiKTeX Console 初始化后重启桥）",
           };
         }
       }
@@ -6111,8 +6113,9 @@ a{color:${v.accent}}
     }
 
     async function exportViaPandoc(text, to, title, retried = false) {
-      // 图表先烤成 PNG 再交给 Pandoc，Word/PDF/EPUB 等才能按图显示
-      const baked = await bakeChartsForExport(text, { mode: "file" }).catch(() => ({
+      // 图表先烤成 PNG 再交给 Pandoc；PDF 用 3x 清晰度照顾复杂图
+      const chartScale = to === "pdf" ? 3 : 2;
+      const baked = await bakeChartsForExport(text, { mode: "file", scale: chartScale }).catch(() => ({
         text,
         images: [],
         chartCount: 0,
@@ -6163,17 +6166,17 @@ a{color:${v.accent}}
       downloadBlob(new Blob([bytes]), data.filename || `${slugify(title)}.${to}`);
     }
 
-    async function runTypstInstall() {
+    async function runXelatexInstall() {
       const box = els.modalBox;
       const t0 = Date.now();
       els.modal.hidden = false;
       box.innerHTML =
-        `<div class="mdm-modal-head"><strong>正在安装 Typst</strong></div>` +
-        `<p class="mdm-modal-body">本机桥正在安装 Typst（印刷级 PDF 引擎）。请勿关闭本页。<br/>黑窗会先尝试 winget/brew；若找不到会<strong>下载官方便携包并显示百分比</strong>。</p>` +
-        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-typst-install-progress">已用时 0 秒 · 安装中… · 请看本机桥黑窗</p></div>`;
+        `<div class="mdm-modal-head"><strong>正在安装 XeLaTeX</strong></div>` +
+        `<p class="mdm-modal-body">本机桥正在安装印刷级 PDF 引擎 <strong>XeLaTeX</strong>（Windows：MiKTeX；macOS：BasicTeX）。体积较大（约数百 MB～1GB+），请勿关闭本页。<br/>详细进度请看<strong>本机桥黑窗</strong>。</p>` +
+        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-xelatex-install-progress">已用时 0 秒 · 安装中… · 请看本机桥黑窗</p></div>`;
       els.modal.onclick = null;
       const timer = setInterval(() => {
-        const el = document.getElementById("mdm-typst-install-progress");
+        const el = document.getElementById("mdm-xelatex-install-progress");
         if (el) {
           el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒 · 安装中… · 请看本机桥黑窗进度`;
         }
@@ -6182,21 +6185,21 @@ a{color:${v.accent}}
         const res = await fetch(`${baseUrl()}/pandoc/install`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
-          body: JSON.stringify({ package: "typst" }),
+          body: JSON.stringify({ package: "xelatex" }),
         });
         const data = await res.json().catch(() => null);
         if (!data?.ok) throw new Error(data?.error || "安装请求失败");
         // 再探测一次，避免 winget 成功但 PATH 未刷新时误报
         const pdf = await probePdfEnginesOnly();
         if (data.installed || pdf.printReady) {
-          toast("Typst 已就绪，继续导出…");
+          toast("XeLaTeX 已就绪，继续导出…");
           return;
         }
         if (data.needsManual) {
-          throw new Error(`请手动安装：${data.command || "typst"}`);
+          throw new Error(`请手动安装：${data.command || "MiKTeX / BasicTeX"}`);
         }
         const detail = String(data.message || data.output || "").trim().slice(0, 300);
-        throw new Error(detail || "Typst 安装未完成（请看本机桥黑窗）");
+        throw new Error(detail || "XeLaTeX 安装未完成（请看本机桥黑窗）");
       } finally {
         clearInterval(timer);
         closeModal();
