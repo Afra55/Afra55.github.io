@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.111";
+const BRIDGE_VERSION = "0.9.112";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -199,6 +199,13 @@ function resolveXelatexUserPath(input) {
 /** 在疑似 MiKTeX 目录里找 miktex.exe / mpm.exe，用于补装 xetex */
 function findMiktexCliNear(input) {
   const raw = String(input || "").trim().replace(/^["']|["']$/g, "");
+  // 用户直接贴了 miktex.exe / mpm.exe
+  try {
+    if (raw && fs.existsSync(raw) && fs.statSync(raw).isFile()) {
+      const base = path.basename(raw).toLowerCase();
+      if (base === "miktex.exe" || base === "mpm.exe") return raw;
+    }
+  } catch (_) {}
   const seeds = [];
   if (raw) {
     try {
