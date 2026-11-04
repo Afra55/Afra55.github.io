@@ -6297,27 +6297,29 @@ a{color:${v.accent}}
         )}</code>`;
       return (
         `<div class="mdm-manual-install" style="margin-top:4px;padding:12px 14px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.6;background:rgba(0,0,0,.03)">` +
-        `<strong>请按下面手动装好 XeLaTeX（印刷级 PDF 必需）</strong>` +
-        `<p style="margin:8px 0 0"><strong>方式 A · 安装包（最简单）</strong></p>` +
-        `<ol style="margin:6px 0 0;padding-left:1.25em">` +
-        `<li>Windows：打开 <a href="${escapeHtml(miktex)}" target="_blank" rel="noopener">MiKTeX 下载页</a>，安装完成后<strong>重启本机桥</strong>。</li>` +
-        `<li>或到 <a href="${escapeHtml(releases)}" target="_blank" rel="noopener">TinyTeX Releases</a> 下载 <code>TinyTeX-1-windows-*.exe</code> 双击安装，再重启桥。</li>` +
-        `<li>macOS：终端执行 <code>brew install --cask basictex</code> 后重启桥。</li>` +
-        `<li>Linux：<code>sudo apt install texlive-xetex texlive-lang-chinese</code> 后重启桥。</li>` +
+        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.12)"><strong>Windows 只需走下面「推荐」这一条</strong>：去 MiKTeX 官网下安装器，双击安装即可。不必同时下两个链接。</p>` +
+        `<p style="margin:0 0 6px"><strong>推荐 · Windows：MiKTeX 安装器</strong></p>` +
+        `<ol style="margin:0;padding-left:1.25em">` +
+        `<li>打开 <a href="${escapeHtml(miktex)}" target="_blank" rel="noopener">https://miktex.org/download</a></li>` +
+        `<li>下载 <strong>Windows Installer</strong>（Basic 或 Net Installer 都可以），<strong>双击运行安装</strong></li>` +
+        `<li>安装时如有选项：选「Install missing packages on-the-fly: Yes」更省事</li>` +
+        `<li>装完后<strong>关掉并重新启动本机桥</strong>，回到本页点「我已装好，重新探测」或再导出 PDF</li>` +
         `</ol>` +
-        `<p style="margin:12px 0 0"><strong>方式 B · 便携包放到桥目录（自动下载失败时用）</strong></p>` +
-        `<ol style="margin:6px 0 0;padding-left:1.25em">` +
-        `<li>打开 <a href="${escapeHtml(releases)}" target="_blank" rel="noopener">TinyTeX Releases</a>，下载：` +
-        `<br/>Windows：<code>TinyTeX-1-tar-*.gz</code> 或 <code>TinyTeX-v*.zip</code>` +
-        `<br/>macOS：<code>TinyTeX-1-darwin-*.tar.xz</code>` +
-        `<br/>Linux：<code>TinyTeX-1-linux-*.tar.xz</code></li>` +
-        `<li>把压缩包<strong>解压到这个文件夹</strong>（没有就新建）：${pathBox(tiny)}` +
-        `本机桥根目录是：${pathBox(root)}</li>` +
-        `<li>解压后应能找到 <code>xelatex</code>（Windows 为 <code>xelatex.exe</code>），例如：` +
-        `<br/><code>…/bin/windows/xelatex.exe</code> · <code>…/bin/universal-darwin/xelatex</code> · <code>…/bin/x86_64-linux/xelatex</code></li>` +
-        `<li><strong>重启本机桥</strong>，回到本页再点导出 PDF。</li>` +
+        `<p style="margin:12px 0 6px"><strong>其它系统</strong></p>` +
+        `<ul style="margin:0;padding-left:1.25em">` +
+        `<li>macOS：终端执行 <code>brew install --cask basictex</code>，然后重启桥</li>` +
+        `<li>Linux：<code>sudo apt install texlive-xetex texlive-lang-chinese</code>，然后重启桥</li>` +
+        `</ul>` +
+        `<details style="margin-top:12px">` +
+        `<summary style="cursor:pointer"><strong>备用（仅当 MiKTeX 装不了时）</strong>：TinyTeX 解压到桥目录</summary>` +
+        `<ol style="margin:8px 0 0;padding-left:1.25em">` +
+        `<li>打开 <a href="${escapeHtml(releases)}" target="_blank" rel="noopener">TinyTeX Releases</a>，下载 Windows 的 <code>TinyTeX-1-tar-*.gz</code> 或 <code>TinyTeX-v*.zip</code></li>` +
+        `<li>解压到（没有就新建）：${pathBox(tiny)}桥根目录：${pathBox(root)}</li>` +
+        `<li>解压后应有 <code>…\\bin\\windows\\xelatex.exe</code></li>` +
+        `<li>重启本机桥再导出</li>` +
         `</ol>` +
-        `<p class="hint tight" style="margin:10px 0 0">不要只把 zip/gz 丢在桌面；必须解压进上面的 <code>bin/tinytex</code> 目录，桥才能探测到。</p>` +
+        `<p class="hint tight" style="margin:8px 0 0">备用方案不要只把压缩包放桌面，必须解压进上面的路径。</p>` +
+        `</details>` +
         `</div>`
       );
     }
@@ -6326,12 +6328,10 @@ a{color:${v.accent}}
       const tiny = String(hints.tinytexDir || "").trim() || "<桥目录>/bin/tinytex";
       const root = String(hints.bridgeRoot || "").trim() || "<桥目录>";
       return [
-        "【手动安装 XeLaTeX】",
-        "方式 A：Windows 装 MiKTeX（https://miktex.org/download）；macOS: brew install --cask basictex；Linux: sudo apt install texlive-xetex texlive-lang-chinese",
-        "方式 B：从 https://github.com/rstudio/tinytex-releases/releases 下载 TinyTeX，解压到：",
-        `  ${tiny}`,
-        "解压后需有 xelatex（如 …/bin/windows/xelatex.exe），然后重启本机桥。",
-        `桥根目录：${root}`,
+        "【Windows 推荐】只下一处：https://miktex.org/download → 下载 Windows Installer → 双击安装 → 重启本机桥",
+        "不必再下 TinyTeX，除非 MiKTeX 装不了。",
+        `备用：TinyTeX 解压到 ${tiny}（桥根目录 ${root}），需有 bin\\windows\\xelatex.exe`,
+        "macOS：brew install --cask basictex；Linux：sudo apt install texlive-xetex texlive-lang-chinese",
       ].join("\n");
     }
 
