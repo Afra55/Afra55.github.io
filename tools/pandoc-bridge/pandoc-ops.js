@@ -1265,7 +1265,9 @@ function xelatexManualInstallText() {
     return [
       "【手动安装 XeLaTeX · Windows】",
       "",
-      "推荐（只走这一条即可）：",
+      "自动安装会从阿里/清华 CTAN 镜像下 Basic 安装包（与浏览器同源），黑窗有百分比。",
+      "",
+      "若仍需手动（只走这一条即可）：",
       "1) 打开 https://miktex.org/download",
       "2) 下载 Windows Installer（Basic / Net 均可），双击安装",
       "3) 建议勾选 Install missing packages on-the-fly = Yes",
@@ -1393,9 +1395,191 @@ async function ensureTinytexPandocPackages(xelatexBin) {
   }
 }
 
+/** 拉取纯文本（列目录 HTML）；带心跳，避免「黑窗无字」 */
+function fetchTextHttps(url, { timeout = 30000, logPrefix = "[pandoc]" } = {}) {
+  return new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    let settled = false;
+    const beat = setInterval(() => {
+      if (settled) return;
+      console.log(
+        `${logPrefix} …等待目录列表 · 已用时 ${Math.round((Date.now() - t0) / 1000)}s · ${String(url).slice(0, 80)}`
+      );
+    }, 4000);
+    const done = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(beat);
+      fn();
+    };
+    const mod = String(url).startsWith("https") ? https : http;
+    const req = mod.get(
+      url,
+      {
+        headers: { "User-Agent": "devtools-bridge-pandoc", Accept: "text/html,*/*" },
+        timeout,
+      },
+      (res) => {
+        if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+          res.resume();
+          done(() => {});
+          return resolve(
+            fetchTextHttps(new URL(res.headers.location, url).href, { timeout, logPrefix })
+          );
+        }
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          const raw = Buffer.concat(chunks).toString("utf8");
+          if (res.statusCode !== 200) {
+            return done(() => reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 80)}`)));
+          }
+          done(() => resolve(raw));
+        });
+      }
+    );
+    req.on("error", (err) => done(() => reject(err)));
+    req.on("timeout", () => {
+      req.destroy();
+      done(() => reject(new Error("请求超时")));
+    });
+  });
+}
+
+function cmpMiktexInstallerName(a, b) {
+  const ver = (n) => {
+    const m = String(n).match(/basic-miktex-([\d.]+)-x64\.exe/i);
+    return (m ? m[1] : "0").split(".").map((x) => Number(x) || 0);
+  };
+  const pa = ver(a);
+  const pb = ver(b);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/**
+ * 解析 MiKTeX Basic Windows Installer URL。
+ * 走清华/阿里等 CTAN 镜像（与浏览器下官网安装包同源镜像，不走 GitHub）。
+ */
+async function resolveMiktexBasicInstaller() {
+  const indexBases = [
+    "https://mirrors.aliyun.com/CTAN/systems/win32/miktex/setup/windows-x64/",
+    "https://mirrors.tuna.tsinghua.edu.cn/CTAN/systems/win32/miktex/setup/windows-x64/",
+    "https://mirrors.cloud.tencent.com/CTAN/systems/win32/miktex/setup/windows-x64/",
+    "https://mirror.ctan.org/systems/win32/miktex/setup/windows-x64/",
+  ];
+  const fallbackName = "basic-miktex-25.12-x64.exe";
+  let lastErr = null;
+  for (let i = 0; i < indexBases.length; i++) {
+    const base = indexBases[i];
+    try {
+      console.log(`[pandoc/miktex] (${i + 1}/${indexBases.length}) 列目录：${base}`);
+      const html = await fetchTextHttps(base, { timeout: 25000, logPrefix: "[pandoc/miktex]" });
+      const names = [...html.matchAll(/basic-miktex-[\d.]+-x64\.exe/gi)].map((m) => m[0]);
+      const uniq = [...new Set(names)].sort(cmpMiktexInstallerName);
+      const name = uniq[uniq.length - 1] || fallbackName;
+      if (!uniq.length) {
+        console.log(`[pandoc/miktex] 目录无匹配，回退文件名 ${fallbackName}`);
+      } else {
+        console.log(`[pandoc/miktex] 选中 ${name}（共 ${uniq.length} 个版本）`);
+      }
+      return { url: base + name, name, mirror: base };
+    } catch (err) {
+      lastErr = err;
+      console.log(`[pandoc/miktex] 列目录失败：${err?.message || err}`);
+    }
+  }
+  // 镜像列表都挂了时仍给一个固定阿里云直链，下载阶段再试其它镜像
+  const name = fallbackName;
+  const mirror = indexBases[0];
+  console.log(`[pandoc/miktex] 目录均失败（${lastErr?.message || "?"}），直链回退 ${mirror}${name}`);
+  return { url: mirror + name, name, mirror };
+}
+
+/**
+ * Windows：从 CTAN 国内镜像下载 Basic MiKTeX 安装包并无人值守安装。
+ * 这是浏览器「下得很快」的同一类源，避免 GitHub TinyTeX 卡住。
+ */
+async function installMiktexBasicInstaller() {
+  if (process.platform !== "win32") {
+    throw new Error("MiKTeX Basic 安装器仅支持 Windows");
+  }
+  const asset = await resolveMiktexBasicInstaller();
+  const tmpDir = makeBridgeTemp("miktex-dl-");
+  const exePath = path.join(tmpDir, asset.name || "basic-miktex-x64.exe");
+  console.log("[pandoc/miktex] ════════════════════════════════════");
+  console.log("[pandoc/miktex] 将从国内 CTAN 镜像下载 MiKTeX 安装包（与浏览器同源，非 GitHub）");
+  console.log(`[pandoc/miktex] 文件：${asset.name}`);
+  console.log("[pandoc/miktex] 黑窗会刷下载百分比；约 140MB，通常几分钟内完成");
+  console.log("[pandoc/miktex] ════════════════════════════════════");
+
+  const downloadCandidates = [
+    asset.url,
+    `https://mirrors.aliyun.com/CTAN/systems/win32/miktex/setup/windows-x64/${asset.name}`,
+    `https://mirrors.tuna.tsinghua.edu.cn/CTAN/systems/win32/miktex/setup/windows-x64/${asset.name}`,
+    `https://mirrors.cloud.tencent.com/CTAN/systems/win32/miktex/setup/windows-x64/${asset.name}`,
+  ];
+  const urls = [...new Set(downloadCandidates.filter(Boolean))];
+
+  try {
+    let used = "";
+    let lastErr = null;
+    for (let i = 0; i < urls.length; i++) {
+      const u = urls[i];
+      try {
+        console.log(`[pandoc/miktex] ▶ 下载源 ${i + 1}/${urls.length}`);
+        await downloadToFile(u, exePath, { logPrefix: "[pandoc/miktex]", timeout: 1800000 });
+        const st = fs.statSync(exePath);
+        if (st.size < 5 * 1024 * 1024) {
+          throw new Error(`安装包过小（${st.size}B），可能是错误页`);
+        }
+        used = u;
+        break;
+      } catch (err) {
+        lastErr = err;
+        console.log(`[pandoc/miktex] ✖ 源 ${i + 1} 失败：${err?.message || err}`);
+        try {
+          fs.unlinkSync(exePath);
+        } catch (_) {}
+      }
+    }
+    if (!used) throw lastErr || new Error("MiKTeX 安装包所有镜像下载失败");
+
+    console.log(`[pandoc/miktex] 下载完成 · ${used}`);
+    console.log("[pandoc/miktex] 开始无人值守安装（用户级 · 黑窗可见安装器输出）…");
+    // --unattended：无 GUI；--shared=no：用户目录，尽量避开 UAC；缺包自动装
+    await runCmdInherit(
+      exePath,
+      ["--unattended", "--auto-install=yes", "--shared=no"],
+      { timeout: 1800000, logPrefix: "[pandoc/miktex-setup]" }
+    );
+    refreshWindowsPathEnv();
+    await new Promise((res) => setTimeout(res, 2000));
+    let hit = await locateXelatexBinary();
+    if (!hit) {
+      await new Promise((res) => setTimeout(res, 4000));
+      refreshWindowsPathEnv();
+      hit = await locateXelatexBinary();
+    }
+    if (!hit) throw new Error("MiKTeX 安装结束但未找到 xelatex.exe（可重启桥后再探测）");
+    prependPath(path.dirname(hit));
+    resolveCmdBin._cache = resolveCmdBin._cache || Object.create(null);
+    resolveCmdBin._cache.xelatex = hit;
+    console.log(`[pandoc/miktex] 就绪 · ${hit}`);
+    return { bin: hit, command: `miktex-basic:${asset.name}`, used };
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch (_) {}
+  }
+}
+
 /**
  * 下载 TinyTeX 到桥目录（自带 xelatex；黑窗有下载百分比）。
- * 比 winget MiKTeX 更稳：不需要管理员，也不会因 UAC 几秒就失败。
+ * Windows 上仅作 CTAN MiKTeX / winget 失败后的备用（GitHub 在国内常卡住）。
  */
 async function installTinytexPortable() {
   const asset = await resolveTinytexReleaseAsset();
@@ -1567,12 +1751,17 @@ async function finalizeXelatexProbe(extra = {}) {
   };
 }
 
-/** 安装 XeLaTeX：本机已有 → TinyTeX 便携（正确资源名）→ 再试 winget/brew */
+/** 安装 XeLaTeX：已有 → Win 先 CTAN MiKTeX（浏览器同源）→ winget → TinyTeX 备用 → brew */
 async function installXelatex() {
   const platform = process.platform;
   console.log("[pandoc] ════════════════════════════════════");
   console.log("[pandoc] 准备安装 XeLaTeX（印刷级 PDF · 复杂图表/中文）");
-  console.log("[pandoc] 黑窗会持续输出：连接中 → 下载百分比 → 解压 → 宏包");
+  if (platform === "win32") {
+    console.log("[pandoc] Windows：优先从阿里/清华 CTAN 下 MiKTeX 安装包（同浏览器，黑窗有 %）");
+    console.log("[pandoc] 不会先卡在 GitHub TinyTeX；失败才会试 winget / TinyTeX 备用");
+  } else {
+    console.log("[pandoc] 黑窗会持续输出：连接中 → 下载百分比 → 解压 → 宏包");
+  }
   console.log("[pandoc] 若长时间无新字，请改用网页弹框里的「手动安装」说明");
   console.log("[pandoc] ════════════════════════════════════");
 
@@ -1586,36 +1775,72 @@ async function installXelatex() {
 
   let last = { command: "", output: "", message: "" };
 
-  // 优先 TinyTeX：旧版 TinyTeX-1.zip 已 404，会几秒假失败；现按 release 实名 + 镜像下载
-  try {
-    const portable = await installTinytexPortable();
-    refreshWindowsPathEnv();
-    prependPath(path.dirname(portable.bin));
-    return finalizeXelatexProbe({
-      command: portable.command,
-      output: portable.bin,
-    });
-  } catch (err) {
-    last = {
-      command: "tinytex-portable",
-      output: String(err?.message || err),
-      message: String(err?.message || err),
-    };
-    console.log(`[pandoc/tinytex] 便携包失败：${last.message}，尝试系统包管理器…`);
-  }
-
-  if (platform === "win32" && (await hasCmd("winget"))) {
-    console.log("[pandoc] 尝试 winget 用户级安装 MiKTeX…");
-    const r = await wingetInstall("MiKTeX.MiKTeX", ["--scope", "user"]);
-    last = { ...last, ...r };
-    refreshWindowsPathEnv();
-    await new Promise((res) => setTimeout(res, 2000));
-    let hit = await locateXelatexBinary();
-    if (!hit) {
-      await new Promise((res) => setTimeout(res, 3000));
-      hit = await locateXelatexBinary();
+  // Windows：先下 CTAN Basic 安装包（国内镜像快），再 winget，TinyTeX 仅作最后备用
+  if (platform === "win32") {
+    try {
+      const mik = await installMiktexBasicInstaller();
+      return finalizeXelatexProbe({
+        command: mik.command,
+        output: mik.bin,
+      });
+    } catch (err) {
+      last = {
+        command: "miktex-basic-installer",
+        output: String(err?.message || err),
+        message: String(err?.message || err),
+      };
+      console.log(`[pandoc/miktex] CTAN 安装失败：${last.message}，尝试 winget…`);
     }
-    if (hit) return finalizeXelatexProbe(last);
+
+    if (await hasCmd("winget")) {
+      console.log("[pandoc] 尝试 winget 用户级安装 MiKTeX…");
+      const r = await wingetInstall("MiKTeX.MiKTeX", ["--scope", "user"]);
+      last = { ...last, ...r };
+      refreshWindowsPathEnv();
+      await new Promise((res) => setTimeout(res, 2000));
+      let hit = await locateXelatexBinary();
+      if (!hit) {
+        await new Promise((res) => setTimeout(res, 3000));
+        hit = await locateXelatexBinary();
+      }
+      if (hit) return finalizeXelatexProbe(last);
+      console.log("[pandoc/winget] 安装后仍未找到 xelatex，尝试 TinyTeX 备用…");
+    }
+
+    try {
+      const portable = await installTinytexPortable();
+      refreshWindowsPathEnv();
+      prependPath(path.dirname(portable.bin));
+      return finalizeXelatexProbe({
+        command: portable.command,
+        output: portable.bin,
+      });
+    } catch (err) {
+      last = {
+        command: "tinytex-portable",
+        output: String(err?.message || err),
+        message: String(err?.message || err),
+      };
+      console.log(`[pandoc/tinytex] 便携包失败：${last.message}`);
+    }
+  } else {
+    // macOS / Linux：仍优先 TinyTeX 便携，再 brew
+    try {
+      const portable = await installTinytexPortable();
+      refreshWindowsPathEnv();
+      prependPath(path.dirname(portable.bin));
+      return finalizeXelatexProbe({
+        command: portable.command,
+        output: portable.bin,
+      });
+    } catch (err) {
+      last = {
+        command: "tinytex-portable",
+        output: String(err?.message || err),
+        message: String(err?.message || err),
+      };
+      console.log(`[pandoc/tinytex] 便携包失败：${last.message}，尝试系统包管理器…`);
+    }
   }
 
   if (platform === "darwin" && (await hasCmd("brew"))) {

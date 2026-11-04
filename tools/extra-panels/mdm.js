@@ -6197,7 +6197,7 @@ a{color:${v.accent}}
       }
       if (!env.printReady) {
         onInstallStart?.();
-        toast("缺少 PDF 引擎，开始安装 XeLaTeX（可能需下载 TinyTeX，请看黑窗）…");
+        toast("缺少 PDF 引擎，开始从国内镜像下载 MiKTeX（黑窗有百分比）…");
         try {
           const inst = await runXelatexInstall();
           if (inst?.installHints) installHints = inst.installHints;
@@ -6221,7 +6221,7 @@ a{color:${v.accent}}
           return {
             ok: false,
             error:
-              "XeLaTeX 安装后仍未探测到（请看黑窗；或按弹框说明把 TinyTeX 解压到桥目录后重启桥）",
+              "XeLaTeX 安装后仍未探测到（请看黑窗；或按弹框去 MiKTeX 官网装完后重启桥）",
             installHints,
           };
         }
@@ -6379,8 +6379,8 @@ a{color:${v.accent}}
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在安装 XeLaTeX</strong></div>` +
         `<div class="mdm-modal-body" style="max-height:min(62vh,520px);overflow:auto;text-align:left">` +
-        `<p>本机桥正在自动下载安装（TinyTeX / XeLaTeX，约 50–250MB，常要 5–15 分钟）。请勿关闭本页与黑窗。</p>` +
-        `<p class="hint tight">黑窗应出现：连接中 → 下载 xx% → 解压。若很快失败，请直接按下方手动步骤（含<strong>文件放哪</strong>）。</p>` +
+        `<p>本机桥正在从<strong>阿里/清华 CTAN 镜像</strong>下载 MiKTeX 安装包（与浏览器同源，约 140MB），然后无人值守安装。请勿关闭本页与黑窗。</p>` +
+        `<p class="hint tight">黑窗应很快出现：列目录 → 下载 xx% → 安装器输出。若黑窗长时间无字，再按下方手动装。</p>` +
         xelatexManualGuideHtml(hints || {}) +
         `</div>` +
         `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-xelatex-install-progress">已用时 0 秒 · 已向本机桥发出安装请求…</p></div>`;
@@ -6390,11 +6390,11 @@ a{color:${v.accent}}
         if (el) {
           const sec = Math.round((Date.now() - t0) / 1000);
           el.textContent =
-            sec < 15
-              ? `已用时 ${sec} 秒 · 正在连本机桥 / 拉取发布列表… · 请看黑窗`
-              : sec < 60
-                ? `已用时 ${sec} 秒 · 若黑窗有「下载中 xx%」即正常 · 也可按上方手动安装`
-                : `已用时 ${sec} 秒 · 仍在安装（体积大/网络慢属正常）· 黑窗无字请改手动安装`;
+            sec < 20
+              ? `已用时 ${sec} 秒 · 正在连镜像 / 下载安装包… · 请看黑窗百分比`
+              : sec < 120
+                ? `已用时 ${sec} 秒 · 若黑窗有「下载中 xx%」或安装器输出即正常`
+                : `已用时 ${sec} 秒 · 仍在安装（约 140MB + 解压）· 黑窗无字请改手动安装`;
         }
       }, 1000);
       try {
