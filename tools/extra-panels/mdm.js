@@ -6075,7 +6075,11 @@ a{color:${v.accent}}
       if (!env.pandocOk) {
         onInstallStart?.();
         toast("未找到 pandoc，开始自动安装…");
-        await runPandocInstall();
+        try {
+          await runPandocInstall();
+        } catch (err) {
+          return { ok: false, error: String(err?.message || err || "pandoc 安装失败") };
+        }
         env = await probePrintPdfEnv();
         if (!env.pandocOk) {
           return { ok: false, error: "pandoc 安装后仍未就绪（请看黑窗，或手动安装后重试）" };
@@ -6084,7 +6088,11 @@ a{color:${v.accent}}
       if (!env.printReady) {
         onInstallStart?.();
         toast("缺少 PDF 引擎，开始下载安装 Typst…");
-        await runTypstInstall();
+        try {
+          await runTypstInstall();
+        } catch (err) {
+          return { ok: false, error: String(err?.message || err || "Typst 安装失败") };
+        }
         const pdf = await probePdfEnginesOnly();
         if (!pdf.printReady) {
           env = await probePrintPdfEnv();
