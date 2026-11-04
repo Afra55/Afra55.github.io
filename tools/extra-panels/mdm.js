@@ -5603,7 +5603,8 @@ a{color:${v.accent}}
 .toc ul{margin:.35rem 0 0;padding-left:1.2rem}
 .toc-l2{padding-left:.8rem}.toc-l3,.toc-l4,.toc-l5,.toc-l6{padding-left:1.6rem}
 .mdm-mermaid,figure{margin:1rem 0;text-align:center}
-.mdm-mermaid svg,figure img{max-width:100%;height:auto}
+.mdm-mermaid svg,.mdm-mermaid-svg svg,figure img{max-width:100%;height:auto}
+.mdm-mermaid-svg{display:inline-block;max-width:100%}
 .katex-display{overflow-x:auto;overflow-y:hidden}
 @media print{@page{margin:18mm 16mm}body{max-width:none;margin:0;padding:0;background:#fff;color:#111}pre,table,blockquote,img,.mdm-mermaid{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
 </style></head><body>${buildToc(bodyHtml)}${bodyHtml}</body></html>`;
@@ -5803,21 +5804,33 @@ a{color:${v.accent}}
     }
 
     /**
-     * 把 ```mermaid 烤成图片，Pandoc/HTML/长图才能按「图表」显示而不是代码块。
+     * 找 mermaid 围栏：兼容 ```mermaid / ``` mermaid / ~~~mermaid（预览能认、旧正则认不出）。
+     * @returns {{ index: number, end: number, body: string }[]}
+     */
+    function findMermaidFences(mdText) {
+      const src = String(mdText || "");
+      /** @type {{ index: number, end: number, body: string }[]} */
+      const hits = [];
+      // info 串允许空格：``` mermaid / ```mermaid title
+      const re = /(```|~~~)[ \t]*mermaid[^\n]*\r?\n([\s\S]*?)\r?\n[ \t]*\1/gi;
+      let m;
+      while ((m = re.exec(src))) {
+        hits.push({ index: m.index, end: re.lastIndex, body: String(m[2] || "") });
+      }
+      return hits;
+    }
+
+    /**
+     * 把 mermaid 烤成图片/占位，Pandoc/HTML/长图才能按「图表」显示而不是代码块。
      * @param {string} mdText
-     * @param {{ mode?: "file"|"data", scale?: number }} [opts] file=assets/ 路径+images；data=内联 data URL；PDF 用更高 scale
+     * @param {{ mode?: "file"|"data"|"html", scale?: number }} [opts]
+     *   file=assets/ 路径；data=MD 内联 data URL；html=导出占位符（渲染后再注入 SVG，避开 MD/DOMPurify 对超长 data URL 的坑）
      */
     async function bakeChartsForExport(mdText, opts = {}) {
       const src = String(mdText || "");
-      const mode = opts.mode === "data" ? "data" : "file";
+      const mode = opts.mode === "data" ? "data" : opts.mode === "html" ? "html" : "file";
       const scale = Math.max(1, Number(opts.scale) || 2);
-      const re = /```mermaid[ \t]*\r?\n([\s\S]*?)```/gi;
-      /** @type {{ index: number, end: number, body: string }[]} */
-      const hits = [];
-      let m;
-      while ((m = re.exec(src))) {
-        hits.push({ index: m.index, end: re.lastIndex, body: String(m[1] || "") });
-      }
+      const hits = findMermaidFences(src);
       if (!hits.length) return { text: src, images: [], chartCount: 0, failed: 0 };
 
       toast(`正在渲染 ${hits.length} 个图表…`);
@@ -5838,14 +5851,24 @@ a{color:${v.accent}}
         n += 1;
         try {
           const svgRaw = await renderMermaidSourceToSvg(code);
-          const b64 = await svgMarkupToPngBase64(svgRaw, scale);
           const alt = `图表${n}`;
-          if (mode === "data") {
-            out += `\n\n![${alt}](data:image/png;base64,${b64})\n\n`;
+          if (mode === "html") {
+            // HTML 单文件：优先内联 SVG（清晰、不依赖栅格化）；占位符避开 markdown 解析超长 URL
+            const el = parseSvgMarkup(svgRaw);
+            const markup = el ? mermaidSvgForExport(el) : String(svgRaw || "");
+            if (!markup || !/<svg[\s>]/i.test(markup)) throw new Error("空 SVG");
+            const token = `MDMCHART${n}X`;
+            images.push({ token, n, alt, svg: markup });
+            out += `\n\n${token}\n\n`;
           } else {
-            const path = `assets/mdm-chart-${n}.png`;
-            images.push({ path, dataBase64: b64 });
-            out += `\n\n![${alt}](${path})\n\n`;
+            const b64 = await svgMarkupToPngBase64(svgRaw, scale);
+            if (mode === "data") {
+              out += `\n\n![${alt}](data:image/png;base64,${b64})\n\n`;
+            } else {
+              const path = `assets/mdm-chart-${n}.png`;
+              images.push({ path, dataBase64: b64 });
+              out += `\n\n![${alt}](${path})\n\n`;
+            }
           }
           chartCount += 1;
         } catch (err) {
@@ -5857,13 +5880,35 @@ a{color:${v.accent}}
       }
       out += src.slice(cursor);
       if (chartCount) toast(`已嵌入 ${chartCount} 个图表${failed ? `（${failed} 个失败保留源码）` : ""}`);
+      else if (failed) toast(`${failed} 个图表未能嵌入（仍保留源码）`);
       return { text: out, images, chartCount, failed };
+    }
+
+    /** 把 HTML 导出占位符换成内联 SVG 图表（在 DOMPurify 之后注入） */
+    function injectHtmlChartPlaceholders(html, images) {
+      let out = String(html || "");
+      for (const im of images || []) {
+        const token = String(im.token || "");
+        if (!token) continue;
+        const fig =
+          `<figure class="mdm-mermaid" data-mdm-chart="${im.n || ""}">` +
+          `<div class="mdm-mermaid-svg" aria-label="${escapeHtml(im.alt || "图表")}">${im.svg || ""}</div>` +
+          `</figure>`;
+        // markdown-it 常包成 <p>TOKEN</p>
+        const pRe = new RegExp(`<p>\\s*${token}\\s*</p>`, "g");
+        if (pRe.test(out)) out = out.replace(pRe, fig);
+        else out = out.split(token).join(fig);
+      }
+      return out;
     }
 
     async function buildExportHtml(text) {
       await ensureKatex().catch(() => false);
-      const baked = await bakeChartsForExport(text, { mode: "data" });
-      return inlineAssetsForExport(renderMarkdown(baked.text));
+      const baked = await bakeChartsForExport(text, { mode: "html" });
+      let html = renderMarkdown(baked.text);
+      html = injectHtmlChartPlaceholders(html, baked.images);
+      html = await inlineAssetsForExport(html);
+      return { html, chartCount: baked.chartCount || 0, failed: baked.failed || 0 };
     }
 
     async function exportCurrent(fmt, target) {
@@ -5891,9 +5936,12 @@ a{color:${v.accent}}
           return;
         }
         if (fmt === "html-standalone") {
-          const html = await buildExportHtml(text);
+          const { html, chartCount, failed } = await buildExportHtml(text);
           downloadBlob(new Blob([standaloneHtml(title, html)], { type: "text/html;charset=utf-8" }), `${slugify(title)}.html`);
-          toast("已导出 HTML（图表已嵌入）");
+          if (chartCount && !failed) toast(`已导出 HTML（已嵌入 ${chartCount} 个图表）`);
+          else if (chartCount && failed) toast(`已导出 HTML（嵌入 ${chartCount} 个，${failed} 个失败）`);
+          else if (failed) toast(`已导出 HTML（${failed} 个图表未能嵌入，请看控制台）`);
+          else toast("已导出 HTML");
           return;
         }
         if (fmt === "pdf") {
@@ -5918,10 +5966,10 @@ a{color:${v.accent}}
                 okText: "浏览器打印",
               });
               if (!okPrint) throw lastErr;
-              const html = await buildExportHtml(text);
+              const printed = await buildExportHtml(text);
               const w = window.open("", "_blank");
               if (!w) throw new Error("弹窗被拦截，无法打印");
-              w.document.write(standaloneHtml(title, html));
+              w.document.write(standaloneHtml(title, printed.html));
               w.document.close();
               w.focus();
               setTimeout(() => w.print(), 300);
@@ -5958,10 +6006,10 @@ a{color:${v.accent}}
               okText: "浏览器打印",
             });
             if (!okPrint) throw lastErr || new Error(failMsg);
-            const html = await buildExportHtml(text);
+            const printed = await buildExportHtml(text);
             const w = window.open("", "_blank");
             if (!w) throw new Error("弹窗被拦截，无法打印");
-            w.document.write(standaloneHtml(title, html));
+            w.document.write(standaloneHtml(title, printed.html));
             w.document.close();
             w.focus();
             setTimeout(() => w.print(), 300);
@@ -5972,12 +6020,12 @@ a{color:${v.accent}}
           await ensureVendor("html2canvas");
           if (typeof window.html2canvas !== "function") throw new Error("截图库加载失败（请检查网络后重试）");
           // 先把 mermaid 烤进 HTML，避免预览未渲染/纯编辑模式只出代码块
-          const bakedHtml = await buildExportHtml(text);
+          const baked = await buildExportHtml(text);
           const tmp = document.createElement("div");
           tmp.className = "markdown-body";
           tmp.style.cssText =
             "position:fixed;left:-10000px;top:0;width:820px;background:#fff;color:#111;padding:16px;box-sizing:border-box";
-          tmp.innerHTML = bakedHtml;
+          tmp.innerHTML = baked.html;
           document.body.appendChild(tmp);
           try {
             const { canvas, scale, tiles } = await capturePreviewAsOnePng(tmp);
