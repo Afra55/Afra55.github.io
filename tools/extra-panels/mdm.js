@@ -6297,13 +6297,23 @@ a{color:${v.accent}}
         )}</code>`;
       return (
         `<div class="mdm-manual-install" style="margin-top:4px;padding:12px 14px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.6;background:rgba(0,0,0,.03)">` +
-        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.12)"><strong>若你已经装过 MiKTeX</strong>：请先<strong>完全退出本机桥黑窗再重新启动</strong>，然后点「我已装好，重新探测」。装完不重启桥时，旧进程读不到新 PATH，会一直报未装好。</p>` +
-        `<p style="margin:0 0 6px"><strong>还没装？Windows 只走这一条</strong></p>` +
+        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.15)"><strong>找不到 xelatex.exe？</strong>说明 XeLaTeX 引擎包还没装上（只有控制台不够）。按下面「补装引擎」做。</p>` +
+        `<p style="margin:0 0 6px"><strong>补装引擎（已有 MiKTeX Console 时）</strong></p>` +
+        `<ol style="margin:0 0 10px;padding-left:1.25em">` +
+        `<li>开始菜单打开 <strong>MiKTeX Console</strong></li>` +
+        `<li>左侧点 <strong>Packages</strong>（宏包）</li>` +
+        `<li>搜索 <code>miktex-xetex</code> 或 <code>xetex</code> → 选中 → <strong>Install</strong></li>` +
+        `<li>装完后到 <code>…\\MiKTeX\\miktex\\bin\\x64\\</code> 应出现 <code>xelatex.exe</code>（也可搜 <code>miktex-xelatex.exe</code>）</li>` +
+        `<li><strong>关掉并重启本机桥</strong>，再点「我已装好，重新探测」</li>` +
+        `</ol>` +
+        `<p class="hint tight" style="margin:0 0 10px">也可在「命令提示符」执行：<code>miktex packages install miktex-xetex</code></p>` +
+        `<p style="margin:0 0 8px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.12)"><strong>若连 MiKTeX Console 都没有</strong>：请先完整安装，再重启桥探测。</p>` +
+        `<p style="margin:0 0 6px"><strong>还没装 MiKTeX？Windows 只走这一条</strong></p>` +
         `<ol style="margin:0;padding-left:1.25em">` +
         `<li>打开 <a href="${escapeHtml(miktex)}" target="_blank" rel="noopener">https://miktex.org/download</a></li>` +
-        `<li>下载 <strong>Windows Installer</strong>（Basic 或 Net Installer 都可以），<strong>双击运行安装</strong></li>` +
-        `<li>安装时如有选项：选「Install missing packages on-the-fly: Yes」更省事</li>` +
-        `<li>装完后<strong>关掉并重新启动本机桥</strong>，再点「我已装好，重新探测」或导出 PDF</li>` +
+        `<li>下载 <strong>Windows Installer（Basic）</strong>，双击安装</li>` +
+        `<li>安装时选「Install missing packages on-the-fly: Yes」</li>` +
+        `<li>装完确认存在 <code>…\\miktex\\bin\\x64\\xelatex.exe</code>，再<strong>重启本机桥</strong></li>` +
         `</ol>` +
         `<p style="margin:12px 0 6px"><strong>其它系统</strong></p>` +
         `<ul style="margin:0;padding-left:1.25em">` +
@@ -6328,9 +6338,10 @@ a{color:${v.accent}}
       const tiny = String(hints.tinytexDir || "").trim() || "<桥目录>/bin/tinytex";
       const root = String(hints.bridgeRoot || "").trim() || "<桥目录>";
       return [
-        "【Windows 推荐】只下一处：https://miktex.org/download → 下载 Windows Installer → 双击安装 → 重启本机桥",
-        "不必再下 TinyTeX，除非 MiKTeX 装不了。",
-        `备用：TinyTeX 解压到 ${tiny}（桥根目录 ${root}），需有 bin\\windows\\xelatex.exe`,
+        "找不到 xelatex.exe：打开 MiKTeX Console → Packages → 搜索 miktex-xetex → Install",
+        "或命令行：miktex packages install miktex-xetex",
+        "【还没装 MiKTeX】https://miktex.org/download → Basic Installer → 装完应有 …\\miktex\\bin\\x64\\xelatex.exe → 重启桥",
+        `备用 TinyTeX：解压到 ${tiny}（桥根 ${root}），需有 bin\\windows\\xelatex.exe`,
         "macOS：brew install --cask basictex；Linux：sudo apt install texlive-xetex texlive-lang-chinese",
       ].join("\n");
     }
@@ -6374,7 +6385,7 @@ a{color:${v.accent}}
         `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:rgba(0,0,0,.03)">` +
         `<p style="margin:0 0 6px"><strong>指定本机 XeLaTeX / MiKTeX 位置</strong></p>` +
         `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.109。若仍提示「未知接口」= 桥未更新成功，请重新下载完整包并替换后启动。</p>` +
-        `<p style="margin:0 0 6px;padding:8px 10px;border-radius:6px;background:rgba(59,130,246,.1)"><strong>注意：文件名是 <code>xelatex.exe</code></strong>，不是 <code>miktex.exe</code>。常见位置：<code>…\\MiKTeX\\miktex\\bin\\x64\\xelatex.exe</code></p>` +
+        `<p style="margin:0 0 6px;padding:8px 10px;border-radius:6px;background:rgba(59,130,246,.1)"><strong>要找 <code>xelatex.exe</code></strong>（也认 <code>miktex-xelatex.exe</code>），不是 <code>miktex.exe</code>。若整个电脑搜不到：按下方「补装引擎」装 <code>miktex-xetex</code> 宏包。</p>` +
         `<p class="hint tight" style="margin:0 0 6px">${escapeHtml(pathHint)}</p>` +
         `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 …\\miktex\\bin\\x64\\xelatex.exe 或 C:\\Program Files\\MiKTeX" value="${escapeHtml(
           savedPath || (typeof localStorage !== "undefined" ? localStorage.getItem("mdm-xelatex-path") || "" : "")

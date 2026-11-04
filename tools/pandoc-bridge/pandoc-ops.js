@@ -1100,21 +1100,25 @@ function resolveXelatexFromUserPath(input) {
       return "";
     }
     if (st.isDirectory()) {
-      for (const rel of [
-        want,
-        path.join("miktex", "bin", "x64", want),
-        path.join("miktex", "bin", "win64", want),
-        path.join("miktex", "bin", want),
-        path.join("bin", "x64", want),
-        path.join("bin", "win64", want),
-        path.join("bin", "windows", want),
-        path.join("bin", "universal-darwin", want),
-        path.join("bin", "x86_64-linux", want),
-        path.join("bin", "aarch64-linux", want),
-        path.join("bin", want),
-      ]) {
-        const p = path.join(raw, rel);
-        if (fs.existsSync(p)) return p;
+      const names =
+        process.platform === "win32" ? [want, "miktex-xelatex.exe"] : [want, "miktex-xelatex"];
+      for (const exe of names) {
+        for (const rel of [
+          exe,
+          path.join("miktex", "bin", "x64", exe),
+          path.join("miktex", "bin", "win64", exe),
+          path.join("miktex", "bin", exe),
+          path.join("bin", "x64", exe),
+          path.join("bin", "win64", exe),
+          path.join("bin", "windows", exe),
+          path.join("bin", "universal-darwin", exe),
+          path.join("bin", "x86_64-linux", exe),
+          path.join("bin", "aarch64-linux", exe),
+          path.join("bin", exe),
+        ]) {
+          const p = path.join(raw, rel);
+          if (fs.existsSync(p)) return p;
+        }
       }
       return findXelatexUnderMiktexTree(raw, 0) || findXelatexInTinytex(raw);
     }
@@ -1126,7 +1130,7 @@ function writeXelatexOverridePath(input) {
   const resolved = resolveXelatexFromUserPath(input);
   if (!resolved) {
     throw new Error(
-      "路径无效：请填写 xelatex.exe 的完整路径，或 MiKTeX 安装目录（内含 miktex\\bin\\x64\\xelatex.exe）"
+      "目录里没有 xelatex.exe。请用 MiKTeX Console → Packages 安装 miktex-xetex；或重装 Basic。装完应有 …\\miktex\\bin\\x64\\xelatex.exe"
     );
   }
   const f = xelatexOverridePathFile();

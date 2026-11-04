@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.109";
+const BRIDGE_VERSION = "0.9.110";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -148,18 +148,22 @@ function resolveXelatexUserPath(input) {
       return "";
     }
     if (!st.isDirectory()) return "";
-    for (const rel of [
-      want,
-      path.join("miktex", "bin", "x64", want),
-      path.join("miktex", "bin", "win64", want),
-      path.join("miktex", "bin", want),
-      path.join("bin", "x64", want),
-      path.join("bin", "win64", want),
-      path.join("bin", "windows", want),
-      path.join("bin", want),
-    ]) {
-      const p = path.join(raw, rel);
-      if (fs.existsSync(p)) return p;
+    const names =
+      process.platform === "win32" ? [want, "miktex-xelatex.exe"] : [want, "miktex-xelatex"];
+    for (const exe of names) {
+      for (const rel of [
+        exe,
+        path.join("miktex", "bin", "x64", exe),
+        path.join("miktex", "bin", "win64", exe),
+        path.join("miktex", "bin", exe),
+        path.join("bin", "x64", exe),
+        path.join("bin", "win64", exe),
+        path.join("bin", "windows", exe),
+        path.join("bin", exe),
+      ]) {
+        const p = path.join(raw, rel);
+        if (fs.existsSync(p)) return p;
+      }
     }
     // 浅扫一层子目录（自定义安装常见）
     for (const name of fs.readdirSync(raw).slice(0, 80)) {
@@ -181,6 +185,75 @@ function resolveXelatexUserPath(input) {
       }
     }
   } catch (_) {}
+  return "";
+}
+
+/** 在疑似 MiKTeX 目录里找 miktex.exe / mpm.exe，用于补装 xetex */
+function findMiktexCliNear(input) {
+  const raw = String(input || "").trim().replace(/^["']|["']$/g, "");
+  const seeds = [];
+  if (raw) {
+    try {
+      if (fs.existsSync(raw)) {
+        const st = fs.statSync(raw);
+        seeds.push(st.isFile() ? path.dirname(raw) : raw);
+      }
+    } catch (_) {}
+  }
+  const la = process.env.LOCALAPPDATA || "";
+  const pf = process.env.ProgramFiles || "C:\\Program Files";
+  seeds.push(
+    path.join(pf, "MiKTeX"),
+    la ? path.join(la, "Programs", "MiKTeX") : "",
+    ...seeds.map((s) => path.join(s, "miktex", "bin", "x64")),
+    ...seeds.map((s) => path.join(s, "bin", "x64"))
+  );
+  const cliNames = ["miktex.exe", "mpm.exe", "initexmf.exe"];
+  for (const root of seeds.filter(Boolean)) {
+    for (const name of cliNames) {
+      for (const rel of [name, path.join("miktex", "bin", "x64", name), path.join("bin", "x64", name)]) {
+        const p = path.join(root, rel);
+        try {
+          if (fs.existsSync(p)) return p;
+        } catch (_) {}
+      }
+    }
+  }
+  return "";
+}
+
+/** 已有 MiKTeX 但缺 xelatex：尝试 packages install miktex-xetex */
+async function tryInstallMiktexXetex(nearPath) {
+  if (process.platform !== "win32") return "";
+  const cli = findMiktexCliNear(nearPath);
+  if (!cli) {
+    console.log("[bridge] 未找到 miktex.exe/mpm.exe，无法自动补装 xetex");
+    return "";
+  }
+  const base = path.basename(cli).toLowerCase();
+  console.log(`[bridge] 用 ${cli} 补装 miktex-xetex（黑窗可见）…`);
+  try {
+    if (base === "miktex.exe") {
+      await execFileAsync(cli, ["packages", "install", "miktex-xetex"], {
+        timeout: 1800000,
+        windowsHide: false,
+      });
+    } else if (base === "mpm.exe") {
+      await execFileAsync(cli, ["--install=miktex-xetex"], { timeout: 1800000, windowsHide: false });
+    } else {
+      await execFileAsync(cli, ["--update-fndb"], { timeout: 120000, windowsHide: true });
+    }
+  } catch (err) {
+    console.log(`[bridge] 补装 xetex 结束/异常：${err?.message || err}`);
+  }
+  const binDir = path.dirname(cli);
+  for (const name of ["xelatex.exe", "miktex-xelatex.exe"]) {
+    const p = path.join(binDir, name);
+    if (fs.existsSync(p)) {
+      console.log(`[bridge] 补装后找到：${p}`);
+      return p;
+    }
+  }
   return "";
 }
 
@@ -218,14 +291,19 @@ async function setXelatexPathInBridge(body = {}) {
     console.log(`[bridge] pandoc-ops 指定路径不可用，改用内置：${err?.message || err}`);
   }
 
-  const bin = resolveXelatexUserPath(input);
+  let bin = resolveXelatexUserPath(input);
   if (!bin) {
-    console.log("[bridge] 路径下未找到 xelatex.exe");
+    console.log("[bridge] 路径下未找到 xelatex.exe，尝试用 MiKTeX 补装 miktex-xetex…");
+    const tried = await tryInstallMiktexXetex(input);
+    bin = resolveXelatexUserPath(input) || tried;
+  }
+  if (!bin) {
+    console.log("[bridge] 仍无 xelatex.exe");
     return {
       installed: false,
       needsManual: true,
       message:
-        "路径无效：请填 xelatex.exe 全路径，或含 miktex\\bin\\x64\\xelatex.exe 的 MiKTeX 目录",
+        "目录里没有 xelatex.exe。请打开 MiKTeX Console → Packages → 安装 miktex-xetex；或重装 Basic 安装包。装完应出现 …\\miktex\\bin\\x64\\xelatex.exe",
     };
   }
   const root = bridgeRootDir();
