@@ -537,13 +537,39 @@ async function probeCmd(name) {
   }
 }
 
+function xelatexInstallHints() {
+  const bridgeRoot = resolveBridgeRoot();
+  const tinytexDir = tinytexBridgeRoot();
+  const sep = process.platform === "win32" ? "\\" : "/";
+  const xelatexRel =
+    process.platform === "win32"
+      ? `bin${sep}windows${sep}xelatex.exe`
+      : process.platform === "darwin"
+        ? `bin${sep}universal-darwin${sep}xelatex`
+        : `bin${sep}x86_64-linux${sep}xelatex`;
+  return {
+    bridgeRoot,
+    tinytexDir,
+    xelatexExample: `${tinytexDir}${sep}...${sep}${xelatexRel}`,
+    releasesUrl: "https://github.com/rstudio/tinytex-releases/releases",
+    miktexUrl: "https://miktex.org/download",
+    platform: process.platform,
+    manualText: xelatexManualInstallText(),
+  };
+}
+
 async function probePdfEngines() {
   const engines = {};
   for (const name of PDF_ENGINE_ORDER) {
     engines[name] = await probeCmd(name);
   }
   const preferred = PDF_ENGINE_ORDER.find((n) => engines[n]?.ok) || "";
-  return { engines, preferred, printReady: !!preferred };
+  return {
+    engines,
+    preferred,
+    printReady: !!preferred,
+    installHints: xelatexInstallHints(),
+  };
 }
 
 function cjkFontVars() {
@@ -1231,29 +1257,58 @@ async function downloadWithMirrors(url, dest, opts = {}) {
   throw lastErr || new Error("所有镜像下载失败");
 }
 
-/** 给前端弹框用的手动安装说明（纯文本） */
+/** 给前端弹框用的手动安装说明（纯文本，含解压目录） */
 function xelatexManualInstallText() {
+  const bridgeRoot = resolveBridgeRoot();
+  const tinytexDir = tinytexBridgeRoot();
   if (process.platform === "win32") {
     return [
       "【手动安装 XeLaTeX · Windows】",
-      "1) 打开 https://miktex.org/download 下载安装 MiKTeX（含 xelatex）",
-      "2) 或打开 https://github.com/rstudio/tinytex-releases/releases 下载 TinyTeX-1-windows-*.exe 并安装",
-      "3) 装完后重启本机桥，再回到网页导出 PDF",
+      "",
+      "方式 A · 安装包（简单）",
+      "1) 打开 https://miktex.org/download 下载并安装 MiKTeX",
+      "2) 或打开 https://github.com/rstudio/tinytex-releases/releases 下载 TinyTeX-1-windows-*.exe，双击安装",
+      "3) 重启本机桥，再导出 PDF",
+      "",
+      "方式 B · 便携包放到桥目录（推荐网络不稳时）",
+      "1) 打开 https://github.com/rstudio/tinytex-releases/releases",
+      "2) 下载 TinyTeX-1-tar-*.gz 或 TinyTeX-v*.zip",
+      `3) 解压到本机桥目录（必须是这个文件夹）：`,
+      `     ${tinytexDir}`,
+      "4) 解压后应能找到类似：",
+      `     ${tinytexDir}\\…\\bin\\windows\\xelatex.exe`,
+      "5) 重启本机桥，再导出 PDF",
+      "",
+      `本机桥根目录：${bridgeRoot}`,
     ].join("\n");
   }
   if (process.platform === "darwin") {
     return [
       "【手动安装 XeLaTeX · macOS】",
-      "1) 终端执行：brew install --cask basictex",
-      "2) 或从 https://github.com/rstudio/tinytex-releases/releases 下载 TinyTeX-1-darwin-*.tar.xz",
-      "3) 装完后新开终端 / 重启本机桥，再导出 PDF",
+      "",
+      "方式 A：终端执行 brew install --cask basictex ，然后重启桥",
+      "",
+      "方式 B · 便携包：",
+      "1) https://github.com/rstudio/tinytex-releases/releases 下载 TinyTeX-1-darwin-*.tar.xz",
+      `2) 解压到：${tinytexDir}`,
+      `3) 应存在：…/bin/universal-darwin/xelatex`,
+      "4) 重启本机桥再导出",
+      "",
+      `本机桥根目录：${bridgeRoot}`,
     ].join("\n");
   }
   return [
     "【手动安装 XeLaTeX · Linux】",
-    "1) sudo apt install texlive-xetex texlive-lang-chinese",
-    "2) 或从 https://github.com/rstudio/tinytex-releases/releases 下载对应 TinyTeX-1-linux-*.tar.xz",
-    "3) 装完后重启本机桥，再导出 PDF",
+    "",
+    "方式 A：sudo apt install texlive-xetex texlive-lang-chinese",
+    "",
+    "方式 B · 便携包：",
+    "1) https://github.com/rstudio/tinytex-releases/releases 下载 TinyTeX-1-linux-*.tar.xz",
+    `2) 解压到：${tinytexDir}`,
+    "3) 应存在：…/bin/x86_64-linux/xelatex（或 aarch64-linux）",
+    "4) 重启本机桥再导出",
+    "",
+    `本机桥根目录：${bridgeRoot}`,
   ].join("\n");
 }
 
@@ -1506,6 +1561,7 @@ async function finalizeXelatexProbe(extra = {}) {
     package: "xelatex",
     bin: pdf.engines.xelatex?.bin || located || "",
     manualInstall: xelatexManualInstallText(),
+    installHints: xelatexInstallHints(),
     ...extra,
   };
 }
@@ -1581,7 +1637,8 @@ async function installXelatex() {
     }
   }
 
-  const manual = xelatexManualInstallText();
+  const hints = xelatexInstallHints();
+  const manual = hints.manualText;
   console.log("[pandoc] 自动安装未完成。手动安装说明：");
   console.log(manual);
   return {
@@ -1600,6 +1657,7 @@ async function installXelatex() {
       "XeLaTeX 安装失败（请看黑窗；检查网络后重试，或按手动说明安装）",
     output: last.output || last.message || "",
     manualInstall: manual,
+    installHints: hints,
     pdf: await probePdfEngines(),
   };
 }

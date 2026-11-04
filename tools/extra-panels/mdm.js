@@ -976,6 +976,40 @@
       });
     }
 
+    /**
+     * HTML 正文确认弹窗（可含链接/路径）；返回 'yes' | 'no' | 'alt'
+     * @param {{ title: string, bodyHtml: string, okText?: string, cancelText?: string, altText?: string }} opts
+     */
+    function confirmModalHtml({ title, bodyHtml, okText = "确定", cancelText = "取消", altText = "" }) {
+      return new Promise((resolve) => {
+        const box = els.modalBox;
+        const altBtn = altText
+          ? `<button type="button" class="ghost-btn" data-cf="alt">${escapeHtml(altText)}</button>`
+          : "";
+        box.innerHTML =
+          `<div class="mdm-modal-head"><strong>${escapeHtml(title)}</strong></div>` +
+          `<div class="mdm-modal-body" style="max-height:min(62vh,520px);overflow:auto;text-align:left">${bodyHtml}</div>` +
+          `<div class="mdm-modal-foot" style="flex-wrap:wrap;gap:8px">` +
+          `<button type="button" class="ghost-btn" data-cf="no">${escapeHtml(cancelText)}</button>` +
+          altBtn +
+          `<button type="button" class="secondary-btn" data-cf="yes">${escapeHtml(okText)}</button>` +
+          `</div>`;
+        els.modal.hidden = false;
+        const done = (v) => {
+          closeModal();
+          resolve(v);
+        };
+        els.modal.onclick = (e) => {
+          if (e.target === els.modal) done("no");
+        };
+        box.onclick = (e) => {
+          const b = e.target.closest?.("[data-cf]");
+          if (!b) return;
+          done(b.dataset.cf === "yes" ? "yes" : b.dataset.cf === "alt" ? "alt" : "no");
+        };
+      });
+    }
+
     /** 批量栏状态（不重建列表，供细粒度更新复用） */
     function updateBatchBar() {
       if (!els.batchbar) return;
@@ -5956,16 +5990,30 @@ a{color:${v.accent}}
             });
             if (!ready.ok) {
               lastErr = new Error(ready.error || "印刷级 PDF 环境未就绪");
-              const okPrint = await confirmModal({
-                title: attemptedInstall ? "引擎未装好，改用浏览器打印？" : "无法印刷级导出，改用浏览器打印？",
-                body:
-                  `${lastErr.message}\n\n` +
-                  (attemptedInstall
-                    ? `${xelatexManualGuideText()}\n\n若黑窗仍在下载，可等结束后再导出；也可先用浏览器打印。`
-                    : "可改用浏览器打印「另存为 PDF」（质量低于印刷级），或检查本机桥后重试。"),
-                okText: "浏览器打印",
-              });
-              if (!okPrint) throw lastErr;
+              if (attemptedInstall || /XeLaTeX|PDF 引擎|Typst|MiKTeX|印刷级/i.test(lastErr.message)) {
+                const act = await showXelatexNotReadyModal({
+                  error: lastErr.message,
+                  hints: ready.installHints || null,
+                });
+                if (act === "retry") {
+                  const again = await ensurePrintPdfReady({});
+                  if (again.ok) {
+                    await exportViaPandoc(text, "pdf", title, true);
+                    toast("已导出印刷级 PDF");
+                    return;
+                  }
+                  toast("仍未探测到引擎，请确认已解压到桥目录并重启桥");
+                  throw new Error(again.error || lastErr.message);
+                }
+                if (act !== "print") throw lastErr;
+              } else {
+                const okPrint = await confirmModal({
+                  title: "无法印刷级导出，改用浏览器打印？",
+                  body: `${lastErr.message}\n\n可改用浏览器打印「另存为 PDF」，或检查本机桥后重试。`,
+                  okText: "浏览器打印",
+                });
+                if (!okPrint) throw lastErr;
+              }
               const printed = await buildExportHtml(text);
               const w = window.open("", "_blank");
               if (!w) throw new Error("弹窗被拦截，无法打印");
@@ -5985,7 +6033,7 @@ a{color:${v.accent}}
             if (/未找到印刷级 PDF 引擎|未找到.*XeLaTeX|未找到.*Typst|pdf-engine|MiKTeX/i.test(msg)) {
               try {
                 attemptedInstall = true;
-                toast("仍缺 PDF 引擎，继续安装 XeLaTeX（MiKTeX）…");
+                toast("仍缺 PDF 引擎，继续安装 XeLaTeX…");
                 await runXelatexInstall();
                 await exportViaPandoc(text, "pdf", title, true);
                 toast("已导出印刷级 PDF");
@@ -5996,16 +6044,26 @@ a{color:${v.accent}}
             }
             const failMsg = String(lastErr?.message || lastErr || "导出失败");
             if (/本机桥未启动|未找到本机桥|Failed to fetch/i.test(failMsg)) throw lastErr;
-            const okPrint = await confirmModal({
-              title: "导出失败，改用浏览器打印？",
-              body:
-                `${failMsg}\n\n` +
-                (attemptedInstall
-                  ? "若黑窗里安装已结束仍失败，可先用浏览器打印，或重启桥后再试。"
-                  : "可改用浏览器打印「另存为 PDF」，或查看本机桥黑窗错误后重试。"),
-              okText: "浏览器打印",
-            });
-            if (!okPrint) throw lastErr || new Error(failMsg);
+            if (attemptedInstall || /XeLaTeX|PDF 引擎|MiKTeX|TinyTeX|印刷级/i.test(failMsg)) {
+              const act = await showXelatexNotReadyModal({ error: failMsg });
+              if (act === "retry") {
+                const again = await ensurePrintPdfReady({});
+                if (again.ok) {
+                  await exportViaPandoc(text, "pdf", title, true);
+                  toast("已导出印刷级 PDF");
+                  return;
+                }
+                throw new Error(again.error || failMsg);
+              }
+              if (act !== "print") throw lastErr || new Error(failMsg);
+            } else {
+              const okPrint = await confirmModal({
+                title: "导出失败，改用浏览器打印？",
+                body: `${failMsg}\n\n可改用浏览器打印「另存为 PDF」，或查看本机桥黑窗错误后重试。`,
+                okText: "浏览器打印",
+              });
+              if (!okPrint) throw lastErr || new Error(failMsg);
+            }
             const printed = await buildExportHtml(text);
             const w = window.open("", "_blank");
             if (!w) throw new Error("弹窗被拦截，无法打印");
@@ -6106,6 +6164,7 @@ a{color:${v.accent}}
           printReady: !!data.printReady,
           preferred: data.preferred || "",
           engines: data.engines || {},
+          installHints: data.installHints || null,
         };
       } catch (_) {
         return { printReady: false, preferred: "" };
@@ -6118,6 +6177,7 @@ a{color:${v.accent}}
      */
     async function ensurePrintPdfReady({ onInstallStart } = {}) {
       let env = await probePrintPdfEnv();
+      let installHints = null;
       if (!env.bridgeOk) {
         showBridgeHelpModal("导出印刷级 PDF");
         return { ok: false, error: "本机桥未启动" };
@@ -6139,11 +6199,18 @@ a{color:${v.accent}}
         onInstallStart?.();
         toast("缺少 PDF 引擎，开始安装 XeLaTeX（可能需下载 TinyTeX，请看黑窗）…");
         try {
-          await runXelatexInstall();
+          const inst = await runXelatexInstall();
+          if (inst?.installHints) installHints = inst.installHints;
         } catch (err) {
-          return { ok: false, error: String(err?.message || err || "XeLaTeX 安装失败") };
+          const e = err || {};
+          return {
+            ok: false,
+            error: String(e.message || e || "XeLaTeX 安装失败"),
+            installHints: e.installHints || installHints,
+          };
         }
         const pdf = await probePdfEnginesOnly();
+        if (pdf.installHints) installHints = pdf.installHints;
         if (!pdf.printReady) {
           env = await probePrintPdfEnv();
         } else {
@@ -6154,11 +6221,12 @@ a{color:${v.accent}}
           return {
             ok: false,
             error:
-              "XeLaTeX 安装后仍未探测到（请看黑窗完整输出；若黑窗还在下载请等结束后重启桥再导出）",
+              "XeLaTeX 安装后仍未探测到（请看黑窗；或按弹框说明把 TinyTeX 解压到桥目录后重启桥）",
+            installHints,
           };
         }
       }
-      return { ok: true, preferred: env.preferred || "" };
+      return { ok: true, preferred: env.preferred || "", installHints };
     }
 
     async function exportViaPandoc(text, to, title, retried = false) {
@@ -6215,42 +6283,105 @@ a{color:${v.accent}}
       downloadBlob(new Blob([bytes]), data.filename || `${slugify(title)}.${to}`);
     }
 
-    /** 弹框内：手动安装 XeLaTeX 说明（HTML） */
-    function xelatexManualGuideHtml() {
+    /** @param {any} hints */
+    function xelatexManualGuideHtml(hints = {}) {
+      const tiny =
+        String(hints.tinytexDir || "").trim() ||
+        "（本机桥解压目录）/bin/tinytex";
+      const root = String(hints.bridgeRoot || "").trim() || "（本机桥解压目录）";
+      const releases = hints.releasesUrl || "https://github.com/rstudio/tinytex-releases/releases";
+      const miktex = hints.miktexUrl || "https://miktex.org/download";
+      const pathBox = (p) =>
+        `<code style="display:block;margin:6px 0;padding:8px 10px;background:rgba(0,0,0,.06);border-radius:6px;word-break:break-all;user-select:all">${escapeHtml(
+          p
+        )}</code>`;
       return (
-        `<div class="mdm-manual-install" style="margin-top:12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.55;background:rgba(0,0,0,.03)">` +
-        `<strong>网络不稳？可手动安装</strong>` +
-        `<ol style="margin:8px 0 0;padding-left:1.25em">` +
-        `<li><strong>Windows</strong>：打开 <a href="https://miktex.org/download" target="_blank" rel="noopener">MiKTeX 下载页</a> 安装（含 XeLaTeX）。或到 <a href="https://github.com/rstudio/tinytex-releases/releases" target="_blank" rel="noopener">TinyTeX Releases</a> 下 <code>TinyTeX-1-windows-*.exe</code>。</li>` +
-        `<li><strong>macOS</strong>：终端执行 <code>brew install --cask basictex</code>。</li>` +
-        `<li><strong>Linux</strong>：<code>sudo apt install texlive-xetex texlive-lang-chinese</code>。</li>` +
-        `<li>装完后<strong>重启本机桥</strong>，回到本页再导出 PDF。</li>` +
+        `<div class="mdm-manual-install" style="margin-top:4px;padding:12px 14px;border:1px solid var(--line,#cbd5e1);border-radius:8px;text-align:left;font-size:13px;line-height:1.6;background:rgba(0,0,0,.03)">` +
+        `<strong>请按下面手动装好 XeLaTeX（印刷级 PDF 必需）</strong>` +
+        `<p style="margin:8px 0 0"><strong>方式 A · 安装包（最简单）</strong></p>` +
+        `<ol style="margin:6px 0 0;padding-left:1.25em">` +
+        `<li>Windows：打开 <a href="${escapeHtml(miktex)}" target="_blank" rel="noopener">MiKTeX 下载页</a>，安装完成后<strong>重启本机桥</strong>。</li>` +
+        `<li>或到 <a href="${escapeHtml(releases)}" target="_blank" rel="noopener">TinyTeX Releases</a> 下载 <code>TinyTeX-1-windows-*.exe</code> 双击安装，再重启桥。</li>` +
+        `<li>macOS：终端执行 <code>brew install --cask basictex</code> 后重启桥。</li>` +
+        `<li>Linux：<code>sudo apt install texlive-xetex texlive-lang-chinese</code> 后重启桥。</li>` +
         `</ol>` +
-        `<p class="hint tight" style="margin:8px 0 0">自动安装时请看黑窗：应出现「连接中 / 下载中 xx% / 解压」。若超过 1 分钟仍无新字，请用上面手动方式。</p>` +
+        `<p style="margin:12px 0 0"><strong>方式 B · 便携包放到桥目录（自动下载失败时用）</strong></p>` +
+        `<ol style="margin:6px 0 0;padding-left:1.25em">` +
+        `<li>打开 <a href="${escapeHtml(releases)}" target="_blank" rel="noopener">TinyTeX Releases</a>，下载：` +
+        `<br/>Windows：<code>TinyTeX-1-tar-*.gz</code> 或 <code>TinyTeX-v*.zip</code>` +
+        `<br/>macOS：<code>TinyTeX-1-darwin-*.tar.xz</code>` +
+        `<br/>Linux：<code>TinyTeX-1-linux-*.tar.xz</code></li>` +
+        `<li>把压缩包<strong>解压到这个文件夹</strong>（没有就新建）：${pathBox(tiny)}` +
+        `本机桥根目录是：${pathBox(root)}</li>` +
+        `<li>解压后应能找到 <code>xelatex</code>（Windows 为 <code>xelatex.exe</code>），例如：` +
+        `<br/><code>…/bin/windows/xelatex.exe</code> · <code>…/bin/universal-darwin/xelatex</code> · <code>…/bin/x86_64-linux/xelatex</code></li>` +
+        `<li><strong>重启本机桥</strong>，回到本页再点导出 PDF。</li>` +
+        `</ol>` +
+        `<p class="hint tight" style="margin:10px 0 0">不要只把 zip/gz 丢在桌面；必须解压进上面的 <code>bin/tinytex</code> 目录，桥才能探测到。</p>` +
         `</div>`
       );
     }
 
-    function xelatexManualGuideText() {
+    function xelatexManualGuideText(hints = {}) {
+      const tiny = String(hints.tinytexDir || "").trim() || "<桥目录>/bin/tinytex";
+      const root = String(hints.bridgeRoot || "").trim() || "<桥目录>";
       return [
-        "【手动安装】",
-        "Windows：https://miktex.org/download （MiKTeX）或 https://github.com/rstudio/tinytex-releases/releases",
-        "macOS：brew install --cask basictex",
-        "Linux：sudo apt install texlive-xetex texlive-lang-chinese",
-        "装完后重启本机桥，再导出 PDF。",
+        "【手动安装 XeLaTeX】",
+        "方式 A：Windows 装 MiKTeX（https://miktex.org/download）；macOS: brew install --cask basictex；Linux: sudo apt install texlive-xetex texlive-lang-chinese",
+        "方式 B：从 https://github.com/rstudio/tinytex-releases/releases 下载 TinyTeX，解压到：",
+        `  ${tiny}`,
+        "解压后需有 xelatex（如 …/bin/windows/xelatex.exe），然后重启本机桥。",
+        `桥根目录：${root}`,
       ].join("\n");
+    }
+
+    /** 引擎未就绪：完整手动说明弹框。返回 'print' | 'retry' | 'cancel' */
+    async function showXelatexNotReadyModal({ error = "", hints = null } = {}) {
+      let h = hints;
+      if (!h?.tinytexDir) {
+        try {
+          const { res, data } = await fetchPandocJson("/pandoc/pdf-engines");
+          if (res.ok && data?.installHints) h = data.installHints;
+        } catch (_) {}
+      }
+      h = h || {};
+      const errLine = String(error || "").trim();
+      const bodyHtml =
+        (errLine
+          ? `<p style="margin:0 0 10px;color:var(--danger,#b91c1c)"><strong>原因：</strong>${escapeHtml(
+              errLine.slice(0, 500)
+            )}</p>`
+          : "") +
+        `<p class="hint tight" style="margin:0 0 8px">自动安装未完成或仍探测不到引擎。请按下面<strong>完整步骤</strong>手动安装，尤其注意「文件放哪里」。</p>` +
+        xelatexManualGuideHtml(h);
+      const choice = await confirmModalHtml({
+        title: "引擎未装好 — 请手动安装 XeLaTeX",
+        bodyHtml,
+        okText: "浏览器打印",
+        altText: "我已装好，重新探测",
+        cancelText: "关闭",
+      });
+      if (choice === "yes") return "print";
+      if (choice === "alt") return "retry";
+      return "cancel";
     }
 
     async function runXelatexInstall() {
       const box = els.modalBox;
       const t0 = Date.now();
+      // 先拉一次路径，弹框里就能显示「解压到哪」
+      let hints = null;
+      try {
+        const pdf0 = await probePdfEnginesOnly();
+        hints = pdf0.installHints || null;
+      } catch (_) {}
       els.modal.hidden = false;
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在安装 XeLaTeX</strong></div>` +
-        `<div class="mdm-modal-body">` +
-        `<p>本机桥正在自动下载安装印刷级 PDF 引擎（TinyTeX / XeLaTeX，约 50–250MB，常要 5–15 分钟）。</p>` +
-        `<p class="hint tight">请<strong>不要关闭</strong>本页与本机桥黑窗。黑窗应陆续出现：连接中 → 下载百分比 → 解压。</p>` +
-        xelatexManualGuideHtml() +
+        `<div class="mdm-modal-body" style="max-height:min(62vh,520px);overflow:auto;text-align:left">` +
+        `<p>本机桥正在自动下载安装（TinyTeX / XeLaTeX，约 50–250MB，常要 5–15 分钟）。请勿关闭本页与黑窗。</p>` +
+        `<p class="hint tight">黑窗应出现：连接中 → 下载 xx% → 解压。若很快失败，请直接按下方手动步骤（含<strong>文件放哪</strong>）。</p>` +
+        xelatexManualGuideHtml(hints || {}) +
         `</div>` +
         `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-xelatex-install-progress">已用时 0 秒 · 已向本机桥发出安装请求…</p></div>`;
       els.modal.onclick = null;
@@ -6274,24 +6405,19 @@ a{color:${v.accent}}
         });
         const data = await res.json().catch(() => null);
         if (!data?.ok) throw new Error(data?.error || "安装请求失败");
+        if (data.installHints) hints = data.installHints;
         // 再探测一次，避免 winget 成功但 PATH 未刷新时误报
         const pdf = await probePdfEnginesOnly();
+        if (pdf.installHints) hints = pdf.installHints;
         if (data.installed || pdf.printReady) {
           toast("XeLaTeX 已就绪，继续导出…");
-          return;
+          return { ok: true, installHints: hints };
         }
         const detail = String(data.message || data.output || "").trim().slice(0, 400);
-        const manual = String(data.manualInstall || xelatexManualGuideText()).trim();
-        if (data.needsManual) {
-          throw new Error(
-            [detail || "自动安装未完成", data.command ? `命令参考：${data.command}` : "", manual]
-              .filter(Boolean)
-              .join("\n\n")
-          );
-        }
-        throw new Error(
-          [detail || "XeLaTeX 安装未完成（请看本机桥黑窗）", manual].filter(Boolean).join("\n\n")
-        );
+        const err = new Error(detail || "XeLaTeX 自动安装未完成");
+        err.installHints = hints || data.installHints || null;
+        err.needsManual = !!data.needsManual;
+        throw err;
       } finally {
         clearInterval(timer);
         closeModal();
