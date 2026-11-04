@@ -6373,6 +6373,7 @@ a{color:${v.accent}}
         `<p class="hint tight" style="margin:0 0 8px">已装过却仍提示？先<strong>关掉黑窗重启本机桥</strong>；或装在自定义目录时，在下方<strong>填写路径</strong>。</p>` +
         `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:rgba(0,0,0,.03)">` +
         `<p style="margin:0 0 6px"><strong>指定本机 XeLaTeX / MiKTeX 位置</strong></p>` +
+        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.107。若提示「未知接口」= 桥太旧，请先更新并重启桥。</p>` +
         `<p class="hint tight" style="margin:0 0 6px">${escapeHtml(pathHint)}</p>` +
         `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 C:\\Program Files\\MiKTeX 或 …\\miktex\\bin\\x64\\xelatex.exe" value="${escapeHtml(
           savedPath
@@ -6415,32 +6416,41 @@ a{color:${v.accent}}
             if (msg) msg.textContent = "正在保存并探测…";
             b.disabled = true;
             try {
-              const res = await fetch(`${baseUrl()}/pandoc/set-xelatex-path`, {
+              // 走已有 /pandoc/install（所有桥版本都有）；附带 path。
+              // 旧专用路由 /set-xelatex-path 在未更新的桥上会回「未知接口」。
+              const headers = {
+                "Content-Type": "application/json",
+                "X-Adb-Token": token(),
+                "X-Ffmpeg-Token": token(),
+              };
+              // 必须走 /pandoc/install（旧桥也有）；body.path 由 ≥0.9.107 识别为「记住路径」
+              const res = await fetch(`${baseUrl()}/pandoc/install`, {
                 method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "X-Adb-Token": token(),
-                  "X-Ffmpeg-Token": token(),
-                },
-                body: JSON.stringify({ path: pathVal }),
+                headers,
+                body: JSON.stringify({ package: "xelatex", path: pathVal }),
               });
               const data = await res.json().catch(() => null);
               if (!res.ok || !data?.ok) {
-                throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+                const errText = String(data?.error || data?.message || `HTTP ${res.status}`);
+                if (/未知接口/i.test(errText)) {
+                  throw new Error("本机桥版本过旧，请先更新并重启本机桥（需 ≥0.9.107），再填写路径");
+                }
+                throw new Error(errText);
               }
+              // 新桥：command=user-path / savedPath；旧桥可能误走整包安装，以 installed 为准
               if (data.installed || data.pdf?.printReady) {
-                toast(`已使用：${data.bin || data.savedPath || pathVal}`);
+                toast(`已使用：${data.bin || data.savedPath || data.output || pathVal}`);
                 done("retry");
                 return;
               }
               if (msg) {
-                msg.textContent = String(data.message || "路径已记录但仍未探测到，请检查路径或重启桥").slice(
-                  0,
-                  200
-                );
+                msg.textContent = String(
+                  data.message ||
+                    "未识别到 xelatex。请确认路径下有 miktex\\bin\\x64\\xelatex.exe，并更新重启本机桥 ≥0.9.107"
+                ).slice(0, 240);
               }
             } catch (err) {
-              if (msg) msg.textContent = String(err?.message || err).slice(0, 200);
+              if (msg) msg.textContent = String(err?.message || err).slice(0, 220);
             } finally {
               b.disabled = false;
             }

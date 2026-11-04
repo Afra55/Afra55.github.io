@@ -2165,6 +2165,23 @@ async function installXelatex() {
 
 async function installPackage(body = {}) {
   const pkg = String(body.package || body.pkg || "pandoc").toLowerCase();
+  // 手动指定路径：走已有 /pandoc/install，避免旧桥不认识 /set-xelatex-path →「未知接口」
+  const pathInput = String(body.path || body.xelatex || body.bin || "").trim();
+  if (
+    pathInput ||
+    pkg === "xelatex-path" ||
+    pkg === "set-xelatex-path" ||
+    pkg === "set-path"
+  ) {
+    if (!pathInput) {
+      return {
+        installed: false,
+        message: "请提供 path（xelatex.exe 或 MiKTeX 目录）",
+        installHints: xelatexInstallHints(),
+      };
+    }
+    return setXelatexPath({ path: pathInput });
+  }
   // 印刷级 PDF 只认 XeLaTeX；旧前端传 typst 也改走 xelatex
   if (
     pkg === "typst" ||
