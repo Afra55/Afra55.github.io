@@ -5896,8 +5896,8 @@ a{color:${v.accent}}
           `</figure>`;
         // markdown-it 常包成 <p>TOKEN</p>
         const pRe = new RegExp(`<p>\\s*${token}\\s*</p>`, "g");
-        if (pRe.test(out)) out = out.replace(pRe, fig);
-        else out = out.split(token).join(fig);
+        const replaced = out.replace(pRe, fig);
+        out = replaced === out ? out.split(token).join(fig) : replaced;
       }
       return out;
     }
