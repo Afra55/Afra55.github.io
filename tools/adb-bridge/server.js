@@ -6187,13 +6187,9 @@ async function handleApi(req, res, url) {
       }
       if (isConvert) {
         // 先读 body：PDF 时拦截「旧版 pandoc-ops 仍 throw 请用前端打印」
-        const raw = await readBody(req, 96 * 1024 * 1024, {
-          onProgress: (n) => {
-            if (n === 0 || n % (512 * 1024) < 64 * 1024) {
-              console.log(`[bridge] Pandoc 上传… ${Math.round(n / 1024)} KB`);
-            }
-          },
-        });
+        console.log("[bridge] 正在接收 Pandoc 转换上传…");
+        const raw = await readBody(req, 96 * 1024 * 1024);
+        console.log(`[bridge] 上传完成 · ${Math.round(raw.length / 1024)} KB`);
         const body = parseJsonBody(raw);
         const toFmt = String(body?.to || "").trim().toLowerCase();
         if (toFmt === "pdf") {
