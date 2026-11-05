@@ -615,9 +615,16 @@
 
       function vbbPreviewSeekForKeepRanges(keeps, t, opts) {
         const fn = window.DevToolsVtrimEditor?.previewSeekForKeepRanges;
-        if (typeof fn === "function") return fn(keeps, t, opts);
+        const o = opts || {};
+        const endKeep =
+          Number(o.endKeepSec) > 0
+            ? Number(o.endKeepSec)
+            : typeof window.DevToolsVtrimEditor?.resolveEndKeepSec === "function"
+              ? window.DevToolsVtrimEditor.resolveEndKeepSec(o.srcFps || o.edit || 0)
+              : 1 / 30;
+        if (typeof fn === "function") return fn(keeps, t, { ...o, endKeepSec: endKeep });
         if (!Array.isArray(keeps) || !keeps.length) return null;
-        const paused = Boolean(opts && opts.paused);
+        const paused = Boolean(o.paused);
         const time = Number(t);
         if (!Number.isFinite(time)) return null;
         const first = keeps[0];
@@ -633,8 +640,7 @@
           const nxt = keeps[i + 1];
           if (nxt && time < nxt.start) return nxt.start;
         }
-        // keep.end 已在 keepRangesFromEdit 收过片尾半开，暂停时勿再减 END_KEEP
-        if (paused) return Math.max(last.start, last.end - endEps);
+        if (paused) return Math.max(last.start, last.end - endKeep);
         return first.start;
       }
 
@@ -642,6 +648,7 @@
         const stamped = vbbEditWithSrcFps(edit);
         const fn = window.DevToolsVtrimEditor?.keepRangesFromEdit;
         if (typeof fn === "function") return fn(stamped, duration);
+        // 回退：无 vtrim 时用 1/fps 近似半开（正式路径走源帧时钟）
         const d = Math.max(0, Number(duration) || 0);
         const trimStart = Math.max(0, Number(stamped?.trimStart) || 0);
         const trimEnd = Math.min(d, Math.max(trimStart + VBB_MIN_SPAN, Number(stamped?.trimEnd) || d));
@@ -655,60 +662,27 @@
             ? resolveEnd(stamped)
             : fps >= 5 && fps <= 240
               ? 1 / fps
-              : Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
-                ? window.DevToolsVtrimEditor.END_KEEP_SEC
-                : 1 / 25;
+              : 1 / 30;
         for (const c of cuts) {
           const cutStart = Math.max(trimStart, Number(c.start) || 0);
           const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
-          // 与 vtrim：cut.start / cut.end 两端各空 2 帧
-          const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep * 2);
-          const resumeAt = Math.min(trimEnd, cutEnd + endKeep * 2);
+          // 闭区间删：上一段止于 cut.start，下一段从 cut.end+1 帧起
+          const keepEnd = Math.max(cursor + 0.05, cutStart);
+          const resumeAt = Math.min(trimEnd, cutEnd + endKeep);
           if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
           cursor = Math.max(cursor, resumeAt);
         }
         if (trimEnd > cursor + 0.02) keeps.push({ start: cursor, end: trimEnd });
         if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
-        const lastKeep = keeps[keeps.length - 1];
-        if (lastKeep && lastKeep.end >= trimEnd - 0.001) {
-          lastKeep.end = Math.max(lastKeep.start + 0.05, lastKeep.end - endKeep);
-        }
         return keeps;
       }
 
-      /**
-       * 成片 keep：无删段 ≡ 预览；有删中间时接点再收 1 源帧（对齐 vtrim keepRangesForEncode）。
-       */
+      /** 成片 keep ≡ 预览 keep（源帧半开窗，不再叠垫） */
       function vbbKeepRangesForEncode(edit, duration) {
         const stamped = vbbEditWithSrcFps(edit);
         const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
         if (typeof fn === "function") return fn(stamped, duration);
-        const preview = vbbKeepRangesFromEdit(stamped, duration);
-        const trimStart = Math.max(0, Number(stamped?.trimStart) || 0);
-        const trimEnd = Math.max(trimStart + VBB_MIN_SPAN, Number(stamped?.trimEnd) || duration || 0);
-        const cuts = vbbNormalizeCutouts(stamped?.cutouts, trimStart, trimEnd);
-        if (!cuts.length || preview.length <= 1) return preview;
-        const resolveEnd = window.DevToolsVtrimEditor?.resolveEndKeepSec;
-        const padFrames = Math.max(
-          1,
-          Number(window.DevToolsVtrimEditor?.ENCODE_CUT_JUNCTION_PAD_FRAMES) || 1
-        );
-        const endKeep =
-          typeof resolveEnd === "function"
-            ? resolveEnd(stamped)
-            : Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
-              ? window.DevToolsVtrimEditor.END_KEEP_SEC
-              : 1 / 25;
-        const pad = endKeep * padFrames;
-        return preview.map((k, i) => {
-          let start = Number(k.start) || 0;
-          let end = Math.max(start + 0.05, Number(k.end) || 0);
-          if (i === 0 && start > 0.02) start = Math.min(end - 0.05, start + pad);
-          if (i > 0) start = Math.min(end - 0.05, start + pad);
-          if (i < preview.length - 1) end = Math.max(start + 0.05, end - pad);
-          if (i === preview.length - 1) end = Math.max(start + 0.05, end - pad);
-          return { start, end };
-        });
+        return vbbKeepRangesFromEdit(stamped, duration);
       }
 
       function vbbEditIsDirty(edit, duration, srcW, srcH) {
@@ -1583,7 +1557,11 @@
         const keeps = vbbKeepRangesForEncode(item.edit, item.duration);
         if (!keeps.length) return;
         const t = Number.isFinite(mediaTime) ? mediaTime : Number(vbbVideo.currentTime) || 0;
-        const next = vbbPreviewSeekForKeepRanges(keeps, t, { paused: vbbVideo.paused });
+        const next = vbbPreviewSeekForKeepRanges(keeps, t, {
+          paused: vbbVideo.paused,
+          edit: item.edit,
+          srcFps: item.edit?.srcFps || item.srcFps,
+        });
         if (next == null || !Number.isFinite(next)) return;
         // 须小于约 1 帧；原先 0.04 会让删段尾近边界少跳、外预览偏后
         if (Math.abs(t - next) < 0.001) return;

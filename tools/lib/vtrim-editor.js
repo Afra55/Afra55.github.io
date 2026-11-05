@@ -75,12 +75,30 @@
     return Math.min(START_KEEP_SEC, endKeep * 0.5);
   }
   /**
-   * 仅「删中间」接点：成片相对预览 keep 再收 2 帧（与编码片头/片尾垫同量，防多段接点多吐）。
-   * 无 cutouts 时仍不叠；单段片头片尾由编码 -ss/-t 垫处理。
+   * @deprecated 根因已改为源帧半开窗，预览≡成片不再叠接点垫；保留 0 兼容旧读取。
    */
-  const ENCODE_CUT_JUNCTION_PAD_FRAMES = 2;
+  const ENCODE_CUT_JUNCTION_PAD_FRAMES = 0;
   /** @deprecated 全局黄柄垫已取消；保留 0 以免旧调用/测试读字段报错 */
   const ENCODE_BOUND_PAD_SEC = 0;
+
+  /** keep / 预览 / 成片共用的源帧时钟（永远 >0） */
+  function resolveKeepFps(editOrFps) {
+    const raw =
+      editOrFps && typeof editOrFps === "object"
+        ? Number(editOrFps.srcFps) || 0
+        : Number(editOrFps) || 0;
+    return normalizeSourceFps(raw) || DEFAULT_FRAME_FPS;
+  }
+
+  function secToFrame(sec, fps) {
+    const f = Math.max(1, Number(fps) || DEFAULT_FRAME_FPS);
+    return Math.round(Math.max(0, Number(sec) || 0) * f);
+  }
+
+  function frameToSec(frame, fps) {
+    const f = Math.max(1, Number(fps) || DEFAULT_FRAME_FPS);
+    return Math.max(0, Math.round(Number(frame) || 0)) / f;
+  }
   let uidSeq = 0;
 
   function toast(msg) {
@@ -1631,7 +1649,10 @@
     async function seekPlayheadExact(t) {
       let target = clamp(t, startSec, endKeepSec());
       // 与外预览同一套 keepRanges：落在删段/半开尾则跳到应播点
-      const jump = previewSeekForKeepRanges(keepRangesLocal(), target, { paused: true });
+      const jump = previewSeekForKeepRanges(keepRangesLocal(), target, {
+        paused: true,
+        endKeepSec: endKeepStepSec(),
+      });
       if (jump != null && Number.isFinite(jump)) {
         target = clamp(jump, startSec, endKeepSec());
       }
@@ -1687,7 +1708,10 @@
         }
         return Math.max(startSec, cut.start - frame);
       }
-      const after = previewSeekForKeepRanges(keeps, cut.end + 1e-4, { paused: true });
+      const after = previewSeekForKeepRanges(keeps, cut.end + 1e-4, {
+        paused: true,
+        endKeepSec: endKeepStepSec(),
+      });
       if (after != null && Number.isFinite(after)) return after;
       return Math.min(endKeepSec(), cut.end + frame);
     }
@@ -1716,7 +1740,10 @@
       const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
       // 播放时提前约 0.75 帧截断，减少 rVFC/timeupdate 迟到导致片尾多画出几帧
       // 与 keep/GIF 同一截断点，勿再提前 endLead（否则播放比成片少几帧）
-      const jump = previewSeekForKeepRanges(keepRangesLocal(), cur, { paused: false });
+      const jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
+        paused: false,
+        endKeepSec: endKeepStepSec(),
+      });
       if (jump == null || !Number.isFinite(jump)) return false;
       if (Math.abs(jump - cur) < 0.001) return false;
       playWindowLooping = true;
@@ -2519,71 +2546,71 @@
   }
 
   /**
-   * 预览/成片共用 keep：严格按黄柄 trim + 红柄 cutouts。
-   * 手机拖到哪一帧，预览播哪一帧，GIF 就切哪一帧（所见即所得）。
-   * 半开 END_KEEP/START_KEEP 仅表达「红柄所见帧闭区间删除」，预览与成片同一套。
+   * 预览/成片共用 keep：源帧半开窗 [startF, endF)。
+   * - 黄柄 trimStart = 首帧（含）；trimEnd = 半开上界（该帧起不进预览/GIF）
+   * - 红柄 cut.start/end = 闭区间删除（两端所见帧都删）→ 上一段止于 cs，下一段从 ce+1 起
+   * 秒值由 frame/fps 还原，预览与编码同一套，禁止再叠「多删 N 帧」垫。
    */
   function keepRangesFromEdit(edit, duration) {
+    const fps = resolveKeepFps(edit);
     const d = Math.max(0, Number(duration) || 0);
-    const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
-    const trimEnd = Math.min(d, Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || d));
-    const cuts = normalizeCutouts(edit?.cutouts, trimStart, trimEnd);
-    // 与编辑器 endKeepStepSec 同一公式（resolveEndKeepSec）
-    const endKeep = resolveEndKeepSec(edit);
-    const keeps = [];
-    let cursor = trimStart;
-    for (const c of cuts) {
-      // 闭区间：红柄 cut.start / cut.end 所见帧都要删。
-      // 上一段在 cut.start 前空 2 帧、下一段从 cut.end 起空 2 帧（两端对称，宁可多删）。
-      const cutStart = Math.max(trimStart, Number(c.start) || 0);
-      const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
-      const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep * 2);
-      const resumeAt = Math.min(trimEnd, cutEnd + endKeep * 2);
-      if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
-      cursor = Math.max(cursor, resumeAt);
+    const maxF = Math.max(0, secToFrame(d, fps));
+    const minSpanF = Math.max(1, Math.ceil(MIN_SPAN * fps));
+    let startF = secToFrame(edit?.trimStart, fps);
+    let endF = secToFrame(edit?.trimEnd, fps);
+    if (endF < startF + minSpanF) endF = startF + minSpanF;
+    if (maxF > 0) {
+      endF = Math.min(endF, maxF);
+      startF = Math.max(0, Math.min(startF, Math.max(0, endF - minSpanF)));
     }
-    if (trimEnd > cursor + 0.02) keeps.push({ start: cursor, end: trimEnd });
-    if (!keeps.length) keeps.push({ start: trimStart, end: trimEnd });
-    const last = keeps[keeps.length - 1];
-    if (last && last.end >= trimEnd - 0.001) {
-      last.end = Math.max(last.start + 0.05, last.end - endKeep);
+    const trimStartSec = frameToSec(startF, fps);
+    const trimEndSec = frameToSec(endF, fps);
+    const cuts = normalizeCutouts(edit?.cutouts, trimStartSec, trimEndSec);
+    const cutFs = [];
+    for (const c of cuts) {
+      let cs = secToFrame(c.start, fps);
+      let ce = secToFrame(c.end, fps);
+      cs = Math.max(startF, Math.min(cs, endF - 1));
+      ce = Math.max(cs, Math.min(ce, endF - 1));
+      cutFs.push({ cs, ce });
+    }
+    cutFs.sort((a, b) => a.cs - b.cs);
+    const merged = [];
+    for (const c of cutFs) {
+      const last = merged[merged.length - 1];
+      if (last && c.cs <= last.ce + 1) last.ce = Math.max(last.ce, c.ce);
+      else merged.push({ cs: c.cs, ce: c.ce });
+    }
+    const keeps = [];
+    let cursor = startF;
+    for (const c of merged) {
+      if (c.cs > cursor) {
+        keeps.push({ start: frameToSec(cursor, fps), end: frameToSec(c.cs, fps) });
+      }
+      cursor = Math.max(cursor, c.ce + 1);
+    }
+    if (endF > cursor) {
+      keeps.push({ start: frameToSec(cursor, fps), end: frameToSec(endF, fps) });
+    }
+    if (!keeps.length) {
+      keeps.push({ start: frameToSec(startF, fps), end: frameToSec(endF, fps) });
     }
     return keeps;
   }
 
   /**
-   * 成片 keep：无删段时 ≡ 预览 keep（单段片头/片尾由编码 -ss/-t 垫，此处不叠）。
-   * 有删中间时：每段接点再收 ENCODE_CUT_JUNCTION_PAD_FRAMES 源帧；
-   * 首段若 trimStart>0 再推片头、末段再收片尾（拼成一条后再编 GIF 时 startSec=0，只能靠 keep 收）。
+   * 成片 keep ≡ 预览 keep（同一源帧半开窗）。根因修复：禁止再叠编码接点/片头片尾垫。
    */
   function keepRangesForEncode(edit, duration) {
-    const preview = keepRangesFromEdit(edit, duration);
-    const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
-    const trimEnd = Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || duration || 0);
-    const cuts = normalizeCutouts(edit?.cutouts, trimStart, trimEnd);
-    if (!cuts.length || preview.length <= 1) return preview;
-    const pad = resolveEndKeepSec(edit) * Math.max(1, ENCODE_CUT_JUNCTION_PAD_FRAMES);
-    return preview.map((k, i) => {
-      let start = Number(k.start) || 0;
-      let end = Math.max(start + 0.05, Number(k.end) || 0);
-      // 多段成片首段：黄柄片头再推，防拼片后 GIF 片头多吐
-      if (i === 0 && start > 0.02) start = Math.min(end - 0.05, start + pad);
-      // 刚过删段终点的下一段：起点再推后
-      if (i > 0) start = Math.min(end - 0.05, start + pad);
-      // 将进入删段起点的上一段：终点再提前
-      if (i < preview.length - 1) end = Math.max(start + 0.05, end - pad);
-      // 多段成片末段：再收片尾（与单段编码尾垫同量级）
-      if (i === preview.length - 1) end = Math.max(start + 0.05, end - pad);
-      return { start, end };
-    });
+    return keepRangesFromEdit(edit, duration);
   }
 
   /**
    * 外预览：源时间若落在 keep 外（删中间 / 片头片尾外），返回应 seek 到的时间；否则 null。
-   * 播放到末段 keep 尾则循环到第一段；暂停则停在末段尾。
+   * keep 为半开 [start,end)；暂停停在末段最后一源帧（end - 1/fps）。
    * @param {{start:number,end:number}[]} keeps
    * @param {number} t
-   * @param {{ paused?: boolean }} [opts]
+   * @param {{ paused?: boolean, endKeepSec?: number, srcFps?: number }} [opts]
    * @returns {number|null}
    */
   function previewSeekForKeepRanges(keeps, t, opts) {
@@ -2594,8 +2621,11 @@
     const first = keeps[0];
     const last = keeps[keeps.length - 1];
     const endEps = 0.0005;
-    // 勿用大 start 容差提前进入下一段 keep，否则删段尾会少播进保留区约 1～数帧
     const startEps = 0.0005;
+    const endKeep =
+      Number(opts?.endKeepSec) > 0
+        ? Number(opts.endKeepSec)
+        : resolveEndKeepSec(opts?.srcFps || opts?.edit || 0);
     for (let i = 0; i < keeps.length; i++) {
       const k = keeps[i];
       if (time >= k.start - startEps && time < k.end - endEps) return null;
@@ -2605,8 +2635,8 @@
       const nxt = keeps[i + 1];
       if (nxt && time < nxt.start) return nxt.start;
     }
-    // keepRangesFromEdit 已对末段收过 END_KEEP；暂停停在 keep 尾前一丁点，勿再减半开
-    if (paused) return Math.max(last.start, last.end - endEps);
+    // 半开上界：暂停停在末帧起点，勿贴到 exclusive end（那一帧已不进 GIF）
+    if (paused) return Math.max(last.start, last.end - endKeep);
     return first.start;
   }
 
@@ -2761,6 +2791,9 @@
     exportKeepVideo,
     normalizeSourceFps,
     frameSnapSecFromFps,
+    resolveKeepFps,
+    secToFrame,
+    frameToSec,
     resolveEndKeepSec,
     resolveStartKeepSec,
     DEFAULT_FRAME_FPS,
