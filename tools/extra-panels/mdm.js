@@ -6351,11 +6351,18 @@ a{color:${v.accent}}
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在导出 ${escapeHtml(toLabel)}</strong></div>` +
         `<div class="mdm-modal-body" style="text-align:left">` +
-        `<p id="mdm-pandoc-export-stage" style="margin:0 0 8px">准备中…</p>` +
+        `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:0 0 6px">` +
+        `<p id="mdm-pandoc-export-stage" style="margin:0">准备中…</p>` +
+        `<p class="mono" id="mdm-pandoc-export-pct" style="margin:0;font-weight:700">0%</p>` +
+        `</div>` +
+        `<div class="gif-progress" style="margin:0 0 10px" aria-hidden="true">` +
+        `<div class="gif-progress-track"><span class="gif-progress-fill" id="mdm-pandoc-export-fill" style="width:0%;transition:width .35s ease"></span></div>` +
+        `</div>` +
         `<p class="hint tight" id="mdm-pandoc-export-detail" style="margin:0 0 8px;min-height:1.2em"></p>` +
-        `<p class="hint tight" id="mdm-pandoc-export-alive" style="margin:0 0 8px;min-height:1.2em;font-weight:600">等待桥心跳…</p>` +
+        `<p class="hint tight" id="mdm-pandoc-export-pages" style="margin:0 0 8px;min-height:1.2em"></p>` +
+        `<p class="hint tight" id="mdm-pandoc-export-alive" style="margin:0 0 8px;min-height:1.2em;font-weight:600">等待桥进度…</p>` +
         `<p class="hint tight" id="mdm-pandoc-export-lastlog" style="margin:0 0 8px;min-height:1.2em;word-break:break-all"></p>` +
-        `<p class="hint tight">大文档超 8 分钟<strong>很正常</strong>。看本行「仍在转换」= 桥有心跳；黑窗在下宏包也可等。无心跳超过约 20 秒才像卡住。</p>` +
+        `<p class="hint tight">进度来自 XeLaTeX 页码 <code>[N]</code> + 遍数（通常最多 3 遍）。总页数先按正文粗估，首遍结束后会校正。装宏包时百分比会慢爬。</p>` +
         `</div>` +
         `<div class="mdm-modal-foot" style="flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center">` +
         `<p class="hint tight" id="mdm-pandoc-export-elapsed" style="margin:0">已用时 0 秒</p>` +
@@ -6363,9 +6370,13 @@ a{color:${v.accent}}
         `</div>`;
       const stageEl = () => document.getElementById("mdm-pandoc-export-stage");
       const detailEl = () => document.getElementById("mdm-pandoc-export-detail");
+      const pagesEl = () => document.getElementById("mdm-pandoc-export-pages");
+      const pctEl = () => document.getElementById("mdm-pandoc-export-pct");
+      const fillEl = () => document.getElementById("mdm-pandoc-export-fill");
       const aliveEl = () => document.getElementById("mdm-pandoc-export-alive");
       const lastLogEl = () => document.getElementById("mdm-pandoc-export-lastlog");
       const elapsedEl = () => document.getElementById("mdm-pandoc-export-elapsed");
+      let lastPct = 0;
       const setLocal = (stage, detail = "") => {
         if (stopped) return;
         const s = stageEl();
@@ -6378,9 +6389,35 @@ a{color:${v.accent}}
         const a = aliveEl();
         const lg = lastLogEl();
         const el = elapsedEl();
+        const pg = pagesEl();
+        const pctNode = pctEl();
+        const fill = fillEl();
         if (!data) return;
         const hb = data.heartbeatAgeSec != null ? Number(data.heartbeatAgeSec) : null;
         const limit = Number(data.timeoutSec) || 0;
+        let pct = Math.round(Number(data.percent) || 0);
+        if (pct < lastPct) pct = lastPct;
+        lastPct = pct;
+        if (pctNode) pctNode.textContent = `${pct}%`;
+        if (fill) fill.style.width = `${pct}%`;
+        if (pg) {
+          const bits = [];
+          if (data.page > 0 && data.pageEst > 0) {
+            bits.push(`排版约第 ${data.page} / ${data.pageEst} 页`);
+          } else if (data.pageEst > 0) {
+            bits.push(`估约 ${data.pageEst} 页（尚未打出页码）`);
+          }
+          if (data.pass > 0) {
+            bits.push(`第 ${data.pass}/${data.passMax || 3} 遍`);
+          }
+          if (data.phase === "packages") {
+            bits.push(`装宏包${data.pkgCount ? ` · ${data.pkgCount} 条日志` : ""}`);
+          }
+          if (data.percentSource === "pages") bits.push("按页码计");
+          else if (data.percentSource === "packages") bits.push("装包中");
+          else if (data.percentSource === "estimate") bits.push("估算");
+          pg.textContent = bits.join(" · ");
+        }
         if (a) {
           if (data.active && data.alive) {
             a.textContent =
@@ -6401,9 +6438,9 @@ a{color:${v.accent}}
         }
         if (lg) {
           const bits = [];
-          if (data.lastLog) bits.push(`最近输出：${data.lastLog}`);
+          if (data.lastLog) bits.push(`最近：${data.lastLog}`);
           if (data.outPdfBytes > 0) {
-            bits.push(`临时 PDF 已写 ${Math.round(data.outPdfBytes / 1024)} KB`);
+            bits.push(`临时 PDF ${Math.round(data.outPdfBytes / 1024)} KB`);
           }
           lg.textContent = bits.join(" · ");
         }
