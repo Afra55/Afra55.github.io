@@ -1004,12 +1004,29 @@
         }
       }
 
-      function fillAdbInfo(info) {
+      const ADB_INFO_STAGE_LABEL = {
+        base: "已连上设备…",
+        state: "读取状态…",
+        props: "型号 / 系统属性…",
+        screen: "分辨率…",
+        battery: "电量…",
+        storage: "存储…",
+        ram: "内存 / CPU…",
+        kernel: "内核 / 运行时间…",
+        imei: "IMEI / 循环…",
+        variant: "变体 ID…",
+        done: "已加载",
+      };
+
+      function fillAdbInfo(info, { keepLoading = false, stage = "" } = {}) {
         const set = (id, value) => {
           const el = $(id);
-          if (el) el.textContent = value || "—";
+          if (!el) return;
+          // 流式扫：空值不覆盖已显示的内容（避免后段把前段刷回 —）
+          if (keepLoading && (value == null || value === "")) return;
+          el.textContent = value || "—";
         };
-        setAdbInfoLoading(false);
+        if (!keepLoading) setAdbInfoLoading(false);
         if (!info) {
           clearAdbInfoFields();
           if (adbInfoMeta) adbInfoMeta.textContent = "未选择设备";
@@ -1048,10 +1065,15 @@
         if (info.usefulLife != null) cycleBits.push(`寿命剩 ${info.usefulLife}%`);
         set("#adb-info-cycle", cycleBits.join(" / "));
         set("#adb-info-capacity", info.capacity);
-        set("#adb-info-frp", info.frp === true ? "已开启" : info.frp === false ? "未开启" : "");
+        set(
+          "#adb-info-frp",
+          info.frp === true ? "已开启" : info.frp === false ? "未开启" : keepLoading ? "" : ""
+        );
         set("#adb-info-launch", info.launchLevel);
         if (adbInfoMeta) {
-          adbInfoMeta.textContent = info.ready === false ? info.message || "设备未就绪" : "已加载";
+          if (info.ready === false) adbInfoMeta.textContent = info.message || "设备未就绪";
+          else if (keepLoading) adbInfoMeta.textContent = ADB_INFO_STAGE_LABEL[stage] || "正在抓取…";
+          else adbInfoMeta.textContent = "已加载";
         }
       }
   
@@ -2356,7 +2378,56 @@
         }
         clearAdbInfoFields();
         setAdbInfoLoading(true);
+        const useStream =
+          !adbBridgeVersion || bridgeHas("device-info-stream") || bridgeAtLeast("0.9.119");
         try {
+          if (useStream) {
+            const res = await adbFetch(`/device/info/stream?serial=${encodeURIComponent(serial)}`);
+            const reader = res.body?.getReader?.();
+            if (!reader) throw new Error("桥未返回流式响应");
+            const decoder = new TextDecoder();
+            let buf = "";
+            let lastInfo = null;
+            while (true) {
+              if (token !== adbInfoLoadToken) {
+                try {
+                  await reader.cancel();
+                } catch (_) {}
+                return;
+              }
+              const { done, value } = await reader.read();
+              if (done) break;
+              buf += decoder.decode(value, { stream: true });
+              let nl;
+              while ((nl = buf.indexOf("\n")) >= 0) {
+                const line = buf.slice(0, nl).trim();
+                buf = buf.slice(nl + 1);
+                if (!line) continue;
+                let item;
+                try {
+                  item = JSON.parse(line);
+                } catch {
+                  continue;
+                }
+                if (!item?.ok && item?.error) throw new Error(item.error);
+                if (item?.info) {
+                  lastInfo = item.info;
+                  const doneLine = Boolean(item.done || item.stage === "done");
+                  fillAdbInfo(item.info, { keepLoading: !doneLine, stage: item.stage || "" });
+                }
+              }
+            }
+            if (token !== adbInfoLoadToken) return;
+            if (lastInfo) {
+              fillAdbInfo(lastInfo);
+              if (!String(lastInfo.variantId || "").trim()) {
+                void resolveVariantIdFallback(serial, token);
+              }
+            } else {
+              throw new Error("未收到设备信息");
+            }
+            return;
+          }
           const data = await adbFetch(`/device/info?serial=${encodeURIComponent(serial)}`);
           if (token !== adbInfoLoadToken) return;
           fillAdbInfo(data.info);
@@ -2365,6 +2436,20 @@
           }
         } catch (err) {
           if (token !== adbInfoLoadToken) return;
+          // 流式失败时回退一次性接口
+          if (useStream) {
+            try {
+              const data = await adbFetch(`/device/info?serial=${encodeURIComponent(serial)}`);
+              if (token !== adbInfoLoadToken) return;
+              fillAdbInfo(data.info);
+              if (!String(data?.info?.variantId || "").trim()) {
+                void resolveVariantIdFallback(serial, token);
+              }
+              return;
+            } catch (err2) {
+              err = err2;
+            }
+          }
           fillAdbInfo({ serial, state: "error", ready: false, message: err.message || String(err) });
           setError(adbError, err.message || String(err));
         } finally {

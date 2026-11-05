@@ -748,8 +748,53 @@ function pdfEngineCliArg(engineName, pdfInfo) {
   return name;
 }
 
+/** 当前转换进度（供前端轮询 /pandoc/progress，避免长任务「没动静」） */
+let convertProgress = { active: false, stage: "", detail: "", startedAt: 0, updatedAt: 0 };
+
+function setConvertProgress(stage, detail = "") {
+  const now = Date.now();
+  convertProgress = {
+    active: true,
+    stage: String(stage || ""),
+    detail: String(detail || "").slice(0, 240),
+    startedAt: convertProgress.active && convertProgress.startedAt ? convertProgress.startedAt : now,
+    updatedAt: now,
+  };
+  const elapsed = Math.max(0, Math.round((now - convertProgress.startedAt) / 1000));
+  console.log(`[pandoc] ▶ ${convertProgress.stage}${detail ? ` · ${detail}` : ""} · ${elapsed}s`);
+}
+
+function clearConvertProgress(finalStage = "") {
+  if (finalStage) {
+    convertProgress = {
+      ...convertProgress,
+      active: false,
+      stage: String(finalStage),
+      updatedAt: Date.now(),
+    };
+  } else {
+    convertProgress = { active: false, stage: "", detail: "", startedAt: 0, updatedAt: 0 };
+  }
+}
+
+function getConvertProgress() {
+  const p = convertProgress || {};
+  const startedAt = Number(p.startedAt) || 0;
+  const elapsedSec = startedAt ? Math.max(0, Math.round((Date.now() - startedAt) / 1000)) : 0;
+  return {
+    ok: true,
+    active: !!p.active,
+    stage: p.stage || "",
+    detail: p.detail || "",
+    startedAt,
+    updatedAt: Number(p.updatedAt) || 0,
+    elapsedSec,
+  };
+}
+
 /** 印刷级 PDF：仅 XeLaTeX（复杂图表 + 中文） */
 async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine = "" } = {}) {
+  setConvertProgress("探测 PDF 引擎", "XeLaTeX / MiKTeX");
   const pdfInfo = await probePdfEngines();
   const engine = String(pdfEngine || pdfInfo.preferred || "").trim() || "xelatex";
   if (!pdfInfo.engines.xelatex?.ok && !pdfInfo.engines[engine]?.ok) {
@@ -763,6 +808,7 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   }
   const useEngine = pdfInfo.engines.xelatex?.ok ? "xelatex" : engine;
 
+  setConvertProgress("准备临时文件", title || "document");
   const tmp = makeBridgeTemp("mdm-pdf-");
   const inPath = path.join(tmp, "in.md");
   const outPath = path.join(tmp, "out.pdf");
@@ -786,11 +832,23 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
 
   console.log(`[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp}`);
+  setConvertProgress(
+    "Pandoc + XeLaTeX 排版中",
+    `引擎 ${useEngine} · 图表多/文档长时可能数分钟，黑窗有日志`
+  );
+  // 心跳：XeLaTeX 期间黑窗可能长时间无新行，定时刷新 progress 的 updatedAt
+  const heartbeat = setInterval(() => {
+    setConvertProgress(
+      "Pandoc + XeLaTeX 排版中",
+      `仍在运行 · 引擎 ${useEngine} · 请勿关黑窗`
+    );
+  }, 5000);
   try {
     await runCmd(resolvePandocBin(), args, { cwd: tmp, timeout: 900000 });
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 20) {
       throw new Error("PDF 输出为空（请检查字体与 XeLaTeX/MiKTeX 是否完整）");
     }
+    setConvertProgress("读取 PDF 输出", `${Math.round(fs.statSync(outPath).size / 1024)} KB`);
     const buf = fs.readFileSync(outPath);
     return {
       dataBase64: buf.toString("base64"),
@@ -809,6 +867,7 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     }
     throw new Error((msg || "印刷级 PDF 失败").slice(0, 500));
   } finally {
+    clearInterval(heartbeat);
     try {
       fs.rmSync(tmp, { recursive: true, force: true });
     } catch (_) {}
@@ -827,6 +886,7 @@ async function convertFromTextOnce({ text, to, from = "gfm", title, images, qual
   const outPath = path.join(tmp, `out.${ext}`);
   const fromFmt = String(from || "gfm").trim() || "gfm";
   try {
+    setConvertProgress("准备导出", `${fromFmt} → ${toFmt}`);
     writeExportImages(tmp, images);
     const args = ["-f", fromFmt, "-t", toFmt];
     if (quality !== "fast") {
@@ -835,11 +895,19 @@ async function convertFromTextOnce({ text, to, from = "gfm", title, images, qual
     }
     args.push("-o", outPath);
     console.log(`[pandoc] 文本导出 · ${fromFmt} → ${toFmt} · quality=${quality || "max"} · args=${args.join(" ")}`);
-    await runCmd(resolvePandocBin(), args, {
-      input: Buffer.from(String(text || ""), "utf8"),
-      cwd: tmp,
-      timeout: 600000,
-    });
+    setConvertProgress("Pandoc 转换中", `${fromFmt} → ${toFmt}`);
+    const heartbeat = setInterval(() => {
+      setConvertProgress("Pandoc 转换中", `${fromFmt} → ${toFmt} · 仍在运行`);
+    }, 5000);
+    try {
+      await runCmd(resolvePandocBin(), args, {
+        input: Buffer.from(String(text || ""), "utf8"),
+        cwd: tmp,
+        timeout: 600000,
+      });
+    } finally {
+      clearInterval(heartbeat);
+    }
     const buf = fs.readFileSync(outPath);
     return {
       dataBase64: buf.toString("base64"),
@@ -947,6 +1015,10 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngi
   }
 
   console.log(`[pandoc] 文件转换「${name}」· ${fromFmt} → ${toFmt}${usedPdfEngine ? ` · pdf-engine=${usedPdfEngine}` : ""} · tmp=${tmp}`);
+  setConvertProgress("文件转换中", `${name} · ${fromFmt} → ${toFmt}`);
+  const fileHeartbeat = setInterval(() => {
+    setConvertProgress("文件转换中", `${name} · 仍在运行`);
+  }, 5000);
   try {
     await runCmd(resolvePandocBin(), args, { cwd: tmp, timeout: 600000 });
     if (outIsMd) {
@@ -982,6 +1054,7 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngi
     }
     throw new Error(msg.slice(0, 500) || "pandoc 转换失败");
   } finally {
+    clearInterval(fileHeartbeat);
     try {
       fs.rmSync(tmp, { recursive: true, force: true });
     } catch (_) {}
@@ -989,10 +1062,22 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngi
 }
 
 async function convert(body = {}) {
-  if (body && body.dataBase64 && body.filename) {
-    return convertFromFile(body);
+  const label = String(body?.title || body?.filename || body?.name || body?.to || "document").slice(0, 80);
+  setConvertProgress("收到转换请求", label);
+  try {
+    let result;
+    if (body && body.dataBase64 && body.filename) {
+      setConvertProgress("文件转换", body.filename);
+      result = await convertFromFile(body);
+    } else {
+      result = await convertFromText(body);
+    }
+    clearConvertProgress("完成");
+    return result;
+  } catch (err) {
+    clearConvertProgress("失败");
+    throw err;
   }
-  return convertFromText(body);
 }
 
 async function wingetInstall(id, extraArgs = []) {
@@ -2230,6 +2315,9 @@ module.exports = {
   installPackage,
   probePdfEngines,
   resolvePandocBin,
+  getConvertProgress,
+  setConvertProgress,
+  clearConvertProgress,
   FILE_FROM,
   PDF_ENGINE_ORDER,
 };
