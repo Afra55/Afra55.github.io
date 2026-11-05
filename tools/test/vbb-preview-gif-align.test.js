@@ -124,23 +124,30 @@ t("编辑后仍 forceAccurateCut（精确切，不靠多删垫）", () => {
   assert.ok(vbb.includes("forceAccurateCut: Boolean(prepared.cutNote)"));
 });
 
-t("编码：keep 已半开时不再二次垫（编辑/带 startSec 路径 pad=0）", () => {
-  assert.ok(shared.includes("function vbbEncodeHalfOpenPadSec"));
-  // 两处 encode 均：forceAccurateCut / keepAligned / 有 startSec → pad 0
-  const hits = shared.match(/halfOpenPad\s*=\s*[\s\S]*?vbbEncodeHalfOpenPadSec/g) || [];
+t("编码：keep 对齐路径片尾再收 2 帧（防 GIF 多吐；预览 keep 不动）", () => {
+  assert.ok(shared.includes("function vbbEncodeKeepTailPadSec"));
+  assert.ok(shared.includes("function vbbEncodeSpanTailPadSec"));
+  const hits = shared.match(/halfOpenPad\s*=\s*vbbEncodeSpanTailPadSec/g) || [];
   assert.ok(hits.length >= 2, `encode sites=${hits.length}`);
-  for (const h of hits) {
-    assert.ok(
-      /forceAccurateCut|keepAligned|Number\.isFinite\(opts\.startSec\)/.test(h),
-      "keep 对齐路径须跳过二次半开垫"
-    );
-  }
-  const m = shared.match(/function vbbEncodeHalfOpenPadSec\([\s\S]*?\n      \}/);
-  assert.ok(m);
+  assert.ok(shared.includes("encodeT / speed") || /encodeT\s*\/\s*speed/.test(shared));
+  const m = shared.match(/function vbbEncodeKeepTailPadSec\([\s\S]*?\n      \}/);
+  const m2 = shared.match(/function vbbEncodeSpanTailPadSec\([\s\S]*?\n      \}/);
+  assert.ok(m && m2);
   const box = {};
-  vm.runInNewContext(`${m[0]}\nthis.fn = vbbEncodeHalfOpenPadSec;`, box);
-  // 旧路径函数仍保留合理下限
-  assert.ok(box.fn(20, 30) + 1e-9 >= 0.5 / 30);
+  vm.runInNewContext(
+    `${m[0]}\n${m2[0]}\nthis.tail = vbbEncodeKeepTailPadSec;\nthis.span = vbbEncodeSpanTailPadSec;`,
+    box
+  );
+  // 30fps 源 + 15fps GIF → max(2/15, 2/30)=2/15
+  assert.ok(Math.abs(box.tail(15, 30) - 2 / 15) < 1e-9);
+  // 编辑路径走 keep 尾垫，非 0
+  assert.ok(box.span(15, 30, { startSec: 1.2 }) + 1e-9 >= 2 / 15);
+  // 旧路径仍可半帧
+  const old = shared.match(/function vbbEncodeHalfOpenPadSec\([\s\S]*?\n      \}/);
+  assert.ok(old);
+  const boxOld = {};
+  vm.runInNewContext(`${old[0]}\nthis.fn = vbbEncodeHalfOpenPadSec;`, boxOld);
+  assert.ok(boxOld.fn(20, 30) + 1e-9 >= 0.5 / 30);
 });
 
 t("预裁切不再对 keep span 二次减半帧", () => {
