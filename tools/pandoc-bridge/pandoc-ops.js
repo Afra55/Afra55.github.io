@@ -127,13 +127,14 @@ function runCmd(file, args, { input, timeout = 300000, cwd, env } = {}) {
 }
 
 /**
- * PDF 专用：输出打到黑窗，超时杀进程树，避免 MiKTeX 装包/弹窗把请求挂死一小时。
+ * PDF 专用：输出打到黑窗；默认不设硬超时（大文档可一直跑完）。
+ * timeout=0 / 不传有效超时 → 不杀进程；用户取消才中止。
  */
 function runCmdLogged(
   file,
   args,
   {
-    timeout = 480000,
+    timeout = 0,
     cwd,
     env,
     logPrefix = "[pandoc]",
@@ -143,7 +144,7 @@ function runCmdLogged(
   } = {}
 ) {
   const label = [file, ...(args || []).slice(0, 8)].join(" ");
-  const limitSec = timeoutSec || Math.round(timeout / 1000);
+  const killMs = Number(timeout) > 0 ? Number(timeout) : 0;
   const state = progressState || {
     phase: "typeset",
     page: 0,
@@ -153,7 +154,11 @@ function runCmdLogged(
     pkgCount: 0,
   };
   console.log(`${logPrefix} ▶ ${label}${args && args.length > 8 ? " …" : ""}`);
-  console.log(`${logPrefix} 预计最长 ${limitSec}s（大文档/首次装宏包会更久，属正常）`);
+  console.log(
+    killMs > 0
+      ? `${logPrefix} 硬超时 ${Math.round(killMs / 1000)}s`
+      : `${logPrefix} 无硬超时 · 跑完为止（可点取消）`
+  );
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
       cwd,
@@ -180,6 +185,7 @@ function runCmdLogged(
       if (state.pass > 0) bits.push(`第 ${state.pass}/${state.passMax} 遍`);
       const sec = Math.round((Date.now() - t0) / 1000);
       bits.push(`已用时 ${sec}s`);
+      bits.push("无超时");
       return bits.join(" · ");
     };
     const touchProgress = (stage) => {
@@ -197,7 +203,7 @@ function runCmdLogged(
           : `XeLaTeX 排版中${state.page ? ` · 第 ${state.page} 页` : ""}`);
       setConvertProgress(stageText, buildDetail(), {
         lastLog,
-        timeoutSec: limitSec,
+        timeoutSec: 0, // 0 = 无硬上限
         outPdfBytes,
         percent,
         phase: state.phase,
@@ -212,28 +218,31 @@ function runCmdLogged(
     const beat = setInterval(() => {
       const sec = Math.round((Date.now() - t0) / 1000);
       console.log(
-        `${logPrefix} …仍在运行 · ${sec}s / ${limitSec}s · p${state.pass} · 页 ${state.page}/${state.pageEst}`
+        `${logPrefix} …仍在运行 · ${sec}s · p${state.pass} · 页 ${state.page}/${state.pageEst}`
       );
       touchProgress();
     }, 4000);
-    const timer = setTimeout(() => {
-      console.log(`${logPrefix} ✖ 超时 ${limitSec}s，结束进程树 pid=${child.pid}`);
-      killProcessTree(child.pid);
-      finish(() => {
-        const err = new Error(
-          `PDF 排版超时（>${limitSec}s）。若黑窗仍在下宏包，可再导出一次；大文档也可拆篇。或用浏览器打印。`
-        );
-        err.stdout = stdout;
-        err.stderr = stderr || "timeout";
-        reject(err);
-      });
-    }, timeout);
+    let timer = null;
+    if (killMs > 0) {
+      timer = setTimeout(() => {
+        console.log(`${logPrefix} ✖ 超时 ${Math.round(killMs / 1000)}s，结束进程树 pid=${child.pid}`);
+        killProcessTree(child.pid);
+        finish(() => {
+          const err = new Error(
+            `PDF 排版超时（>${Math.round(killMs / 1000)}s）。可再导出一次，或用浏览器打印。`
+          );
+          err.stdout = stdout;
+          err.stderr = stderr || "timeout";
+          reject(err);
+        });
+      }, killMs);
+    }
 
     function finish(fn) {
       if (settled) return;
       settled = true;
       clearInterval(beat);
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       fn();
     }
 
@@ -1093,17 +1102,6 @@ function getConvertProgress() {
   };
 }
 
-/** 按正文/图片规模估算 PDF 最长等待（秒）：大文档超 8 分钟完全正常 */
-function estimatePdfTimeoutSec(text, images) {
-  const chars = String(text || "").length;
-  const imgN = Array.isArray(images) ? images.length : 0;
-  // 基准 12 分钟；每 2 万字 +2 分钟；每张图 +20 秒；上限 45 分钟
-  let sec = 12 * 60;
-  sec += Math.floor(chars / 20000) * 120;
-  sec += imgN * 20;
-  return Math.min(45 * 60, Math.max(12 * 60, sec));
-}
-
 /** 粗估页数（中文混排约 2200 字/页；图约 0.4 页）— 仅用于进度条，非精确 */
 function estimatePdfPages(text, images) {
   const chars = String(text || "").length;
@@ -1188,7 +1186,6 @@ function computePdfPercent(state) {
 async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine = "" } = {}) {
   const pageEst = estimatePdfPages(text, images);
   const passMax = 3; // pandoc 驱动 XeLaTeX 通常最多约 3 遍
-  const timeoutSec = estimatePdfTimeoutSec(text, images);
   const progressState = {
     phase: "probe",
     page: 0,
@@ -1202,7 +1199,7 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     phase: "probe",
     pageEst,
     passMax,
-    timeoutSec,
+    timeoutSec: 0,
     percentSource: "stage",
   });
   const pdfInfo = await probePdfEngines();
@@ -1224,7 +1221,7 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     phase: "prepare",
     pageEst,
     passMax,
-    timeoutSec,
+    timeoutSec: 0,
     percentSource: "stage",
   });
   const tmp = makeBridgeTemp("mdm-pdf-");
@@ -1250,15 +1247,14 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   );
   if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
 
-  const timeoutMs = timeoutSec * 1000;
   console.log(
-    `[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp} · 估 ${pageEst} 页 · 上限 ${timeoutSec}s`
+    `[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp} · 估 ${pageEst} 页 · 无硬超时`
   );
   progressState.phase = "typeset";
   progressState.pass = 0; // 等首条 Running xelatex / 引擎横幅再记第 1 遍
   setConvertProgress(
     "Pandoc + XeLaTeX 排版中",
-    `引擎 ${useEngine} · 估约 ${pageEst} 页 · 上限约 ${Math.round(timeoutSec / 60)} 分钟`,
+    `引擎 ${useEngine} · 估约 ${pageEst} 页 · 跑完为止（可取消）`,
     {
       percent: 8,
       phase: "typeset",
@@ -1266,16 +1262,17 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
       pageEst,
       pass: 0,
       passMax,
-      timeoutSec,
+      timeoutSec: 0,
       percentSource: "estimate",
     }
   );
   const miktexEnv = await ensureMiktexQuietAutoInstall(engineCli);
   try {
+    // 无硬超时：大文档/首次装宏包可一直跑；仅用户取消才中止
     await runCmdLogged(resolvePandocBin(), args, {
       cwd: tmp,
-      timeout: timeoutMs,
-      timeoutSec,
+      timeout: 0,
+      timeoutSec: 0,
       env: miktexEnv,
       logPrefix: "[pandoc/pdf]",
       watchFile: outPath,
@@ -1292,7 +1289,7 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
       pageEst: progressState.pageEst || pageEst,
       pass: progressState.pass,
       passMax,
-      timeoutSec,
+      timeoutSec: 0,
       outPdfBytes: fs.statSync(outPath).size,
       percentSource: "stage",
     });

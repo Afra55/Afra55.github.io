@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.124";
+const BRIDGE_VERSION = "0.9.125";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -7424,6 +7424,11 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
   handleApi(req, res, url);
 });
+
+// Node 18+ 默认 requestTimeout=5min，会掐断长 PDF/装包；本机桥改为不限时
+server.requestTimeout = 0;
+server.headersTimeout = 0;
+server.timeout = 0;
 
 server.on("upgrade", (req, socket, head) => {
   const deps = {
