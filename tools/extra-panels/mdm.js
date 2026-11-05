@@ -1681,7 +1681,14 @@
     }
 
     /** #2 表格可视化编辑（光标所在表格 → 网格弹窗） */
+    /** @type {{ stop: () => void } | null} */
+    let pandocProgressCtl = null;
+
     function closeModal() {
+      try {
+        pandocProgressCtl?.stop?.();
+      } catch (_) {}
+      pandocProgressCtl = null;
       if (!els.modal) return;
       els.modal.hidden = true;
       els.modalBox.innerHTML = "";
@@ -6319,37 +6326,67 @@ a{color:${v.accent}}
       return { ok: true, preferred: env.preferred || "", installHints };
     }
 
-    /** Pandoc 长导出：弹框显示已用时 + 轮询桥 /pandoc/progress */
+    /**
+     * Pandoc 长导出进度弹框。
+     * 仅在 convert 进行中轮询 /pandoc/progress（约 1.2s 一次）；结束或 Esc 必须停。
+     */
     function openPandocExportProgress(toLabel) {
+      try {
+        pandocProgressCtl?.stop?.();
+      } catch (_) {}
+      pandocProgressCtl = null;
+
       const box = els.modalBox;
       const t0 = Date.now();
+      let stopped = false;
+      let tick = null;
+      let pollTimer = null;
       els.modal.hidden = false;
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在导出 ${escapeHtml(toLabel)}</strong></div>` +
         `<div class="mdm-modal-body" style="text-align:left">` +
         `<p id="mdm-pandoc-export-stage" style="margin:0 0 8px">准备中…</p>` +
         `<p class="hint tight" id="mdm-pandoc-export-detail" style="margin:0 0 8px;min-height:1.2em"></p>` +
-        `<p class="hint tight">PDF / 大文档可能要几分钟。黑窗有 <span class="mono">[pandoc]</span> 日志即在跑。</p>` +
+        `<p class="hint tight">导出进行中才会请求进度；结束后自动停止。黑窗有 <span class="mono">[pandoc]</span> 即在跑。</p>` +
         `</div>` +
         `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-pandoc-export-elapsed">已用时 0 秒</p></div>`;
       const stageEl = () => document.getElementById("mdm-pandoc-export-stage");
       const detailEl = () => document.getElementById("mdm-pandoc-export-detail");
       const elapsedEl = () => document.getElementById("mdm-pandoc-export-elapsed");
       const setLocal = (stage, detail = "") => {
+        if (stopped) return;
         const s = stageEl();
         const d = detailEl();
         if (s) s.textContent = stage || "处理中…";
         if (d) d.textContent = detail || "";
       };
-      const tick = setInterval(() => {
+      const stop = () => {
+        if (stopped) return;
+        stopped = true;
+        if (tick) clearInterval(tick);
+        if (pollTimer) clearInterval(pollTimer);
+        tick = null;
+        pollTimer = null;
+        if (pandocProgressCtl && pandocProgressCtl.stop === stop) pandocProgressCtl = null;
+      };
+      tick = setInterval(() => {
+        if (stopped || els.modal?.hidden || !stageEl()) {
+          stop();
+          return;
+        }
         const el = elapsedEl();
         if (el) el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒`;
       }, 500);
-      let pollTimer = null;
       const startPoll = () => {
+        if (stopped || pollTimer) return;
         const poll = async () => {
+          if (stopped || els.modal?.hidden || !stageEl()) {
+            stop();
+            return;
+          }
           try {
             const { res, data } = await fetchPandocJson("/pandoc/progress");
+            if (stopped) return;
             if (res.ok && data) {
               if (data.stage) setLocal(data.stage, data.detail || "");
               const el = elapsedEl();
@@ -6362,15 +6399,20 @@ a{color:${v.accent}}
         void poll();
         pollTimer = setInterval(poll, 1200);
       };
-      return {
+      const ctl = {
         setLocal,
         startPoll,
+        stop,
         close() {
-          clearInterval(tick);
-          if (pollTimer) clearInterval(pollTimer);
-          closeModal();
+          stop();
+          if (els.modal && !els.modal.hidden) {
+            els.modal.hidden = true;
+            els.modalBox.innerHTML = "";
+          }
         },
       };
+      pandocProgressCtl = ctl;
+      return ctl;
     }
 
     async function exportViaPandoc(text, to, title, retried = false) {
