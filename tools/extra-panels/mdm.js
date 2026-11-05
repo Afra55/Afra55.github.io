@@ -32,11 +32,11 @@
     ["mediawiki", "MediaWiki (.wiki)"],
     ["org", "Org-mode (.org)"],
     ["opml", "OPML (.opml)"],
-    ["html", "HTML（Pandoc）"],
+    ["html", "HTML（Pandoc · 铺满屏宽）"],
   ];
   const LOCAL_FORMATS = [
     ["md", "Markdown (.md)"],
-    ["html-standalone", "HTML（单文件）"],
+    ["html-standalone", "HTML（浏览器单文件）"],
     ["png", "长图 PNG"],
   ];
 
@@ -1475,6 +1475,90 @@
       });
     }
 
+    function tableToCsv(table) {
+      const rows = [...(table?.querySelectorAll?.("tr") || [])];
+      return rows
+        .map((tr) =>
+          [...tr.children]
+            .map((cell) => {
+              const t = String(cell.innerText || "")
+                .replace(/\r?\n/g, " ")
+                .replace(/"/g, '""');
+              return `"${t}"`;
+            })
+            .join(",")
+        )
+        .join("\n");
+    }
+
+    function tableToHtmlSnippet(table) {
+      const clone = table.cloneNode(true);
+      clone.querySelectorAll(".mdm-table-toolbar").forEach((n) => n.remove());
+      return `<!doctype html><html lang="zh"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>table</title>
+<style>body{margin:1rem;font-family:system-ui,sans-serif}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:.35rem .55rem;text-align:left}th{background:#f4f4f5}</style>
+</head><body>${clone.outerHTML}</body></html>`;
+    }
+
+    /** 表格：放大 / 下载（CSV · HTML），与代码/图表同款 */
+    function addTableToolbars() {
+      if (!els.preview) return;
+      els.preview.querySelectorAll("table").forEach((table) => {
+        if (table.closest(".mdm-table-wrap")) return;
+        const wrap = document.createElement("div");
+        wrap.className = "mdm-table-wrap";
+        table.parentNode?.insertBefore(wrap, table);
+        wrap.appendChild(table);
+
+        const bar = document.createElement("div");
+        bar.className = "mdm-table-toolbar";
+        bar.setAttribute("data-html2canvas-ignore", "true");
+        const mkBtn = (label, title, cls, onClick) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = `ghost-btn mdm-table-btn ${cls || ""}`.trim();
+          btn.textContent = label;
+          btn.title = title;
+          btn.setAttribute("aria-label", title);
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClick(btn);
+          });
+          return btn;
+        };
+        bar.appendChild(
+          mkBtn("放大", "放大查看表格", "mdm-table-zoom", () => {
+            if (typeof window.__mdmOpenTableLightbox === "function") {
+              window.__mdmOpenTableLightbox(table);
+            } else {
+              toast("放大预览未就绪，请刷新页面");
+            }
+          })
+        );
+        bar.appendChild(
+          mkBtn("下载", "下载表格（CSV）", "mdm-table-dl", () => {
+            const csv = tableToCsv(table);
+            if (!csv.trim()) {
+              toast("表格为空");
+              return;
+            }
+            downloadBlob(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }), "table.csv");
+            toast("已下载 table.csv");
+          })
+        );
+        bar.appendChild(
+          mkBtn("HTML", "下载表格为 HTML", "mdm-table-dl-html", () => {
+            downloadBlob(
+              new Blob([tableToHtmlSnippet(table)], { type: "text/html;charset=utf-8" }),
+              "table.html"
+            );
+            toast("已下载 table.html");
+          })
+        );
+        wrap.appendChild(bar);
+      });
+    }
+
     /** 超大文档：暂停自动预览，避免 markdown-it + 高亮 + 大纲把页面卡死 */
     const LARGE_DOC_CHARS = 120000;
     function largeDocHint(len) {
@@ -1553,6 +1637,7 @@
       applyTaskLists(els.preview);
       applyHeadingAnchors(els.preview);
       addCodeCopyButtons();
+      addTableToolbars();
       refreshOutlineHeads();
       updateDocStats(src, state.view?.state.selection.main);
       void resolvePreviewAssets();
@@ -5709,31 +5794,58 @@
       );
     }
 
-    function standaloneHtml(title, bodyHtml) {
+    /** 导出 HTML 共用：强制正文/图表/表格铺满视口（浏览器单文件 + Pandoc 后处理） */
+    function exportHtmlFullWidthCss(extra = "") {
       const v = themeVars();
+      return (
+        `:root{color-scheme:${isDarkScheme() ? "dark" : "light"}}` +
+        `*{box-sizing:border-box}` +
+        `html,body{width:100%!important;min-height:100%;margin:0!important;max-width:none!important}` +
+        `body{max-width:none!important;width:100%!important;margin:0!important;padding:1rem clamp(.5rem,1.5vw,1.25rem) 2rem!important;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}` +
+        /* 覆盖 Pandoc 默认 .container / titleblock 等窄栏 */
+        `#TOC,.title,.author,.date,header,main,article,section,.container,.main-container,.main,.content,div.sourceCode,` +
+        `pre,table,p,ul,ol,blockquote,h1,h2,h3,h4,h5,h6,.toc,.mdm-mermaid,figure,.mdm-mermaid-svg{max-width:none!important;width:100%!important}` +
+        `pre{background:${v.panel};padding:.8rem;border-radius:8px;overflow:auto}` +
+        `code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}` +
+        `pre code{background:none}` +
+        `table{border-collapse:collapse}th,td{border:1px solid ${v.line};padding:.35rem .6rem}` +
+        `img{max-width:100%!important;height:auto!important;display:block}` +
+        `blockquote{border-left:3px solid ${v.line};margin:0;padding-left:1rem;color:${v.muted}}` +
+        `a{color:${v.accent}}` +
+        `.toc,#TOC{border:1px solid ${v.line};border-radius:8px;padding:.6rem .9rem;margin-bottom:1.4rem}` +
+        `.toc ul,#TOC ul{margin:.35rem 0 0;padding-left:1.2rem}` +
+        `.toc-l2{padding-left:.8rem}.toc-l3,.toc-l4,.toc-l5,.toc-l6{padding-left:1.6rem}` +
+        `.mdm-mermaid,figure,.mdm-mermaid-svg{margin:1rem 0;text-align:center}` +
+        `.mdm-mermaid svg,.mdm-mermaid-svg svg,figure svg,figure img{display:block;width:100%!important;max-width:100%!important;height:auto!important;margin:0 auto}` +
+        `.katex-display{overflow-x:auto;overflow-y:hidden}` +
+        `@media print{@page{margin:18mm 16mm}body{max-width:none;width:auto;margin:0;padding:0;background:#fff;color:#111}pre,table,blockquote,img,.mdm-mermaid{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc,#TOC{page-break-after:always}}` +
+        String(extra || "")
+      );
+    }
+
+    /** 给 Pandoc 产出的 HTML 注入铺满屏宽样式 + viewport */
+    function widenPandocHtml(htmlStr) {
+      let html = String(htmlStr || "");
+      const css = exportHtmlFullWidthCss();
+      const styleTag = `<style id="mdm-fullwidth">${css}</style>`;
+      const vp = `<meta name="viewport" content="width=device-width,initial-scale=1" />`;
+      if (!/name=["']viewport["']/i.test(html)) {
+        if (/<head[^>]*>/i.test(html)) html = html.replace(/<head([^>]*)>/i, `<head$1>${vp}`);
+        else html = `${vp}${html}`;
+      }
+      if (/id=["']mdm-fullwidth["']/.test(html)) {
+        html = html.replace(/<style id=["']mdm-fullwidth["']>[\s\S]*?<\/style>/i, styleTag);
+      } else if (/<\/head>/i.test(html)) {
+        html = html.replace(/<\/head>/i, `${styleTag}</head>`);
+      } else {
+        html = `${styleTag}${html}`;
+      }
+      return html;
+    }
+
+    function standaloneHtml(title, bodyHtml) {
       return `<!doctype html><html lang="zh"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>${escapeHtml(title)}</title>
-<style>
-:root{color-scheme:${isDarkScheme() ? "dark" : "light"}}
-*{box-sizing:border-box}
-html,body{width:100%;min-height:100%;margin:0}
-/* 真正铺满视口：去掉任何居中窄栏；图表/代码/表格跟屏宽走 */
-body{max-width:none!important;width:100%!important;margin:0!important;padding:1rem clamp(.5rem,1.5vw,1.25rem) 2rem;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
-pre,table,p,ul,ol,blockquote,h1,h2,h3,h4,h5,h6,.toc,.mdm-mermaid,figure,.mdm-mermaid-svg{max-width:none;width:100%}
-pre{background:${v.panel};padding:.8rem;border-radius:8px;overflow:auto}
-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-pre code{background:none}
-table{border-collapse:collapse}th,td{border:1px solid ${v.line};padding:.35rem .6rem}
-img{max-width:100%;height:auto;display:block}blockquote{border-left:3px solid ${v.line};margin:0;padding-left:1rem;color:${v.muted}}
-a{color:${v.accent}}
-.toc{border:1px solid ${v.line};border-radius:8px;padding:.6rem .9rem;margin-bottom:1.4rem}
-.toc ul{margin:.35rem 0 0;padding-left:1.2rem}
-.toc-l2{padding-left:.8rem}.toc-l3,.toc-l4,.toc-l5,.toc-l6{padding-left:1.6rem}
-.mdm-mermaid,figure,.mdm-mermaid-svg{margin:1rem 0;text-align:center}
-/* 关键图表：用 viewBox 等比拉满容器，勿锁死导出时的像素宽 */
-.mdm-mermaid svg,.mdm-mermaid-svg svg,figure svg{display:block;width:100%!important;max-width:100%!important;height:auto!important;margin:0 auto}
-.katex-display{overflow-x:auto;overflow-y:hidden}
-@media print{@page{margin:18mm 16mm}body{max-width:none;width:auto;margin:0;padding:0;background:#fff;color:#111}pre,table,blockquote,img,.mdm-mermaid{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
-</style></head><body>${buildToc(bodyHtml)}${bodyHtml}</body></html>`;
+<style id="mdm-fullwidth">${exportHtmlFullWidthCss()}</style></head><body>${buildToc(bodyHtml)}${bodyHtml}</body></html>`;
     }
 
     async function exportItemsToZip(ids) {
@@ -5991,6 +6103,14 @@ a{color:${v.accent}}
             const token = `MDMCHART${n}X`;
             images.push({ token, n, alt, svg: markup });
             out += `\n\n${token}\n\n`;
+          } else if (mode === "rawhtml") {
+            // Pandoc HTML：把流体 SVG 以 raw HTML 写入 MD（需 from=gfm+raw_html）
+            const el = parseSvgMarkup(svgRaw);
+            const markup = el ? mermaidSvgForHtmlEmbed(el) : String(svgRaw || "");
+            if (!markup || !/<svg[\s>]/i.test(markup)) throw new Error("空 SVG");
+            out +=
+              `\n\n<figure class="mdm-mermaid"><div class="mdm-mermaid-svg" aria-label="${escapeHtml(alt)}">${markup}</div></figure>\n\n`;
+            chartCount += 1;
           } else {
             const b64 = await withTimeout(svgMarkupToPngBase64(svgRaw, scale), 45000, `图表${n}栅格化`);
             if (mode === "data") {
@@ -6476,13 +6596,24 @@ a{color:${v.accent}}
         },
       });
       try {
-        // 图表先烤成 PNG 再交给 Pandoc；PDF 用 3x 清晰度照顾复杂图
+        // 图表先烤再交给 Pandoc：PDF/其它用 PNG；HTML 用流体 SVG raw，导出后可铺满屏宽
         // 本地阶段也会更新文案，避免一直停在「等待桥进度」
+        const isHtml = to === "html";
         prog.setLocalPct(1);
-        prog.setLocal("渲染图表", isPdf ? "高清栅格化 Mermaid（浏览器本地，还没上传）…" : "处理中…");
+        prog.setLocal(
+          "渲染图表",
+          isPdf
+            ? "高清栅格化 Mermaid（浏览器本地，还没上传）…"
+            : isHtml
+              ? "嵌入流体 SVG 图表（浏览器本地）…"
+              : "处理中…"
+        );
         prog.setAliveText?.("浏览器本地准备中（还没问桥）…", "");
         const chartScale = isPdf ? 3 : 2;
-        const baked = await bakeChartsForExport(text, { mode: "file", scale: chartScale }).catch(() => ({
+        const baked = await bakeChartsForExport(text, {
+          mode: isHtml ? "rawhtml" : "file",
+          scale: chartScale,
+        }).catch(() => ({
           text,
           images: [],
           chartCount: 0,
@@ -6491,38 +6622,63 @@ a{color:${v.accent}}
         prog.setLocalPct(3);
         prog.setLocal(
           "收集图片资源",
-          baked.chartCount ? `已嵌入 ${baked.chartCount} 个图表（仍在浏览器）` : "读取本地图片…"
+          baked.chartCount
+            ? isHtml
+              ? `已嵌入 ${baked.chartCount} 个流体图表（仍在浏览器）`
+              : `已嵌入 ${baked.chartCount} 个图表（仍在浏览器）`
+            : "读取本地图片…"
         );
         const assetImages = await collectReferencedAssetsWithData(baked.text).catch(() => []);
-        const images = [...assetImages, ...(baked.images || [])];
+        const images = isHtml ? assetImages : [...assetImages, ...(baked.images || [])];
         const plan =
           typeof QR.exportPandocPlan === "function" ? QR.exportPandocPlan(to) : { from: "gfm", args: [] };
+        // HTML：允许 MD 内 raw figure/svg；Pandoc 不支持时再回退 gfm
+        let fromFmt = plan.from || "gfm";
+        if (isHtml && baked.chartCount) fromFmt = "gfm+raw_html";
         prog.setLocalPct(4);
         prog.setLocal(
           "上传到本机桥",
           isPdf
             ? "Pandoc → PDF · 无超时 · 下方应变为「桥进度正常」"
-            : `Pandoc → ${toLabel}`
+            : isHtml
+              ? "Pandoc → HTML · 导出后注入铺满样式"
+              : `Pandoc → ${toLabel}`
         );
         prog.startPoll();
         prog.markConvertPosted?.();
         prog.setAliveText?.("正在上传到桥并拉取进度…", "");
         let res;
+        let data = null;
+        let usedFrom = fromFmt;
         try {
-          res = await fetch(`${baseUrl()}/pandoc/convert`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
-            body: JSON.stringify({
-              text: baked.text,
-              to,
-              from: plan.from || "gfm",
-              title,
-              images,
-              quality: "max",
-            }),
-            signal: abort?.signal,
-            cache: "no-store",
-          });
+          const postConvert = (from) =>
+            fetch(`${baseUrl()}/pandoc/convert`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+              body: JSON.stringify({
+                text: baked.text,
+                to,
+                from,
+                title,
+                images,
+                quality: "max",
+              }),
+              signal: abort?.signal,
+              cache: "no-store",
+            });
+          res = await postConvert(usedFrom);
+          data = await res.json().catch(() => null);
+          // 旧 pandoc 可能不认 gfm+raw_html：回退 gfm（图表可能变代码块，仍注入铺满 CSS）
+          if (
+            isHtml &&
+            usedFrom.includes("raw_html") &&
+            (!res.ok || !data?.ok) &&
+            /Unknown input format|raw_html|Unrecognized/i.test(String(data?.error || ""))
+          ) {
+            usedFrom = "gfm";
+            res = await postConvert(usedFrom);
+            data = await res.json().catch(() => null);
+          }
         } catch (err) {
           prog.close();
           if (prog.wasCancelled?.() || err?.name === "AbortError") {
@@ -6531,7 +6687,6 @@ a{color:${v.accent}}
           showBridgeHelpModal("导出为 Pandoc 格式");
           throw new Error("本机桥未启动");
         }
-        const data = await res.json().catch(() => null);
         if (!res.ok || !data?.ok) {
           let msg = data?.error || `本机桥未响应（HTTP ${res.status}），请确认桥已启动且装了 pandoc`;
           if (data?.needsBridgeUpdate || /PDF 请用前端打印|需额外 LaTeX|Pandoc 模块过旧|旁路 pandoc-ops/i.test(msg)) {
@@ -6557,8 +6712,19 @@ a{color:${v.accent}}
           throw new Error(msg);
         }
         prog.setLocal("下载结果", data.filename || `${toLabel}`);
-        const bytes = Uint8Array.from(atob(data.dataBase64 || ""), (c) => c.charCodeAt(0));
-        downloadBlob(new Blob([bytes]), data.filename || `${slugify(title)}.${to}`);
+        let bytes = Uint8Array.from(atob(data.dataBase64 || ""), (c) => c.charCodeAt(0));
+        let outName = data.filename || `${slugify(title)}.${to === "html" ? "html" : to}`;
+        if (isHtml) {
+          try {
+            const raw = new TextDecoder().decode(bytes);
+            const widened = widenPandocHtml(raw);
+            bytes = new TextEncoder().encode(widened);
+            outName = outName.replace(/\.html?$/i, "") + ".html";
+          } catch (_) {
+            /* 保底仍下原文件 */
+          }
+        }
+        downloadBlob(new Blob([bytes], isHtml ? { type: "text/html;charset=utf-8" } : undefined), outName);
         prog.close();
       } catch (err) {
         try {
@@ -8482,6 +8648,7 @@ a{color:${v.accent}}
           `<img id="mdm-lightbox-img" class="mdm-lightbox-img" alt="" draggable="false" />` +
           `<div id="mdm-lightbox-svghost" class="mdm-lightbox-svghost" hidden></div>` +
           `<pre id="mdm-lightbox-codehost" class="mdm-lightbox-codehost" hidden><code></code></pre>` +
+          `<div id="mdm-lightbox-tablehost" class="mdm-lightbox-tablehost" hidden></div>` +
           `</div>` +
           `<div class="mdm-lightbox-toolbar">` +
           `<button type="button" class="ghost-btn" id="mdm-lightbox-zoom-out" aria-label="缩小">－</button>` +
@@ -8496,6 +8663,8 @@ a{color:${v.accent}}
           `<button type="button" data-fmt="jpeg">JPEG</button>` +
           `<button type="button" data-fmt="webp">WebP</button>` +
           `<button type="button" data-fmt="code" id="mdm-lightbox-dl-code" hidden>源码文件</button>` +
+          `<button type="button" data-fmt="csv" id="mdm-lightbox-dl-csv" hidden>CSV</button>` +
+          `<button type="button" data-fmt="table-html" id="mdm-lightbox-dl-table-html" hidden>HTML</button>` +
           `</div></details>` +
           `</div></div>`;
         document.body.appendChild(dlg);
@@ -8505,6 +8674,7 @@ a{color:${v.accent}}
       const imgEl = dlg.querySelector("#mdm-lightbox-img");
       let svgHost = dlg.querySelector("#mdm-lightbox-svghost");
       let codeHost = dlg.querySelector("#mdm-lightbox-codehost");
+      let tableHost = dlg.querySelector("#mdm-lightbox-tablehost");
       if (stage && !svgHost) {
         svgHost = document.createElement("div");
         svgHost.id = "mdm-lightbox-svghost";
@@ -8520,6 +8690,13 @@ a{color:${v.accent}}
         codeHost.innerHTML = "<code></code>";
         stage.appendChild(codeHost);
       }
+      if (stage && !tableHost) {
+        tableHost = document.createElement("div");
+        tableHost.id = "mdm-lightbox-tablehost";
+        tableHost.className = "mdm-lightbox-tablehost";
+        tableHost.hidden = true;
+        stage.appendChild(tableHost);
+      }
       const cap = dlg.querySelector("#mdm-lightbox-cap");
       const pctEl = dlg.querySelector("#mdm-lightbox-zoom-pct");
       const closeBtn = dlg.querySelector("#mdm-lightbox-close");
@@ -8529,36 +8706,48 @@ a{color:${v.accent}}
       const dlWrap = dlg.querySelector("#mdm-lightbox-dl");
       const dlSvgBtn = dlg.querySelector("#mdm-lightbox-dl-svg");
       let dlCodeBtn = dlg.querySelector("#mdm-lightbox-dl-code");
-      if (!dlCodeBtn && dlWrap) {
-        const menu = dlWrap.querySelector(".mdm-lightbox-dl-menu");
-        if (menu) {
-          dlCodeBtn = document.createElement("button");
-          dlCodeBtn.type = "button";
-          dlCodeBtn.id = "mdm-lightbox-dl-code";
-          dlCodeBtn.setAttribute("data-fmt", "code");
-          dlCodeBtn.hidden = true;
-          dlCodeBtn.textContent = "源码文件";
-          menu.appendChild(dlCodeBtn);
+      let dlCsvBtn = dlg.querySelector("#mdm-lightbox-dl-csv");
+      let dlTableHtmlBtn = dlg.querySelector("#mdm-lightbox-dl-table-html");
+      const ensureDlBtn = (id, fmt, label) => {
+        let btn = dlg.querySelector(`#${id}`);
+        if (!btn && dlWrap) {
+          const menu = dlWrap.querySelector(".mdm-lightbox-dl-menu");
+          if (menu) {
+            btn = document.createElement("button");
+            btn.type = "button";
+            btn.id = id;
+            btn.setAttribute("data-fmt", fmt);
+            btn.hidden = true;
+            btn.textContent = label;
+            menu.appendChild(btn);
+          }
         }
-      }
-      if (!stage || !imgEl || !svgHost || !codeHost) return;
+        return btn;
+      };
+      dlCodeBtn = ensureDlBtn("mdm-lightbox-dl-code", "code", "源码文件") || dlCodeBtn;
+      dlCsvBtn = ensureDlBtn("mdm-lightbox-dl-csv", "csv", "CSV") || dlCsvBtn;
+      dlTableHtmlBtn = ensureDlBtn("mdm-lightbox-dl-table-html", "table-html", "HTML") || dlTableHtmlBtn;
+      if (!stage || !imgEl || !svgHost || !codeHost || !tableHost) return;
 
       const view = { scale: 1, x: 0, y: 0, dragging: false, lastX: 0, lastY: 0 };
       let objectUrlToRevoke = null;
       let exportSvgMarkup = null;
       let exportCodeText = "";
       let exportCodeExt = "txt";
+      let exportTableEl = null;
       let exportBaseName = "image";
-      /** @type {"img"|"svg"|"code"} */
+      /** @type {"img"|"svg"|"code"|"table"} */
       let previewMode = "img";
       let lightboxExporting = false;
       let mermaidOpenToken = 0;
       const SVG_PREVIEW_CAP = "图表预览 · 滚轮缩放 · 空白处拖动 · 可划词复制 · 可下载";
       const CODE_PREVIEW_CAP = "代码预览 · 滚轮缩放 · 拖动平移 · 可划词复制 · 可下载";
+      const TABLE_PREVIEW_CAP = "表格预览 · 滚轮缩放 · Shift+拖平移 · 可划词 · 可下载 CSV/HTML";
 
       function activeLayer() {
         if (previewMode === "svg") return svgHost;
         if (previewMode === "code") return codeHost;
+        if (previewMode === "table") return tableHost;
         return imgEl;
       }
 
@@ -8617,6 +8806,14 @@ a{color:${v.accent}}
           view.y = 0;
           syncTransform();
           return;
+        } else if (previewMode === "table") {
+          nw = Math.max(tableHost.scrollWidth || 1, sw * 0.9);
+          nh = Math.max(tableHost.scrollHeight || 1, sh * 0.4);
+          view.scale = Math.min(1.1, Math.max(0.5, Math.min(sw / nw, sh / nh) * 0.95));
+          view.x = 0;
+          view.y = 0;
+          syncTransform();
+          return;
         } else {
           nw = imgEl.naturalWidth || 1;
           nh = imgEl.naturalHeight || 1;
@@ -8643,10 +8840,14 @@ a{color:${v.accent}}
       }
 
       function syncDownloadUi() {
-        if (dlSvgBtn) dlSvgBtn.hidden = !exportSvgMarkup || previewMode === "code";
-        if (dlCodeBtn) dlCodeBtn.hidden = previewMode !== "code";
+        const isCode = previewMode === "code";
+        const isTable = previewMode === "table";
+        if (dlSvgBtn) dlSvgBtn.hidden = !exportSvgMarkup || isCode || isTable;
+        if (dlCodeBtn) dlCodeBtn.hidden = !isCode;
+        if (dlCsvBtn) dlCsvBtn.hidden = !isTable;
+        if (dlTableHtmlBtn) dlTableHtmlBtn.hidden = !isTable;
         dlWrap?.querySelectorAll('button[data-fmt="png"],button[data-fmt="jpeg"],button[data-fmt="webp"]').forEach((b) => {
-          b.hidden = previewMode === "code";
+          b.hidden = isCode || isTable;
         });
         if (dlWrap) {
           dlWrap.open = false;
@@ -8675,6 +8876,8 @@ a{color:${v.accent}}
         codeHost.hidden = true;
         const codeEl = codeHost.querySelector("code");
         if (codeEl) codeEl.textContent = "";
+        tableHost.hidden = true;
+        tableHost.innerHTML = "";
         if (cap) cap.textContent = "";
         if (objectUrlToRevoke) {
           URL.revokeObjectURL(objectUrlToRevoke);
@@ -8683,9 +8886,10 @@ a{color:${v.accent}}
         exportSvgMarkup = null;
         exportCodeText = "";
         exportCodeExt = "txt";
+        exportTableEl = null;
         exportBaseName = "image";
         previewMode = "img";
-        stage.classList.remove("is-code-mode");
+        stage.classList.remove("is-code-mode", "is-table-mode");
         syncDownloadUi();
         view.scale = 1;
         view.x = 0;
@@ -8715,12 +8919,15 @@ a{color:${v.accent}}
         if (opts.objectUrl) objectUrlToRevoke = opts.objectUrl;
         exportSvgMarkup = opts.svgMarkup || null;
         exportCodeText = "";
+        exportTableEl = null;
         exportBaseName = String(opts.baseName || "image").replace(/[^\w\u4e00-\u9fff.-]+/g, "_") || "image";
         previewMode = "img";
-        stage.classList.remove("is-code-mode");
+        stage.classList.remove("is-code-mode", "is-table-mode");
         svgHost.innerHTML = "";
         svgHost.hidden = true;
         codeHost.hidden = true;
+        tableHost.hidden = true;
+        tableHost.innerHTML = "";
         imgEl.hidden = false;
         syncDownloadUi();
         view.scale = 1;
@@ -8749,13 +8956,16 @@ a{color:${v.accent}}
         }
         exportSvgMarkup = null;
         exportCodeText = "";
+        exportTableEl = null;
         exportBaseName = "mermaid-chart";
         previewMode = "svg";
-        stage.classList.remove("is-code-mode");
+        stage.classList.remove("is-code-mode", "is-table-mode");
         imgEl.removeAttribute("src");
         imgEl.alt = "";
         imgEl.hidden = true;
         codeHost.hidden = true;
+        tableHost.hidden = true;
+        tableHost.innerHTML = "";
         svgHost.hidden = false;
         svgHost.innerHTML = "";
         syncDownloadUi();
@@ -8772,11 +8982,14 @@ a{color:${v.accent}}
         if (!markup) return;
         exportSvgMarkup = markup;
         exportCodeText = "";
+        exportTableEl = null;
         exportBaseName = "mermaid-chart";
         previewMode = "svg";
-        stage.classList.remove("is-code-mode");
+        stage.classList.remove("is-code-mode", "is-table-mode");
         imgEl.hidden = true;
         codeHost.hidden = true;
+        tableHost.hidden = true;
+        tableHost.innerHTML = "";
         svgHost.hidden = false;
         svgHost.innerHTML = markup;
         syncDownloadUi();
@@ -8799,13 +9012,17 @@ a{color:${v.accent}}
         exportSvgMarkup = null;
         exportCodeText = text;
         exportCodeExt = codeBlockExt(pre);
+        exportTableEl = null;
         exportBaseName = `code`;
         previewMode = "code";
         stage.classList.add("is-code-mode");
+        stage.classList.remove("is-table-mode");
         imgEl.hidden = true;
         imgEl.removeAttribute("src");
         svgHost.hidden = true;
         svgHost.innerHTML = "";
+        tableHost.hidden = true;
+        tableHost.innerHTML = "";
         codeHost.hidden = false;
         const codeEl = codeHost.querySelector("code") || codeHost;
         // 保留预览高亮：克隆源 code 的 HTML；无则纯文本
@@ -8828,7 +9045,42 @@ a{color:${v.accent}}
         window.requestAnimationFrame(() => fitImage());
       }
 
+      function openTableLightbox(table) {
+        if (!table) {
+          toast("表格为空");
+          return;
+        }
+        document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
+        exportSvgMarkup = null;
+        exportCodeText = "";
+        exportTableEl = table;
+        exportBaseName = "table";
+        previewMode = "table";
+        stage.classList.add("is-table-mode");
+        stage.classList.remove("is-code-mode");
+        imgEl.hidden = true;
+        imgEl.removeAttribute("src");
+        svgHost.hidden = true;
+        svgHost.innerHTML = "";
+        codeHost.hidden = true;
+        tableHost.hidden = false;
+        tableHost.innerHTML = "";
+        const clone = table.cloneNode(true);
+        clone.querySelectorAll(".mdm-table-toolbar").forEach((n) => n.remove());
+        tableHost.appendChild(clone);
+        syncDownloadUi();
+        view.scale = 1;
+        view.x = 0;
+        view.y = 0;
+        view.dragging = false;
+        syncStageCursor(false);
+        if (cap) cap.textContent = TABLE_PREVIEW_CAP;
+        showModal();
+        window.requestAnimationFrame(() => fitImage());
+      }
+
       window.__mdmOpenCodeLightbox = openCodeLightbox;
+      window.__mdmOpenTableLightbox = openTableLightbox;
 
       function openMermaidLightbox(div) {
         const svg = div?.querySelector?.("svg");
@@ -8892,6 +9144,26 @@ a{color:${v.accent}}
             if (dlWrap) dlWrap.open = false;
             return;
           }
+          if (fmt === "csv" || fmt === "table-html") {
+            const srcTable = exportTableEl || tableHost.querySelector("table");
+            if (!srcTable) {
+              toast("表格为空");
+              return;
+            }
+            if (fmt === "csv") {
+              const csv = tableToCsv(srcTable);
+              downloadBlob(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }), "table.csv");
+              toast("已下载 table.csv");
+            } else {
+              downloadBlob(
+                new Blob([tableToHtmlSnippet(srcTable)], { type: "text/html;charset=utf-8" }),
+                "table.html"
+              );
+              toast("已下载 table.html");
+            }
+            if (dlWrap) dlWrap.open = false;
+            return;
+          }
           if (fmt === "svg") {
             if (!markupSnapshot) {
               toast("当前预览无 SVG");
@@ -8905,6 +9177,10 @@ a{color:${v.accent}}
           }
           if (previewMode === "code") {
             toast("代码请用「源码文件」下载");
+            return;
+          }
+          if (previewMode === "table") {
+            toast("表格请用 CSV / HTML 下载");
             return;
           }
           const ext = fmt === "jpeg" ? "jpg" : fmt;
@@ -9038,9 +9314,11 @@ a{color:${v.accent}}
           syncStageCursor(true);
           return;
         }
-        if (previewMode === "code" && e.target.closest?.("code, pre")) {
-          // 允许划词；按住空白边缘仍可拖动画布——仅当选区为空且按住 stage 空白时拖
-          // 简化：代码模式默认不拖，只滚轮缩放；Shift+拖 平移
+        if (
+          (previewMode === "code" && e.target.closest?.("code, pre")) ||
+          (previewMode === "table" && e.target.closest?.("table, th, td"))
+        ) {
+          // 允许划词；Shift+拖 平移
           if (!e.shiftKey) {
             view.dragging = false;
             return;
@@ -9076,7 +9354,7 @@ a{color:${v.accent}}
       stage.addEventListener("dblclick", (e) => {
         // 活 SVG / 代码上双击文字 = 选词，不缩放
         if (previewMode === "svg" && isSvgTextTarget(e.target)) return;
-        if (previewMode === "code") return;
+        if (previewMode === "code" || previewMode === "table") return;
         e.preventDefault();
         if (view.scale > 1.05) fitImage();
         else zoomAt(e.clientX, e.clientY, clampScale(Math.max(view.scale * 1.8, 1.5)));

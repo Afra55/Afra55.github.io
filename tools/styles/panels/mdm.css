@@ -376,7 +376,41 @@
   white-space: inherit;
 }
 .mdm-lightbox-codehost[hidden] { display: none !important; }
-.mdm-lightbox-stage.is-code-mode { cursor: text; touch-action: pan-y; }
+.mdm-lightbox-stage.is-code-mode,
+.mdm-lightbox-stage.is-table-mode { cursor: text; touch-action: pan-y; }
+.mdm-lightbox-tablehost {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: var(--panel-strong, rgba(0, 0, 0, 0.25));
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  overflow: visible;
+  text-align: left;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.mdm-lightbox-tablehost table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  background: var(--bg-0, #111);
+}
+.mdm-lightbox-tablehost th,
+.mdm-lightbox-tablehost td {
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.65rem;
+  white-space: nowrap;
+}
+.mdm-lightbox-tablehost th {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.mdm-lightbox-tablehost[hidden] { display: none !important; }
 .mdm-lightbox-toolbar {
   display: flex;
   align-items: center;
@@ -707,6 +741,41 @@ html[data-theme-scheme="light"] .hljs-title, html[data-theme-scheme="light"] .hl
 html[data-theme-scheme="light"] .hljs-name { color: #6f42c1; }
 html[data-theme-scheme="light"] .hljs-tag { color: #22863a; }
 html[data-theme-scheme="light"] .hljs-meta, html[data-theme-scheme="light"] .hljs-deletion { color: #b31d28; }
+
+/* 表格工具条：放大 / 下载 CSV / HTML */
+.mdm-table-wrap {
+  position: relative;
+  margin: 0.6rem 0;
+  overflow: auto;
+}
+.mdm-table-toolbar {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  z-index: 2;
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.mdm-table-wrap:hover .mdm-table-toolbar { opacity: 1; }
+.mdm-table-toolbar .mdm-table-btn {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel, rgba(0, 0, 0, 0.35));
+  color: var(--muted);
+  cursor: pointer;
+}
+.mdm-table-toolbar .mdm-table-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+@media (hover: none) {
+  .mdm-table-toolbar { opacity: 1; }
+}
 
 /* 代码块工具条：放大 / 下载 / 复制 */
 .mdm-code-toolbar {

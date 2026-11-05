@@ -74,6 +74,7 @@
     mediawiki: { from: "gfm", args: [] },
     org: { from: "gfm", args: [] },
     opml: { from: "gfm", args: [] },
+    // 前端导出 HTML 时若含 Mermaid，会改用 gfm+raw_html 并注入铺满屏宽 CSS
     html: { from: "gfm", args: ["--standalone", "--embed-resources"] },
     pdf: { from: "gfm", args: ["--pdf-engine=xelatex"], note: "印刷级：仅 XeLaTeX" },
     asciidoc: { from: "gfm", args: [] },
