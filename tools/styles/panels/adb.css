@@ -151,8 +151,12 @@
   }
 }
 
-.adb-info.is-loading {
-  display: none !important;
+/* 旧路径整包加载时仍可淡一点；流式扫用 is-streaming，信息区始终可见 */
+.adb-info.is-loading:not(.is-streaming) {
+  opacity: 0.55;
+}
+.adb-info.is-streaming .meta-row strong {
+  transition: color 0.15s ease;
 }
 
 .adb-getprop-open-row {

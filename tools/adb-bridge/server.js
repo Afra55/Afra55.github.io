@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.120";
+const BRIDGE_VERSION = "0.9.121";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -1206,9 +1206,9 @@ async function readImei(serial) {
 }
 
 async function deviceInfo(serial, { onPartial, shouldAbort } = {}) {
-  const emit = (info, stage) => {
+  const emit = async (info, stage) => {
     try {
-      onPartial?.(info, stage);
+      await onPartial?.(info, stage);
     } catch (_) {}
   };
   const aborted = () => {
@@ -1228,7 +1228,7 @@ async function deviceInfo(serial, { onPartial, shouldAbort } = {}) {
       ready: false,
       message: `设备状态为 ${base.state}，请在手机上授权 USB 调试`,
     };
-    emit(notReady, "state");
+    await emit(notReady, "state");
     return notReady;
   }
 
@@ -1275,7 +1275,7 @@ async function deviceInfo(serial, { onPartial, shouldAbort } = {}) {
     uptime: "",
     tradein: "",
   };
-  emit(info, "base");
+  await emit(info, "base");
   if (aborted()) return info;
 
   const keys = [
@@ -1336,14 +1336,14 @@ async function deviceInfo(serial, { onPartial, shouldAbort } = {}) {
     locale: props["persist.sys.locale"] || props["ro.product.locale"] || "",
     variantId: String(props["persist.vendor.custom.variant.id"] || "").trim(),
   };
-  emit(info, "props");
+  await emit(info, "props");
 
   const runStep = async (stage, fn) => {
     if (aborted()) return;
     try {
       await fn();
     } catch (_) {}
-    emit(info, stage);
+    await emit(info, stage);
   };
 
   await runStep("screen", async () => {
@@ -1466,7 +1466,7 @@ async function deviceInfo(serial, { onPartial, shouldAbort } = {}) {
     }
   });
 
-  emit(info, "done");
+  await emit(info, "done");
   return info;
 }
 
@@ -6583,22 +6583,36 @@ async function handleApi(req, res, url) {
         "Content-Type": "application/x-ndjson; charset=utf-8",
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
+        // 禁止反向代理 / 浏览器中间层攒包，否则前端会「最后一起到」
+        "X-Accel-Buffering": "no",
       };
       applyCors(headers, origin);
       res.writeHead(200, headers);
+      try {
+        res.socket?.setNoDelay?.(true);
+      } catch (_) {}
       let closed = false;
       req.on("close", () => {
         closed = true;
       });
       const writeLine = (obj) => {
         if (closed || res.writableEnded) return;
-        res.write(`${JSON.stringify(obj)}\n`);
+        const ok = res.write(`${JSON.stringify(obj)}\n`);
+        // 尽量立刻刷出（Node http 无 flush 时靠 setImmediate 让出事件循环）
+        if (typeof res.flush === "function") {
+          try {
+            res.flush();
+          } catch (_) {}
+        }
+        return ok;
       };
+      const yieldTick = () => new Promise((r) => setImmediate(r));
       try {
         const info = await deviceInfo(serial, {
           shouldAbort: () => closed,
-          onPartial: (partial, stage) => {
+          onPartial: async (partial, stage) => {
             writeLine({ ok: true, stage: stage || "", info: partial, done: stage === "done" });
+            await yieldTick();
           },
         });
         if (!closed) writeLine({ ok: true, stage: "done", info, done: true });
