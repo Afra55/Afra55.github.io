@@ -943,12 +943,21 @@
   
       let adbInfoLoadToken = 0;
 
-      function setAdbInfoLoading(on) {
+      function setAdbInfoLoading(on, { progressive = false } = {}) {
         const loading = $("#adb-info-loading");
         const info = $("#adb-info");
         if (loading) loading.hidden = !on;
-        if (info) info.classList.toggle("is-loading", Boolean(on));
-        if (on && adbInfoMeta) adbInfoMeta.textContent = "正在抓取信息…";
+        // progressive：信息区必须可见（边扫边填）；勿再 display:none
+        if (info) {
+          if (progressive) {
+            info.classList.remove("is-loading");
+            info.classList.toggle("is-streaming", Boolean(on));
+          } else {
+            info.classList.toggle("is-loading", Boolean(on));
+            info.classList.remove("is-streaming");
+          }
+        }
+        if (on && adbInfoMeta) adbInfoMeta.textContent = progressive ? "正在抓取（边扫边显）…" : "正在抓取信息…";
       }
 
       function clearAdbInfoFields() {
@@ -2377,9 +2386,9 @@
           return;
         }
         clearAdbInfoFields();
-        setAdbInfoLoading(true);
         const useStream =
           !adbBridgeVersion || bridgeHas("device-info-stream") || bridgeAtLeast("0.9.119");
+        setAdbInfoLoading(true, { progressive: useStream });
         try {
           if (useStream) {
             const res = await adbFetch(`/device/info/stream?serial=${encodeURIComponent(serial)}`);
@@ -2388,6 +2397,12 @@
             const decoder = new TextDecoder();
             let buf = "";
             let lastInfo = null;
+            // 让浏览器有机会在两次 chunk 之间绘制
+            const paint = () =>
+              new Promise((r) => {
+                if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => r());
+                else setTimeout(r, 0);
+              });
             while (true) {
               if (token !== adbInfoLoadToken) {
                 try {
@@ -2399,6 +2414,7 @@
               if (done) break;
               buf += decoder.decode(value, { stream: true });
               let nl;
+              let painted = false;
               while ((nl = buf.indexOf("\n")) >= 0) {
                 const line = buf.slice(0, nl).trim();
                 buf = buf.slice(nl + 1);
@@ -2414,8 +2430,10 @@
                   lastInfo = item.info;
                   const doneLine = Boolean(item.done || item.stage === "done");
                   fillAdbInfo(item.info, { keepLoading: !doneLine, stage: item.stage || "" });
+                  painted = true;
                 }
               }
+              if (painted) await paint();
             }
             if (token !== adbInfoLoadToken) return;
             if (lastInfo) {
