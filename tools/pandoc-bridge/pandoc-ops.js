@@ -1194,6 +1194,7 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     passMax,
     pkgCount: 0,
   };
+  console.log(`[pandoc] convertToPrintPdf · 估 ${pageEst} 页 · 正文 ${String(text || "").length} 字`);
   setConvertProgress("探测 PDF 引擎", "XeLaTeX / MiKTeX", {
     percent: 3,
     phase: "probe",
@@ -1202,7 +1203,9 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     timeoutSec: 0,
     percentSource: "stage",
   });
+  console.log("[pandoc] 正在探测 XeLaTeX / MiKTeX…");
   const pdfInfo = await probePdfEngines();
+  console.log(`[pandoc] 探测结果 · preferred=${pdfInfo.preferred || "无"} · printReady=${!!pdfInfo.printReady}`);
   const engine = String(pdfEngine || pdfInfo.preferred || "").trim() || "xelatex";
   if (!pdfInfo.engines.xelatex?.ok && !pdfInfo.engines[engine]?.ok) {
     const hint =
