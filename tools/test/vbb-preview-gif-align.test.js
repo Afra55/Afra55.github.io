@@ -28,12 +28,19 @@ function loadKeepFns() {
   const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
   const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
-  assert.ok(fromEdit && forEnc && norm);
+  const resolveEnd = vtrim.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const resolveStart = vtrim.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
+  assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && normalizeFps);
   const box = {};
   vm.runInNewContext(
     `
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
-    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 0;
+    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, FRAME_SNAP_SEC = 1 / 30;
+    const ENCODE_BOUND_PAD_SEC = 0;
+    ${normalizeFps[0]}
+    ${resolveEnd[0]}
+    ${resolveStart[0]}
     ${norm[0]}
     ${fromEdit[0]}
     ${forEnc[0]}
@@ -97,17 +104,32 @@ t("编辑后仍 forceAccurateCut（精确切，不靠多删垫）", () => {
   assert.ok(vbb.includes("forceAccurateCut: Boolean(prepared.cutNote)"));
 });
 
-t("编码半开垫兼顾 GIF 帧与源帧", () => {
+t("编码：keep 已半开时不再二次垫（编辑/带 startSec 路径 pad=0）", () => {
   assert.ok(shared.includes("function vbbEncodeHalfOpenPadSec"));
+  // 两处 encode 均：forceAccurateCut / keepAligned / 有 startSec → pad 0
+  const hits = shared.match(/halfOpenPad\s*=\s*[\s\S]*?vbbEncodeHalfOpenPadSec/g) || [];
+  assert.ok(hits.length >= 2, `encode sites=${hits.length}`);
+  for (const h of hits) {
+    assert.ok(
+      /forceAccurateCut|keepAligned|Number\.isFinite\(opts\.startSec\)/.test(h),
+      "keep 对齐路径须跳过二次半开垫"
+    );
+  }
   const m = shared.match(/function vbbEncodeHalfOpenPadSec\([\s\S]*?\n      \}/);
   assert.ok(m);
   const box = {};
   vm.runInNewContext(`${m[0]}\nthis.fn = vbbEncodeHalfOpenPadSec;`, box);
-  const pad15_30 = box.fn(15, 30);
-  const pad20_30 = box.fn(20, 30);
-  // 20fps GIF 时半个 GIF 帧 < 半个 30 源帧 → 必须抬到源帧半宽，否则片尾多帧
-  assert.ok(pad20_30 + 1e-9 >= 0.5 / 30, `pad20_30=${pad20_30}`);
-  assert.ok(pad15_30 + 1e-9 >= 0.5 / 15, `pad15_30=${pad15_30}`);
+  // 旧路径函数仍保留合理下限
+  assert.ok(box.fn(20, 30) + 1e-9 >= 0.5 / 30);
+});
+
+t("预裁切不再对 keep span 二次减半帧", () => {
+  const fn = vbb.slice(
+    vbb.indexOf("async function materializeVbbTrimClip"),
+    vbb.indexOf("async function prepareVbbEncodeSource")
+  );
+  assert.ok(!/1\s*\/\s*60/.test(fn) || fn.includes("禁止再减半帧"), "预裁勿再 span-1/60");
+  assert.ok(fn.includes("禁止再减半帧") || /const dur = Math\.max\(0\.05, Number\(span\)/.test(fn));
 });
 
 t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {
