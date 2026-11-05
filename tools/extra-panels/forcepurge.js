@@ -194,27 +194,27 @@
     async function handleDrop(e) {
       if (!e.dataTransfer) return;
       e.preventDefault();
+      e.stopPropagation();
       $p("#fp-drop")?.classList.remove("is-over");
       let paths = [];
       try {
         paths = window.devtoolsBridgeToken?.pathsFromDataTransfer?.(e.dataTransfer) || [];
       } catch (_) {}
-      if (!paths.length) {
-        const names = [...(e.dataTransfer.files || [])].map((f) => f.name).filter(Boolean);
-        for (const name of names) {
-          try {
-            const r = await api("/resolve", { method: "POST", body: { name } });
-            if (r?.path) paths.push(r.path);
-          } catch (err) {
-            setError(err.message || String(err));
-          }
-        }
-      }
-      if (!paths.length) {
-        setError("浏览器通常不提供完整本地路径。请用「添加文件 / 文件夹」或粘贴绝对路径。");
+      if (paths.length) {
+        await addPaths(paths);
         return;
       }
-      await addPaths(paths);
+      // https 页拖拽通常没有绝对路径：直接打开系统多选，避免「不支持、请点选」死胡同
+      if (metaEl) metaEl.textContent = "浏览器拿不到拖拽路径，正在打开系统选择框…";
+      toast?.("请在弹出的窗口里选择刚才的文件/文件夹");
+      const looksDir = [...(e.dataTransfer.items || [])].some((it) => {
+        try {
+          return it.webkitGetAsEntry?.()?.isDirectory;
+        } catch (_) {
+          return false;
+        }
+      });
+      void doPick(looksDir ? "dir" : "files");
     }
 
     async function runPurge() {
@@ -311,6 +311,9 @@
       root.addEventListener(ev, (e) => {
         if (!e.dataTransfer) return;
         e.preventDefault();
+        try {
+          e.dataTransfer.dropEffect = "copy";
+        } catch (_) {}
         dropEl?.classList.add("is-over");
       })
     );
@@ -318,6 +321,16 @@
       if (e.target === root || e.target === dropEl) dropEl?.classList.remove("is-over");
     });
     root.addEventListener("drop", (e) => void handleDrop(e));
+    dropEl?.addEventListener("click", (e) => {
+      e.preventDefault();
+      void doPick("files");
+    });
+    dropEl?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        void doPick("files");
+      }
+    });
 
     async function connectBridge() {
       try {

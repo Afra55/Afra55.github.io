@@ -293,26 +293,37 @@ async function pickPath(kind = "file") {
   if (!isWindows()) throw new Error("仅支持 Windows");
   const isDir = kind === "dir";
   const multi = kind === "files";
-  // 先建不可见 owner 窗并 Show/Hide，确保对话框能抢到前台（否则常表现为「点了没反应」）
+  // 可见临时 owner + TopMost + 抢前台，避免对话框沉到任务栏「点了没反应」
   const script = [
     "Add-Type -AssemblyName System.Windows.Forms",
+    "Add-Type -AssemblyName System.Drawing",
     "[System.Windows.Forms.Application]::EnableVisualStyles() | Out-Null",
+    "$code = @'",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public class WinFg {",
+    "  [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd);",
+    "  [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);",
+    "  [DllImport(\"user32.dll\")] public static extern bool BringWindowToTop(IntPtr hWnd);",
+    "}",
+    "'@",
+    "Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue | Out-Null",
     "$f = New-Object System.Windows.Forms.Form",
+    "$f.Text = 'DevTools 选择文件'",
     "$f.TopMost = $true",
-    "$f.ShowInTaskbar = $false",
-    "$f.Opacity = 0",
-    "$f.Width = 1",
-    "$f.Height = 1",
-    "$f.StartPosition = 'Manual'",
-    "$f.Location = New-Object System.Drawing.Point(-2000,-2000)",
+    "$f.ShowInTaskbar = $true",
+    "$f.Opacity = 0.01",
+    "$f.Width = 320",
+    "$f.Height = 80",
+    "$f.StartPosition = 'CenterScreen'",
     "$f.Show() | Out-Null",
     "$f.Activate() | Out-Null",
-    "$f.Hide() | Out-Null",
+    "try { [void][WinFg]::ShowWindow($f.Handle, 9); [void][WinFg]::BringWindowToTop($f.Handle); [void][WinFg]::SetForegroundWindow($f.Handle) } catch {}",
     isDir
-      ? "$d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='选择文件夹（可多次添加）'; $d.ShowNewFolderButton=$false"
+      ? "$d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='选择文件夹'; $d.ShowNewFolderButton=$false"
       : multi
-        ? "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title='选择文件（可多选）'; $d.Multiselect=$true; $d.CheckFileExists=$true; $d.CheckPathExists=$true"
-        : "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title='选择文件'; $d.CheckFileExists=$false; $d.CheckPathExists=$true; $d.ValidateNames=$false",
+        ? "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title='选择文件（可多选）'; $d.Multiselect=$true; $d.CheckFileExists=$true; $d.CheckPathExists=$true; $d.RestoreDirectory=$true"
+        : "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Title='选择文件'; $d.CheckFileExists=$true; $d.CheckPathExists=$true; $d.RestoreDirectory=$true",
     "$r = $d.ShowDialog($f)",
     "$f.Close() | Out-Null",
     "if ($r -eq [System.Windows.Forms.DialogResult]::OK) {",
@@ -323,7 +334,7 @@ async function pickPath(kind = "file") {
         : "  if ($d.FileName) { Write-Output $d.FileName }",
     "}",
   ].join("\n");
-  const { stdout } = await runPowerShell(script, { sta: true, timeout: 120000 });
+  const { stdout } = await runPowerShell(script, { sta: true, timeout: 180000 });
   const paths = String(stdout || "")
     .trim()
     .split(/\r?\n/)
