@@ -1209,8 +1209,11 @@
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
-        // keep 已半开仍不够：编码再收片尾垫，frameCount 按收紧窗算，避免 -frames:v 逼出黄柄外画面
-        const halfOpenPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
+        // keep 已半开仍不够：片头/片尾编码再收，frameCount 按收紧窗算
+        const headPad = vbbEncodeSpanHeadPadSec(fps, opts.srcFps, opts, startSec);
+        const tailPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
+        const halfOpenPad = headPad + tailPad;
+        let encodeSs = Math.max(0, startSec + headPad);
         let encodeT = Math.max(0.05, span - halfOpenPad);
         const effSpan = encodeT / speed;
         const naturalFrames = Math.max(2, Math.floor(effSpan * fps + 1e-6));
@@ -1264,7 +1267,6 @@
         let inName = `in.${ext}`;
         let segName = null;
         let encodeInput = inName;
-        let encodeSs = startSec;
   
         try {
           ticker.setPhase(`${stageLabel}本地载入`);
@@ -1283,16 +1285,15 @@
           const wantSeg =
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
-            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
+            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05 || headPad > 0);
           if (wantSeg) {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            // 半开 [start, start+span)；倍速时必须精确切，禁止 copy 关键帧少切
+            // 半开 [encodeSs, encodeSs+encodeT)；用已含片头垫的起点
             const cutDur = encodeT;
-            // 编辑对齐 / 倍速 / 非片头：禁止 copy，避免关键帧多带片头或接点帧
-            const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
-              accurate: speed > 1.01 || Boolean(opts.forceAccurateCut),
+            const cutArgs = buildVbbSegmentCutArgs(inName, segName, encodeSs, cutDur, {
+              accurate: speed > 1.01 || Boolean(opts.forceAccurateCut) || headPad > 0,
             });
             const cutCode = await ffmpeg.exec(cutArgs);
             if (aborted()) throw new Error("已取消");
@@ -1573,24 +1574,39 @@
       }
 
       /**
-       * keep 对齐路径片尾垫：预览 keep 已按 1/srcFps 半开，但 ffmpeg fps 滤镜仍常在
-       * 黄柄外多吐 1～数帧（预览播对、GIF 片尾多几帧）。编码窗再收 2 帧，宁可少 1 帧。
-       * 只动 -t / frameCount，不改预览 keep。
+       * keep 对齐路径片头/片尾垫（秒）：预览 keep 已半开，ffmpeg 仍易在黄柄外多吐。
+       * 两端各收 2 帧；只动编码 -ss/-t / frameCount，不改预览 keep。
        */
-      function vbbEncodeKeepTailPadSec(gifFps, srcFps) {
+      function vbbEncodeKeepEdgePadSec(gifFps, srcFps) {
         const g = 1 / Math.max(8, Number(gifFps) || 15);
         const src = Number(srcFps) || 0;
         const s = src >= 5 && src <= 240 ? 1 / src : 1 / 25;
         return Math.max(2 * g, 2 * s);
       }
 
-      /** 编辑/精确切用 keep 尾垫；其它走旧半开垫 */
+      /** @deprecated 同 vbbEncodeKeepEdgePadSec（片尾） */
+      function vbbEncodeKeepTailPadSec(gifFps, srcFps) {
+        return vbbEncodeKeepEdgePadSec(gifFps, srcFps);
+      }
+
+      /** 编辑/精确切：片尾垫；其它走旧半开垫 */
       function vbbEncodeSpanTailPadSec(gifFps, srcFps, opts) {
         const o = opts || {};
         if (o.forceAccurateCut || o.keepAligned || Number.isFinite(o.startSec)) {
-          return vbbEncodeKeepTailPadSec(gifFps, srcFps);
+          return vbbEncodeKeepEdgePadSec(gifFps, srcFps);
         }
         return vbbEncodeHalfOpenPadSec(gifFps, srcFps);
+      }
+
+      /**
+       * 编辑路径片头垫：startSec>0 时把 -ss 再推后 2 帧，并缩短 encodeT。
+       * startSec≈0（整段/已预裁）不垫，避免误删片头内容。
+       */
+      function vbbEncodeSpanHeadPadSec(gifFps, srcFps, opts, startSec) {
+        const o = opts || {};
+        if (!(o.forceAccurateCut || o.keepAligned || Number.isFinite(o.startSec))) return 0;
+        if (!(Number(startSec) > 0.02)) return 0;
+        return vbbEncodeKeepEdgePadSec(gifFps, srcFps);
       }
 
       /**
@@ -1872,9 +1888,11 @@
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
-        // 面板侧先收 keep 尾垫；桥内再收半帧，叠加以防片尾多吐
-        const halfOpenPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
-        const encodeSpan = Math.max(0.05, span - halfOpenPad);
+        // 面板侧先收片头/片尾垫；桥内再收半帧
+        const headPad = vbbEncodeSpanHeadPadSec(fps, opts.srcFps, opts, startSec);
+        const tailPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
+        const encodeStart = Math.max(0, startSec + headPad);
+        const encodeSpan = Math.max(0.05, span - headPad - tailPad);
         const effSpan = encodeSpan / speed;
         const frameCount = Math.max(2, Math.floor(effSpan * fps + 1e-6));
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
@@ -1900,7 +1918,7 @@
         q.set("fps", String(fps));
         q.set("width", String(outW));
         q.set("quality", String(gifskiQuality));
-        q.set("startSec", String(startSec));
+        q.set("startSec", String(encodeStart));
         q.set("span", String(encodeSpan));
         q.set("speed", String(speed));
         if (Math.abs(bright) >= 0.01) q.set("brightness", String(bright));
@@ -2046,7 +2064,10 @@
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
-        const halfOpenPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
+        const headPad = vbbEncodeSpanHeadPadSec(fps, opts.srcFps, opts, startSec);
+        const tailPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
+        const halfOpenPad = headPad + tailPad;
+        let encodeSs = Math.max(0, startSec + headPad);
         let encodeT = Math.max(0.05, span - halfOpenPad);
         const effSpan = encodeT / speed;
         // 半开 [start, end)：向下取整帧数，避免 round 多吃片尾 1～数帧
@@ -2146,8 +2167,7 @@
         let inName = `in.${ext}`;
         let segName = null;
         let encodeInput = inName;
-        let encodeSs = startSec;
-        // encodeT / halfOpenPad 已在上方按 keep 尾垫算好
+        // encodeSs / encodeT / headPad / tailPad 已在上方算好
 
         try {
           ticker.setPhase(`${stageLabel}本地载入`);
@@ -2162,14 +2182,14 @@
           const wantSeg =
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
-            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
+            (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05 || headPad > 0);
           if (wantSeg) {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
             const cutDur = encodeT;
-            const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
-              accurate: speed > 1.01 || Boolean(opts.forceAccurateCut),
+            const cutArgs = buildVbbSegmentCutArgs(inName, segName, encodeSs, cutDur, {
+              accurate: speed > 1.01 || Boolean(opts.forceAccurateCut) || headPad > 0,
             });
             const cutCode = await ffmpeg.exec(cutArgs);
             if (aborted()) throw new Error("已取消");

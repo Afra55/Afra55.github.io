@@ -75,10 +75,10 @@
     return Math.min(START_KEEP_SEC, endKeep * 0.5);
   }
   /**
-   * 仅「删中间」接点：成片相对预览 keep 再收 1 帧（编码器/fps 滤镜易多吐边界帧）。
-   * 无 cutouts 时仍为 0，黄柄片头片尾所见即所得不叠加。
+   * 仅「删中间」接点：成片相对预览 keep 再收 2 帧（与编码片头/片尾垫同量，防多段接点多吐）。
+   * 无 cutouts 时仍不叠；单段片头片尾由编码 -ss/-t 垫处理。
    */
-  const ENCODE_CUT_JUNCTION_PAD_FRAMES = 1;
+  const ENCODE_CUT_JUNCTION_PAD_FRAMES = 2;
   /** @deprecated 全局黄柄垫已取消；保留 0 以免旧调用/测试读字段报错 */
   const ENCODE_BOUND_PAD_SEC = 0;
   let uidSeq = 0;
@@ -2534,11 +2534,10 @@
     let cursor = trimStart;
     for (const c of cuts) {
       // 闭区间：红柄 cut.start / cut.end 所见帧都要删。
-      // 上一段在 cut.start 前收 endKeep；下一段从 cut.end 起空 2 帧再接（宁可多删 1 帧），
-      // 否则 GIF 在「中间段片尾」接点常往前多吐几帧删不掉的画面（预览跳切看不出）。
+      // 上一段在 cut.start 前空 2 帧、下一段从 cut.end 起空 2 帧（两端对称，宁可多删）。
       const cutStart = Math.max(trimStart, Number(c.start) || 0);
       const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
-      const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep);
+      const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep * 2);
       const resumeAt = Math.min(trimEnd, cutEnd + endKeep * 2);
       if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
       cursor = Math.max(cursor, resumeAt);
@@ -2553,9 +2552,9 @@
   }
 
   /**
-   * 成片 keep：无删段时 ≡ 预览 keep（黄柄所见即所得）。
-   * 有删中间时：接点两端再各收 1 源帧——ffmpeg trim/fps 比 HTML5 跳切更容易多带边界帧，
-   * 表现为「红柄终点预览对、GIF 中间段片尾往前多几帧」。
+   * 成片 keep：无删段时 ≡ 预览 keep（单段片头/片尾由编码 -ss/-t 垫，此处不叠）。
+   * 有删中间时：每段接点再收 ENCODE_CUT_JUNCTION_PAD_FRAMES 源帧；
+   * 首段若 trimStart>0 再推片头、末段再收片尾（拼成一条后再编 GIF 时 startSec=0，只能靠 keep 收）。
    */
   function keepRangesForEncode(edit, duration) {
     const preview = keepRangesFromEdit(edit, duration);
@@ -2567,10 +2566,14 @@
     return preview.map((k, i) => {
       let start = Number(k.start) || 0;
       let end = Math.max(start + 0.05, Number(k.end) || 0);
-      // 刚过删段终点的下一段：起点再推后，避免接点多吐 cut.end 附近帧
+      // 多段成片首段：黄柄片头再推，防拼片后 GIF 片头多吐
+      if (i === 0 && start > 0.02) start = Math.min(end - 0.05, start + pad);
+      // 刚过删段终点的下一段：起点再推后
       if (i > 0) start = Math.min(end - 0.05, start + pad);
       // 将进入删段起点的上一段：终点再提前
       if (i < preview.length - 1) end = Math.max(start + 0.05, end - pad);
+      // 多段成片末段：再收片尾（与单段编码尾垫同量级）
+      if (i === preview.length - 1) end = Math.max(start + 0.05, end - pad);
       return { start, end };
     });
   }

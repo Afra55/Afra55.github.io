@@ -34,7 +34,7 @@ function loadKeepFns() {
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
     const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, FRAME_SNAP_SEC = 1 / 30;
     const ENCODE_BOUND_PAD_SEC = 0;
-    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 1;
+    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 2;
     ${normalizeFps[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
@@ -74,7 +74,7 @@ t("外预览播放/落点走 vbbKeepRangesForEncode", () => {
   assert.ok(/vbbKeepRangesForEncode\(item\.edit,\s*item\.duration\)/.test(vbb));
 });
 
-t("删中间：成片接点相对预览再收 1 帧；片头仍对齐黄柄", () => {
+t("多段删中间：成片接点再收 2 帧；首段片头/末段片尾再收", () => {
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = {
     trimStart: 5,
@@ -89,11 +89,16 @@ t("删中间：成片接点相对预览再收 1 帧；片头仍对齐黄柄", ()
   const enc = keepRangesForEncode(edit, 100);
   assert.ok(preview.length >= 3 && enc.length === preview.length);
   const pad = 1 / 25;
-  assert.ok(Math.abs(enc[0].start - 5) < 1e-9, "片头=黄柄");
-  assert.ok(Math.abs(enc[0].end - (preview[0].end - pad)) < 1e-9, "上一段终点再收");
-  assert.ok(Math.abs(enc[1].start - (preview[1].start + pad)) < 1e-9, "下一段起点再推");
-  // 预览：cut.end 起空 2 帧
-  assert.ok(Math.abs(preview[1].start - (30 + pad * 2)) < 1e-9);
+  const jPad = pad * 2;
+  assert.ok(Math.abs(preview[0].end - (20 - pad * 2)) < 1e-9, "预览上一段在 cut.start 前空 2");
+  assert.ok(Math.abs(preview[1].start - (30 + pad * 2)) < 1e-9, "预览下一段从 cut.end 空 2");
+  assert.ok(Math.abs(enc[0].start - (preview[0].start + jPad)) < 1e-9, "成片首段片头再推");
+  assert.ok(Math.abs(enc[0].end - (preview[0].end - jPad)) < 1e-9, "上一段终点再收");
+  assert.ok(Math.abs(enc[1].start - (preview[1].start + jPad)) < 1e-9, "下一段起点再推");
+  assert.ok(
+    Math.abs(enc[enc.length - 1].end - (preview[preview.length - 1].end - jPad)) < 1e-9,
+    "末段片尾再收"
+  );
 });
 
 t("仅裁片头片尾：成片起点=黄柄，片尾半开与预览一致", () => {
@@ -115,9 +120,9 @@ t("exportKeepVideo -ss 回退须两端再收，防少删", () => {
   assert.ok(/bias\s*=\s*1\s*\/\s*30/.test(exp));
 });
 
-t("ENCODE_BOUND_PAD_SEC=0；接点垫用 ENCODE_CUT_JUNCTION_PAD_FRAMES", () => {
+t("ENCODE_BOUND_PAD_SEC=0；接点垫 ENCODE_CUT_JUNCTION_PAD_FRAMES=2", () => {
   assert.ok(/ENCODE_BOUND_PAD_SEC\s*=\s*0/.test(vtrim));
-  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*1/.test(vtrim));
+  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*2/.test(vtrim));
 });
 
 t("片尾抬手只用 min(want,…) 收紧，禁止推过拖点", () => {

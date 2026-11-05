@@ -50,7 +50,7 @@ function loadVtrimKeepFns() {
     const START_KEEP_SEC = 1 / 50;
     const FRAME_SNAP_SEC = 1 / 30;
     const ENCODE_BOUND_PAD_SEC = 0;
-    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 1;
+    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 2;
     ${normalizeFps[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
