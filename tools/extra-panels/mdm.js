@@ -1792,7 +1792,7 @@
         ["Ctrl/⌘ + F", "文档内查找 / 替换"],
         ["Ctrl/⌘ + Z", "撤销（焦点在列表时 = 撤销删除）"],
         ["双击列表项", "重命名"],
-        ["右键列表项", "更多：打开位置 / 复制路径 / 置顶 / 导出 / 删除"],
+        ["右键列表项", "更多：用阅读页打开 / 打开位置 / 复制路径 / 置顶 / 导出 / 删除"],
         ["Ctrl/⌘ + 单击", "多选（批量操作）"],
         ["↑ / ↓", "列表导航"],
       ];
@@ -4639,6 +4639,27 @@
         listCtxEl = null;
       }
     }
+
+    /** 用独立 MD 阅读页打开（sessionStorage 交接，一次一篇） */
+    async function openInMdRead(item) {
+      if (!item) return;
+      try {
+        const text = await readDocText(item);
+        sessionStorage.setItem(
+          "devtools-mdread-doc",
+          JSON.stringify({
+            text: String(text || ""),
+            title: item.title || String(item.fileName || "").replace(/\.(md|markdown|txt)$/i, "") || "document",
+          })
+        );
+      } catch (err) {
+        setErr(`无法传到阅读页：${err?.message || err}（可直接打开阅读页选文件）`);
+        return;
+      }
+      const url = new URL("./mdread/", location.href).href;
+      window.open(url, "_blank", "noopener");
+    }
+
     function showListCtx(x, y, item) {
       closeListCtx();
       const el = document.createElement("div");
@@ -4646,6 +4667,7 @@
       const fmts = [...LOCAL_FORMATS, ...PANDOC_FORMATS];
       el.innerHTML =
         `<button type="button" data-ctx="open">打开</button>` +
+        `<button type="button" data-ctx="mdread">用阅读页打开</button>` +
         `<button type="button" data-ctx="reveal">打开文件位置</button>` +
         `<button type="button" data-ctx="copy-path">复制文件路径</button>` +
         `<button type="button" data-ctx="pin">${item.pinned ? "取消置顶" : "置顶"}</button>` +
@@ -4718,6 +4740,7 @@
         }
         closeListCtx();
         if (act === "open") void openDoc(item.id);
+        else if (act === "mdread") void openInMdRead(item);
         else if (act === "reveal") void revealItemLocation(item);
         else if (act === "copy-path") {
           // 同步 / ClipboardItem 手势写入 / 异步反查

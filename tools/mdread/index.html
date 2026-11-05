@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1419" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MD 阅读" />
+  <meta name="description" content="专注预览单个 Markdown · 图表/公式/高亮 · 可单独加到桌面 · 无需本机桥" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="../icons/icon-180.png" />
+  <link rel="icon" href="../icons/icon-192.png" />
+  <title>MD 阅读</title>
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <header class="top">
+    <strong class="brand">MD 阅读</strong>
+    <div class="top-actions">
+      <label class="file-btn primary">选择 MD
+        <input id="mr-file" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" />
+      </label>
+      <button type="button" class="ghost" id="mr-clear" hidden>关闭文件</button>
+      <a class="ghost" href="../" rel="noopener">回工具站</a>
+    </div>
+  </header>
+
+  <p class="hint" id="mr-status">点「选择 MD」或把一个 .md 拖进本页 · 一次只预览一个文件</p>
+  <p class="error" id="mr-error" hidden></p>
+
+  <div class="layout" id="mr-layout" hidden>
+    <aside class="outline" id="mr-outline" aria-label="标题大纲">
+      <p class="outline-label">大纲</p>
+      <div class="outline-body" id="mr-outline-body"></div>
+    </aside>
+    <main class="stage" id="mr-stage">
+      <div class="doc-meta">
+        <h1 class="doc-title" id="mr-title">未命名</h1>
+      </div>
+      <article class="markdown-body preview" id="mr-preview"></article>
+    </main>
+  </div>
+
+  <div class="drop-hint" id="mr-empty">
+    <p class="drop-title">选择或拖入一个 Markdown</p>
+    <p class="hint">支持 Mermaid 图表、KaTeX 公式、代码高亮；图表/代码/表格可放大下载。不连本机桥。</p>
+  </div>
+
+  <section class="install-card" id="mr-install" hidden>
+    <button type="button" class="primary" id="mr-install-btn" hidden>添加到桌面</button>
+    <p class="hint" id="mr-install-hint" hidden></p>
+  </section>
+
+  <script src="./preview.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>
