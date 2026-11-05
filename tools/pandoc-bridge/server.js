@@ -12,10 +12,11 @@ const {
   installPackage,
   probePdfEngines,
   setXelatexPath,
+  getConvertProgress,
 } = require("./pandoc-ops");
 
-const BRIDGE_VERSION = "0.1.8";
-const FEATURES = { pandoc: true, importToMarkdown: true, printPdf: true };
+const BRIDGE_VERSION = "0.1.9";
+const FEATURES = { pandoc: true, importToMarkdown: true, printPdf: true, convertProgress: true };
 
 function readBody(req, limit = 96 * 1024 * 1024, { onProgress } = {}) {
   return new Promise((resolve, reject) => {
@@ -77,6 +78,10 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname === "/pdf-engines" && req.method === "GET") {
       const pdf = await probePdfEngines();
       sendJson(res, 200, { ok: true, ...pdf });
+      return;
+    }
+    if (pathname === "/progress" && req.method === "GET") {
+      sendJson(res, 200, getConvertProgress());
       return;
     }
     if (pathname === "/set-xelatex-path" && req.method === "POST") {

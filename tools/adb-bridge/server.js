@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.118";
+const BRIDGE_VERSION = "0.9.119";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -1205,17 +1205,78 @@ async function readImei(serial) {
   return "";
 }
 
-async function deviceInfo(serial) {
+async function deviceInfo(serial, { onPartial, shouldAbort } = {}) {
+  const emit = (info, stage) => {
+    try {
+      onPartial?.(info, stage);
+    } catch (_) {}
+  };
+  const aborted = () => {
+    try {
+      return Boolean(shouldAbort?.());
+    } catch (_) {
+      return false;
+    }
+  };
+
   const devices = await listDevices();
   const base = devices.find((d) => d.serial === serial);
   if (!base) throw new Error("设备不存在或未连接");
   if (base.state !== "device") {
-    return {
+    const notReady = {
       ...base,
       ready: false,
       message: `设备状态为 ${base.state}，请在手机上授权 USB 调试`,
     };
+    emit(notReady, "state");
+    return notReady;
   }
+
+  let info = {
+    ...base,
+    ready: true,
+    manufacturer: "",
+    model: base.model || "",
+    deviceName: base.device || "",
+    androidVersion: "",
+    sdk: "",
+    buildId: "",
+    serialno: serial,
+    abi: "",
+    battery: "",
+    screen: "",
+    density: "",
+    storage: "",
+    imei: "",
+    imeis: [],
+    cycleCount: null,
+    capacity: "",
+    usefulLife: null,
+    frp: null,
+    launchLevel: "",
+    tradeinProduct: null,
+    brand: "",
+    productName: "",
+    board: "",
+    platform: "",
+    hardware: "",
+    bootloader: "",
+    fingerprint: "",
+    securityPatch: "",
+    buildType: "",
+    buildTags: "",
+    buildDate: "",
+    baseband: "",
+    locale: "",
+    variantId: "",
+    ram: "",
+    cpuCores: "",
+    kernel: "",
+    uptime: "",
+    tradein: "",
+  };
+  emit(info, "base");
+  if (aborted()) return info;
 
   const keys = [
     "ro.product.manufacturer",
@@ -1249,126 +1310,9 @@ async function deviceInfo(serial) {
       props[key] = await getprop(serial, key);
     })
   );
-
-  const imei = await readImei(serial);
-
-  let tradein = "";
-  let tradeinData = null;
-  try {
-    const out = await shellCapture(serial, "tradeinmode getstatus", 8000);
-    tradein = String(out || "").trim();
-    try {
-      tradeinData = JSON.parse(tradein);
-    } catch {
-      tradeinData = null;
-    }
-  } catch {
-    tradein = "";
-  }
-  const imeisFromTradein = Array.isArray(tradeinData?.imeis)
-    ? tradeinData.imeis.map((x) => String(x || "").trim()).filter(Boolean)
-    : [];
-  const imeiFinal = imei || imeisFromTradein.join(" / ");
-  const cycleCount = Number.isFinite(Number(tradeinData?.battery?.cycle_count))
-    ? Number(tradeinData.battery.cycle_count)
-    : null;
-  const capacityBytes = Number(tradeinData?.storage?.capacity_bytes);
-  const capacity = Number.isFinite(capacityBytes) && capacityBytes > 0 ? `${Math.round(capacityBytes / 1e9)} GB` : "";
-  const usefulLife = Number.isFinite(Number(tradeinData?.storage?.useful_lifetime_remaining))
-    ? Number(tradeinData.storage.useful_lifetime_remaining)
-    : null;
-  const frp = tradeinData?.locks?.factory_reset_protection;
-  const launchLevel = tradeinData?.launch_level != null ? String(tradeinData.launch_level) : "";
-  const tradeinProduct =
-    tradeinData?.product && typeof tradeinData.product === "object" ? tradeinData.product : null;
-
-  let ram = "";
-  try {
-    const out = await shellCapture(serial, "cat /proc/meminfo | head -n 1", 8000);
-    const m = String(out || "").match(/MemTotal:\s*(\d+)\s*kB/i);
-    if (m) ram = `${Math.round(Number(m[1]) / 1024 / 1024 * 10) / 10} GB`;
-  } catch {
-    ram = "";
-  }
-
-  let cpuCores = "";
-  try {
-    const out = await shellCapture(serial, "cat /proc/cpuinfo | grep -c '^processor'", 8000);
-    const n = Number(String(out || "").trim());
-    if (n > 0) cpuCores = `${n} 核`;
-  } catch {
-    cpuCores = "";
-  }
-
-  let kernel = "";
-  try {
-    const out = await shellCapture(serial, "uname -r", 8000);
-    kernel = String(out || "").trim().split(/\r?\n/)[0].slice(0, 120);
-  } catch {
-    kernel = "";
-  }
-
-  let uptime = "";
-  try {
-    const out = await shellCapture(serial, "cat /proc/uptime", 8000);
-    const sec = Number(String(out || "").trim().split(/\s+/)[0]);
-    if (Number.isFinite(sec) && sec > 0) {
-      const d = Math.floor(sec / 86400);
-      const h = Math.floor((sec % 86400) / 3600);
-      const mi = Math.floor((sec % 3600) / 60);
-      uptime = d > 0 ? `${d}天${h}小时` : h > 0 ? `${h}小时${mi}分` : `${mi}分`;
-    }
-  } catch {
-    uptime = "";
-  }
-
-  let battery = "";
-  try {
-    const { stdout } = await adbSerial(serial, ["shell", "dumpsys", "battery"], { timeout: 10000 });
-    const level = stdout.match(/level:\s*(\d+)/);
-    const status = stdout.match(/status:\s*(\d+)/);
-    battery = level ? `${level[1]}%` : "";
-    if (status) battery += status[1] === "2" ? "（充电中）" : "";
-  } catch {
-    battery = "";
-  }
-
-  let screen = "";
-  try {
-    const { stdout } = await adbSerial(serial, ["shell", "wm", "size"], { timeout: 8000 });
-    const m = stdout.match(/(\d+)\s*x\s*(\d+)/i);
-    screen = m ? `${m[1]}x${m[2]}` : stdout.trim();
-  } catch {
-    screen = "";
-  }
-
-  let density = "";
-  try {
-    const { stdout } = await adbSerial(serial, ["shell", "wm", "density"], { timeout: 8000 });
-    const m = stdout.match(/(\d+)/);
-    density = m ? m[1] : stdout.trim();
-  } catch {
-    density = "";
-  }
-
-  let storage = "";
-  try {
-    const { stdout } = await adbSerial(serial, ["shell", "df", "-h", "/sdcard"], { timeout: 8000 });
-    const lines = stdout.trim().split(/\r?\n/);
-    storage = lines[lines.length - 1] || stdout.trim();
-  } catch {
-    storage = "";
-  }
-
-  // 部分机型单 key getprop 对 persist.vendor.* 会空返回，但全量 getprop（系统属性弹框）有值
-  let variantId = String(props["persist.vendor.custom.variant.id"] || "").trim();
-  if (!variantId) {
-    variantId = await getpropFromDump(serial, "persist.vendor.custom.variant.id");
-  }
-
-  return {
-    ...base,
-    ready: true,
+  if (aborted()) return info;
+  info = {
+    ...info,
     manufacturer: props["ro.product.manufacturer"] || "",
     model: props["ro.product.model"] || base.model || "",
     deviceName: props["ro.product.device"] || base.device || "",
@@ -1377,18 +1321,6 @@ async function deviceInfo(serial) {
     buildId: props["ro.build.display.id"] || "",
     serialno: props["ro.serialno"] || serial,
     abi: props["ro.product.cpu.abi"] || "",
-    battery,
-    screen,
-    density,
-    storage,
-    imei: imeiFinal,
-    imeis: imeisFromTradein,
-    cycleCount,
-    capacity,
-    usefulLife,
-    frp: typeof frp === "boolean" ? frp : null,
-    launchLevel,
-    tradeinProduct,
     brand: props["ro.product.brand"] || "",
     productName: props["ro.product.name"] || "",
     board: props["ro.product.board"] || "",
@@ -1402,13 +1334,140 @@ async function deviceInfo(serial) {
     buildDate: props["ro.build.date"] || "",
     baseband: props["gsm.version.baseband"] || "",
     locale: props["persist.sys.locale"] || props["ro.product.locale"] || "",
-    variantId,
-    ram,
-    cpuCores,
-    kernel,
-    uptime,
-    tradein,
+    variantId: String(props["persist.vendor.custom.variant.id"] || "").trim(),
   };
+  emit(info, "props");
+
+  const runStep = async (stage, fn) => {
+    if (aborted()) return;
+    try {
+      await fn();
+    } catch (_) {}
+    emit(info, stage);
+  };
+
+  await runStep("screen", async () => {
+    try {
+      const { stdout } = await adbSerial(serial, ["shell", "wm", "size"], { timeout: 8000 });
+      const m = stdout.match(/(\d+)\s*x\s*(\d+)/i);
+      info.screen = m ? `${m[1]}x${m[2]}` : stdout.trim();
+    } catch {
+      info.screen = "";
+    }
+    try {
+      const { stdout } = await adbSerial(serial, ["shell", "wm", "density"], { timeout: 8000 });
+      const m = stdout.match(/(\d+)/);
+      info.density = m ? m[1] : stdout.trim();
+    } catch {
+      info.density = "";
+    }
+  });
+
+  await runStep("battery", async () => {
+    try {
+      const { stdout } = await adbSerial(serial, ["shell", "dumpsys", "battery"], { timeout: 10000 });
+      const level = stdout.match(/level:\s*(\d+)/);
+      const status = stdout.match(/status:\s*(\d+)/);
+      info.battery = level ? `${level[1]}%` : "";
+      if (status) info.battery += status[1] === "2" ? "（充电中）" : "";
+    } catch {
+      info.battery = "";
+    }
+  });
+
+  await runStep("storage", async () => {
+    try {
+      const { stdout } = await adbSerial(serial, ["shell", "df", "-h", "/sdcard"], { timeout: 8000 });
+      const lines = stdout.trim().split(/\r?\n/);
+      info.storage = lines[lines.length - 1] || stdout.trim();
+    } catch {
+      info.storage = "";
+    }
+  });
+
+  await runStep("ram", async () => {
+    try {
+      const out = await shellCapture(serial, "cat /proc/meminfo | head -n 1", 8000);
+      const m = String(out || "").match(/MemTotal:\s*(\d+)\s*kB/i);
+      if (m) info.ram = `${Math.round((Number(m[1]) / 1024 / 1024) * 10) / 10} GB`;
+    } catch {
+      info.ram = "";
+    }
+    try {
+      const out = await shellCapture(serial, "cat /proc/cpuinfo | grep -c '^processor'", 8000);
+      const n = Number(String(out || "").trim());
+      if (n > 0) info.cpuCores = `${n} 核`;
+    } catch {
+      info.cpuCores = "";
+    }
+  });
+
+  await runStep("kernel", async () => {
+    try {
+      const out = await shellCapture(serial, "uname -r", 8000);
+      info.kernel = String(out || "").trim().split(/\r?\n/)[0].slice(0, 120);
+    } catch {
+      info.kernel = "";
+    }
+    try {
+      const out = await shellCapture(serial, "cat /proc/uptime", 8000);
+      const sec = Number(String(out || "").trim().split(/\s+/)[0]);
+      if (Number.isFinite(sec) && sec > 0) {
+        const d = Math.floor(sec / 86400);
+        const h = Math.floor((sec % 86400) / 3600);
+        const mi = Math.floor((sec % 3600) / 60);
+        info.uptime = d > 0 ? `${d}天${h}小时` : h > 0 ? `${h}小时${mi}分` : `${mi}分`;
+      }
+    } catch {
+      info.uptime = "";
+    }
+  });
+
+  await runStep("imei", async () => {
+    const imei = await readImei(serial);
+    let tradein = "";
+    let tradeinData = null;
+    try {
+      const out = await shellCapture(serial, "tradeinmode getstatus", 8000);
+      tradein = String(out || "").trim();
+      try {
+        tradeinData = JSON.parse(tradein);
+      } catch {
+        tradeinData = null;
+      }
+    } catch {
+      tradein = "";
+    }
+    const imeisFromTradein = Array.isArray(tradeinData?.imeis)
+      ? tradeinData.imeis.map((x) => String(x || "").trim()).filter(Boolean)
+      : [];
+    info.imei = imei || imeisFromTradein.join(" / ");
+    info.imeis = imeisFromTradein;
+    info.cycleCount = Number.isFinite(Number(tradeinData?.battery?.cycle_count))
+      ? Number(tradeinData.battery.cycle_count)
+      : null;
+    const capacityBytes = Number(tradeinData?.storage?.capacity_bytes);
+    info.capacity =
+      Number.isFinite(capacityBytes) && capacityBytes > 0 ? `${Math.round(capacityBytes / 1e9)} GB` : "";
+    info.usefulLife = Number.isFinite(Number(tradeinData?.storage?.useful_lifetime_remaining))
+      ? Number(tradeinData.storage.useful_lifetime_remaining)
+      : null;
+    const frp = tradeinData?.locks?.factory_reset_protection;
+    info.frp = typeof frp === "boolean" ? frp : null;
+    info.launchLevel = tradeinData?.launch_level != null ? String(tradeinData.launch_level) : "";
+    info.tradeinProduct =
+      tradeinData?.product && typeof tradeinData.product === "object" ? tradeinData.product : null;
+    info.tradein = tradein;
+  });
+
+  await runStep("variant", async () => {
+    if (!info.variantId) {
+      info.variantId = await getpropFromDump(serial, "persist.vendor.custom.variant.id");
+    }
+  });
+
+  emit(info, "done");
+  return info;
 }
 
 function parseLsLine(line) {
@@ -6445,6 +6504,8 @@ async function handleApi(req, res, url) {
             "device-processes",
             "device-shell",
             "device-layout",
+            "device-info-stream",
+            "pandoc-progress",
           ],
           mirror: scrcpyMirror.jarStatus(),
           adb: adbInfo,
@@ -6507,6 +6568,43 @@ async function handleApi(req, res, url) {
       const serial = url.searchParams.get("serial") || "";
       const info = await deviceInfo(serial);
       sendJson(res, 200, { ok: true, info }, origin);
+      return;
+    }
+
+    // 边扫边推：每拿到一类字段就写一行 NDJSON（扫到一个显示一个）
+    if (url.pathname === "/device/info/stream" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      if (!serial) {
+        sendJson(res, 400, { ok: false, error: "missing serial" }, origin);
+        return;
+      }
+      const headers = {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      };
+      applyCors(headers, origin);
+      res.writeHead(200, headers);
+      let closed = false;
+      req.on("close", () => {
+        closed = true;
+      });
+      const writeLine = (obj) => {
+        if (closed || res.writableEnded) return;
+        res.write(`${JSON.stringify(obj)}\n`);
+      };
+      try {
+        const info = await deviceInfo(serial, {
+          shouldAbort: () => closed,
+          onPartial: (partial, stage) => {
+            writeLine({ ok: true, stage: stage || "", info: partial, done: stage === "done" });
+          },
+        });
+        if (!closed) writeLine({ ok: true, stage: "done", info, done: true });
+      } catch (err) {
+        writeLine({ ok: false, done: true, error: err?.message || String(err) });
+      }
+      if (!res.writableEnded) res.end();
       return;
     }
 

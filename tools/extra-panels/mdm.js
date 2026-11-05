@@ -6319,62 +6319,136 @@ a{color:${v.accent}}
       return { ok: true, preferred: env.preferred || "", installHints };
     }
 
+    /** Pandoc 长导出：弹框显示已用时 + 轮询桥 /pandoc/progress */
+    function openPandocExportProgress(toLabel) {
+      const box = els.modalBox;
+      const t0 = Date.now();
+      els.modal.hidden = false;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>正在导出 ${escapeHtml(toLabel)}</strong></div>` +
+        `<div class="mdm-modal-body" style="text-align:left">` +
+        `<p id="mdm-pandoc-export-stage" style="margin:0 0 8px">准备中…</p>` +
+        `<p class="hint tight" id="mdm-pandoc-export-detail" style="margin:0 0 8px;min-height:1.2em"></p>` +
+        `<p class="hint tight">PDF / 大文档可能要几分钟。黑窗有 <span class="mono">[pandoc]</span> 日志即在跑。</p>` +
+        `</div>` +
+        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-pandoc-export-elapsed">已用时 0 秒</p></div>`;
+      const stageEl = () => document.getElementById("mdm-pandoc-export-stage");
+      const detailEl = () => document.getElementById("mdm-pandoc-export-detail");
+      const elapsedEl = () => document.getElementById("mdm-pandoc-export-elapsed");
+      const setLocal = (stage, detail = "") => {
+        const s = stageEl();
+        const d = detailEl();
+        if (s) s.textContent = stage || "处理中…";
+        if (d) d.textContent = detail || "";
+      };
+      const tick = setInterval(() => {
+        const el = elapsedEl();
+        if (el) el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒`;
+      }, 500);
+      let pollTimer = null;
+      const startPoll = () => {
+        const poll = async () => {
+          try {
+            const { res, data } = await fetchPandocJson("/pandoc/progress");
+            if (res.ok && data) {
+              if (data.stage) setLocal(data.stage, data.detail || "");
+              const el = elapsedEl();
+              if (el && data.elapsedSec != null) {
+                el.textContent = `已用时 ${data.elapsedSec} 秒${data.active ? " · 桥端进行中" : ""}`;
+              }
+            }
+          } catch (_) {}
+        };
+        void poll();
+        pollTimer = setInterval(poll, 1200);
+      };
+      return {
+        setLocal,
+        startPoll,
+        close() {
+          clearInterval(tick);
+          if (pollTimer) clearInterval(pollTimer);
+          closeModal();
+        },
+      };
+    }
+
     async function exportViaPandoc(text, to, title, retried = false) {
-      // 图表先烤成 PNG 再交给 Pandoc；PDF 用 3x 清晰度照顾复杂图
-      const chartScale = to === "pdf" ? 3 : 2;
-      const baked = await bakeChartsForExport(text, { mode: "file", scale: chartScale }).catch(() => ({
-        text,
-        images: [],
-        chartCount: 0,
-      }));
-      const assetImages = await collectReferencedAssetsWithData(baked.text).catch(() => []);
-      const images = [...assetImages, ...(baked.images || [])];
-      const plan =
-        typeof QR.exportPandocPlan === "function" ? QR.exportPandocPlan(to) : { from: "gfm", args: [] };
-      let res;
+      const toLabel = String(to || "file").toUpperCase();
+      const prog = openPandocExportProgress(toLabel);
       try {
-        res = await fetch(`${baseUrl()}/pandoc/convert`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
-          body: JSON.stringify({
-            text: baked.text,
-            to,
-            from: plan.from || "gfm",
-            title,
-            images,
-            quality: "max",
-          }),
-        });
-      } catch (_) {
-        showBridgeHelpModal("导出为 Pandoc 格式");
-        throw new Error("本机桥未启动");
-      }
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.ok) {
-        let msg = data?.error || `本机桥未响应（HTTP ${res.status}），请确认桥已启动且装了 pandoc`;
-        if (data?.needsBridgeUpdate || /PDF 请用前端打印|需额外 LaTeX|Pandoc 模块过旧/i.test(msg)) {
-          void requestBridgeSelfUpdate();
-          msg = normalizePdfBridgeError(msg);
-        }
-        if (/未找到本机桥|未启动|Failed to fetch/i.test(msg)) {
+        // 图表先烤成 PNG 再交给 Pandoc；PDF 用 3x 清晰度照顾复杂图
+        prog.setLocal("渲染图表", to === "pdf" ? "高清栅格化 Mermaid…" : "处理中…");
+        const chartScale = to === "pdf" ? 3 : 2;
+        const baked = await bakeChartsForExport(text, { mode: "file", scale: chartScale }).catch(() => ({
+          text,
+          images: [],
+          chartCount: 0,
+        }));
+        prog.setLocal(
+          "收集图片资源",
+          baked.chartCount ? `已嵌入 ${baked.chartCount} 个图表` : "读取本地图片…"
+        );
+        const assetImages = await collectReferencedAssetsWithData(baked.text).catch(() => []);
+        const images = [...assetImages, ...(baked.images || [])];
+        const plan =
+          typeof QR.exportPandocPlan === "function" ? QR.exportPandocPlan(to) : { from: "gfm", args: [] };
+        prog.setLocal("上传到本机桥", `Pandoc → ${toLabel}`);
+        prog.startPoll();
+        let res;
+        try {
+          res = await fetch(`${baseUrl()}/pandoc/convert`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+            body: JSON.stringify({
+              text: baked.text,
+              to,
+              from: plan.from || "gfm",
+              title,
+              images,
+              quality: "max",
+            }),
+          });
+        } catch (_) {
+          prog.close();
           showBridgeHelpModal("导出为 Pandoc 格式");
+          throw new Error("本机桥未启动");
+        }
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          let msg = data?.error || `本机桥未响应（HTTP ${res.status}），请确认桥已启动且装了 pandoc`;
+          if (data?.needsBridgeUpdate || /PDF 请用前端打印|需额外 LaTeX|Pandoc 模块过旧/i.test(msg)) {
+            void requestBridgeSelfUpdate();
+            msg = normalizePdfBridgeError(msg);
+          }
+          prog.close();
+          if (/未找到本机桥|未启动|Failed to fetch/i.test(msg)) {
+            showBridgeHelpModal("导出为 Pandoc 格式");
+            throw new Error(msg);
+          }
+          if (!retried && to !== "pdf" && /pandoc/i.test(msg) && /未找到|not found|ENOENT|未安装/i.test(msg)) {
+            const ok = await confirmModal({
+              title: "安装 pandoc",
+              body: "导出该格式需要 pandoc，当前未安装。现在用本机桥自动安装？（Windows/macOS 支持，约 100–150MB）",
+              okText: "自动安装",
+            });
+            if (ok) {
+              await runPandocInstall();
+              return await exportViaPandoc(text, to, title, true);
+            }
+          }
           throw new Error(msg);
         }
-        if (!retried && to !== "pdf" && /pandoc/i.test(msg) && /未找到|not found|ENOENT|未安装/i.test(msg)) {
-          const ok = await confirmModal({
-            title: "安装 pandoc",
-            body: "导出该格式需要 pandoc，当前未安装。现在用本机桥自动安装？（Windows/macOS 支持，约 100–150MB）",
-            okText: "自动安装",
-          });
-          if (ok) {
-            await runPandocInstall();
-            return await exportViaPandoc(text, to, title, true);
-          }
-        }
-        throw new Error(msg);
+        prog.setLocal("下载结果", data.filename || `${toLabel}`);
+        const bytes = Uint8Array.from(atob(data.dataBase64 || ""), (c) => c.charCodeAt(0));
+        downloadBlob(new Blob([bytes]), data.filename || `${slugify(title)}.${to}`);
+        prog.close();
+      } catch (err) {
+        try {
+          prog.close();
+        } catch (_) {}
+        throw err;
       }
-      const bytes = Uint8Array.from(atob(data.dataBase64 || ""), (c) => c.charCodeAt(0));
-      downloadBlob(new Blob([bytes]), data.filename || `${slugify(title)}.${to}`);
     }
 
     /** @param {any} hints */
