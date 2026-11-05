@@ -5633,7 +5633,7 @@
       return `<!doctype html><html lang="zh"><head><meta charset="utf-8" /><title>${escapeHtml(title)}</title>
 <style>
 :root{color-scheme:${isDarkScheme() ? "dark" : "light"}}
-body{max-width:820px;margin:2rem auto;padding:0 1rem;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+body{max-width:min(1120px,94vw);margin:1.5rem auto;padding:0 1.25rem;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
 pre{background:${v.panel};padding:.8rem;border-radius:8px;overflow:auto}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre code{background:none}

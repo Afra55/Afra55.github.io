@@ -1130,8 +1130,12 @@ function parseLatexProgressLine(line, state) {
     state.phase = "typeset";
     hit = true;
   }
-  // 装/下宏包
-  if (/installing|downloading|package|宏包|miktex.*install/i.test(s)) {
+  // 装/下宏包：只认明确的安装动作，勿匹配裸 "package"（警告里常有，会一直卡在「正在装」）
+  const installingPkg =
+    /installing\s+(package|file)|downloading\s+(package|file)|package\s+\S+\s+installed|正在(安装|下载).*宏包|miktex.*(installing|downloading)/i.test(
+      s
+    );
+  if (installingPkg) {
     state.phase = "packages";
     state.pkgCount = (state.pkgCount || 0) + 1;
     hit = true;
@@ -1146,6 +1150,10 @@ function parseLatexProgressLine(line, state) {
       state.phase = "typeset";
       hit = true;
     }
+  }
+  // 已在排版出页后，不再被含 package 的杂讯打回「装宏包」
+  if ((state.page || 0) > 0 && state.phase === "packages" && !installingPkg) {
+    state.phase = "typeset";
   }
   // Output written on out.pdf (12 pages, …)
   const written = s.match(/Output written on .*\((\d+)\s+pages?/i);
