@@ -132,10 +132,26 @@ function runCmd(file, args, { input, timeout = 300000, cwd, env } = {}) {
 function runCmdLogged(
   file,
   args,
-  { timeout = 480000, cwd, env, logPrefix = "[pandoc]", watchFile = "", timeoutSec = 0 } = {}
+  {
+    timeout = 480000,
+    cwd,
+    env,
+    logPrefix = "[pandoc]",
+    watchFile = "",
+    timeoutSec = 0,
+    progressState = null,
+  } = {}
 ) {
   const label = [file, ...(args || []).slice(0, 8)].join(" ");
   const limitSec = timeoutSec || Math.round(timeout / 1000);
+  const state = progressState || {
+    phase: "typeset",
+    page: 0,
+    pageEst: 1,
+    pass: 1,
+    passMax: 3,
+    pkgCount: 0,
+  };
   console.log(`${logPrefix} ▶ ${label}${args && args.length > 8 ? " …" : ""}`);
   console.log(`${logPrefix} 预计最长 ${limitSec}s（大文档/首次装宏包会更久，属正常）`);
   return new Promise((resolve, reject) => {
@@ -150,22 +166,55 @@ function runCmdLogged(
     let stdout = "";
     let stderr = "";
     let lastLog = "";
+    let lineBuf = "";
     const t0 = Date.now();
-    const touchProgress = (stage, detail) => {
+    const buildDetail = () => {
+      const bits = [];
+      if (state.phase === "packages") {
+        bits.push(`装宏包中${state.pkgCount ? ` · 已见 ${state.pkgCount} 条` : ""}`);
+      } else if (state.page > 0) {
+        bits.push(`约第 ${state.page}/${state.pageEst} 页`);
+      } else {
+        bits.push(`估约 ${state.pageEst} 页`);
+      }
+      if (state.pass > 0) bits.push(`第 ${state.pass}/${state.passMax} 遍`);
+      const sec = Math.round((Date.now() - t0) / 1000);
+      bits.push(`已用时 ${sec}s`);
+      return bits.join(" · ");
+    };
+    const touchProgress = (stage) => {
       let outPdfBytes = 0;
       if (watchFile) {
         try {
           if (fs.existsSync(watchFile)) outPdfBytes = fs.statSync(watchFile).size || 0;
         } catch (_) {}
       }
-      setConvertProgress(stage, detail, { lastLog, timeoutSec: limitSec, outPdfBytes });
+      const percent = computePdfPercent(state);
+      const stageText =
+        stage ||
+        (state.phase === "packages"
+          ? "MiKTeX 正在装/下宏包"
+          : `XeLaTeX 排版中${state.page ? ` · 第 ${state.page} 页` : ""}`);
+      setConvertProgress(stageText, buildDetail(), {
+        lastLog,
+        timeoutSec: limitSec,
+        outPdfBytes,
+        percent,
+        phase: state.phase,
+        page: state.page,
+        pageEst: state.pageEst,
+        pass: state.pass,
+        passMax: state.passMax,
+        pkgCount: state.pkgCount,
+        percentSource: state.page > 0 ? "pages" : state.phase === "packages" ? "packages" : "estimate",
+      });
     };
     const beat = setInterval(() => {
       const sec = Math.round((Date.now() - t0) / 1000);
-      console.log(`${logPrefix} …仍在运行 · 已用时 ${sec}s / 上限 ${limitSec}s`);
-      const bits = [`已用时 ${sec}s`, `上限约 ${Math.round(limitSec / 60)} 分钟`];
-      if (lastLog) bits.push(`最近：${lastLog.slice(0, 80)}`);
-      touchProgress("Pandoc + XeLaTeX 排版中（进行中）", bits.join(" · "));
+      console.log(
+        `${logPrefix} …仍在运行 · ${sec}s / ${limitSec}s · p${state.pass} · 页 ${state.page}/${state.pageEst}`
+      );
+      touchProgress();
     }, 4000);
     const timer = setTimeout(() => {
       console.log(`${logPrefix} ✖ 超时 ${limitSec}s，结束进程树 pid=${child.pid}`);
@@ -188,26 +237,26 @@ function runCmdLogged(
       fn();
     }
 
+    const handleLine = (raw) => {
+      const s = String(raw || "").trim();
+      if (!s) return;
+      lastLog = s.slice(0, 200);
+      console.log(`${logPrefix} ${s.slice(0, 240)}`);
+      parseLatexProgressLine(s, state);
+      touchProgress();
+    };
     const pipeLog = (buf, isErr) => {
       const text = buf.toString("utf8");
       if (isErr) stderr += text;
       else stdout += text;
-      for (const line of text.split(/\r?\n/)) {
-        const s = line.trim();
-        if (!s) continue;
-        lastLog = s.slice(0, 200);
-        console.log(`${logPrefix} ${isErr ? "!" : "|"} ${s.slice(0, 240)}`);
-        if (/installing|downloading|package|宏包|下载|Output written|Transcript/i.test(s)) {
-          touchProgress(
-            /installing|downloading|package|宏包|下载/i.test(s)
-              ? "MiKTeX 正在装/下宏包（仍在转换）"
-              : "XeLaTeX 排版中（仍在转换）",
-            s.slice(0, 160)
-          );
-        } else {
-          // 任意输出都刷新心跳，前端据此判断「还活着」
-          touchProgress("Pandoc + XeLaTeX 排版中（进行中）", s.slice(0, 160));
-        }
+      lineBuf += text;
+      // XeLaTeX 页码常挤在一行：…[1] [2] [3]…；按换行拆，过长则冲刷
+      const parts = lineBuf.split(/\r?\n/);
+      lineBuf = parts.pop() || "";
+      for (const part of parts) handleLine(part);
+      if (lineBuf.length > 400) {
+        handleLine(lineBuf);
+        lineBuf = "";
       }
     };
     child.stdout?.on("data", (b) => pipeLog(b, false));
@@ -220,9 +269,10 @@ function runCmdLogged(
       });
     });
     child.on("close", (code) => {
+      if (lineBuf.trim()) handleLine(lineBuf);
       finish(() => {
         const sec = Math.round((Date.now() - t0) / 1000);
-        console.log(`${logPrefix} ✔ 结束 · exit=${code} · ${sec}s`);
+        console.log(`${logPrefix} ✔ 结束 · exit=${code} · ${sec}s · 页 ${state.page}`);
         if (code && code !== 0) {
           const err = new Error((stderr || stdout || `exit ${code}`).trim().slice(0, 500) || `pandoc exit ${code}`);
           err.stdout = stdout;
@@ -231,7 +281,7 @@ function runCmdLogged(
           reject(err);
           return;
         }
-        resolve({ stdout, stderr, code: code == null ? 0 : code });
+        resolve({ stdout, stderr, code: code == null ? 0 : code, progressState: state });
       });
     });
   });
@@ -918,7 +968,7 @@ function pdfEngineCliArg(engineName, pdfInfo) {
   return name;
 }
 
-/** 当前转换进度（供前端轮询 /pandoc/progress，避免长任务「没动静」） */
+/** 当前转换进度（供前端轮询 /pandoc/progress） */
 let convertProgress = {
   active: false,
   stage: "",
@@ -928,10 +978,30 @@ let convertProgress = {
   updatedAt: 0,
   timeoutSec: 0,
   outPdfBytes: 0,
+  percent: 0,
+  phase: "",
+  page: 0,
+  pageEst: 0,
+  pass: 0,
+  passMax: 0,
+  pkgCount: 0,
+  percentSource: "",
 };
 
 function setConvertProgress(stage, detail = "", extra = {}) {
   const now = Date.now();
+  const keep = (key, cast) =>
+    extra[key] != null ? cast(extra[key]) : convertProgress[key];
+  const num = (v) => Number(v) || 0;
+  const str = (v) => String(v || "");
+  let percent = keep("percent", num);
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
+  // 进度只前进不回退（装包阶段除外可微抖，但这里统一单调）
+  const prevPct = Number(convertProgress.percent) || 0;
+  if (convertProgress.active && percent < prevPct && extra.percent != null) {
+    percent = prevPct;
+  }
   convertProgress = {
     active: true,
     stage: String(stage || convertProgress.stage || ""),
@@ -942,17 +1012,21 @@ function setConvertProgress(stage, detail = "", extra = {}) {
         : convertProgress.lastLog || "",
     startedAt: convertProgress.active && convertProgress.startedAt ? convertProgress.startedAt : now,
     updatedAt: now,
-    timeoutSec:
-      extra.timeoutSec != null
-        ? Number(extra.timeoutSec) || 0
-        : Number(convertProgress.timeoutSec) || 0,
-    outPdfBytes:
-      extra.outPdfBytes != null
-        ? Number(extra.outPdfBytes) || 0
-        : Number(convertProgress.outPdfBytes) || 0,
+    timeoutSec: keep("timeoutSec", num) || 0,
+    outPdfBytes: keep("outPdfBytes", num) || 0,
+    percent,
+    phase: keep("phase", str) || convertProgress.phase || "",
+    page: keep("page", num) || 0,
+    pageEst: keep("pageEst", num) || 0,
+    pass: keep("pass", num) || 0,
+    passMax: keep("passMax", num) || 0,
+    pkgCount: keep("pkgCount", num) || 0,
+    percentSource: keep("percentSource", str) || convertProgress.percentSource || "",
   };
   const elapsed = Math.max(0, Math.round((now - convertProgress.startedAt) / 1000));
-  console.log(`[pandoc] ▶ ${convertProgress.stage}${detail ? ` · ${detail}` : ""} · ${elapsed}s`);
+  console.log(
+    `[pandoc] ▶ ${convertProgress.percent}% · ${convertProgress.stage}${detail ? ` · ${detail}` : ""} · ${elapsed}s`
+  );
 }
 
 function clearConvertProgress(finalStage = "") {
@@ -961,6 +1035,8 @@ function clearConvertProgress(finalStage = "") {
       ...convertProgress,
       active: false,
       stage: String(finalStage),
+      percent: 100,
+      phase: "done",
       updatedAt: Date.now(),
     };
   } else {
@@ -973,6 +1049,14 @@ function clearConvertProgress(finalStage = "") {
       updatedAt: 0,
       timeoutSec: 0,
       outPdfBytes: 0,
+      percent: 0,
+      phase: "",
+      page: 0,
+      pageEst: 0,
+      pass: 0,
+      passMax: 0,
+      pkgCount: 0,
+      percentSource: "",
     };
   }
 }
@@ -998,6 +1082,14 @@ function getConvertProgress() {
     heartbeatAgeSec,
     timeoutSec: Number(p.timeoutSec) || 0,
     outPdfBytes: Number(p.outPdfBytes) || 0,
+    percent: Math.max(0, Math.min(100, Math.round(Number(p.percent) || 0))),
+    phase: p.phase || "",
+    page: Number(p.page) || 0,
+    pageEst: Number(p.pageEst) || 0,
+    pass: Number(p.pass) || 0,
+    passMax: Number(p.passMax) || 0,
+    pkgCount: Number(p.pkgCount) || 0,
+    percentSource: p.percentSource || "",
   };
 }
 
@@ -1012,9 +1104,107 @@ function estimatePdfTimeoutSec(text, images) {
   return Math.min(45 * 60, Math.max(12 * 60, sec));
 }
 
+/** 粗估页数（中文混排约 2200 字/页；图约 0.4 页）— 仅用于进度条，非精确 */
+function estimatePdfPages(text, images) {
+  const chars = String(text || "").length;
+  const imgN = Array.isArray(images) ? images.length : 0;
+  return Math.max(1, Math.ceil(chars / 2200) + Math.ceil(imgN * 0.4));
+}
+
+/**
+ * 解析 Pandoc/XeLaTeX/MiKTeX 黑窗一行 → 更新页码/遍数/装包计数。
+ * 返回是否识别到「有意义」的进度事件。
+ */
+function parseLatexProgressLine(line, state) {
+  const s = String(line || "");
+  let hit = false;
+  // 只认 Pandoc --verbose 的 "Running xelatex" 计遍，避免与 "This is XeTeX" 双计
+  if (/^Running\s+\S+/i.test(s)) {
+    state.pass = Math.min((state.pass || 0) + 1, state.passMax || 3);
+    state.page = 0; // 新遍从第 0 页重新计
+    state.phase = "typeset";
+    hit = true;
+  } else if (/This is XeTeX/i.test(s) || /This is pdfTeX/i.test(s)) {
+    // 引擎横幅：若还没 Running，记为第 1 遍
+    if (!(state.pass > 0)) state.pass = 1;
+    state.phase = "typeset";
+    hit = true;
+  }
+  // 装/下宏包
+  if (/installing|downloading|package|宏包|miktex.*install/i.test(s)) {
+    state.phase = "packages";
+    state.pkgCount = (state.pkgCount || 0) + 1;
+    hit = true;
+  }
+  // shipout 页码：[1] [2] …（可能同一行多个）
+  const pageRe = /\[(\d+)\]/g;
+  let m;
+  while ((m = pageRe.exec(s))) {
+    const n = Number(m[1]) || 0;
+    if (n > (state.page || 0)) {
+      state.page = n;
+      state.phase = "typeset";
+      hit = true;
+    }
+  }
+  // Output written on out.pdf (12 pages, …)
+  const written = s.match(/Output written on .*\((\d+)\s+pages?/i);
+  if (written) {
+    const n = Number(written[1]) || 0;
+    if (n > 0) {
+      state.page = n;
+      if (n > (state.pageEst || 0)) state.pageEst = n; // 实测页数校正估算
+      state.phase = "typeset";
+      hit = true;
+    }
+  }
+  return hit;
+}
+
+/** 根据阶段/页码/遍数合成 0–100 百分比 */
+function computePdfPercent(state) {
+  const phase = state.phase || "typeset";
+  if (phase === "probe") return 3;
+  if (phase === "prepare") return 6;
+  if (phase === "finalize") return 96;
+  if (phase === "done") return 100;
+  const passMax = Math.max(1, Number(state.passMax) || 3);
+  const pass = Math.max(1, Math.min(passMax, Number(state.pass) || 1));
+  const pageEst = Math.max(1, Number(state.pageEst) || 1);
+  const page = Math.max(0, Number(state.page) || 0);
+  if (phase === "packages") {
+    // 装包：卡在当前遍起点附近缓慢爬升，不假装知道总数
+    const base = 8 + ((pass - 1) / passMax) * 82;
+    return Math.min(base + 8, base + Math.min(10, (state.pkgCount || 0) * 0.4));
+  }
+  // 排版：每遍占 82% 的 1/passMax；页进度用 min(page/est, 0.98)
+  const passSpan = 82 / passMax;
+  const pageRatio = Math.min(0.98, page / pageEst);
+  const pct = 8 + (pass - 1) * passSpan + pageRatio * passSpan;
+  return Math.max(8, Math.min(94, pct));
+}
+
 /** 印刷级 PDF：仅 XeLaTeX（复杂图表 + 中文） */
 async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine = "" } = {}) {
-  setConvertProgress("探测 PDF 引擎", "XeLaTeX / MiKTeX");
+  const pageEst = estimatePdfPages(text, images);
+  const passMax = 3; // pandoc 驱动 XeLaTeX 通常最多约 3 遍
+  const timeoutSec = estimatePdfTimeoutSec(text, images);
+  const progressState = {
+    phase: "probe",
+    page: 0,
+    pageEst,
+    pass: 0,
+    passMax,
+    pkgCount: 0,
+  };
+  setConvertProgress("探测 PDF 引擎", "XeLaTeX / MiKTeX", {
+    percent: 3,
+    phase: "probe",
+    pageEst,
+    passMax,
+    timeoutSec,
+    percentSource: "stage",
+  });
   const pdfInfo = await probePdfEngines();
   const engine = String(pdfEngine || pdfInfo.preferred || "").trim() || "xelatex";
   if (!pdfInfo.engines.xelatex?.ok && !pdfInfo.engines[engine]?.ok) {
@@ -1028,7 +1218,15 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   }
   const useEngine = pdfInfo.engines.xelatex?.ok ? "xelatex" : engine;
 
-  setConvertProgress("准备临时文件", title || "document");
+  progressState.phase = "prepare";
+  setConvertProgress("准备临时文件", `${title || "document"} · 估约 ${pageEst} 页`, {
+    percent: 6,
+    phase: "prepare",
+    pageEst,
+    passMax,
+    timeoutSec,
+    percentSource: "stage",
+  });
   const tmp = makeBridgeTemp("mdm-pdf-");
   const inPath = path.join(tmp, "in.md");
   const outPath = path.join(tmp, "out.pdf");
@@ -1047,23 +1245,33 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     `mainfont=${cjkFont}`,
     "-V",
     "geometry:margin=2cm",
-    "--pdf-engine-opt=-interaction=nonstopmode"
+    "--pdf-engine-opt=-interaction=nonstopmode",
+    "--verbose" // 打出 Running xelatex，便于计遍数
   );
   if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
 
-  const timeoutSec = estimatePdfTimeoutSec(text, images);
   const timeoutMs = timeoutSec * 1000;
   console.log(
-    `[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp} · 上限 ${timeoutSec}s`
+    `[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp} · 估 ${pageEst} 页 · 上限 ${timeoutSec}s`
   );
+  progressState.phase = "typeset";
+  progressState.pass = 0; // 等首条 Running xelatex / 引擎横幅再记第 1 遍
   setConvertProgress(
-    "Pandoc + XeLaTeX 排版中（进行中）",
-    `引擎 ${useEngine} · 上限约 ${Math.round(timeoutSec / 60)} 分钟（大文档更久属正常）· 请看黑窗`,
-    { timeoutSec }
+    "Pandoc + XeLaTeX 排版中",
+    `引擎 ${useEngine} · 估约 ${pageEst} 页 · 上限约 ${Math.round(timeoutSec / 60)} 分钟`,
+    {
+      percent: 8,
+      phase: "typeset",
+      page: 0,
+      pageEst,
+      pass: 0,
+      passMax,
+      timeoutSec,
+      percentSource: "estimate",
+    }
   );
   const miktexEnv = await ensureMiktexQuietAutoInstall(engineCli);
   try {
-    // 按文档规模自适应超时；杀进程树；黑窗可见输出；进度带心跳
     await runCmdLogged(resolvePandocBin(), args, {
       cwd: tmp,
       timeout: timeoutMs,
@@ -1071,12 +1279,25 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
       env: miktexEnv,
       logPrefix: "[pandoc/pdf]",
       watchFile: outPath,
+      progressState,
     });
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 20) {
       throw new Error("PDF 输出为空（请检查字体与 XeLaTeX/MiKTeX 是否完整；黑窗是否有缺包错误）");
     }
-    setConvertProgress("读取 PDF 输出", `${Math.round(fs.statSync(outPath).size / 1024)} KB`);
+    const sizeKb = Math.round(fs.statSync(outPath).size / 1024);
+    setConvertProgress("读取 PDF 输出", `${sizeKb} KB · ${progressState.page || pageEst} 页`, {
+      percent: 96,
+      phase: "finalize",
+      page: progressState.page || pageEst,
+      pageEst: progressState.pageEst || pageEst,
+      pass: progressState.pass,
+      passMax,
+      timeoutSec,
+      outPdfBytes: fs.statSync(outPath).size,
+      percentSource: "stage",
+    });
     const buf = fs.readFileSync(outPath);
+    clearConvertProgress("完成");
     return {
       dataBase64: buf.toString("base64"),
       filename: `${safeBase(title)}.pdf`,
