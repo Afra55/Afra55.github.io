@@ -62,16 +62,48 @@ const FILE_FROM = {
   ".org": "org",
 };
 
-function runCmd(file, args, { input, timeout = 300000, cwd } = {}) {
+function killProcessTree(pid) {
+  if (!pid) return;
+  try {
+    if (process.platform === "win32") {
+      // 杀整棵树：否则只死 pandoc、xelatex/MiKTeX 装包窗还能挂很久
+      spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+    } else {
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch (_) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
+
+function runCmd(file, args, { input, timeout = 300000, cwd, env } = {}) {
   return new Promise((resolve, reject) => {
     const child = execFile(
       file,
       args,
-      { timeout, maxBuffer: 128 * 1024 * 1024, windowsHide: true, encoding: "buffer", cwd },
+      {
+        timeout,
+        maxBuffer: 128 * 1024 * 1024,
+        windowsHide: true,
+        encoding: "buffer",
+        cwd,
+        env: env ? { ...process.env, ...env } : undefined,
+        killSignal: "SIGKILL",
+      },
       (err, stdout, stderr) => {
         if (err) {
           err.stdout = Buffer.isBuffer(stdout) ? stdout.toString("utf8") : String(stdout || "");
           err.stderr = Buffer.isBuffer(stderr) ? stderr.toString("utf8") : String(stderr || "");
+          if (err.killed || /ETIMEDOUT|timeout/i.test(String(err.message || ""))) {
+            err.message = `命令超时（${Math.round(timeout / 1000)}s）：${path.basename(String(file))}`;
+          }
           reject(err);
           return;
         }
@@ -81,11 +113,122 @@ function runCmd(file, args, { input, timeout = 300000, cwd } = {}) {
         });
       }
     );
+    // execFile 超时有时杀不掉 Windows 孙子进程
+    const guard = setTimeout(() => {
+      killProcessTree(child.pid);
+    }, Math.max(1000, timeout + 2000));
+    child.on("close", () => clearTimeout(guard));
+    child.on("error", () => clearTimeout(guard));
     if (input != null) {
       child.stdin.write(input);
       child.stdin.end();
     }
   });
+}
+
+/**
+ * PDF 专用：输出打到黑窗，超时杀进程树，避免 MiKTeX 装包/弹窗把请求挂死一小时。
+ */
+function runCmdLogged(file, args, { timeout = 480000, cwd, env, logPrefix = "[pandoc]" } = {}) {
+  const label = [file, ...(args || []).slice(0, 8)].join(" ");
+  console.log(`${logPrefix} ▶ ${label}${args && args.length > 8 ? " …" : ""}`);
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, {
+      cwd,
+      env: env ? { ...process.env, ...env } : process.env,
+      windowsHide: false, // 允许 MiKTeX 弹窗露出来；装包进度也能看见
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let settled = false;
+    let stdout = "";
+    let stderr = "";
+    const t0 = Date.now();
+    const beat = setInterval(() => {
+      const sec = Math.round((Date.now() - t0) / 1000);
+      console.log(`${logPrefix} …仍在运行 · 已用时 ${sec}s（可看上方 XeLaTeX/MiKTeX 输出）`);
+      setConvertProgress("Pandoc + XeLaTeX 排版中", `已用时 ${sec}s · 黑窗若在装宏包请等它下完`);
+    }, 8000);
+    const timer = setTimeout(() => {
+      console.log(`${logPrefix} ✖ 超时 ${Math.round(timeout / 1000)}s，结束进程树 pid=${child.pid}`);
+      killProcessTree(child.pid);
+      finish(() => {
+        const err = new Error(
+          `PDF 排版超时（>${Math.round(timeout / 1000)}s）。常见原因：MiKTeX 首次缺宏包在下载、或弹窗在任务栏待点。请看黑窗；也可改用浏览器打印。`
+        );
+        err.stdout = stdout;
+        err.stderr = stderr || "timeout";
+        reject(err);
+      });
+    }, timeout);
+
+    function finish(fn) {
+      if (settled) return;
+      settled = true;
+      clearInterval(beat);
+      clearTimeout(timer);
+      fn();
+    }
+
+    const pipeLog = (buf, isErr) => {
+      const text = buf.toString("utf8");
+      if (isErr) stderr += text;
+      else stdout += text;
+      for (const line of text.split(/\r?\n/)) {
+        const s = line.trim();
+        if (!s) continue;
+        console.log(`${logPrefix} ${isErr ? "!" : "|"} ${s.slice(0, 240)}`);
+        if (/installing|downloading|package|宏包|下载/i.test(s)) {
+          setConvertProgress("MiKTeX 正在装/下宏包", s.slice(0, 160));
+        }
+      }
+    };
+    child.stdout?.on("data", (b) => pipeLog(b, false));
+    child.stderr?.on("data", (b) => pipeLog(b, true));
+    child.on("error", (err) => {
+      finish(() => {
+        err.stdout = stdout;
+        err.stderr = err.message;
+        reject(err);
+      });
+    });
+    child.on("close", (code) => {
+      finish(() => {
+        const sec = Math.round((Date.now() - t0) / 1000);
+        console.log(`${logPrefix} ✔ 结束 · exit=${code} · ${sec}s`);
+        if (code && code !== 0) {
+          const err = new Error((stderr || stdout || `exit ${code}`).trim().slice(0, 500) || `pandoc exit ${code}`);
+          err.stdout = stdout;
+          err.stderr = stderr;
+          err.code = code;
+          reject(err);
+          return;
+        }
+        resolve({ stdout, stderr, code: code == null ? 0 : code });
+      });
+    });
+  });
+}
+
+/** 尽量让 MiKTeX 缺包时自动装，而不是弹窗卡死 */
+async function ensureMiktexQuietAutoInstall(engineBin) {
+  const env = {
+    MIKTEX_AUTO_INSTALL: "1",
+    MIKTEX_ENABLE_INSTALLER: "t",
+    // 部分版本认这个
+    MIKTEX_ASSUME_YES: "1",
+  };
+  try {
+    const binDir = path.dirname(String(engineBin || ""));
+    const initexmf = path.join(binDir, process.platform === "win32" ? "initexmf.exe" : "initexmf");
+    if (binDir && fs.existsSync(initexmf)) {
+      console.log("[pandoc] 设置 MiKTeX AutoInstall=1 …");
+      await runCmd(initexmf, ["--set-config-value", "[MPM]AutoInstall=1"], { timeout: 20000 });
+    }
+  } catch (err) {
+    console.log(`[pandoc] AutoInstall 配置跳过：${err?.message || err}`);
+  }
+  return env;
 }
 
 /**
@@ -834,19 +977,19 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   console.log(`[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp}`);
   setConvertProgress(
     "Pandoc + XeLaTeX 排版中",
-    `引擎 ${useEngine} · 图表多/文档长时可能数分钟，黑窗有日志`
+    `引擎 ${useEngine} · 最长约 8 分钟；首次可能在下宏包，请看黑窗`
   );
-  // 心跳：XeLaTeX 期间黑窗可能长时间无新行，定时刷新 progress 的 updatedAt
-  const heartbeat = setInterval(() => {
-    setConvertProgress(
-      "Pandoc + XeLaTeX 排版中",
-      `仍在运行 · 引擎 ${useEngine} · 请勿关黑窗`
-    );
-  }, 5000);
+  const miktexEnv = await ensureMiktexQuietAutoInstall(engineCli);
   try {
-    await runCmd(resolvePandocBin(), args, { cwd: tmp, timeout: 900000 });
+    // 8 分钟硬超时 + 进程树清理；输出进黑窗，避免「藏弹窗挂一小时」
+    await runCmdLogged(resolvePandocBin(), args, {
+      cwd: tmp,
+      timeout: 480000,
+      env: miktexEnv,
+      logPrefix: "[pandoc/pdf]",
+    });
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 20) {
-      throw new Error("PDF 输出为空（请检查字体与 XeLaTeX/MiKTeX 是否完整）");
+      throw new Error("PDF 输出为空（请检查字体与 XeLaTeX/MiKTeX 是否完整；黑窗是否有缺包错误）");
     }
     setConvertProgress("读取 PDF 输出", `${Math.round(fs.statSync(outPath).size / 1024)} KB`);
     const buf = fs.readFileSync(outPath);
@@ -867,7 +1010,6 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     }
     throw new Error((msg || "印刷级 PDF 失败").slice(0, 500));
   } finally {
-    clearInterval(heartbeat);
     try {
       fs.rmSync(tmp, { recursive: true, force: true });
     } catch (_) {}
