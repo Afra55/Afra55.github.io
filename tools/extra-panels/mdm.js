@@ -5630,10 +5630,13 @@
 
     function standaloneHtml(title, bodyHtml) {
       const v = themeVars();
-      return `<!doctype html><html lang="zh"><head><meta charset="utf-8" /><title>${escapeHtml(title)}</title>
+      return `<!doctype html><html lang="zh"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>${escapeHtml(title)}</title>
 <style>
 :root{color-scheme:${isDarkScheme() ? "dark" : "light"}}
-body{max-width:min(1120px,94vw);margin:1.5rem auto;padding:0 1.25rem;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+*{box-sizing:border-box}
+html,body{width:100%;margin:0}
+/* 自适应屏幕宽度：随窗口变宽/变窄，仅留左右内边距 */
+body{max-width:none;width:100%;padding:1.25rem clamp(1rem,3vw,2.5rem) 2.5rem;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
 pre{background:${v.panel};padding:.8rem;border-radius:8px;overflow:auto}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre code{background:none}
@@ -5647,7 +5650,7 @@ a{color:${v.accent}}
 .mdm-mermaid svg,.mdm-mermaid-svg svg,figure img{max-width:100%;height:auto}
 .mdm-mermaid-svg{display:inline-block;max-width:100%}
 .katex-display{overflow-x:auto;overflow-y:hidden}
-@media print{@page{margin:18mm 16mm}body{max-width:none;margin:0;padding:0;background:#fff;color:#111}pre,table,blockquote,img,.mdm-mermaid{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
+@media print{@page{margin:18mm 16mm}body{max-width:none;width:auto;margin:0;padding:0;background:#fff;color:#111}pre,table,blockquote,img,.mdm-mermaid{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
 </style></head><body>${buildToc(bodyHtml)}${bodyHtml}</body></html>`;
     }
 
