@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.116";
+const BRIDGE_VERSION = "0.9.117";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -101,12 +101,26 @@ if (!fileUnlockBridge) {
     "未找到文件占用模块（可选）：完整 ZIP 请包含 fileunlock-bridge/server.js + lock-ops.js + purge-ops.js"
   );
 }
-function loadPandocBridge() {
-  const candidates = [
+function pandocBridgeCandidates() {
+  return [
     path.join(__dirname, "pandoc-bridge", "server.js"),
     path.join(__dirname, "..", "pandoc-bridge", "server.js"),
   ];
-  for (const candidate of candidates) {
+}
+function pandocOpsCandidates() {
+  return [
+    path.join(__dirname, "pandoc-bridge", "pandoc-ops.js"),
+    path.join(__dirname, "..", "pandoc-bridge", "pandoc-ops.js"),
+  ];
+}
+function clearRequireCache(filePath) {
+  try {
+    const resolved = require.resolve(filePath);
+    delete require.cache[resolved];
+  } catch (_) {}
+}
+function loadPandocBridge() {
+  for (const candidate of pandocBridgeCandidates()) {
     try {
       if (fs.existsSync(candidate)) return require(candidate);
     } catch (err) {
@@ -115,7 +129,26 @@ function loadPandocBridge() {
   }
   return null;
 }
-const pandocBridge = loadPandocBridge();
+/** 磁盘上的 pandoc-ops 是否已支持印刷级 PDF（旧 ZIP 会直接抛「请用前端打印」） */
+function pandocOpsSupportsPrintPdf() {
+  for (const opsPath of pandocOpsCandidates()) {
+    try {
+      if (!fs.existsSync(opsPath)) continue;
+      clearRequireCache(opsPath);
+      const ops = require(opsPath);
+      if (typeof ops.convertToPrintPdf === "function") return true;
+    } catch (_) {}
+  }
+  return false;
+}
+function reloadPandocBridge() {
+  for (const p of [...pandocBridgeCandidates(), ...pandocOpsCandidates()]) {
+    clearRequireCache(p);
+  }
+  pandocBridge = loadPandocBridge();
+  return pandocBridge;
+}
+let pandocBridge = loadPandocBridge();
 if (!pandocBridge) {
   console.warn("未找到 Pandoc 模块（可选）：完整 ZIP 请包含 pandoc-bridge/server.js + pandoc-ops.js");
 }
@@ -6153,9 +6186,49 @@ async function handleApi(req, res, url) {
         return;
       }
       if (isConvert) {
+        // 先读 body：PDF 时拦截「旧版 pandoc-ops 仍 throw 请用前端打印」
+        const raw = await readBody(req, 96 * 1024 * 1024, {
+          onProgress: (n) => {
+            if (n === 0 || n % (512 * 1024) < 64 * 1024) {
+              console.log(`[bridge] Pandoc 上传… ${Math.round(n / 1024)} KB`);
+            }
+          },
+        });
+        const body = parseJsonBody(raw);
+        const toFmt = String(body?.to || "").trim().toLowerCase();
+        if (toFmt === "pdf") {
+          if (!pandocOpsSupportsPrintPdf()) {
+            console.log("[bridge] pandoc-ops 过旧（无 convertToPrintPdf），拒绝旧「前端打印」死胡同");
+            sendJson(
+              res,
+              400,
+              {
+                ok: false,
+                needsBridgeUpdate: true,
+                error:
+                  "本机桥 Pandoc 模块过旧，仍会拒绝 PDF。请完全退出黑窗后重新启动桥（会自动更新），更新完成后再导出。路径若已填写会保留。",
+              },
+              origin
+            );
+            return;
+          }
+          // 热更新后清缓存，避免仍跑旧 convert
+          reloadPandocBridge();
+        }
         console.log("");
         console.log("[bridge] → Pandoc 文档转换 · 请看下方 [pandoc] 进度");
         beginBridgeBusy("pandoc-convert");
+        try {
+          await pandocBridge.handleRequest(req, res, {
+            pathname: stripped,
+            alreadyAuthed: !isPandocHealth,
+            embedded: true,
+            preloadedBody: body,
+          });
+        } finally {
+          endBridgeBusy("pandoc-convert");
+        }
+        return;
       }
       try {
         await pandocBridge.handleRequest(req, res, {
@@ -6163,8 +6236,8 @@ async function handleApi(req, res, url) {
           alreadyAuthed: !isPandocHealth,
           embedded: true,
         });
-      } finally {
-        if (isConvert) endBridgeBusy("pandoc-convert");
+      } catch (err) {
+        throw err;
       }
       return;
     }
