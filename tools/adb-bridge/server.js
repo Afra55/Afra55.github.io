@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.127";
+const BRIDGE_VERSION = "0.9.128";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -129,17 +129,25 @@ function loadPandocBridge() {
   }
   return null;
 }
-/** 磁盘上的 pandoc-ops 是否已支持印刷级 PDF（旧 ZIP 会直接抛「请用前端打印」） */
-function pandocOpsSupportsPrintPdf() {
+/** 直接拿 pandoc-ops，避免走 server 路由二次 readBody 挂死 */
+function loadPandocOps() {
   for (const opsPath of pandocOpsCandidates()) {
     try {
       if (!fs.existsSync(opsPath)) continue;
-      clearRequireCache(opsPath);
-      const ops = require(opsPath);
-      if (typeof ops.convertToPrintPdf === "function") return true;
-    } catch (_) {}
+      return require(opsPath);
+    } catch (err) {
+      console.warn("加载 pandoc-ops 失败:", opsPath, err.message || err);
+    }
   }
-  return false;
+  return null;
+}
+/** 磁盘上的 pandoc-ops 是否已支持印刷级 PDF（旧 ZIP 会直接抛「请用前端打印」） */
+function pandocOpsSupportsPrintPdf() {
+  try {
+    return typeof loadPandocOps()?.convertToPrintPdf === "function";
+  } catch (_) {
+    return false;
+  }
 }
 function reloadPandocBridge() {
   for (const p of [...pandocBridgeCandidates(), ...pandocOpsCandidates()]) {
@@ -6256,18 +6264,16 @@ async function handleApi(req, res, url) {
         return;
       }
       if (isConvert) {
-        // PDF：先确认模块并 reload，再读 body+写 progress（避免 progress 写到被清掉的旧模块）
+        // 关键：统一桥已读完 body 后，旧 pandoc/server 再 readBody 会永远挂起 → 只见 progress、无 [pandoc]
+        // 改为桥内直接调 pandoc-ops.convert，不再二次读请求体。
         const touchPandocProgress = (stage, detail, extra) => {
           try {
-            if (typeof pandocBridge?.setConvertProgress === "function") {
-              pandocBridge.setConvertProgress(stage, detail, extra || {});
+            const ops = loadPandocOps();
+            if (typeof ops?.setConvertProgress === "function") {
+              ops.setConvertProgress(stage, detail, extra || {});
             }
           } catch (_) {}
         };
-        // 根据 Content-Type / 预读头无法可靠知 to=pdf，先轻量支持探测；真正拦截在 body 解析后
-        if (pandocOpsSupportsPrintPdf()) {
-          reloadPandocBridge();
-        }
         touchPandocProgress("接收上传", "浏览器 → 本机桥", {
           percent: 1,
           phase: "prepare",
@@ -6288,7 +6294,13 @@ async function handleApi(req, res, url) {
           },
         });
         console.log(`[bridge] 上传完成 · ${Math.round(raw.length / 1024)} KB`);
-        const body = parseJsonBody(raw);
+        let body;
+        try {
+          body = parseJsonBody(raw);
+        } catch (err) {
+          sendJson(res, 400, { ok: false, error: `JSON 解析失败：${err?.message || err}` }, origin);
+          return;
+        }
         const toFmt = String(body?.to || "").trim().toLowerCase();
         if (toFmt === "pdf" && !pandocOpsSupportsPrintPdf()) {
           console.log("[bridge] pandoc-ops 过旧（无 convertToPrintPdf），拒绝旧「前端打印」死胡同");
@@ -6305,21 +6317,37 @@ async function handleApi(req, res, url) {
           );
           return;
         }
+        // PDF：热加载最新 ops（不清两次，避免 progress 模块分裂）
+        if (toFmt === "pdf") {
+          reloadPandocBridge();
+        }
+        const ops = loadPandocOps();
+        if (typeof ops?.convert !== "function") {
+          sendJson(res, 503, { ok: false, error: "未找到 Pandoc convert（请用完整 ZIP）" }, origin);
+          return;
+        }
         touchPandocProgress("准备转换", `${toFmt || "file"} · ${Math.round(raw.length / 1024)} KB 已收齐`, {
           percent: 5,
           phase: "prepare",
           percentSource: "stage",
         });
         console.log("");
-        console.log("[bridge] → Pandoc 文档转换 · 请看下方 [pandoc] 进度");
+        console.log(`[bridge] → Pandoc 文档转换 · to=${toFmt || "?"} · 请看下方 [pandoc] 进度`);
         beginBridgeBusy("pandoc-convert");
+        const t0 = Date.now();
         try {
-          await pandocBridge.handleRequest(req, res, {
-            pathname: stripped,
-            alreadyAuthed: !isPandocHealth,
-            embedded: true,
-            preloadedBody: body,
-          });
+          console.log(`[pandoc] ════ 桥内直接 convert 开始 · ${String(body.title || body.filename || "(text)").slice(0, 80)}`);
+          const data = await ops.convert(body);
+          console.log(`[pandoc] ✔ convert 完成 · ${Math.round((Date.now() - t0) / 1000)}s`);
+          console.log("");
+          sendJson(res, 200, { ok: true, ...data }, origin);
+        } catch (err) {
+          console.log(`[pandoc] ✖ convert 失败 · ${err?.message || err}`);
+          console.log("");
+          try {
+            ops.clearConvertProgress?.("失败");
+          } catch (_) {}
+          sendJson(res, 400, { ok: false, error: err?.message || String(err) }, origin);
         } finally {
           endBridgeBusy("pandoc-convert");
         }
