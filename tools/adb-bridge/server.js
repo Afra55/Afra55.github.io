@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.128";
+const BRIDGE_VERSION = "0.9.129";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -101,14 +101,38 @@ if (!fileUnlockBridge) {
     "未找到文件占用模块（可选）：完整 ZIP 请包含 fileunlock-bridge/server.js + lock-ops.js + purge-ops.js"
   );
 }
+/** 桥安装根：扁平 ZIP 为解压目录；仓库/EnvKit 嵌套为 tools/（adb-bridge 的上一级） */
+function bridgeInstallRoot() {
+  const fromEnv = String(process.env.ADB_BRIDGE_DIR || process.env.DEVTOOLS_BRIDGE_DIR || "").trim();
+  if (fromEnv) {
+    try {
+      if (fs.existsSync(fromEnv)) return path.resolve(fromEnv);
+    } catch (_) {}
+  }
+  // 扁平 ZIP：server.js 与 pandoc-bridge/ ffmpeg-bridge/ 同级
+  if (
+    fs.existsSync(path.join(__dirname, "pandoc-bridge")) ||
+    fs.existsSync(path.join(__dirname, "ffmpeg-bridge")) ||
+    fs.existsSync(path.join(__dirname, "git-bridge"))
+  ) {
+    return path.resolve(__dirname);
+  }
+  // 嵌套：.../adb-bridge/server.js → 根为上一级
+  return path.resolve(__dirname, "..");
+}
+
 function pandocBridgeCandidates() {
+  const root = bridgeInstallRoot();
   return [
+    path.join(root, "pandoc-bridge", "server.js"),
     path.join(__dirname, "pandoc-bridge", "server.js"),
     path.join(__dirname, "..", "pandoc-bridge", "server.js"),
   ];
 }
 function pandocOpsCandidates() {
+  const root = bridgeInstallRoot();
   return [
+    path.join(root, "pandoc-bridge", "pandoc-ops.js"),
     path.join(__dirname, "pandoc-bridge", "pandoc-ops.js"),
     path.join(__dirname, "..", "pandoc-bridge", "pandoc-ops.js"),
   ];
@@ -120,7 +144,11 @@ function clearRequireCache(filePath) {
   } catch (_) {}
 }
 function loadPandocBridge() {
+  const seen = new Set();
   for (const candidate of pandocBridgeCandidates()) {
+    const key = path.resolve(candidate);
+    if (seen.has(key)) continue;
+    seen.add(key);
     try {
       if (fs.existsSync(candidate)) return require(candidate);
     } catch (err) {
@@ -129,17 +157,36 @@ function loadPandocBridge() {
   }
   return null;
 }
-/** 直接拿 pandoc-ops，避免走 server 路由二次 readBody 挂死 */
+/** 直接拿 pandoc-ops；优先带 convertToPrintPdf 的副本（避免加载到自动更新写错目录的旧文件） */
 function loadPandocOps() {
+  const seen = new Set();
+  let fallback = null;
+  let fallbackPath = "";
   for (const opsPath of pandocOpsCandidates()) {
+    const key = path.resolve(opsPath);
+    if (seen.has(key)) continue;
+    seen.add(key);
     try {
       if (!fs.existsSync(opsPath)) continue;
-      return require(opsPath);
+      clearRequireCache(opsPath);
+      const ops = require(opsPath);
+      if (typeof ops?.convertToPrintPdf === "function") {
+        if (fallbackPath && fallbackPath !== opsPath) {
+          console.log(`[bridge] pandoc-ops 选用印刷级副本：${opsPath}`);
+        }
+        return ops;
+      }
+      if (!fallback && ops) {
+        fallback = ops;
+        fallbackPath = opsPath;
+        console.log(`[bridge] pandoc-ops 无 convertToPrintPdf，继续找：${opsPath}`);
+      }
     } catch (err) {
       console.warn("加载 pandoc-ops 失败:", opsPath, err.message || err);
     }
   }
-  return null;
+  if (fallbackPath) console.log(`[bridge] pandoc-ops 回退：${fallbackPath}`);
+  return fallback;
 }
 /** 磁盘上的 pandoc-ops 是否已支持印刷级 PDF（旧 ZIP 会直接抛「请用前端打印」） */
 function pandocOpsSupportsPrintPdf() {
@@ -6302,24 +6349,37 @@ async function handleApi(req, res, url) {
           return;
         }
         const toFmt = String(body?.to || "").trim().toLowerCase();
-        if (toFmt === "pdf" && !pandocOpsSupportsPrintPdf()) {
-          console.log("[bridge] pandoc-ops 过旧（无 convertToPrintPdf），拒绝旧「前端打印」死胡同");
-          sendJson(
-            res,
-            400,
-            {
-              ok: false,
-              needsBridgeUpdate: true,
-              error:
-                "本机桥 Pandoc 模块过旧，仍会拒绝 PDF。请完全退出黑窗后重新启动桥（会自动更新），更新完成后再导出。路径若已填写会保留。",
-            },
-            origin
-          );
-          return;
-        }
-        // PDF：热加载最新 ops（不清两次，避免 progress 模块分裂）
         if (toFmt === "pdf") {
           reloadPandocBridge();
+          if (!pandocOpsSupportsPrintPdf()) {
+            console.log("[bridge] pandoc-ops 无 convertToPrintPdf，尝试从站点强制拉取…");
+            touchPandocProgress("更新 Pandoc 模块", "正在下载 pandoc-ops.js", {
+              percent: 4,
+              phase: "prepare",
+              percentSource: "stage",
+            });
+            let refreshed = false;
+            try {
+              refreshed = await forceRefreshPandocOps();
+            } catch (err) {
+              console.log(`[bridge] 强制刷新 pandoc-ops 失败：${err?.message || err}`);
+            }
+            if (!refreshed) {
+              sendJson(
+                res,
+                400,
+                {
+                  ok: false,
+                  needsBridgeUpdate: true,
+                  bridgeVersion: BRIDGE_VERSION,
+                  error:
+                    `桥核心已是 ${BRIDGE_VERSION}，但旁路 pandoc-ops.js 仍过旧（无印刷级 PDF）。请完全退出黑窗后重开（会再自动更新），或重新下载完整 ZIP。`,
+                },
+                origin
+              );
+              return;
+            }
+          }
         }
         const ops = loadPandocOps();
         if (typeof ops?.convert !== "function") {
@@ -7529,6 +7589,12 @@ function printBanner(activePort) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);
     console.log(" 请在网页把桥地址改成上述端口后再连接");
   }
+  try {
+    const root = bridgeInstallRoot();
+    const printOk = pandocOpsSupportsPrintPdf();
+    console.log(` 安装根: ${root}`);
+    console.log(` Pandoc 印刷级 PDF 模块: ${printOk ? "就绪" : "未就绪（将在导出时自动拉取 pandoc-ops）"}`);
+  } catch (_) {}
   console.log("========================================");
   console.log("");
 }
@@ -7687,8 +7753,45 @@ async function checkBridgeUpdate() {
 /** 仓库相对路径 → 本机实际路径（兼容 ZIP 扁平布局与 EnvKit 嵌套布局） */
 function localPathForRepoPath(repoPath) {
   const rel = String(repoPath).replace(/^\.\//, "");
+  // 扁平 ZIP：server.js 在解压根；adb-bridge/* → 解压根/*
   if (rel.startsWith("adb-bridge/")) return path.join(__dirname, rel.slice("adb-bridge/".length));
-  return path.join(path.dirname(__dirname), rel);
+  // 其余（pandoc-bridge/… 等）：扁平写到解压根；嵌套写到 tools/
+  // 旧逻辑误用 path.dirname(__dirname)，会把更新写到解压目录的上一级，导致仍加载包内旧 pandoc-ops
+  return path.join(bridgeInstallRoot(), rel);
+}
+
+/** 强制从站点拉最新 pandoc-ops（修复「版本号已新但 ops 仍旧」） */
+async function forceRefreshPandocOps() {
+  const dest = localPathForRepoPath("pandoc-bridge/pandoc-ops.js");
+  const serverDest = localPathForRepoPath("pandoc-bridge/server.js");
+  console.log(`[bridge] 强制刷新 pandoc-ops → ${dest}`);
+  const opsBuf = await fetchRemote(`${SELF_BASE}/pandoc-bridge/pandoc-ops.js`, {
+    binary: true,
+    timeoutMs: 120000,
+  });
+  await writeFileAtomic(dest, opsBuf);
+  try {
+    const srvBuf = await fetchRemote(`${SELF_BASE}/pandoc-bridge/server.js`, {
+      binary: true,
+      timeoutMs: 60000,
+    });
+    await writeFileAtomic(serverDest, srvBuf);
+  } catch (err) {
+    console.log(`[bridge] pandoc-bridge/server.js 刷新跳过：${err?.message || err}`);
+  }
+  // 若上一级曾被旧逻辑写过一份，尽量同步过去，避免下次误载
+  try {
+    const stray = path.join(path.dirname(__dirname), "pandoc-bridge", "pandoc-ops.js");
+    if (path.resolve(stray) !== path.resolve(dest) && fs.existsSync(path.dirname(stray))) {
+      await writeFileAtomic(stray, opsBuf);
+      console.log(`[bridge] 已同步副本到（兼容旧路径）：${stray}`);
+    }
+  } catch (_) {}
+  reloadPandocBridge();
+  const ops = loadPandocOps();
+  const ok = typeof ops?.convertToPrintPdf === "function";
+  console.log(`[bridge] pandoc-ops 刷新后 printPdf=${ok}`);
+  return ok;
 }
 
 /** server.js 必须最后写：中途退出时本地版本号仍旧，下次还能发现并续传 */

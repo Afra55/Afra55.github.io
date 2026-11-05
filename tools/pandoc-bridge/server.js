@@ -17,7 +17,7 @@ const {
   clearConvertProgress,
 } = require("./pandoc-ops");
 
-const BRIDGE_VERSION = "0.1.16";
+const BRIDGE_VERSION = "0.1.17";
 const FEATURES = { pandoc: true, importToMarkdown: true, printPdf: true, convertProgress: true };
 
 function readBody(req, limit = 96 * 1024 * 1024, { onProgress } = {}) {

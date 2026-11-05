@@ -6162,11 +6162,22 @@ a{color:${v.accent}}
       return { res, data };
     }
 
-    /** 旧桥抛「请用前端打印」时，改写成可执行的更新提示 */
-    function normalizePdfBridgeError(msg) {
+    /** 旧桥 / ops 旁路过旧时的提示（勿把「缺 XeLaTeX」误说成桥旧） */
+    function normalizePdfBridgeError(msg, meta = {}) {
       const s = String(msg || "").trim();
-      if (/PDF 请用前端打印|需额外 LaTeX 引擎|needsBridgeUpdate|Pandoc 模块过旧/i.test(s)) {
-        return "本机桥还是旧版（会拒绝印刷级 PDF）。请完全退出黑窗后重新启动桥，等自动更新完成，再点导出。已填写的引擎路径会保留。";
+      const ver = String(meta.bridgeVersion || "").trim();
+      if (/旁路 pandoc-ops|无印刷级 PDF|无 convertToPrintPdf/i.test(s)) {
+        return `${s} 已填写的引擎路径会保留。`;
+      }
+      if (/PDF 请用前端打印|需额外 LaTeX 引擎|Pandoc 模块过旧/i.test(s)) {
+        return ver
+          ? `桥核心 ${ver}，但 Pandoc 旁路文件可能未更新。请完全退出黑窗再开一次（自动更新），或重新下载完整 ZIP。路径会保留。`
+          : "本机桥 Pandoc 旁路仍过旧。请完全退出黑窗后重新启动桥，等自动更新完成，再点导出。已填写的引擎路径会保留。";
+      }
+      if (/needsBridgeUpdate/i.test(s) && !/XeLaTeX|MiKTeX|未找到印刷级/i.test(s)) {
+        return ver
+          ? `桥核心 ${ver}，Pandoc 模块需刷新。请退出黑窗重开，或下载完整 ZIP。`
+          : "本机桥 Pandoc 模块需刷新。请完全退出黑窗后重新启动桥再导出。";
       }
       return s;
     }
@@ -6661,9 +6672,9 @@ a{color:${v.accent}}
         const data = await res.json().catch(() => null);
         if (!res.ok || !data?.ok) {
           let msg = data?.error || `本机桥未响应（HTTP ${res.status}），请确认桥已启动且装了 pandoc`;
-          if (data?.needsBridgeUpdate || /PDF 请用前端打印|需额外 LaTeX|Pandoc 模块过旧/i.test(msg)) {
+          if (data?.needsBridgeUpdate || /PDF 请用前端打印|需额外 LaTeX|Pandoc 模块过旧|旁路 pandoc-ops/i.test(msg)) {
             void requestBridgeSelfUpdate();
-            msg = normalizePdfBridgeError(msg);
+            msg = normalizePdfBridgeError(msg, { bridgeVersion: data?.bridgeVersion || "" });
           }
           prog.close();
           if (/未找到本机桥|未启动|Failed to fetch/i.test(msg)) {
