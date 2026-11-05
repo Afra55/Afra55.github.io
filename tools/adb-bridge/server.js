@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.125";
+const BRIDGE_VERSION = "0.9.126";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -622,10 +622,11 @@ function applyCors(headers, origin) {
   headers["Access-Control-Allow-Private-Network"] = "true";
 }
 
-function readBody(req, limit = 512 * 1024 * 1024) {
+function readBody(req, limit = 512 * 1024 * 1024, { onProgress } = {}) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
+    let lastProg = 0;
     req.on("data", (chunk) => {
       size += chunk.length;
       if (size > limit) {
@@ -634,6 +635,13 @@ function readBody(req, limit = 512 * 1024 * 1024) {
         return;
       }
       chunks.push(chunk);
+      const now = Date.now();
+      if (typeof onProgress === "function" && now - lastProg >= 400) {
+        lastProg = now;
+        try {
+          onProgress(size);
+        } catch (_) {}
+      }
     });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
@@ -6246,31 +6254,60 @@ async function handleApi(req, res, url) {
         return;
       }
       if (isConvert) {
-        // 先读 body：PDF 时拦截「旧版 pandoc-ops 仍 throw 请用前端打印」
+        // PDF：先确认模块并 reload，再读 body+写 progress（避免 progress 写到被清掉的旧模块）
+        const touchPandocProgress = (stage, detail, extra) => {
+          try {
+            if (typeof pandocBridge?.setConvertProgress === "function") {
+              pandocBridge.setConvertProgress(stage, detail, extra || {});
+            }
+          } catch (_) {}
+        };
+        // 根据 Content-Type / 预读头无法可靠知 to=pdf，先轻量支持探测；真正拦截在 body 解析后
+        if (pandocOpsSupportsPrintPdf()) {
+          reloadPandocBridge();
+        }
+        touchPandocProgress("接收上传", "浏览器 → 本机桥", {
+          percent: 1,
+          phase: "prepare",
+          percentSource: "stage",
+        });
         console.log("[bridge] 正在接收 Pandoc 转换上传…");
-        const raw = await readBody(req, 96 * 1024 * 1024);
+        const raw = await readBody(req, 96 * 1024 * 1024, {
+          onProgress: (n) => {
+            const kb = Math.round(n / 1024);
+            if (kb % 512 < 32 || n < 65536) {
+              console.log(`[bridge] 上传中… ${kb} KB`);
+            }
+            touchPandocProgress("接收上传", `已收 ${kb} KB`, {
+              percent: Math.min(5, 1 + kb / 5000),
+              phase: "prepare",
+              percentSource: "stage",
+            });
+          },
+        });
         console.log(`[bridge] 上传完成 · ${Math.round(raw.length / 1024)} KB`);
         const body = parseJsonBody(raw);
         const toFmt = String(body?.to || "").trim().toLowerCase();
-        if (toFmt === "pdf") {
-          if (!pandocOpsSupportsPrintPdf()) {
-            console.log("[bridge] pandoc-ops 过旧（无 convertToPrintPdf），拒绝旧「前端打印」死胡同");
-            sendJson(
-              res,
-              400,
-              {
-                ok: false,
-                needsBridgeUpdate: true,
-                error:
-                  "本机桥 Pandoc 模块过旧，仍会拒绝 PDF。请完全退出黑窗后重新启动桥（会自动更新），更新完成后再导出。路径若已填写会保留。",
-              },
-              origin
-            );
-            return;
-          }
-          // 热更新后清缓存，避免仍跑旧 convert
-          reloadPandocBridge();
+        if (toFmt === "pdf" && !pandocOpsSupportsPrintPdf()) {
+          console.log("[bridge] pandoc-ops 过旧（无 convertToPrintPdf），拒绝旧「前端打印」死胡同");
+          sendJson(
+            res,
+            400,
+            {
+              ok: false,
+              needsBridgeUpdate: true,
+              error:
+                "本机桥 Pandoc 模块过旧，仍会拒绝 PDF。请完全退出黑窗后重新启动桥（会自动更新），更新完成后再导出。路径若已填写会保留。",
+            },
+            origin
+          );
+          return;
         }
+        touchPandocProgress("准备转换", `${toFmt || "file"} · ${Math.round(raw.length / 1024)} KB 已收齐`, {
+          percent: 5,
+          phase: "prepare",
+          percentSource: "stage",
+        });
         console.log("");
         console.log("[bridge] → Pandoc 文档转换 · 请看下方 [pandoc] 进度");
         beginBridgeBusy("pandoc-convert");

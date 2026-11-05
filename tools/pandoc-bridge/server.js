@@ -13,9 +13,11 @@ const {
   probePdfEngines,
   setXelatexPath,
   getConvertProgress,
+  setConvertProgress,
+  clearConvertProgress,
 } = require("./pandoc-ops");
 
-const BRIDGE_VERSION = "0.1.13";
+const BRIDGE_VERSION = "0.1.14";
 const FEATURES = { pandoc: true, importToMarkdown: true, printPdf: true, convertProgress: true };
 
 function readBody(req, limit = 96 * 1024 * 1024, { onProgress } = {}) {
@@ -94,17 +96,33 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname === "/convert" && req.method === "POST") {
       console.log("");
       console.log("[pandoc] ════ 收到转换请求 · 正在接收上传…");
+      setConvertProgress("接收上传", "浏览器 → 本机桥", {
+        percent: 1,
+        phase: "prepare",
+        percentSource: "stage",
+      });
       let body = opts.preloadedBody;
       if (body == null) {
         const raw = await readBody(req, 96 * 1024 * 1024, {
           onProgress: (n) => {
-            console.log(`[pandoc] 上传中… ${Math.round(n / 1024)} KB`);
+            const kb = Math.round(n / 1024);
+            console.log(`[pandoc] 上传中… ${kb} KB`);
+            setConvertProgress("接收上传", `已收 ${kb} KB`, {
+              percent: Math.min(5, 1 + kb / 5000),
+              phase: "prepare",
+              percentSource: "stage",
+            });
           },
         });
         console.log(`[pandoc] 上传完成 · ${Math.round(raw.length / 1024)} KB`);
         body = parseJsonBody(raw);
       } else {
         console.log("[pandoc] 使用预读 body（统一桥已拦截校验）");
+        setConvertProgress("上传已收齐", "开始转换…", {
+          percent: 5,
+          phase: "prepare",
+          percentSource: "stage",
+        });
       }
       const name = String(body.filename || body.name || "(text)");
       console.log(`[pandoc] 开始处理「${name}」…`);
@@ -117,6 +135,9 @@ async function handleRequest(req, res, opts = {}) {
       } catch (err) {
         console.log(`[pandoc] /convert 失败 · ${err?.message || err}`);
         console.log("");
+        try {
+          clearConvertProgress("失败");
+        } catch (_) {}
         throw err;
       }
       return;
@@ -172,4 +193,11 @@ async function handleRequest(req, res, opts = {}) {
   }
 }
 
-module.exports = { handleRequest, BRIDGE_VERSION, FEATURES };
+module.exports = {
+  handleRequest,
+  BRIDGE_VERSION,
+  FEATURES,
+  getConvertProgress,
+  setConvertProgress,
+  clearConvertProgress,
+};

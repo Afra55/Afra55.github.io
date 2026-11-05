@@ -6156,6 +6156,7 @@ a{color:${v.accent}}
     async function fetchPandocJson(pathname) {
       const res = await fetch(`${baseUrl()}${pathname}`, {
         headers: { "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+        cache: "no-store",
       });
       const data = await res.json().catch(() => null);
       return { res, data };
@@ -6360,9 +6361,9 @@ a{color:${v.accent}}
         `</div>` +
         `<p class="hint tight" id="mdm-pandoc-export-detail" style="margin:0 0 8px;min-height:1.2em"></p>` +
         `<p class="hint tight" id="mdm-pandoc-export-pages" style="margin:0 0 8px;min-height:1.2em"></p>` +
-        `<p class="hint tight" id="mdm-pandoc-export-alive" style="margin:0 0 8px;min-height:1.2em;font-weight:600">等待桥进度…</p>` +
+        `<p class="hint tight" id="mdm-pandoc-export-alive" style="margin:0 0 8px;min-height:1.2em;font-weight:600">浏览器准备中（尚未连桥）…</p>` +
         `<p class="hint tight" id="mdm-pandoc-export-lastlog" style="margin:0 0 8px;min-height:1.2em;word-break:break-all"></p>` +
-        `<p class="hint tight">进度来自 XeLaTeX 页码 <code>[N]</code> + 遍数（通常最多 3 遍）。<strong>无超时上限</strong>，跑完为止；不要了再点取消。装宏包时百分比会慢爬。</p>` +
+        `<p class="hint tight">先在浏览器烘图表，再上传到桥；进度条来自 XeLaTeX 页码。<strong>无超时</strong>，跑完为止。</p>` +
         `</div>` +
         `<div class="mdm-modal-foot" style="flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center">` +
         `<p class="hint tight" id="mdm-pandoc-export-elapsed" style="margin:0">已用时 0 秒</p>` +
@@ -6377,12 +6378,36 @@ a{color:${v.accent}}
       const lastLogEl = () => document.getElementById("mdm-pandoc-export-lastlog");
       const elapsedEl = () => document.getElementById("mdm-pandoc-export-elapsed");
       let lastPct = 0;
+      let pollStarted = false;
+      let convertPosted = false;
+      const setAliveText = (text, color) => {
+        const a = aliveEl();
+        if (!a) return;
+        a.textContent = text;
+        a.style.color = color || "";
+      };
       const setLocal = (stage, detail = "") => {
         if (stopped) return;
         const s = stageEl();
         const d = detailEl();
         if (s) s.textContent = stage || "处理中…";
         if (d) d.textContent = detail || "";
+        // 本地阶段时明确不是「卡在等桥」
+        if (!pollStarted) {
+          setAliveText("浏览器本地准备中（还没问桥）…", "");
+        } else if (!convertPosted) {
+          setAliveText("已开始轮询桥进度…", "");
+        }
+      };
+      const setLocalPct = (pct) => {
+        if (stopped) return;
+        let n = Math.round(Number(pct) || 0);
+        if (n < lastPct) n = lastPct;
+        lastPct = n;
+        const pctNode = pctEl();
+        const fill = fillEl();
+        if (pctNode) pctNode.textContent = `${n}%`;
+        if (fill) fill.style.width = `${n}%`;
       };
       const setAliveUi = (data) => {
         if (stopped) return;
@@ -6390,15 +6415,12 @@ a{color:${v.accent}}
         const lg = lastLogEl();
         const el = elapsedEl();
         const pg = pagesEl();
-        const pctNode = pctEl();
-        const fill = fillEl();
         if (!data) return;
         const hb = data.heartbeatAgeSec != null ? Number(data.heartbeatAgeSec) : null;
         let pct = Math.round(Number(data.percent) || 0);
         if (pct < lastPct) pct = lastPct;
         lastPct = pct;
-        if (pctNode) pctNode.textContent = `${pct}%`;
-        if (fill) fill.style.width = `${pct}%`;
+        setLocalPct(pct);
         if (pg) {
           const bits = [];
           if (data.page > 0 && data.pageEst > 0) {
@@ -6415,14 +6437,15 @@ a{color:${v.accent}}
           if (data.percentSource === "pages") bits.push("按页码计");
           else if (data.percentSource === "packages") bits.push("装包中");
           else if (data.percentSource === "estimate") bits.push("估算");
+          else if (data.percentSource === "stage") bits.push("阶段");
           pg.textContent = bits.join(" · ");
         }
         if (a) {
           if (data.active && data.alive) {
             a.textContent =
               hb != null
-                ? `● 仍在转换（心跳 ${hb}s 前）`
-                : "● 仍在转换（桥有心跳）";
+                ? `● 桥进度正常（心跳 ${hb}s 前）`
+                : "● 桥进度正常";
             a.style.color = "var(--ok, #15803d)";
           } else if (data.active) {
             a.textContent =
@@ -6430,8 +6453,11 @@ a{color:${v.accent}}
                 ? `○ 超过 ${hb}s 无心跳 — 可能卡住，可看黑窗或取消`
                 : "○ 暂无心跳 — 可能卡住，可看黑窗或取消";
             a.style.color = "var(--warn, #b45309)";
+          } else if (convertPosted) {
+            a.textContent = "桥暂无活跃任务（可能在排队/刚结束）";
+            a.style.color = "var(--warn, #b45309)";
           } else {
-            a.textContent = "桥端已结束本阶段";
+            a.textContent = "已连上桥，等待开始上传…";
             a.style.color = "";
           }
         }
@@ -6487,6 +6513,8 @@ a{color:${v.accent}}
       }, 500);
       const startPoll = () => {
         if (stopped || pollTimer) return;
+        pollStarted = true;
+        setAliveText("正在拉取桥进度…", "");
         const poll = async () => {
           if (stopped || els.modal?.hidden || !stageEl()) {
             stop();
@@ -6495,8 +6523,24 @@ a{color:${v.accent}}
           try {
             const { res, data } = await fetchPandocJson("/pandoc/progress");
             if (stopped) return;
-            if (res.ok && data) {
-              if (data.stage) setLocal(data.stage, data.detail || "");
+            if (res.status === 404) {
+              setAliveText("桥过旧无 /progress（请退出黑窗重启更新）；转换可能仍在黑窗进行", "var(--warn, #b45309)");
+              return;
+            }
+            if (!res.ok) {
+              setAliveText(
+                `进度接口失败 HTTP ${res.status}${data?.error ? ` · ${data.error}` : ""}`,
+                "var(--warn, #b45309)"
+              );
+              return;
+            }
+            if (data) {
+              if (data.stage) {
+                const s = stageEl();
+                const d = detailEl();
+                if (s) s.textContent = data.stage;
+                if (d) d.textContent = data.detail || "";
+              }
               const el = elapsedEl();
               if (el) el.dataset.fromBridge = "1";
               setAliveUi(data);
@@ -6504,15 +6548,25 @@ a{color:${v.accent}}
                 ctl.onProgress?.(data);
               } catch (_) {}
             }
-          } catch (_) {}
+          } catch (err) {
+            setAliveText(
+              `拉进度失败：${String(err?.message || err).slice(0, 80)}（转换可能仍在进行，请看黑窗）`,
+              "var(--warn, #b45309)"
+            );
+          }
         };
         void poll();
-        pollTimer = setInterval(poll, 1200);
+        pollTimer = setInterval(poll, 1000);
       };
       const ctl = {
         setLocal,
+        setLocalPct,
+        setAliveText,
         setAliveUi,
         startPoll,
+        markConvertPosted() {
+          convertPosted = true;
+        },
         stop,
         onProgress: null,
         wasCancelled: () => cancelled,
@@ -6550,7 +6604,10 @@ a{color:${v.accent}}
       });
       try {
         // 图表先烤成 PNG 再交给 Pandoc；PDF 用 3x 清晰度照顾复杂图
-        prog.setLocal("渲染图表", isPdf ? "高清栅格化 Mermaid…" : "处理中…");
+        // 本地阶段也会更新文案，避免一直停在「等待桥进度」
+        prog.setLocalPct(1);
+        prog.setLocal("渲染图表", isPdf ? "高清栅格化 Mermaid（浏览器本地，还没上传）…" : "处理中…");
+        prog.setAliveText?.("浏览器本地准备中（还没问桥）…", "");
         const chartScale = isPdf ? 3 : 2;
         const baked = await bakeChartsForExport(text, { mode: "file", scale: chartScale }).catch(() => ({
           text,
@@ -6558,21 +6615,25 @@ a{color:${v.accent}}
           chartCount: 0,
         }));
         if (prog.wasCancelled?.()) throw new Error("已取消导出");
+        prog.setLocalPct(3);
         prog.setLocal(
           "收集图片资源",
-          baked.chartCount ? `已嵌入 ${baked.chartCount} 个图表` : "读取本地图片…"
+          baked.chartCount ? `已嵌入 ${baked.chartCount} 个图表（仍在浏览器）` : "读取本地图片…"
         );
         const assetImages = await collectReferencedAssetsWithData(baked.text).catch(() => []);
         const images = [...assetImages, ...(baked.images || [])];
         const plan =
           typeof QR.exportPandocPlan === "function" ? QR.exportPandocPlan(to) : { from: "gfm", args: [] };
+        prog.setLocalPct(4);
         prog.setLocal(
           "上传到本机桥",
           isPdf
-            ? "Pandoc → PDF · 无超时，跑完为止 · 看进度条/页码；不要了再点取消"
+            ? "Pandoc → PDF · 无超时 · 下方应变为「桥进度正常」"
             : `Pandoc → ${toLabel}`
         );
         prog.startPoll();
+        prog.markConvertPosted?.();
+        prog.setAliveText?.("正在上传到桥并拉取进度…", "");
         let res;
         try {
           res = await fetch(`${baseUrl()}/pandoc/convert`, {
@@ -6587,6 +6648,7 @@ a{color:${v.accent}}
               quality: "max",
             }),
             signal: abort?.signal,
+            cache: "no-store",
           });
         } catch (err) {
           prog.close();
