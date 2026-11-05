@@ -130,22 +130,28 @@ assert(
   assert(/END_KEEP_SEC\s*=\s*1\s*\/\s*25/.test(vtrimEd), "编辑预览片尾半开兜底 1/25s");
   assert(/last\.end\s*=\s*Math\.max\(\s*last\.start\s*\+\s*0\.05\s*,\s*last\.end\s*-\s*endKeep\s*\)/.test(vtrimEd), "keepRanges 成片须收掉预览半开片尾");
   assert(/from currentTime|a = t|当前进度/.test(vtrimEd) && /addCutoutAtPlayhead/.test(vtrimEd), "删中间从播放头起");
-  assert(/cutStart\s*-\s*endKeep/.test(vtrimEd) && /endKeep\s*\+\s*startKeep/.test(vtrimEd), "删中间须用 end/startKeep 对齐红柄");
+  assert(/cutStart\s*-\s*endKeep/.test(vtrimEd) && /endKeep\s*\*\s*2/.test(vtrimEd), "删中间：上一段半开、下一段从 cut.end 空 2 帧");
+  assert(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*1/.test(vtrimEd), "成片删中间接点再收 1 帧");
   assert(/Math\.min\(\s*want\s*,\s*Math\.max\(\s*fromShown/.test(vtrimEd), "片尾抬手禁止推过拖点");
   assert(/trimStart:\s*quantizeTrimSec\(startSec\)/.test(vtrimEd), "完成编辑须提交黄柄所见 trimStart，勿预加 START_KEEP");
-  assert(/function keepRangesForEncode/.test(vtrimEd), "成片须有 keepRangesForEncode（≡预览所见）");
+  assert(/function keepRangesForEncode/.test(vtrimEd), "成片须有 keepRangesForEncode");
   assert(/下载编辑后的视频/.test(vtrimEd) && /function exportKeepVideo/.test(vtrimEd), "编辑层须能下载编辑后 mp4");
   assert(/正在导出/.test(vtrimEd) && /export-progress/.test(vtrimEd), "下载编辑后视频须有进度反馈");
   assert(/keepRangesForEncode\(edit, duration\)/.test(vtrimEd), "exportKeepVideo 须按成片 keep 切片");
   {
     const n = vtrimEd.match(/function normalizeCutouts\([\s\S]*?return merged;\s*\}/);
     const k = vtrimEd.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?return keeps;\s*\}/);
-    const ke = vtrimEd.match(
-      /function keepRangesForEncode\(edit, duration\) \{[\s\S]*?return keepRangesFromEdit\(edit, duration\);\s*\}/
-    );
-    assert(n && k && ke, "须能抽出 keepRangesFromEdit / keepRangesForEncode");
+    const ke = vtrimEd.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
+    const resolveEnd = vtrimEd.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+    const resolveStart = vtrimEd.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+    const normalizeFps = vtrimEd.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
+    assert(n && k && ke && resolveEnd && resolveStart && normalizeFps, "须能抽出 keepRangesFromEdit / keepRangesForEncode");
     const fns = new Function(`
-      const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2, END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 0;
+      const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2, END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, FRAME_SNAP_SEC = 1 / 30;
+      const ENCODE_BOUND_PAD_SEC = 0, ENCODE_CUT_JUNCTION_PAD_FRAMES = 1;
+      ${normalizeFps[0]}
+      ${resolveEnd[0]}
+      ${resolveStart[0]}
       ${n[0]}
       ${k[0]}
       ${ke[0]}
@@ -155,14 +161,14 @@ assert(
     assert(ks.length === 2, "中间删除应得两段 keep");
     assert(Math.abs(ks[0].start - 0) < 1e-6, "预览 keep 片头须对齐黄柄（0）");
     assert(Math.abs(ks[0].end - (2 - 1 / 25)) < 1e-6, "上一段须在红柄起点前半开收掉（对齐片尾）");
-    assert(ks[1].start >= 4 + 1 / 25 + 1 / 50 - 1e-6, "下一段须越过终点帧并加片头半开");
+    assert(Math.abs(ks[1].start - (4 + 2 / 25)) < 1e-6, "下一段须从 cut.end 空 2 帧");
     assert(ks[1].end <= 10 - 1 / 25 + 1e-6, "末段仍半开片尾");
     const enc = fns.keepRangesForEncode({ trimStart: 0, trimEnd: 10, cutouts: [{ start: 2, end: 4 }] }, 10);
+    const pad = 1 / 25;
     assert(enc.length === 2, "成片 keep 仍两段");
-    assert(Math.abs(enc[0].start - ks[0].start) < 1e-9, "成片片头 ≡ 预览（所见即所得）");
-    assert(Math.abs(enc[0].end - ks[0].end) < 1e-9, "成片上一段终点 ≡ 预览");
-    assert(Math.abs(enc[1].start - ks[1].start) < 1e-9, "成片下一段起点 ≡ 预览");
     assert(Math.abs(enc[0].start - 0) < 1e-9, "片头对齐黄柄 0");
+    assert(Math.abs(enc[0].end - (ks[0].end - pad)) < 1e-9, "成片上一段终点再收 1 帧");
+    assert(Math.abs(enc[1].start - (ks[1].start + pad)) < 1e-9, "成片下一段起点再推 1 帧");
 
     const p = vtrimEd.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start;\s*\}/);
     assert(p, "须能抽出 previewSeekForKeepRanges");

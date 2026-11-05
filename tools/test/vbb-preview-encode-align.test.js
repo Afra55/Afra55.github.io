@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * 编辑预览 ↔ 成片对齐：拖片头片尾 + 多段删中间，播放 keep 须与编码 keep 同一套。
+ * 编辑预览 ↔ 成片对齐：黄柄无垫；删中间接点成片可再收 1 帧。
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -24,12 +24,20 @@ function loadKeepFns() {
   const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
   const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
-  assert.ok(fromEdit && forEnc && norm);
+  const resolveEnd = vtrim.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const resolveStart = vtrim.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
+  assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && normalizeFps);
   const box = {};
   vm.runInNewContext(
     `
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
-    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 0;
+    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, FRAME_SNAP_SEC = 1 / 30;
+    const ENCODE_BOUND_PAD_SEC = 0;
+    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 1;
+    ${normalizeFps[0]}
+    ${resolveEnd[0]}
+    ${resolveStart[0]}
     ${norm[0]}
     ${fromEdit[0]}
     ${forEnc[0]}
@@ -66,7 +74,7 @@ t("外预览播放/落点走 vbbKeepRangesForEncode", () => {
   assert.ok(/vbbKeepRangesForEncode\(item\.edit,\s*item\.duration\)/.test(vbb));
 });
 
-t("成片 keep ≡ 预览 keep（所见即所得）", () => {
+t("删中间：成片接点相对预览再收 1 帧；片头仍对齐黄柄", () => {
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = {
     trimStart: 5,
@@ -80,11 +88,12 @@ t("成片 keep ≡ 预览 keep（所见即所得）", () => {
   const preview = keepRangesFromEdit(edit, 100);
   const enc = keepRangesForEncode(edit, 100);
   assert.ok(preview.length >= 3 && enc.length === preview.length);
-  for (let i = 0; i < enc.length; i++) {
-    assert.ok(Math.abs(enc[i].start - preview[i].start) < 1e-9, `段${i} 起点一致`);
-    assert.ok(Math.abs(enc[i].end - preview[i].end) < 1e-9, `段${i} 终点一致`);
-  }
+  const pad = 1 / 25;
   assert.ok(Math.abs(enc[0].start - 5) < 1e-9, "片头=黄柄");
+  assert.ok(Math.abs(enc[0].end - (preview[0].end - pad)) < 1e-9, "上一段终点再收");
+  assert.ok(Math.abs(enc[1].start - (preview[1].start + pad)) < 1e-9, "下一段起点再推");
+  // 预览：cut.end 起空 2 帧
+  assert.ok(Math.abs(preview[1].start - (30 + pad * 2)) < 1e-9);
 });
 
 t("仅裁片头片尾：成片起点=黄柄，片尾半开与预览一致", () => {
@@ -106,8 +115,9 @@ t("exportKeepVideo -ss 回退须两端再收，防少删", () => {
   assert.ok(/bias\s*=\s*1\s*\/\s*30/.test(exp));
 });
 
-t("ENCODE_BOUND_PAD_SEC=0（取消成片多删垫）", () => {
+t("ENCODE_BOUND_PAD_SEC=0；接点垫用 ENCODE_CUT_JUNCTION_PAD_FRAMES", () => {
   assert.ok(/ENCODE_BOUND_PAD_SEC\s*=\s*0/.test(vtrim));
+  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*1/.test(vtrim));
 });
 
 t("片尾抬手只用 min(want,…) 收紧，禁止推过拖点", () => {
@@ -115,23 +125,8 @@ t("片尾抬手只用 min(want,…) 收紧，禁止推过拖点", () => {
   assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(vtrim));
 });
 
-t("有 srcFps 时半开 = 1/fps，且拖拽落点=播放 keep 尾=成片 keep 尾", () => {
-  const box = {};
-  const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
-  const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
-  const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
-  vm.runInNewContext(
-    `
-    const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
-    const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, ENCODE_BOUND_PAD_SEC = 0;
-    ${norm[0]}
-    ${fromEdit[0]}
-    ${forEnc[0]}
-    this.keepRangesFromEdit = keepRangesFromEdit;
-    this.keepRangesForEncode = keepRangesForEncode;
-    `,
-    box
-  );
+t("有 srcFps 时半开 = 1/fps，且拖拽落点=播放 keep 尾=成片 keep 尾（无删段）", () => {
+  const box = loadKeepFns();
   for (const fps of [24, 30, 60]) {
     const trimEnd = 10;
     const edit = { trimStart: 0, trimEnd, cutouts: [], srcFps: fps };
