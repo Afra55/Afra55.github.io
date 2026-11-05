@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * 编辑预览 ↔ 成片对齐：黄柄无垫；删中间接点成片可再收 1 帧。
+ * 编辑预览 ↔ 成片：同一源帧半开窗，禁止叠垫。
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -26,16 +26,23 @@ function loadKeepFns() {
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
   const resolveEnd = vtrim.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
   const resolveStart = vtrim.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const resolveKeep = vtrim.match(/function resolveKeepFps\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const secToFrame = vtrim.match(/function secToFrame\(sec, fps\) \{[\s\S]*?\n  \}/);
+  const frameToSec = vtrim.match(/function frameToSec\(frame, fps\) \{[\s\S]*?\n  \}/);
   const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
-  assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && normalizeFps);
+  assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && normalizeFps);
   const box = {};
   vm.runInNewContext(
     `
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
     const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, FRAME_SNAP_SEC = 1 / 30;
+    const DEFAULT_FRAME_FPS = 30;
     const ENCODE_BOUND_PAD_SEC = 0;
-    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 2;
+    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 0;
     ${normalizeFps[0]}
+    ${resolveKeep[0]}
+    ${secToFrame[0]}
+    ${frameToSec[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
     ${norm[0]}
@@ -56,7 +63,7 @@ t("编辑内 keepRangesLocal 走 keepRangesForEncode（预览=成片）", () => 
   );
   assert.ok(block.includes("keepRangesForEncode("));
   assert.ok(!block.includes("keepRangesFromEdit("));
-  assert.ok(/srcFps:\s*sourceFps/.test(block), "播放 keep 必须带 srcFps，与拖拽半开一致");
+  assert.ok(/srcFps:\s*sourceFps/.test(block), "播放 keep 必须带 srcFps");
 });
 
 t("拖拽半开 endKeepStepSec ≡ resolveEndKeepSec(sourceFps)", () => {
@@ -74,11 +81,12 @@ t("外预览播放/落点走 vbbKeepRangesForEncode", () => {
   assert.ok(/vbbKeepRangesForEncode\(item\.edit,\s*item\.duration\)/.test(vbb));
 });
 
-t("多段删中间：成片接点再收 2 帧；首段片头/末段片尾再收", () => {
+t("多段删中间：预览≡成片；红柄闭区间；黄柄为半开上界", () => {
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = {
     trimStart: 5,
     trimEnd: 95,
+    srcFps: 25,
     cutouts: [
       { start: 20, end: 30 },
       { start: 50, end: 60 },
@@ -88,28 +96,27 @@ t("多段删中间：成片接点再收 2 帧；首段片头/末段片尾再收"
   const preview = keepRangesFromEdit(edit, 100);
   const enc = keepRangesForEncode(edit, 100);
   assert.ok(preview.length >= 3 && enc.length === preview.length);
-  const pad = 1 / 25;
-  const jPad = pad * 2;
-  assert.ok(Math.abs(preview[0].end - (20 - pad * 2)) < 1e-9, "预览上一段在 cut.start 前空 2");
-  assert.ok(Math.abs(preview[1].start - (30 + pad * 2)) < 1e-9, "预览下一段从 cut.end 空 2");
-  assert.ok(Math.abs(enc[0].start - (preview[0].start + jPad)) < 1e-9, "成片首段片头再推");
-  assert.ok(Math.abs(enc[0].end - (preview[0].end - jPad)) < 1e-9, "上一段终点再收");
-  assert.ok(Math.abs(enc[1].start - (preview[1].start + jPad)) < 1e-9, "下一段起点再推");
-  assert.ok(
-    Math.abs(enc[enc.length - 1].end - (preview[preview.length - 1].end - jPad)) < 1e-9,
-    "末段片尾再收"
-  );
+  const f = 1 / 25;
+  assert.ok(Math.abs(preview[0].start - 5) < 1e-9);
+  assert.ok(Math.abs(preview[0].end - 20) < 1e-9);
+  assert.ok(Math.abs(preview[1].start - (30 + f)) < 1e-9);
+  assert.ok(Math.abs(preview[preview.length - 1].end - 95) < 1e-9, "末段 end=黄柄");
+  for (let i = 0; i < enc.length; i++) {
+    assert.ok(Math.abs(enc[i].start - preview[i].start) < 1e-9);
+    assert.ok(Math.abs(enc[i].end - preview[i].end) < 1e-9);
+  }
 });
 
-t("仅裁片头片尾：成片起点=黄柄，片尾半开与预览一致", () => {
+t("仅裁片头片尾：成片起点=黄柄，终点=黄柄半开上界", () => {
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
-  const edit = { trimStart: 10, trimEnd: 40, cutouts: [] };
+  const edit = { trimStart: 10, trimEnd: 40, cutouts: [], srcFps: 30 };
   const preview = keepRangesFromEdit(edit, 60);
   const enc = keepRangesForEncode(edit, 60);
   assert.strictEqual(enc.length, 1);
   assert.ok(Math.abs(enc[0].start - preview[0].start) < 1e-9);
   assert.ok(Math.abs(enc[0].end - preview[0].end) < 1e-9);
   assert.ok(Math.abs(enc[0].start - 10) < 1e-9);
+  assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
 t("exportKeepVideo -ss 回退须两端再收，防少删", () => {
@@ -120,9 +127,9 @@ t("exportKeepVideo -ss 回退须两端再收，防少删", () => {
   assert.ok(/bias\s*=\s*1\s*\/\s*30/.test(exp));
 });
 
-t("ENCODE_BOUND_PAD_SEC=0；接点垫 ENCODE_CUT_JUNCTION_PAD_FRAMES=2", () => {
+t("ENCODE 叠垫已清零（根因用源帧窗）", () => {
   assert.ok(/ENCODE_BOUND_PAD_SEC\s*=\s*0/.test(vtrim));
-  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*2/.test(vtrim));
+  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*0/.test(vtrim));
 });
 
 t("片尾抬手只用 min(want,…) 收紧，禁止推过拖点", () => {
@@ -130,20 +137,19 @@ t("片尾抬手只用 min(want,…) 收紧，禁止推过拖点", () => {
   assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(vtrim));
 });
 
-t("有 srcFps 时半开 = 1/fps，且拖拽落点=播放 keep 尾=成片 keep 尾（无删段）", () => {
+t("有 srcFps：停帧=黄柄-1/fps；keep.end=黄柄（半开上界）", () => {
   const box = loadKeepFns();
   for (const fps of [24, 30, 60]) {
     const trimEnd = 10;
     const edit = { trimStart: 0, trimEnd, cutouts: [], srcFps: fps };
     const preview = box.keepRangesFromEdit(edit, 12);
     const enc = box.keepRangesForEncode(edit, 12);
-    const dragSeek = trimEnd - 1 / fps; // endKeepSec()
+    const park = trimEnd - 1 / fps;
     assert.strictEqual(preview.length, 1);
-    assert.ok(Math.abs(preview[0].end - dragSeek) < 1e-9, `${fps}fps 播放 keep 尾 = 拖拽落点`);
-    assert.ok(Math.abs(enc[0].end - dragSeek) < 1e-9, `${fps}fps 成片 keep 尾 = 拖拽落点`);
+    assert.ok(Math.abs(preview[0].end - trimEnd) < 1e-9, `${fps}fps keep.end=黄柄`);
+    assert.ok(Math.abs(enc[0].end - trimEnd) < 1e-9, `${fps}fps 成片 end=黄柄`);
+    assert.ok(Math.abs(park - (trimEnd - 1 / fps)) < 1e-9);
   }
-  const noFps = box.keepRangesFromEdit({ trimStart: 0, trimEnd: 10, cutouts: [] }, 12);
-  assert.ok(Math.abs(noFps[0].end - (10 - 1 / 25)) < 1e-9, "无 fps 回退 1/25");
 });
 
 console.log(`vbb-preview-encode-align.test.js: ${n} passed`);

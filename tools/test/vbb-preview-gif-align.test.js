@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * 黄柄所见即所得；删中间接点成片再收；单段片头/片尾由编码垫收。
+ * 根因：预览/成片共用源帧半开窗 [startF,endF)；禁止再叠编码垫。
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -30,16 +30,25 @@ function loadKeepFns() {
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
   const resolveEnd = vtrim.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
   const resolveStart = vtrim.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const resolveKeep = vtrim.match(/function resolveKeepFps\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const secToFrame = vtrim.match(/function secToFrame\(sec, fps\) \{[\s\S]*?\n  \}/);
+  const frameToSec = vtrim.match(/function frameToSec\(frame, fps\) \{[\s\S]*?\n  \}/);
   const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
-  assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && normalizeFps);
+  assert.ok(
+    fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && normalizeFps
+  );
   const box = {};
   vm.runInNewContext(
     `
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
     const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, FRAME_SNAP_SEC = 1 / 30;
+    const DEFAULT_FRAME_FPS = 30;
     const ENCODE_BOUND_PAD_SEC = 0;
-    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 2;
+    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 0;
     ${normalizeFps[0]}
+    ${resolveKeep[0]}
+    ${secToFrame[0]}
+    ${frameToSec[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
     ${norm[0]}
@@ -47,17 +56,18 @@ function loadKeepFns() {
     ${forEnc[0]}
     this.keepRangesFromEdit = keepRangesFromEdit;
     this.keepRangesForEncode = keepRangesForEncode;
+    this.secToFrame = secToFrame;
+    this.frameToSec = frameToSec;
     `,
     box
   );
   return box;
 }
 
-t("无删段：成片 keep ≡ 预览 keep（单段片头片尾由编码垫）", () => {
-  assert.ok(/ENCODE_BOUND_PAD_SEC\s*=\s*0/.test(vtrim));
-  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*2/.test(vtrim));
+t("无删段：成片 keep ≡ 预览 keep；end = 黄柄半开上界", () => {
+  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*0/.test(vtrim));
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
-  const edit = { trimStart: 5, trimEnd: 95, cutouts: [] };
+  const edit = { trimStart: 5, trimEnd: 95, cutouts: [], srcFps: 25 };
   const a = keepRangesFromEdit(edit, 100);
   const b = keepRangesForEncode(edit, 100);
   assert.strictEqual(a.length, 1);
@@ -65,13 +75,16 @@ t("无删段：成片 keep ≡ 预览 keep（单段片头片尾由编码垫）",
   assert.ok(Math.abs(a[0].start - b[0].start) < 1e-9);
   assert.ok(Math.abs(a[0].end - b[0].end) < 1e-9);
   assert.ok(Math.abs(a[0].start - 5) < 1e-9);
+  // 不再减 1/fps：黄柄即 exclusive end
+  assert.ok(Math.abs(a[0].end - 95) < 1e-9);
 });
 
-t("多段删中间：预览两端空 2 帧；成片接点再收 2 帧 + 首末段", () => {
+t("多段删中间：闭区间删红柄帧；预览≡成片；无叠垫", () => {
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = {
     trimStart: 5,
     trimEnd: 95,
+    srcFps: 25,
     cutouts: [
       { start: 20, end: 30 },
       { start: 50, end: 60 },
@@ -81,37 +94,33 @@ t("多段删中间：预览两端空 2 帧；成片接点再收 2 帧 + 首末�
   const b = keepRangesForEncode(edit, 100);
   assert.strictEqual(a.length, b.length);
   assert.ok(a.length >= 3);
-  const pad = 1 / 25;
-  // 预览：cut.start / cut.end 各空 2 帧
-  assert.ok(Math.abs(a[0].end - (20 - pad * 2)) < 1e-9);
-  assert.ok(Math.abs(a[1].start - (30 + pad * 2)) < 1e-9);
-  assert.ok(Math.abs(a[1].end - (50 - pad * 2)) < 1e-9);
-  assert.ok(Math.abs(a[2].start - (60 + pad * 2)) < 1e-9);
-  // 成片：首段片头再推、接点再收、末段片尾再收（各 2 帧）
-  const jPad = pad * 2;
-  assert.ok(Math.abs(b[0].start - (a[0].start + jPad)) < 1e-9, "多段首段片头再推");
-  assert.ok(Math.abs(b[0].end - (a[0].end - jPad)) < 1e-9, "上一段终点再收");
-  assert.ok(Math.abs(b[1].start - (a[1].start + jPad)) < 1e-9, "下一段起点再推");
-  assert.ok(Math.abs(b[2].end - (a[2].end - jPad)) < 1e-9, "末段片尾再收");
+  const f = 1 / 25;
+  // cut.start 帧删除 → 上一段 exclusive end = 20
+  assert.ok(Math.abs(a[0].end - 20) < 1e-9);
+  // cut.end 帧删除 → 下一段从 30+1/fps 起
+  assert.ok(Math.abs(a[1].start - (30 + f)) < 1e-9);
+  assert.ok(Math.abs(a[1].end - 50) < 1e-9);
+  assert.ok(Math.abs(a[2].start - (60 + f)) < 1e-9);
+  for (let i = 0; i < a.length; i++) {
+    assert.ok(Math.abs(a[i].start - b[i].start) < 1e-9, `段${i} start`);
+    assert.ok(Math.abs(a[i].end - b[i].end) < 1e-9, `段${i} end`);
+  }
 });
 
-t("仅裁片头：成片 keep 起点仍 = 黄柄（编码 -ss 再垫）", () => {
+t("仅裁片头：起点 = 黄柄 trimStart", () => {
   const { keepRangesForEncode } = loadKeepFns();
-  const enc = keepRangesForEncode({ trimStart: 10, trimEnd: 40, cutouts: [] }, 60);
+  const enc = keepRangesForEncode({ trimStart: 10, trimEnd: 40, cutouts: [], srcFps: 30 }, 60);
   assert.strictEqual(enc.length, 1);
   assert.ok(Math.abs(enc[0].start - 10) < 1e-9);
+  assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("keepRangesForEncode 有删段时收接点 + 首末段", () => {
+t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
   const fn = vtrim.slice(
     vtrim.indexOf("function keepRangesForEncode"),
     vtrim.indexOf("function previewSeekForKeepRanges")
   );
-  assert.ok(fn.includes("ENCODE_CUT_JUNCTION_PAD_FRAMES"));
-  assert.ok(fn.includes("if (i > 0)"));
-  assert.ok(fn.includes("i === 0") || fn.includes("i===0"));
-  assert.ok(fn.includes("preview.length - 1"));
-  assert.ok(!fn.includes("ENCODE_BOUND_PAD_SEC / 2"));
+  assert.ok(fn.includes("return keepRangesFromEdit(edit, duration)"));
 });
 
 t("exportKeepVideo：trim 路径不额外 endBias；仅 -ss 回退可收", () => {
@@ -123,35 +132,33 @@ t("exportKeepVideo：trim 路径不额外 endBias；仅 -ss 回退可收", () =>
   assert.ok(exp.includes("if (!useTrim)"));
 });
 
-t("编辑后仍 forceAccurateCut（精确切）", () => {
+t("编辑后仍 forceAccurateCut", () => {
   assert.ok(shared.includes("forceAccurateCut"));
   assert.ok(vbb.includes("forceAccurateCut: Boolean(prepared.cutNote)"));
 });
 
-t("编码：片头/片尾各收 2 帧（startSec>0 才垫片头）", () => {
-  assert.ok(shared.includes("function vbbEncodeKeepEdgePadSec"));
-  assert.ok(shared.includes("function vbbEncodeSpanHeadPadSec"));
+t("编码：keep 对齐路径垫=0；由 frameCount 钳 encodeT", () => {
+  assert.ok(shared.includes("function vbbEncodeWindowFromKeepSpan"));
   assert.ok(shared.includes("function vbbEncodeSpanTailPadSec"));
-  const headHits = shared.match(/vbbEncodeSpanHeadPadSec\(/g) || [];
-  const tailHits = shared.match(/vbbEncodeSpanTailPadSec\(/g) || [];
-  assert.ok(headHits.length >= 3, `head sites=${headHits.length}`);
-  assert.ok(tailHits.length >= 3, `tail sites=${tailHits.length}`);
-  const mEdge = shared.match(/function vbbEncodeKeepEdgePadSec\([\s\S]*?\n      \}/);
-  const mHead = shared.match(/function vbbEncodeSpanHeadPadSec\([\s\S]*?\n      \}/);
-  const mTail = shared.match(/function vbbEncodeSpanTailPadSec\([\s\S]*?\n      \}/);
-  assert.ok(mEdge && mHead && mTail);
+  const m = shared.match(/function vbbEncodeSpanTailPadSec\([\s\S]*?\n      \}/);
+  const mWin = shared.match(/function vbbEncodeWindowFromKeepSpan\([\s\S]*?\n      \}/);
+  assert.ok(m && mWin);
   const box = {};
   vm.runInNewContext(
-    `${mEdge[0]}\n${mHead[0]}\n${mTail[0]}
-     this.edge = vbbEncodeKeepEdgePadSec;
-     this.head = vbbEncodeSpanHeadPadSec;
-     this.tail = vbbEncodeSpanTailPadSec;`,
+    `${m[0]}\n${mWin[0]}
+     function vbbEncodeHalfOpenPadSec(gifFps, srcFps) {
+       return Math.max(0.5 / Math.max(8, gifFps || 15), 1 / 120);
+     }
+     this.tail = vbbEncodeSpanTailPadSec;
+     this.win = vbbEncodeWindowFromKeepSpan;`,
     box
   );
-  assert.ok(Math.abs(box.edge(15, 30) - 2 / 15) < 1e-9);
-  assert.ok(box.head(15, 30, { startSec: 1.2 }, 1.2) + 1e-9 >= 2 / 15);
-  assert.ok(box.head(15, 30, { startSec: 0 }, 0) === 0, "片头≈0 不垫");
-  assert.ok(box.tail(15, 30, { startSec: 1.2 }) + 1e-9 >= 2 / 15);
+  assert.strictEqual(box.tail(15, 30, { startSec: 1.2 }), 0);
+  assert.ok(box.tail(15, 30, {}) + 1e-9 >= 0.5 / 15);
+  const w = box.win(10, 1, 15);
+  assert.strictEqual(w.frameCount, Math.floor(10 * 15 + 1e-9));
+  assert.ok(w.encodeT <= 10 + 1e-9);
+  assert.ok(w.encodeT + 1e-9 >= w.frameCount / 15);
 });
 
 t("预裁切不再对 keep span 二次减半帧", () => {
@@ -170,7 +177,7 @@ t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {
   assert.ok(!/rep <= keep \* 1\.25/.test(vbb));
 });
 
-t("时长标签为保留（黄柄=成片）", () => {
+t("时长标签为保留", () => {
   assert.ok(vtrim.includes("保留 ${formatClock(keepSpan)}") || /保留 \$\{formatClock\(keepSpan\)\}/.test(vtrim));
   assert.ok(!/成片 \$\{formatClock\(keepSpan\)\}/.test(vtrim));
 });

@@ -39,8 +39,14 @@ function loadVtrimKeepFns() {
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
   const resolveEnd = vtrim.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
   const resolveStart = vtrim.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const resolveKeep = vtrim.match(/function resolveKeepFps\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const secToFrame = vtrim.match(/function secToFrame\(sec, fps\) \{[\s\S]*?\n  \}/);
+  const frameToSec = vtrim.match(/function frameToSec\(frame, fps\) \{[\s\S]*?\n  \}/);
   const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
-  assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && normalizeFps, "vtrim keep helpers");
+  assert.ok(
+    fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && normalizeFps,
+    "vtrim keep helpers"
+  );
   const box = {};
   vm.runInNewContext(
     `
@@ -49,9 +55,13 @@ function loadVtrimKeepFns() {
     const END_KEEP_SEC = 1 / 25;
     const START_KEEP_SEC = 1 / 50;
     const FRAME_SNAP_SEC = 1 / 30;
+    const DEFAULT_FRAME_FPS = 30;
     const ENCODE_BOUND_PAD_SEC = 0;
-    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 2;
+    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 0;
     ${normalizeFps[0]}
+    ${resolveKeep[0]}
+    ${secToFrame[0]}
+    ${frameToSec[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
     ${norm[0]}
