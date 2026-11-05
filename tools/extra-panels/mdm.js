@@ -6362,7 +6362,7 @@ a{color:${v.accent}}
         `<p class="hint tight" id="mdm-pandoc-export-pages" style="margin:0 0 8px;min-height:1.2em"></p>` +
         `<p class="hint tight" id="mdm-pandoc-export-alive" style="margin:0 0 8px;min-height:1.2em;font-weight:600">等待桥进度…</p>` +
         `<p class="hint tight" id="mdm-pandoc-export-lastlog" style="margin:0 0 8px;min-height:1.2em;word-break:break-all"></p>` +
-        `<p class="hint tight">进度来自 XeLaTeX 页码 <code>[N]</code> + 遍数（通常最多 3 遍）。总页数先按正文粗估，首遍结束后会校正。装宏包时百分比会慢爬。</p>` +
+        `<p class="hint tight">进度来自 XeLaTeX 页码 <code>[N]</code> + 遍数（通常最多 3 遍）。<strong>无超时上限</strong>，跑完为止；不要了再点取消。装宏包时百分比会慢爬。</p>` +
         `</div>` +
         `<div class="mdm-modal-foot" style="flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center">` +
         `<p class="hint tight" id="mdm-pandoc-export-elapsed" style="margin:0">已用时 0 秒</p>` +
@@ -6394,7 +6394,6 @@ a{color:${v.accent}}
         const fill = fillEl();
         if (!data) return;
         const hb = data.heartbeatAgeSec != null ? Number(data.heartbeatAgeSec) : null;
-        const limit = Number(data.timeoutSec) || 0;
         let pct = Math.round(Number(data.percent) || 0);
         if (pct < lastPct) pct = lastPct;
         lastPct = pct;
@@ -6445,9 +6444,7 @@ a{color:${v.accent}}
           lg.textContent = bits.join(" · ");
         }
         if (el && data.elapsedSec != null) {
-          const lim =
-            limit > 0 ? ` · 上限约 ${Math.round(limit / 60)} 分钟` : "";
-          el.textContent = `已用时 ${data.elapsedSec} 秒${lim}${
+          el.textContent = `已用时 ${data.elapsedSec} 秒 · 无超时上限${
             data.active ? (data.alive ? " · 进行中" : " · 无心跳") : ""
           }`;
         }
@@ -6531,38 +6528,19 @@ a{color:${v.accent}}
       return ctl;
     }
 
-    /** 与桥端 estimatePdfTimeoutSec 对齐：大 MD 超 8 分钟正常 */
-    function estimateClientPdfTimeoutMs(text, images) {
-      const chars = String(text || "").length;
-      const imgN = Array.isArray(images) ? images.length : 0;
-      let sec = 12 * 60;
-      sec += Math.floor(chars / 20000) * 120;
-      sec += imgN * 20;
-      sec = Math.min(45 * 60, Math.max(12 * 60, sec));
-      // 前端比桥端多留 90s，避免桥还在跑就被 Abort 掐断
-      return (sec + 90) * 1000;
-    }
-
     async function exportViaPandoc(text, to, title, retried = false) {
       const toLabel = String(to || "file").toUpperCase();
       const isPdf = to === "pdf";
       const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
-      // PDF：按正文规模放宽（最长约 46 分钟）；非 PDF 仍 6 分钟
-      const exportT0 = Date.now();
-      let timeoutMs = isPdf ? estimateClientPdfTimeoutMs(text, []) : 6 * 60 * 1000;
+      // PDF：无前端超时，跑完为止（仅「取消」会 abort）；其它格式仍 6 分钟
       let timeoutId = null;
-      const armTimeout = (ms) => {
-        if (!abort) return;
-        timeoutMs = Math.max(timeoutMs, Number(ms) || 0);
-        if (timeoutId) clearTimeout(timeoutId);
-        const remain = Math.max(1000, timeoutMs - (Date.now() - exportT0));
+      if (abort && !isPdf) {
         timeoutId = setTimeout(() => {
           try {
             abort.abort();
           } catch (_) {}
-        }, remain);
-      };
-      armTimeout(timeoutMs);
+        }, 6 * 60 * 1000);
+      }
       const prog = openPandocExportProgress(toLabel, {
         onCancel: () => {
           try {
@@ -6570,11 +6548,6 @@ a{color:${v.accent}}
           } catch (_) {}
         },
       });
-      prog.onProgress = (data) => {
-        if (!isPdf || !data?.timeoutSec) return;
-        // 桥端上报上限后，前端对齐（+90s）
-        armTimeout((Number(data.timeoutSec) + 90) * 1000);
-      };
       try {
         // 图表先烤成 PNG 再交给 Pandoc；PDF 用 3x 清晰度照顾复杂图
         prog.setLocal("渲染图表", isPdf ? "高清栅格化 Mermaid…" : "处理中…");
@@ -6591,13 +6564,12 @@ a{color:${v.accent}}
         );
         const assetImages = await collectReferencedAssetsWithData(baked.text).catch(() => []);
         const images = [...assetImages, ...(baked.images || [])];
-        if (isPdf) armTimeout(estimateClientPdfTimeoutMs(baked.text, images));
         const plan =
           typeof QR.exportPandocPlan === "function" ? QR.exportPandocPlan(to) : { from: "gfm", args: [] };
         prog.setLocal(
           "上传到本机桥",
           isPdf
-            ? `Pandoc → PDF · 上限约 ${Math.round(timeoutMs / 60000)} 分钟（大文档更久属正常）· 请看黑窗与「仍在转换」`
+            ? "Pandoc → PDF · 无超时，跑完为止 · 看进度条/页码；不要了再点取消"
             : `Pandoc → ${toLabel}`
         );
         prog.startPoll();
@@ -6619,11 +6591,7 @@ a{color:${v.accent}}
         } catch (err) {
           prog.close();
           if (prog.wasCancelled?.() || err?.name === "AbortError") {
-            throw new Error(
-              isPdf
-                ? "已取消或超时。看弹框是否长期「无心跳」；黑窗若仍在下宏包可再导出一次，或用浏览器打印。"
-                : "已取消或超时"
-            );
+            throw new Error(isPdf ? "已取消导出" : "已取消或超时");
           }
           showBridgeHelpModal("导出为 Pandoc 格式");
           throw new Error("本机桥未启动");
