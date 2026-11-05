@@ -1379,29 +1379,99 @@
       return viaExec();
     }
 
-    /** 给预览里的每个代码块加「复制」按钮 */
+    /** 代码语言 → 下载扩展名 */
+    function codeBlockExt(pre) {
+      const cls = pre?.querySelector?.("code")?.className || "";
+      const m = String(cls).match(/language-([a-z0-9_+-]+)/i);
+      const lang = (m?.[1] || "").toLowerCase();
+      const map = {
+        javascript: "js",
+        typescript: "ts",
+        python: "py",
+        markdown: "md",
+        shell: "sh",
+        bash: "sh",
+        zsh: "sh",
+        plaintext: "txt",
+        text: "txt",
+        csharp: "cs",
+        "c++": "cpp",
+        rust: "rs",
+        golang: "go",
+        ruby: "rb",
+        kotlin: "kt",
+        yaml: "yml",
+      };
+      if (!lang || lang === "mermaid") return "txt";
+      return map[lang] || lang.replace(/[^a-z0-9]+/g, "") || "txt";
+    }
+
+    function codeBlockPlainText(pre) {
+      const code = pre?.querySelector?.("code");
+      return String((code || pre)?.innerText || "");
+    }
+
+    /** 给预览代码块加「放大 / 下载 / 复制」（与图表同款能力） */
     function addCodeCopyButtons() {
       if (!els.preview) return;
       els.preview.querySelectorAll("pre").forEach((pre) => {
-        if (pre.querySelector(".mdm-copy-code")) return;
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "mdm-copy-code";
-        btn.textContent = "复制";
-        btn.title = "复制这段代码";
-        btn.setAttribute("data-html2canvas-ignore", "true");
-        btn.addEventListener("click", async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const code = pre.querySelector("code");
-          const ok = await copyText((code || pre).innerText);
-          btn.textContent = ok ? "已复制" : "失败";
-          window.setTimeout(() => {
-            btn.textContent = "复制";
-          }, 1200);
-          toast(ok ? "已复制代码" : "复制失败");
-        });
-        pre.appendChild(btn);
+        if (pre.classList.contains("mdm-mermaid-pre") || pre.classList.contains("mdm-mermaid-error")) return;
+        if (pre.querySelector("code.language-mermaid")) return;
+        if (pre.querySelector(".mdm-code-toolbar")) return;
+        // 兼容旧「仅复制」按钮
+        pre.querySelector(".mdm-copy-code")?.remove();
+
+        const bar = document.createElement("div");
+        bar.className = "mdm-code-toolbar";
+        bar.setAttribute("data-html2canvas-ignore", "true");
+
+        const mkBtn = (label, title, cls, onClick) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = `ghost-btn mdm-code-btn ${cls || ""}`.trim();
+          btn.textContent = label;
+          btn.title = title;
+          btn.setAttribute("aria-label", title);
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClick(btn);
+          });
+          return btn;
+        };
+
+        bar.appendChild(
+          mkBtn("放大", "放大查看代码", "mdm-code-zoom", () => {
+            if (typeof window.__mdmOpenCodeLightbox === "function") {
+              window.__mdmOpenCodeLightbox(pre);
+            } else {
+              toast("放大预览未就绪，请刷新页面");
+            }
+          })
+        );
+        bar.appendChild(
+          mkBtn("下载", "下载这段代码", "mdm-code-dl", () => {
+            const text = codeBlockPlainText(pre);
+            if (!text.trim()) {
+              toast("代码为空");
+              return;
+            }
+            const ext = codeBlockExt(pre);
+            downloadBlob(new Blob([text], { type: "text/plain;charset=utf-8" }), `code.${ext}`);
+            toast(`已下载 code.${ext}`);
+          })
+        );
+        bar.appendChild(
+          mkBtn("复制", "复制这段代码", "mdm-copy-code", async (btn) => {
+            const ok = await copyText(codeBlockPlainText(pre));
+            btn.textContent = ok ? "已复制" : "失败";
+            window.setTimeout(() => {
+              btn.textContent = "复制";
+            }, 1200);
+            toast(ok ? "已复制代码" : "复制失败");
+          })
+        );
+        pre.appendChild(bar);
       });
     }
 
@@ -2102,16 +2172,27 @@
     /** 图表导出 SVG 串缓存：放大时少一次同步 clone+serialize */
     const mermaidExportCache = new WeakMap();
 
-    /** 图表角标「放大」：不抢正文双击选词 / 划词复制 */
+    /** 图表角标「放大 / 下载」：不抢正文双击选词 / 划词复制 */
     function decorateMermaidDiv(div) {
-      if (!div || div.querySelector(".mdm-mermaid-zoom")) return;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "ghost-btn mdm-mermaid-zoom";
-      btn.setAttribute("data-html2canvas-ignore", "true");
-      btn.setAttribute("aria-label", "放大图表");
-      btn.textContent = "放大";
-      div.appendChild(btn);
+      if (!div) return;
+      if (!div.querySelector(".mdm-mermaid-zoom")) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ghost-btn mdm-mermaid-zoom";
+        btn.setAttribute("data-html2canvas-ignore", "true");
+        btn.setAttribute("aria-label", "放大图表");
+        btn.textContent = "放大";
+        div.appendChild(btn);
+      }
+      if (!div.querySelector(".mdm-mermaid-dl")) {
+        const dl = document.createElement("button");
+        dl.type = "button";
+        dl.className = "ghost-btn mdm-mermaid-dl";
+        dl.setAttribute("data-html2canvas-ignore", "true");
+        dl.setAttribute("aria-label", "下载图表 SVG");
+        dl.textContent = "下载";
+        div.appendChild(dl);
+      }
     }
 
     function queueMermaidExportCache(div) {
@@ -5634,21 +5715,22 @@
 <style>
 :root{color-scheme:${isDarkScheme() ? "dark" : "light"}}
 *{box-sizing:border-box}
-html,body{width:100%;margin:0}
-/* 自适应屏幕宽度：随窗口变宽/变窄，仅留左右内边距 */
-body{max-width:none;width:100%;padding:1.25rem clamp(1rem,3vw,2.5rem) 2.5rem;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+html,body{width:100%;min-height:100%;margin:0}
+/* 真正铺满视口：去掉任何居中窄栏；图表/代码/表格跟屏宽走 */
+body{max-width:none!important;width:100%!important;margin:0!important;padding:1rem clamp(.5rem,1.5vw,1.25rem) 2rem;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+pre,table,p,ul,ol,blockquote,h1,h2,h3,h4,h5,h6,.toc,.mdm-mermaid,figure,.mdm-mermaid-svg{max-width:none;width:100%}
 pre{background:${v.panel};padding:.8rem;border-radius:8px;overflow:auto}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre code{background:none}
-table{border-collapse:collapse;width:100%}th,td{border:1px solid ${v.line};padding:.35rem .6rem}
-img{max-width:100%;height:auto}blockquote{border-left:3px solid ${v.line};margin:0;padding-left:1rem;color:${v.muted}}
+table{border-collapse:collapse}th,td{border:1px solid ${v.line};padding:.35rem .6rem}
+img{max-width:100%;height:auto;display:block}blockquote{border-left:3px solid ${v.line};margin:0;padding-left:1rem;color:${v.muted}}
 a{color:${v.accent}}
 .toc{border:1px solid ${v.line};border-radius:8px;padding:.6rem .9rem;margin-bottom:1.4rem}
 .toc ul{margin:.35rem 0 0;padding-left:1.2rem}
 .toc-l2{padding-left:.8rem}.toc-l3,.toc-l4,.toc-l5,.toc-l6{padding-left:1.6rem}
-.mdm-mermaid,figure{margin:1rem 0;text-align:center}
-.mdm-mermaid svg,.mdm-mermaid-svg svg,figure img{max-width:100%;height:auto}
-.mdm-mermaid-svg{display:inline-block;max-width:100%}
+.mdm-mermaid,figure,.mdm-mermaid-svg{margin:1rem 0;text-align:center}
+/* 关键图表：用 viewBox 等比拉满容器，勿锁死导出时的像素宽 */
+.mdm-mermaid svg,.mdm-mermaid-svg svg,figure svg{display:block;width:100%!important;max-width:100%!important;height:auto!important;margin:0 auto}
 .katex-display{overflow-x:auto;overflow-y:hidden}
 @media print{@page{margin:18mm 16mm}body{max-width:none;width:auto;margin:0;padding:0;background:#fff;color:#111}pre,table,blockquote,img,.mdm-mermaid{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
 </style></head><body>${buildToc(bodyHtml)}${bodyHtml}</body></html>`;
@@ -5902,9 +5984,9 @@ a{color:${v.accent}}
           const svgRaw = await withTimeout(renderMermaidSourceToSvg(code), 45000, `图表${n}渲染`);
           const alt = `图表${n}`;
           if (mode === "html") {
-            // HTML 单文件：优先内联 SVG（清晰、不依赖栅格化）；占位符避开 markdown 解析超长 URL
+            // HTML 单文件：内联流体 SVG（width=100% + viewBox），导出页可铺满屏宽
             const el = parseSvgMarkup(svgRaw);
-            const markup = el ? mermaidSvgForExport(el) : String(svgRaw || "");
+            const markup = el ? mermaidSvgForHtmlEmbed(el) : String(svgRaw || "");
             if (!markup || !/<svg[\s>]/i.test(markup)) throw new Error("空 SVG");
             const token = `MDMCHART${n}X`;
             images.push({ token, n, alt, svg: markup });
@@ -8292,6 +8374,22 @@ a{color:${v.accent}}
       return body.startsWith("<?xml") ? body : `<?xml version="1.0" encoding="UTF-8"?>${body}`;
     }
 
+    /** HTML 单文件嵌入：保留 viewBox，宽度 100%，避免宽屏仍锁在预览像素宽 */
+    function mermaidSvgForHtmlEmbed(svg) {
+      const clone = svg.cloneNode(true);
+      if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      const { w, h } = measureSvgSize(svg);
+      const rw = Math.max(1, Math.round(w));
+      const rh = Math.max(1, Math.round(h));
+      if (!clone.getAttribute("viewBox")) clone.setAttribute("viewBox", `0 0 ${rw} ${rh}`);
+      clone.removeAttribute("style"); // 清掉 mermaid 内联固定宽
+      clone.setAttribute("width", "100%");
+      clone.setAttribute("height", "auto");
+      clone.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      clone.style.cssText = "width:100%;max-width:100%;height:auto;display:block";
+      return new XMLSerializer().serializeToString(clone);
+    }
+
     async function rasterizeSvgMarkup(svgMarkup, mime, scale = 2) {
       // data URL 比 blob URL 在部分环境下二次解码 SVG 更稳
       const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
@@ -8383,6 +8481,7 @@ a{color:${v.accent}}
           `<div class="mdm-lightbox-stage" id="mdm-lightbox-stage">` +
           `<img id="mdm-lightbox-img" class="mdm-lightbox-img" alt="" draggable="false" />` +
           `<div id="mdm-lightbox-svghost" class="mdm-lightbox-svghost" hidden></div>` +
+          `<pre id="mdm-lightbox-codehost" class="mdm-lightbox-codehost" hidden><code></code></pre>` +
           `</div>` +
           `<div class="mdm-lightbox-toolbar">` +
           `<button type="button" class="ghost-btn" id="mdm-lightbox-zoom-out" aria-label="缩小">－</button>` +
@@ -8396,6 +8495,7 @@ a{color:${v.accent}}
           `<button type="button" data-fmt="png">PNG</button>` +
           `<button type="button" data-fmt="jpeg">JPEG</button>` +
           `<button type="button" data-fmt="webp">WebP</button>` +
+          `<button type="button" data-fmt="code" id="mdm-lightbox-dl-code" hidden>源码文件</button>` +
           `</div></details>` +
           `</div></div>`;
         document.body.appendChild(dlg);
@@ -8404,12 +8504,21 @@ a{color:${v.accent}}
       const stage = dlg.querySelector("#mdm-lightbox-stage");
       const imgEl = dlg.querySelector("#mdm-lightbox-img");
       let svgHost = dlg.querySelector("#mdm-lightbox-svghost");
+      let codeHost = dlg.querySelector("#mdm-lightbox-codehost");
       if (stage && !svgHost) {
         svgHost = document.createElement("div");
         svgHost.id = "mdm-lightbox-svghost";
         svgHost.className = "mdm-lightbox-svghost";
         svgHost.hidden = true;
         stage.appendChild(svgHost);
+      }
+      if (stage && !codeHost) {
+        codeHost = document.createElement("pre");
+        codeHost.id = "mdm-lightbox-codehost";
+        codeHost.className = "mdm-lightbox-codehost";
+        codeHost.hidden = true;
+        codeHost.innerHTML = "<code></code>";
+        stage.appendChild(codeHost);
       }
       const cap = dlg.querySelector("#mdm-lightbox-cap");
       const pctEl = dlg.querySelector("#mdm-lightbox-zoom-pct");
@@ -8419,20 +8528,38 @@ a{color:${v.accent}}
       const zoomResetBtn = dlg.querySelector("#mdm-lightbox-zoom-reset");
       const dlWrap = dlg.querySelector("#mdm-lightbox-dl");
       const dlSvgBtn = dlg.querySelector("#mdm-lightbox-dl-svg");
-      if (!stage || !imgEl || !svgHost) return;
+      let dlCodeBtn = dlg.querySelector("#mdm-lightbox-dl-code");
+      if (!dlCodeBtn && dlWrap) {
+        const menu = dlWrap.querySelector(".mdm-lightbox-dl-menu");
+        if (menu) {
+          dlCodeBtn = document.createElement("button");
+          dlCodeBtn.type = "button";
+          dlCodeBtn.id = "mdm-lightbox-dl-code";
+          dlCodeBtn.setAttribute("data-fmt", "code");
+          dlCodeBtn.hidden = true;
+          dlCodeBtn.textContent = "源码文件";
+          menu.appendChild(dlCodeBtn);
+        }
+      }
+      if (!stage || !imgEl || !svgHost || !codeHost) return;
 
       const view = { scale: 1, x: 0, y: 0, dragging: false, lastX: 0, lastY: 0 };
       let objectUrlToRevoke = null;
       let exportSvgMarkup = null;
+      let exportCodeText = "";
+      let exportCodeExt = "txt";
       let exportBaseName = "image";
-      /** @type {"img"|"svg"} */
+      /** @type {"img"|"svg"|"code"} */
       let previewMode = "img";
       let lightboxExporting = false;
       let mermaidOpenToken = 0;
       const SVG_PREVIEW_CAP = "图表预览 · 滚轮缩放 · 空白处拖动 · 可划词复制 · 可下载";
+      const CODE_PREVIEW_CAP = "代码预览 · 滚轮缩放 · 拖动平移 · 可划词复制 · 可下载";
 
       function activeLayer() {
-        return previewMode === "svg" ? svgHost : imgEl;
+        if (previewMode === "svg") return svgHost;
+        if (previewMode === "code") return codeHost;
+        return imgEl;
       }
 
       function isSvgTextTarget(el) {
@@ -8481,6 +8608,15 @@ a{color:${v.accent}}
             nw = sz.w;
             nh = sz.h;
           }
+        } else if (previewMode === "code") {
+          // 代码块：默认贴近舞台宽度，高度可滚动/缩放
+          nw = Math.max(codeHost.scrollWidth || 1, sw * 0.92);
+          nh = Math.max(codeHost.scrollHeight || 1, sh * 0.5);
+          view.scale = Math.min(1.15, Math.max(0.55, sw / nw));
+          view.x = 0;
+          view.y = 0;
+          syncTransform();
+          return;
         } else {
           nw = imgEl.naturalWidth || 1;
           nh = imgEl.naturalHeight || 1;
@@ -8507,7 +8643,11 @@ a{color:${v.accent}}
       }
 
       function syncDownloadUi() {
-        if (dlSvgBtn) dlSvgBtn.hidden = !exportSvgMarkup;
+        if (dlSvgBtn) dlSvgBtn.hidden = !exportSvgMarkup || previewMode === "code";
+        if (dlCodeBtn) dlCodeBtn.hidden = previewMode !== "code";
+        dlWrap?.querySelectorAll('button[data-fmt="png"],button[data-fmt="jpeg"],button[data-fmt="webp"]').forEach((b) => {
+          b.hidden = previewMode === "code";
+        });
         if (dlWrap) {
           dlWrap.open = false;
         }
@@ -8532,14 +8672,20 @@ a{color:${v.accent}}
         imgEl.hidden = false;
         svgHost.innerHTML = "";
         svgHost.hidden = true;
+        codeHost.hidden = true;
+        const codeEl = codeHost.querySelector("code");
+        if (codeEl) codeEl.textContent = "";
         if (cap) cap.textContent = "";
         if (objectUrlToRevoke) {
           URL.revokeObjectURL(objectUrlToRevoke);
           objectUrlToRevoke = null;
         }
         exportSvgMarkup = null;
+        exportCodeText = "";
+        exportCodeExt = "txt";
         exportBaseName = "image";
         previewMode = "img";
+        stage.classList.remove("is-code-mode");
         syncDownloadUi();
         view.scale = 1;
         view.x = 0;
@@ -8568,10 +8714,13 @@ a{color:${v.accent}}
         }
         if (opts.objectUrl) objectUrlToRevoke = opts.objectUrl;
         exportSvgMarkup = opts.svgMarkup || null;
+        exportCodeText = "";
         exportBaseName = String(opts.baseName || "image").replace(/[^\w\u4e00-\u9fff.-]+/g, "_") || "image";
         previewMode = "img";
+        stage.classList.remove("is-code-mode");
         svgHost.innerHTML = "";
         svgHost.hidden = true;
+        codeHost.hidden = true;
         imgEl.hidden = false;
         syncDownloadUi();
         view.scale = 1;
@@ -8599,11 +8748,14 @@ a{color:${v.accent}}
           objectUrlToRevoke = null;
         }
         exportSvgMarkup = null;
+        exportCodeText = "";
         exportBaseName = "mermaid-chart";
         previewMode = "svg";
+        stage.classList.remove("is-code-mode");
         imgEl.removeAttribute("src");
         imgEl.alt = "";
         imgEl.hidden = true;
+        codeHost.hidden = true;
         svgHost.hidden = false;
         svgHost.innerHTML = "";
         syncDownloadUi();
@@ -8619,9 +8771,12 @@ a{color:${v.accent}}
       function fillSvgPreview(markup, alt) {
         if (!markup) return;
         exportSvgMarkup = markup;
+        exportCodeText = "";
         exportBaseName = "mermaid-chart";
         previewMode = "svg";
+        stage.classList.remove("is-code-mode");
         imgEl.hidden = true;
+        codeHost.hidden = true;
         svgHost.hidden = false;
         svgHost.innerHTML = markup;
         syncDownloadUi();
@@ -8633,6 +8788,47 @@ a{color:${v.accent}}
         if (cap) cap.textContent = alt || SVG_PREVIEW_CAP;
         fitImage();
       }
+
+      function openCodeLightbox(pre) {
+        const text = codeBlockPlainText(pre);
+        if (!text.trim()) {
+          toast("代码为空");
+          return;
+        }
+        document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
+        exportSvgMarkup = null;
+        exportCodeText = text;
+        exportCodeExt = codeBlockExt(pre);
+        exportBaseName = `code`;
+        previewMode = "code";
+        stage.classList.add("is-code-mode");
+        imgEl.hidden = true;
+        imgEl.removeAttribute("src");
+        svgHost.hidden = true;
+        svgHost.innerHTML = "";
+        codeHost.hidden = false;
+        const codeEl = codeHost.querySelector("code") || codeHost;
+        // 保留预览高亮：克隆源 code 的 HTML；无则纯文本
+        const srcCode = pre.querySelector("code");
+        if (srcCode && srcCode.innerHTML && srcCode.innerHTML !== srcCode.textContent) {
+          codeEl.innerHTML = srcCode.innerHTML;
+          codeEl.className = srcCode.className || "";
+        } else {
+          codeEl.textContent = text;
+          codeEl.className = srcCode?.className || "";
+        }
+        syncDownloadUi();
+        view.scale = 1;
+        view.x = 0;
+        view.y = 0;
+        view.dragging = false;
+        syncStageCursor(false);
+        if (cap) cap.textContent = CODE_PREVIEW_CAP;
+        showModal();
+        window.requestAnimationFrame(() => fitImage());
+      }
+
+      window.__mdmOpenCodeLightbox = openCodeLightbox;
 
       function openMermaidLightbox(div) {
         const svg = div?.querySelector?.("svg");
@@ -8680,22 +8876,39 @@ a{color:${v.accent}}
           toast("正在导出，请稍候…");
           return;
         }
-        const ext = fmt === "jpeg" ? "jpg" : fmt;
-        const base = exportBaseName;
-        const name = `${base}.${ext}`;
         // 关闭弹层会清空 exportSvgMarkup；异步导出前先快照，避免下到一半被 reset
         const markupSnapshot = exportSvgMarkup;
+        const codeSnapshot = exportCodeText;
+        const codeExt = exportCodeExt || "txt";
         try {
+          if (fmt === "code" || (previewMode === "code" && (fmt === "txt" || fmt === "code"))) {
+            if (!codeSnapshot.trim()) {
+              toast("代码为空");
+              return;
+            }
+            const name = `${exportBaseName || "code"}.${codeExt}`;
+            downloadBlob(new Blob([codeSnapshot], { type: "text/plain;charset=utf-8" }), name);
+            toast(`已下载 ${name}`);
+            if (dlWrap) dlWrap.open = false;
+            return;
+          }
           if (fmt === "svg") {
             if (!markupSnapshot) {
               toast("当前预览无 SVG");
               return;
             }
+            const name = `${exportBaseName || "image"}.svg`;
             downloadBlob(new Blob([markupSnapshot], { type: "image/svg+xml;charset=utf-8" }), name);
             toast(`已下载 ${name}`);
             if (dlWrap) dlWrap.open = false;
             return;
           }
+          if (previewMode === "code") {
+            toast("代码请用「源码文件」下载");
+            return;
+          }
+          const ext = fmt === "jpeg" ? "jpg" : fmt;
+          const name = `${exportBaseName}.${ext}`;
           lightboxExporting = true;
           setLightboxExportUi(true, "导出中…");
           // 最佳质量（scale:2）可能要几秒：立刻给反馈，避免以为卡死
@@ -8729,12 +8942,36 @@ a{color:${v.accent}}
       }
 
       els.preview.addEventListener("click", (e) => {
-        const btn = e.target.closest?.(".mdm-mermaid-zoom");
-        if (!btn || !els.preview.contains(btn)) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const div = btn.closest(".mdm-mermaid");
-        if (div) openMermaidLightbox(div);
+        const zoomBtn = e.target.closest?.(".mdm-mermaid-zoom");
+        if (zoomBtn && els.preview.contains(zoomBtn)) {
+          e.preventDefault();
+          e.stopPropagation();
+          const div = zoomBtn.closest(".mdm-mermaid");
+          if (div) openMermaidLightbox(div);
+          return;
+        }
+        const dlBtn = e.target.closest?.(".mdm-mermaid-dl");
+        if (dlBtn && els.preview.contains(dlBtn)) {
+          e.preventDefault();
+          e.stopPropagation();
+          const div = dlBtn.closest(".mdm-mermaid");
+          const svg = div?.querySelector?.("svg");
+          if (!svg) {
+            toast("图表尚未渲染");
+            return;
+          }
+          try {
+            let markup = mermaidExportCache.get(div);
+            if (!markup) {
+              markup = mermaidSvgForExport(svg);
+              mermaidExportCache.set(div, markup);
+            }
+            downloadBlob(new Blob([markup], { type: "image/svg+xml;charset=utf-8" }), "mermaid-chart.svg");
+            toast("已下载 mermaid-chart.svg");
+          } catch (err) {
+            toast(`下载失败：${err.message || err}`);
+          }
+        }
       });
 
       els.preview.addEventListener("dblclick", (e) => {
@@ -8795,11 +9032,19 @@ a{color:${v.accent}}
 
       stage.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
-        // 活 SVG：点在文字上不拖，留给划词 / 双击选词
+        // 活 SVG / 代码：点在文字上不拖，留给划词 / 双击选词
         if (previewMode === "svg" && isSvgTextTarget(e.target)) {
           view.dragging = false;
           syncStageCursor(true);
           return;
+        }
+        if (previewMode === "code" && e.target.closest?.("code, pre")) {
+          // 允许划词；按住空白边缘仍可拖动画布——仅当选区为空且按住 stage 空白时拖
+          // 简化：代码模式默认不拖，只滚轮缩放；Shift+拖 平移
+          if (!e.shiftKey) {
+            view.dragging = false;
+            return;
+          }
         }
         view.dragging = true;
         view.lastX = e.clientX;
@@ -8829,8 +9074,9 @@ a{color:${v.accent}}
       stage.addEventListener("pointerup", endDrag);
       stage.addEventListener("pointercancel", endDrag);
       stage.addEventListener("dblclick", (e) => {
-        // 活 SVG 上双击文字 = 选词，不缩放
+        // 活 SVG / 代码上双击文字 = 选词，不缩放
         if (previewMode === "svg" && isSvgTextTarget(e.target)) return;
+        if (previewMode === "code") return;
         e.preventDefault();
         if (view.scale > 1.05) fitImage();
         else zoomAt(e.clientX, e.clientY, clampScale(Math.max(view.scale * 1.8, 1.5)));

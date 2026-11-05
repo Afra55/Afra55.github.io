@@ -349,6 +349,34 @@
   overflow: visible;
 }
 .mdm-lightbox-svghost[hidden] { display: none !important; }
+.mdm-lightbox-codehost {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  overflow: visible;
+  text-align: left;
+  user-select: text;
+  -webkit-user-select: text;
+  white-space: pre;
+  line-height: 1.55;
+  font-size: 0.92rem;
+}
+.mdm-lightbox-codehost code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: none;
+  padding: 0;
+  white-space: inherit;
+}
+.mdm-lightbox-codehost[hidden] { display: none !important; }
+.mdm-lightbox-stage.is-code-mode { cursor: text; touch-action: pan-y; }
 .mdm-lightbox-toolbar {
   display: flex;
   align-items: center;
@@ -618,11 +646,11 @@ body > div:not([id]):has(> svg[aria-roledescription="error"]) {
   pointer-events: none !important;
   visibility: hidden !important;
 }
-/* 角标放大：不占双击/划词；导出长图时忽略 */
-.mdm-mermaid-zoom {
+/* 图表角标：放大 / 下载；不占双击/划词；导出长图时忽略 */
+.mdm-mermaid-zoom,
+.mdm-mermaid-dl {
   position: absolute;
   top: 0.35rem;
-  right: 0.35rem;
   z-index: 2;
   padding: 0.12rem 0.45rem;
   line-height: 1.2;
@@ -630,8 +658,12 @@ body > div:not([id]):has(> svg[aria-roledescription="error"]) {
   opacity: 0.92;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
 }
+.mdm-mermaid-zoom { right: 0.35rem; }
+.mdm-mermaid-dl { right: 3.1rem; }
 .mdm-mermaid-zoom:hover,
-.mdm-mermaid-zoom:focus-visible {
+.mdm-mermaid-zoom:focus-visible,
+.mdm-mermaid-dl:hover,
+.mdm-mermaid-dl:focus-visible {
   opacity: 1;
   color: var(--accent);
   border-color: var(--accent);
@@ -676,18 +708,39 @@ html[data-theme-scheme="light"] .hljs-name { color: #6f42c1; }
 html[data-theme-scheme="light"] .hljs-tag { color: #22863a; }
 html[data-theme-scheme="light"] .hljs-meta, html[data-theme-scheme="light"] .hljs-deletion { color: #b31d28; }
 
-/* 代码块一键复制 */
-.mdm-copy-code {
-  position: absolute; top: 0.35rem; right: 0.35rem; z-index: 2;
-  padding: 0.1rem 0.5rem; font-size: 0.72rem; line-height: 1.5;
-  border: 1px solid var(--line); border-radius: 6px;
-  background: var(--panel, rgba(0, 0, 0, 0.35)); color: var(--muted); cursor: pointer;
-  opacity: 0; transition: opacity 0.15s;
+/* 代码块工具条：放大 / 下载 / 复制 */
+.mdm-code-toolbar {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  z-index: 2;
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
-.markdown-body pre:hover .mdm-copy-code { opacity: 1; }
-.mdm-copy-code:hover { color: var(--accent); border-color: var(--accent); }
+.markdown-body pre:hover .mdm-code-toolbar { opacity: 1; }
+.mdm-code-toolbar .mdm-code-btn,
+.mdm-code-toolbar .mdm-copy-code {
+  position: static;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel, rgba(0, 0, 0, 0.35));
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 1;
+  box-shadow: none;
+}
+.mdm-code-toolbar .mdm-code-btn:hover,
+.mdm-code-toolbar .mdm-copy-code:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
 @media (hover: none) {
-  .mdm-copy-code { opacity: 1; }
+  .mdm-code-toolbar { opacity: 1; }
 }
 .mdm-large-doc { padding: 0.6rem; line-height: 1.8; }
 .mdm-large-doc button { margin-left: 0.4rem; }
