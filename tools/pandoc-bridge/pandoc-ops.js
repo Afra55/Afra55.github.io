@@ -1036,7 +1036,7 @@ function setConvertProgress(stage, detail = "", extra = {}) {
   };
   const elapsed = Math.max(0, Math.round((now - convertProgress.startedAt) / 1000));
   console.log(
-    `[pandoc] ▶ ${convertProgress.percent}% · ${convertProgress.stage}${detail ? ` · ${detail}` : ""} · ${elapsed}s`
+    `[pandoc] ▶ ${Math.round(Number(convertProgress.percent) || 0)}% · ${convertProgress.stage}${detail ? ` · ${detail}` : ""} · ${elapsed}s`
   );
 }
 
@@ -1238,8 +1238,12 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   writeExportImages(tmp, images);
 
   const engineCli = pdfEngineCliArg(useEngine, pdfInfo);
-  const args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${engineCli}`, "-o", outPath];
-  // 中文 + 页边距；复杂图表依赖前端先烤成高清 PNG
+  const hasCjk = /[\u3400-\u9FFF]/.test(String(text || ""));
+  const bodyChars = String(text || "").replace(/\s+/g, "").length;
+  // 注意：必须带上 inPath，否则 pandoc 无正文（只剩 -V title）→ PDF 只有标题
+  const args = ["-f", fromFmt, "-t", "pdf", `--pdf-engine=${engineCli}`, inPath, "-o", outPath];
+  // 中文用 ctexart 更稳；页边距；图表已由前端烤成 PNG
+  if (hasCjk) args.push("-V", "documentclass=ctexart");
   args.push(
     "-V",
     `CJKmainfont=${cjkFont}`,
@@ -1248,12 +1252,12 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     "-V",
     "geometry:margin=2cm",
     "--pdf-engine-opt=-interaction=nonstopmode",
-    "--verbose" // 打出 Running xelatex，便于计遍数
+    "--verbose"
   );
   if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
 
   console.log(
-    `[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp} · 估 ${pageEst} 页 · 无硬超时`
+    `[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · cjk=${hasCjk} · in=${path.basename(inPath)} (${bodyChars} 字) · tmp=${tmp} · 估 ${pageEst} 页`
   );
   progressState.phase = "typeset";
   progressState.pass = 0; // 等首条 Running xelatex / 引擎横幅再记第 1 遍
@@ -1286,7 +1290,14 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 20) {
       throw new Error("PDF 输出为空（请检查字体与 XeLaTeX/MiKTeX 是否完整；黑窗是否有缺包错误）");
     }
-    const sizeKb = Math.round(fs.statSync(outPath).size / 1024);
+    const outBytes = fs.statSync(outPath).size;
+    const sizeKb = Math.round(outBytes / 1024);
+    // 正文很长却只有 1 页且文件很小：多半排版失败或未吃进正文
+    if (bodyChars > 400 && (progressState.page || 0) <= 1 && outBytes < 40 * 1024) {
+      throw new Error(
+        `PDF 几乎为空（${sizeKb} KB / ${progressState.page || 1} 页，正文约 ${bodyChars} 字）。常见原因：缺中文字体、LaTeX 报错被 nonstopmode 吞掉。请看黑窗里的 ! LaTeX Error；可更新 MiKTeX 宏包后再试。`
+      );
+    }
     setConvertProgress("读取 PDF 输出", `${sizeKb} KB · ${progressState.page || pageEst} 页`, {
       percent: 96,
       phase: "finalize",
