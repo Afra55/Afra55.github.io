@@ -882,7 +882,10 @@
      * 拖拽 seek、播放截断、成片切片必须用同一个值。
      */
     function endKeepStepSec() {
-      return resolveEndKeepSec(sourceFps);
+      const byFps = resolveEndKeepSec(sourceFps);
+      if (sourceFps >= 5) return byFps;
+      // 尚未探测到 fps：至少按帧格收 1 帧，避免固定 1/25 在低帧率片上半开不够
+      return Math.max(byFps, frameSnapSec || FRAME_SNAP_SEC);
     }
 
     function endKeepSec() {
@@ -892,6 +895,47 @@
     function startKeepSec() {
       // 半开片头：与 keepRangesFromEdit 的 startKeep 同一公式
       return Math.min(endKeepSec(), startSec + resolveStartKeepSec(sourceFps));
+    }
+
+    /** 片尾停帧世代：按钮按下与松手可能连续触发，只保留最后一次 */
+    let endParkGen = 0;
+    /**
+     * 片尾预览停帧：半开区间 [start, end)，黄柄 end 上的帧不应出现。
+     * HTML5 常把 seek 落到关键帧/偏后，点「片尾±」后会看见黄柄外多几帧；
+     * 若 shown 贴柄或超过，再往前收一帧，直到停在 keep 内。
+     */
+    async function seekEndPreviewExact() {
+      const gen = ++endParkGen;
+      const step = Math.max(1 / 240, endKeepStepSec());
+      let target = Math.max(startSec, endSec - step);
+      scrubSeekWanted = null;
+      if (dragSeekTimer) {
+        clearTimeout(dragSeekTimer);
+        dragSeekTimer = 0;
+      }
+      scrubSeekInflight = false;
+      try {
+        video.pause();
+      } catch (_) {}
+      for (let i = 0; i < 6; i++) {
+        if (gen !== endParkGen || closed) return target;
+        try {
+          video.currentTime = target;
+        } catch (_) {}
+        await waitSeek(video);
+        if (gen !== endParkGen || closed) return target;
+        const shown = Number(video.currentTime);
+        if (!Number.isFinite(shown)) break;
+        // 半开：shown 必须明显落在 endSec 之前；贴柄/越界则再往前一帧
+        if (shown < endSec - step * 0.5) break;
+        const next = Math.max(startSec, target - step);
+        if (Math.abs(next - target) < 1e-4) break;
+        target = next;
+      }
+      if (gen !== endParkGen || closed) return target;
+      paintTimeline();
+      updateLabels();
+      return Number(video.currentTime) || target;
     }
 
     function previewSeek(t, { throttle = false } = {}) {
@@ -1305,7 +1349,11 @@
         timeline?.classList.add("is-pulse");
         hapticLight();
       }
-      if (preview) previewSeek(endKeepSec(), { throttle: Boolean(drag) && !immediateSeek });
+      if (preview) {
+        // 拖拽中节流跟手；按钮/抬手用精确回拉，避免片尾预览多出几帧
+        if (immediateSeek || !drag) void seekEndPreviewExact();
+        else previewSeek(endKeepSec(), { throttle: true });
+      }
       paintTimeline();
       updateLabels();
     }
@@ -1381,7 +1429,7 @@
           clamp(Math.min(want, Math.max(fromShown, startSec + MIN_SPAN)), startSec + MIN_SPAN, duration)
         );
         clipCutoutsToWindow();
-        await seekPlayheadExact(endKeepSec());
+        await seekEndPreviewExact();
         paintTimeline();
         updateLabels();
         flashSnapFeedback("end", Math.abs(before - endSec) > frameSnapSec * 0.35);
@@ -1589,7 +1637,11 @@
     function clipPlayWindow(mediaTime) {
       if (closed || !duration || video.paused || playWindowLooping || drag) return false;
       const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
-      const jump = previewSeekForKeepRanges(keepRangesLocal(), cur, { paused: false });
+      // 播放时提前约 0.75 帧截断，减少 rVFC/timeupdate 迟到导致片尾多画出几帧
+      const jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
+        paused: false,
+        endLeadSec: endKeepStepSec() * 0.75,
+      });
       if (jump == null || !Number.isFinite(jump)) return false;
       if (Math.abs(jump - cur) < 0.001) return false;
       playWindowLooping = true;
@@ -1936,13 +1988,14 @@
         await waitSeek(video);
         if (gen !== nudgeSnapGen || closed) return;
         const shown = Number(video.currentTime) || keep;
-        // 同抬手：只收紧、不越过 want，避免片尾- 预览多出几帧
+        // 同抬手：只收紧、不越过 want；解码偏后绝不把 end 推过按钮目标
         const fromShown = shown + step;
         endSec = quantizeTrimSec(
           clamp(Math.min(want, Math.max(fromShown, startSec + MIN_SPAN)), startSec + MIN_SPAN, duration)
         );
         clipCutoutsToWindow();
-        previewSeek(endKeepSec(), { throttle: false });
+        // 回拉停在 keep 内，避免点片尾± 后画面停在黄柄外多几帧
+        await seekEndPreviewExact();
       }
       paintTimeline();
       updateLabels();
@@ -2449,7 +2502,9 @@
     if (!Number.isFinite(time)) return null;
     const first = keeps[0];
     const last = keeps[keeps.length - 1];
-    const endEps = 0.0005;
+    // 播放可带 endLeadSec：提早截断，避免片尾回调迟到多画出黄柄外帧
+    const endLead = !paused && Number(opts?.endLeadSec) > 0 ? Number(opts.endLeadSec) : 0;
+    const endEps = Math.max(0.0005, endLead);
     // 勿用大 start 容差提前进入下一段 keep，否则删段尾会少播进保留区约 1～数帧
     const startEps = 0.0005;
     for (let i = 0; i < keeps.length; i++) {
@@ -2462,7 +2517,7 @@
       if (nxt && time < nxt.start) return nxt.start;
     }
     // keepRangesFromEdit 已对末段收过 END_KEEP；暂停停在 keep 尾前一丁点，勿再减半开
-    if (paused) return Math.max(last.start, last.end - endEps);
+    if (paused) return Math.max(last.start, last.end - 0.0005);
     return first.start;
   }
 
