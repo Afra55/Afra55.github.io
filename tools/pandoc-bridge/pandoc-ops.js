@@ -163,7 +163,9 @@ function runCmdLogged(
     const child = spawn(file, args, {
       cwd,
       env: env ? { ...process.env, ...env } : process.env,
-      windowsHide: false, // 允许 MiKTeX 弹窗露出来；装包进度也能看见
+      // 导出时不要再弹新黑窗；stdout/stderr 已 pipe 到桥日志 + /progress
+      //（MiKTeX 装包 GUI 若真要弹窗，仍可由引擎自己拉起）
+      windowsHide: true,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
