@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * 黄柄所见即所得；删中间接点成片可再收 1 帧（防 GIF 多吐）。
+ * 黄柄所见即所得；删中间接点成片再收；单段片头/片尾由编码垫收。
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -38,7 +38,7 @@ function loadKeepFns() {
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
     const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, FRAME_SNAP_SEC = 1 / 30;
     const ENCODE_BOUND_PAD_SEC = 0;
-    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 1;
+    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 2;
     ${normalizeFps[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
@@ -53,9 +53,9 @@ function loadKeepFns() {
   return box;
 }
 
-t("无删段：成片 keep ≡ 预览 keep（黄柄所见即所得）", () => {
+t("无删段：成片 keep ≡ 预览 keep（单段片头片尾由编码垫）", () => {
   assert.ok(/ENCODE_BOUND_PAD_SEC\s*=\s*0/.test(vtrim));
-  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*1/.test(vtrim));
+  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*2/.test(vtrim));
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = { trimStart: 5, trimEnd: 95, cutouts: [] };
   const a = keepRangesFromEdit(edit, 100);
@@ -67,7 +67,7 @@ t("无删段：成片 keep ≡ 预览 keep（黄柄所见即所得）", () => {
   assert.ok(Math.abs(a[0].start - 5) < 1e-9);
 });
 
-t("删中间：成片接点相对预览再收 1 帧", () => {
+t("多段删中间：预览两端空 2 帧；成片接点再收 2 帧 + 首末段", () => {
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = {
     trimStart: 5,
@@ -82,31 +82,35 @@ t("删中间：成片接点相对预览再收 1 帧", () => {
   assert.strictEqual(a.length, b.length);
   assert.ok(a.length >= 3);
   const pad = 1 / 25;
-  // 片头仍对齐黄柄
-  assert.ok(Math.abs(a[0].start - 5) < 1e-9);
-  assert.ok(Math.abs(b[0].start - 5) < 1e-9);
-  // 上一段终点：成片再提前 1 帧
-  assert.ok(Math.abs(b[0].end - (a[0].end - pad)) < 1e-9);
-  // 下一段起点：成片再推后 1 帧（中间段片尾接点）
-  assert.ok(Math.abs(b[1].start - (a[1].start + pad)) < 1e-9);
-  // 预览 keep 已从 cut.end 空 2 帧
+  // 预览：cut.start / cut.end 各空 2 帧
+  assert.ok(Math.abs(a[0].end - (20 - pad * 2)) < 1e-9);
   assert.ok(Math.abs(a[1].start - (30 + pad * 2)) < 1e-9);
+  assert.ok(Math.abs(a[1].end - (50 - pad * 2)) < 1e-9);
+  assert.ok(Math.abs(a[2].start - (60 + pad * 2)) < 1e-9);
+  // 成片：首段片头再推、接点再收、末段片尾再收（各 2 帧）
+  const jPad = pad * 2;
+  assert.ok(Math.abs(b[0].start - (a[0].start + jPad)) < 1e-9, "多段首段片头再推");
+  assert.ok(Math.abs(b[0].end - (a[0].end - jPad)) < 1e-9, "上一段终点再收");
+  assert.ok(Math.abs(b[1].start - (a[1].start + jPad)) < 1e-9, "下一段起点再推");
+  assert.ok(Math.abs(b[2].end - (a[2].end - jPad)) < 1e-9, "末段片尾再收");
 });
 
-t("仅裁片头：成片起点 = 黄柄 trimStart", () => {
+t("仅裁片头：成片 keep 起点仍 = 黄柄（编码 -ss 再垫）", () => {
   const { keepRangesForEncode } = loadKeepFns();
   const enc = keepRangesForEncode({ trimStart: 10, trimEnd: 40, cutouts: [] }, 60);
   assert.strictEqual(enc.length, 1);
   assert.ok(Math.abs(enc[0].start - 10) < 1e-9);
 });
 
-t("keepRangesForEncode 有删段时收接点垫", () => {
+t("keepRangesForEncode 有删段时收接点 + 首末段", () => {
   const fn = vtrim.slice(
     vtrim.indexOf("function keepRangesForEncode"),
     vtrim.indexOf("function previewSeekForKeepRanges")
   );
   assert.ok(fn.includes("ENCODE_CUT_JUNCTION_PAD_FRAMES"));
   assert.ok(fn.includes("if (i > 0)"));
+  assert.ok(fn.includes("i === 0") || fn.includes("i===0"));
+  assert.ok(fn.includes("preview.length - 1"));
   assert.ok(!fn.includes("ENCODE_BOUND_PAD_SEC / 2"));
 });
 
@@ -119,35 +123,35 @@ t("exportKeepVideo：trim 路径不额外 endBias；仅 -ss 回退可收", () =>
   assert.ok(exp.includes("if (!useTrim)"));
 });
 
-t("编辑后仍 forceAccurateCut（精确切，不靠多删垫）", () => {
+t("编辑后仍 forceAccurateCut（精确切）", () => {
   assert.ok(shared.includes("forceAccurateCut"));
   assert.ok(vbb.includes("forceAccurateCut: Boolean(prepared.cutNote)"));
 });
 
-t("编码：keep 对齐路径片尾再收 2 帧（防 GIF 多吐；预览 keep 不动）", () => {
-  assert.ok(shared.includes("function vbbEncodeKeepTailPadSec"));
+t("编码：片头/片尾各收 2 帧（startSec>0 才垫片头）", () => {
+  assert.ok(shared.includes("function vbbEncodeKeepEdgePadSec"));
+  assert.ok(shared.includes("function vbbEncodeSpanHeadPadSec"));
   assert.ok(shared.includes("function vbbEncodeSpanTailPadSec"));
-  const hits = shared.match(/halfOpenPad\s*=\s*vbbEncodeSpanTailPadSec/g) || [];
-  assert.ok(hits.length >= 2, `encode sites=${hits.length}`);
-  assert.ok(shared.includes("encodeT / speed") || /encodeT\s*\/\s*speed/.test(shared));
-  const m = shared.match(/function vbbEncodeKeepTailPadSec\([\s\S]*?\n      \}/);
-  const m2 = shared.match(/function vbbEncodeSpanTailPadSec\([\s\S]*?\n      \}/);
-  assert.ok(m && m2);
+  const headHits = shared.match(/vbbEncodeSpanHeadPadSec\(/g) || [];
+  const tailHits = shared.match(/vbbEncodeSpanTailPadSec\(/g) || [];
+  assert.ok(headHits.length >= 3, `head sites=${headHits.length}`);
+  assert.ok(tailHits.length >= 3, `tail sites=${tailHits.length}`);
+  const mEdge = shared.match(/function vbbEncodeKeepEdgePadSec\([\s\S]*?\n      \}/);
+  const mHead = shared.match(/function vbbEncodeSpanHeadPadSec\([\s\S]*?\n      \}/);
+  const mTail = shared.match(/function vbbEncodeSpanTailPadSec\([\s\S]*?\n      \}/);
+  assert.ok(mEdge && mHead && mTail);
   const box = {};
   vm.runInNewContext(
-    `${m[0]}\n${m2[0]}\nthis.tail = vbbEncodeKeepTailPadSec;\nthis.span = vbbEncodeSpanTailPadSec;`,
+    `${mEdge[0]}\n${mHead[0]}\n${mTail[0]}
+     this.edge = vbbEncodeKeepEdgePadSec;
+     this.head = vbbEncodeSpanHeadPadSec;
+     this.tail = vbbEncodeSpanTailPadSec;`,
     box
   );
-  // 30fps 源 + 15fps GIF → max(2/15, 2/30)=2/15
-  assert.ok(Math.abs(box.tail(15, 30) - 2 / 15) < 1e-9);
-  // 编辑路径走 keep 尾垫，非 0
-  assert.ok(box.span(15, 30, { startSec: 1.2 }) + 1e-9 >= 2 / 15);
-  // 旧路径仍可半帧
-  const old = shared.match(/function vbbEncodeHalfOpenPadSec\([\s\S]*?\n      \}/);
-  assert.ok(old);
-  const boxOld = {};
-  vm.runInNewContext(`${old[0]}\nthis.fn = vbbEncodeHalfOpenPadSec;`, boxOld);
-  assert.ok(boxOld.fn(20, 30) + 1e-9 >= 0.5 / 30);
+  assert.ok(Math.abs(box.edge(15, 30) - 2 / 15) < 1e-9);
+  assert.ok(box.head(15, 30, { startSec: 1.2 }, 1.2) + 1e-9 >= 2 / 15);
+  assert.ok(box.head(15, 30, { startSec: 0 }, 0) === 0, "片头≈0 不垫");
+  assert.ok(box.tail(15, 30, { startSec: 1.2 }) + 1e-9 >= 2 / 15);
 });
 
 t("预裁切不再对 keep span 二次减半帧", () => {

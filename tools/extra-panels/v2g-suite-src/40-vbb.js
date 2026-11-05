@@ -661,8 +661,8 @@
         for (const c of cuts) {
           const cutStart = Math.max(trimStart, Number(c.start) || 0);
           const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
-          const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep);
-          // 与 vtrim keepRangesFromEdit：cut.end 起空 2 帧，防 GIF 接点多吐
+          // 与 vtrim：cut.start / cut.end 两端各空 2 帧
+          const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep * 2);
           const resumeAt = Math.min(trimEnd, cutEnd + endKeep * 2);
           if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
           cursor = Math.max(cursor, resumeAt);
@@ -703,8 +703,10 @@
         return preview.map((k, i) => {
           let start = Number(k.start) || 0;
           let end = Math.max(start + 0.05, Number(k.end) || 0);
+          if (i === 0 && start > 0.02) start = Math.min(end - 0.05, start + pad);
           if (i > 0) start = Math.min(end - 0.05, start + pad);
           if (i < preview.length - 1) end = Math.max(start + 0.05, end - pad);
+          if (i === preview.length - 1) end = Math.max(start + 0.05, end - pad);
           return { start, end };
         });
       }
