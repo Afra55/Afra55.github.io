@@ -1312,8 +1312,12 @@
         let segName = null;
         let encodeInput = inName;
         let encodeSs = startSec;
-        // 半开：时长略短半帧，避免 -t/fps 滤镜在片尾多吐帧（预览无、GIF 却有）
-        const halfOpenPad = vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
+        // keep 窗（resolveVbbEncodeEdits）已按 1/srcFps 半开；再垫会让 GIF 短于黄柄/预览。
+        // 仅「非 keep 对齐」旧路径保留半帧垫；黑盒编辑/精确切一律 0。
+        const halfOpenPad =
+          opts.forceAccurateCut || opts.keepAligned || Number.isFinite(opts.startSec)
+            ? 0
+            : vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
         let encodeT = Math.max(0.05, span - halfOpenPad);
   
         try {
@@ -1613,9 +1617,9 @@
       }
 
       /**
-       * 编码片尾半开垫（秒）：预览 keep 已按 1/srcFps 收尾，编码侧再收半帧，
-       * 避免 ffmpeg fps/-t 在边界再吐出黄柄上那一帧（预览无、GIF 却有）。
-       * 取 max(半个 GIF 帧, 半个源帧)，高帧 GIF + 低垫时仍够。
+       * 编码片尾半开垫（秒）——仅旧「非 keep 对齐」路径使用。
+       * 黑盒编辑 keep 已按 1/srcFps 收尾；再垫会让 GIF 短于黄柄/预览（部分长片更明显）。
+       * keep 对齐时调用方传 forceAccurateCut / keepAligned / startSec → pad=0。
        */
       function vbbEncodeHalfOpenPadSec(gifFps, srcFps) {
         const g = 0.5 / Math.max(8, Number(gifFps) || 15);
@@ -2175,7 +2179,11 @@
         let segName = null;
         let encodeInput = inName;
         let encodeSs = startSec;
-        const halfOpenPad = vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
+        // keep 已半开；编辑/带 startSec·span 的路径不再二次垫，避免 GIF 短于预览
+        const halfOpenPad =
+          opts.forceAccurateCut || opts.keepAligned || Number.isFinite(opts.startSec)
+            ? 0
+            : vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
         let encodeT = Math.max(0.05, span - halfOpenPad);
 
         try {
@@ -8725,8 +8733,8 @@
        */
       async function materializeVbbTrimClip(file, startSec, span, srcW, srcH, onProgress, ffmpegLease) {
         const start = Math.max(0, Number(startSec) || 0);
-        // 半开窗：略短半帧（≥1/60），避免预裁切再转 GIF 时片尾多出预览没有的帧
-        const dur = Math.max(0.05, (Number(span) || 0.05) - Math.max(1 / 60, 1 / 50));
+        // span 已来自 keep（含黄柄半开）；禁止再减半帧，否则长片预裁路径 GIF 会短于编辑预览
+        const dur = Math.max(0.05, Number(span) || 0.05);
         const keepW = Math.max(1, Math.round(Number(srcW) || 1));
         const keepH = Math.max(1, Math.round(Number(srcH) || 1));
         const cacheKey = vbbPrecutClipCacheKey(file, start, dur, keepW, keepH);
@@ -12675,8 +12683,8 @@
               const crop = win.crop
                 ? `crop=${Math.max(2, win.crop.w)}:${Math.max(2, win.crop.h)}:${Math.max(0, win.crop.x)}:${Math.max(0, win.crop.y)},`
                 : "";
-              // 片尾按半开区间：duration 略短半帧，避免拼接后再转 GIF 多出片尾后画面
-              const mergeDur = Math.max(0.05, span - 0.5 / mergeFps);
+              // span 已是 keep 半开窗；勿再减半帧，否则拼接成片短于单段预览
+              const mergeDur = Math.max(0.05, span);
               // fps 放 trim/setpts 之后：先按源时间裁切，再统一到保留的片源帧率
               return (
                 `[${i}:v]trim=start=${start}:duration=${mergeDur},setpts=PTS-STARTPTS,` +

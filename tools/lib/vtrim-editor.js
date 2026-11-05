@@ -59,7 +59,7 @@
    */
   const START_KEEP_SEC = 1 / 50;
 
-  /** 按片源 fps 取半开片尾；无有效 fps 回退 END_KEEP_SEC */
+  /** 按片源 fps 取半开片尾；无有效 fps 回退 max(1/25, 1/30)，与编辑器 endKeepStepSec 一致 */
   function resolveEndKeepSec(editOrFps) {
     const fps =
       editOrFps && typeof editOrFps === "object"
@@ -67,7 +67,7 @@
         : Number(editOrFps) || 0;
     const n = normalizeSourceFps(fps);
     if (n >= 5) return 1 / n;
-    return END_KEEP_SEC;
+    return Math.max(END_KEEP_SEC, FRAME_SNAP_SEC);
   }
 
   function resolveStartKeepSec(editOrFps) {
@@ -882,10 +882,10 @@
      * 拖拽 seek、播放截断、成片切片必须用同一个值。
      */
     function endKeepStepSec() {
-      const byFps = resolveEndKeepSec(sourceFps);
-      if (sourceFps >= 5) return byFps;
-      // 尚未探测到 fps：至少按帧格收 1 帧，避免固定 1/25 在低帧率片上半开不够
-      return Math.max(byFps, frameSnapSec || FRAME_SNAP_SEC);
+      // 与 keepRangesFromEdit / 成片同一半开一步
+      if (sourceFps >= 5) return resolveEndKeepSec(sourceFps);
+      // 编辑中途尚未写入 srcFps：跟当前帧格，避免和默认 1/25 拧着
+      return Math.max(resolveEndKeepSec(0), frameSnapSec || FRAME_SNAP_SEC);
     }
 
     function endKeepSec() {
@@ -900,14 +900,16 @@
     /** 片尾停帧世代：按钮按下与松手可能连续触发，只保留最后一次 */
     let endParkGen = 0;
     /**
-     * 片尾预览停帧：半开区间 [start, end)，黄柄 end 上的帧不应出现。
-     * HTML5 常把 seek 落到关键帧/偏后，点「片尾±」后会看见黄柄外多几帧；
-     * 若 shown 贴柄或超过，再往前收一帧，直到停在 keep 内。
+     * 片尾所见即所得：
+     * - 黄柄 end = 半开上界（该帧起不进 GIF）
+     * - 停帧 = end - 1/srcFps（keep 末帧）
+     * - 解码偏早 → 收紧 end 对齐 shown（成片跟画面走）
+     * - 解码偏后/贴柄 → 最多再往前试 1 帧，并同步收紧 end（禁止只改画面不改黄柄，否则拖柄≠预览≠GIF）
      */
     async function seekEndPreviewExact() {
       const gen = ++endParkGen;
       const step = Math.max(1 / 240, endKeepStepSec());
-      let target = Math.max(startSec, endSec - step);
+      const want = quantizeTrimSec(endSec);
       scrubSeekWanted = null;
       if (dragSeekTimer) {
         clearTimeout(dragSeekTimer);
@@ -917,25 +919,92 @@
       try {
         video.pause();
       } catch (_) {}
-      for (let i = 0; i < 6; i++) {
-        if (gen !== endParkGen || closed) return target;
-        try {
-          video.currentTime = target;
-        } catch (_) {}
-        await waitSeek(video);
-        if (gen !== endParkGen || closed) return target;
-        const shown = Number(video.currentTime);
-        if (!Number.isFinite(shown)) break;
-        // 半开：shown 必须明显落在 endSec 之前；贴柄/越界则再往前一帧
-        if (shown < endSec - step * 0.5) break;
-        const next = Math.max(startSec, target - step);
-        if (Math.abs(next - target) < 1e-4) break;
-        target = next;
+
+      let target = Math.max(startSec, want - step);
+      try {
+        video.currentTime = target;
+      } catch (_) {}
+      await waitSeek(video);
+      if (gen !== endParkGen || closed) return target;
+      let shown = Number(video.currentTime);
+      if (!Number.isFinite(shown)) shown = target;
+
+      if (shown >= want - step * 0.5) {
+        // 贴柄/越界：再往前一帧，并把黄柄收到 shown+step（画面与成片同一末帧）
+        const earlier = Math.max(startSec, target - step);
+        if (earlier < target - 1e-4) {
+          try {
+            video.currentTime = earlier;
+          } catch (_) {}
+          await waitSeek(video);
+          if (gen !== endParkGen || closed) return earlier;
+          shown = Number(video.currentTime);
+          if (!Number.isFinite(shown)) shown = earlier;
+        }
+        endSec = quantizeTrimSec(
+          clamp(Math.min(want, shown + step), startSec + MIN_SPAN, duration)
+        );
+      } else if (shown + step < want - 0.001) {
+        // 偏早：收紧 end，使 keep 末帧 = 当前所见
+        endSec = quantizeTrimSec(
+          clamp(shown + step, startSec + MIN_SPAN, duration)
+        );
       }
+
+      // 最终停在 keep 末（与播放截断 / GIF 同一点）
+      target = endKeepSec();
+      try {
+        video.currentTime = target;
+      } catch (_) {}
+      await waitSeek(video);
       if (gen !== endParkGen || closed) return target;
       paintTimeline();
       updateLabels();
       return Number(video.currentTime) || target;
+    }
+
+    /**
+     * 片头所见即所得：黄柄 = GIF 首帧。
+     * 解码偏后 → 黄柄推到 shown；偏早则略向前再试，避免关键帧停在柄前。
+     */
+    async function seekStartPreviewExact() {
+      const step = Math.max(1 / 240, endKeepStepSec());
+      let target = startSec;
+      scrubSeekWanted = null;
+      if (dragSeekTimer) {
+        clearTimeout(dragSeekTimer);
+        dragSeekTimer = 0;
+      }
+      scrubSeekInflight = false;
+      try {
+        video.pause();
+      } catch (_) {}
+      for (let i = 0; i < 3; i++) {
+        try {
+          video.currentTime = target;
+        } catch (_) {}
+        await waitSeek(video);
+        if (closed) return target;
+        const shown = Number(video.currentTime);
+        if (!Number.isFinite(shown)) break;
+        if (shown >= startSec - step * 0.25) {
+          if (shown > startSec + step * 0.35) {
+            startSec = quantizeTrimSec(clamp(shown, 0, endSec - MIN_SPAN));
+          }
+          break;
+        }
+        // 仍偏早：往后再试半开一步，逼近可 seek 到的首帧
+        const next = Math.min(endSec - MIN_SPAN, target + step);
+        if (next <= target + 1e-4) break;
+        target = next;
+      }
+      try {
+        video.currentTime = startSec;
+      } catch (_) {}
+      await waitSeek(video);
+      paintTimeline();
+      updateLabels();
+      return Number(video.currentTime) || startSec;
     }
 
     function previewSeek(t, { throttle = false } = {}) {
@@ -1332,7 +1401,10 @@
         timeline?.classList.add("is-pulse");
         hapticLight();
       }
-      if (preview) previewSeek(startSec, { throttle: Boolean(drag) && !immediateSeek });
+      if (preview) {
+        if (immediateSeek || !drag) void seekStartPreviewExact();
+        else previewSeek(startSec, { throttle: true });
+      }
       paintTimeline();
       updateLabels();
     }
@@ -1396,7 +1468,7 @@
         startSec = quantizeTrimSec(clamp(Math.max(want, shown), 0, endSec - MIN_SPAN));
         clipCutoutsToWindow();
         // 抬手停在黄柄所见帧（= GIF 首帧），所见即所得
-        await seekPlayheadExact(startSec);
+        await seekStartPreviewExact();
         paintTimeline();
         updateLabels();
         flashSnapFeedback("start", Math.abs(before - startSec) > frameSnapSec * 0.35);
@@ -1638,10 +1710,8 @@
       if (closed || !duration || video.paused || playWindowLooping || drag) return false;
       const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
       // 播放时提前约 0.75 帧截断，减少 rVFC/timeupdate 迟到导致片尾多画出几帧
-      const jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
-        paused: false,
-        endLeadSec: endKeepStepSec() * 0.75,
-      });
+      // 与 keep/GIF 同一截断点，勿再提前 endLead（否则播放比成片少几帧）
+      const jump = previewSeekForKeepRanges(keepRangesLocal(), cur, { paused: false });
       if (jump == null || !Number.isFinite(jump)) return false;
       if (Math.abs(jump - cur) < 0.001) return false;
       playWindowLooping = true;
@@ -1710,8 +1780,8 @@
         // 提交黄/红柄所见时间：预览与 GIF 都按此精确对齐（所见即所得）
         trimStart: quantizeTrimSec(startSec),
         trimEnd: quantizeTrimSec(endSec),
-        // 带上片源 fps，外预览/成片半开与编辑器同一帧间隔
-        srcFps: sourceFps > 0 ? sourceFps : undefined,
+        // 始终带 fps：半开一步与编辑器 endKeepStepSec 一致（未探测时用默认帧格）
+        srcFps: sourceFps >= 5 ? sourceFps : DEFAULT_FRAME_FPS,
         cutouts: cuts.map((c) => ({
           start: quantizeTrimSec(c.start),
           end: quantizeTrimSec(c.end),
@@ -1977,7 +2047,7 @@
         const shown = Number(video.currentTime) || want;
         startSec = quantizeTrimSec(clamp(Math.max(want, shown), 0, endSec - MIN_SPAN));
         clipCutoutsToWindow();
-        previewSeek(startSec, { throttle: false });
+        await seekStartPreviewExact();
       } else {
         const want = quantizeTrimSec(endSec);
         const step = endKeepStepSec();
@@ -1994,7 +2064,7 @@
           clamp(Math.min(want, Math.max(fromShown, startSec + MIN_SPAN)), startSec + MIN_SPAN, duration)
         );
         clipCutoutsToWindow();
-        // 回拉停在 keep 内，避免点片尾± 后画面停在黄柄外多几帧
+        // 停帧与黄柄同步收紧，保证按钮所见 = 播放 = GIF
         await seekEndPreviewExact();
       }
       paintTimeline();
@@ -2453,10 +2523,9 @@
     const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
     const trimEnd = Math.min(d, Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || d));
     const cuts = normalizeCutouts(edit?.cutouts, trimStart, trimEnd);
-    // 有 srcFps 时半开 = 1 帧；否则回退 1/25，避免固定常量在高帧率片上差几帧
-    const fps = Number(edit?.srcFps) || 0;
-    const endKeep = fps >= 5 && fps <= 240 ? 1 / fps : END_KEEP_SEC;
-    const startKeep = Math.min(START_KEEP_SEC, endKeep * 0.5);
+    // 与编辑器 endKeepStepSec 同一公式（resolveEndKeepSec / resolveStartKeepSec）
+    const endKeep = resolveEndKeepSec(edit);
+    const startKeep = resolveStartKeepSec(edit);
     const keeps = [];
     let cursor = trimStart;
     for (const c of cuts) {
@@ -2502,9 +2571,7 @@
     if (!Number.isFinite(time)) return null;
     const first = keeps[0];
     const last = keeps[keeps.length - 1];
-    // 播放可带 endLeadSec：提早截断，避免片尾回调迟到多画出黄柄外帧
-    const endLead = !paused && Number(opts?.endLeadSec) > 0 ? Number(opts.endLeadSec) : 0;
-    const endEps = Math.max(0.0005, endLead);
+    const endEps = 0.0005;
     // 勿用大 start 容差提前进入下一段 keep，否则删段尾会少播进保留区约 1～数帧
     const startEps = 0.0005;
     for (let i = 0; i < keeps.length; i++) {
@@ -2517,7 +2584,7 @@
       if (nxt && time < nxt.start) return nxt.start;
     }
     // keepRangesFromEdit 已对末段收过 END_KEEP；暂停停在 keep 尾前一丁点，勿再减半开
-    if (paused) return Math.max(last.start, last.end - 0.0005);
+    if (paused) return Math.max(last.start, last.end - endEps);
     return first.start;
   }
 

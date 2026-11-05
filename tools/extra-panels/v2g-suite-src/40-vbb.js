@@ -1048,8 +1048,8 @@
        */
       async function materializeVbbTrimClip(file, startSec, span, srcW, srcH, onProgress, ffmpegLease) {
         const start = Math.max(0, Number(startSec) || 0);
-        // 半开窗：略短半帧（≥1/60），避免预裁切再转 GIF 时片尾多出预览没有的帧
-        const dur = Math.max(0.05, (Number(span) || 0.05) - Math.max(1 / 60, 1 / 50));
+        // span 已来自 keep（含黄柄半开）；禁止再减半帧，否则长片预裁路径 GIF 会短于编辑预览
+        const dur = Math.max(0.05, Number(span) || 0.05);
         const keepW = Math.max(1, Math.round(Number(srcW) || 1));
         const keepH = Math.max(1, Math.round(Number(srcH) || 1));
         const cacheKey = vbbPrecutClipCacheKey(file, start, dur, keepW, keepH);
@@ -4998,8 +4998,8 @@
               const crop = win.crop
                 ? `crop=${Math.max(2, win.crop.w)}:${Math.max(2, win.crop.h)}:${Math.max(0, win.crop.x)}:${Math.max(0, win.crop.y)},`
                 : "";
-              // 片尾按半开区间：duration 略短半帧，避免拼接后再转 GIF 多出片尾后画面
-              const mergeDur = Math.max(0.05, span - 0.5 / mergeFps);
+              // span 已是 keep 半开窗；勿再减半帧，否则拼接成片短于单段预览
+              const mergeDur = Math.max(0.05, span);
               // fps 放 trim/setpts 之后：先按源时间裁切，再统一到保留的片源帧率
               return (
                 `[${i}:v]trim=start=${start}:duration=${mergeDur},setpts=PTS-STARTPTS,` +

@@ -1263,8 +1263,12 @@
         let segName = null;
         let encodeInput = inName;
         let encodeSs = startSec;
-        // 半开：时长略短半帧，避免 -t/fps 滤镜在片尾多吐帧（预览无、GIF 却有）
-        const halfOpenPad = vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
+        // keep 窗（resolveVbbEncodeEdits）已按 1/srcFps 半开；再垫会让 GIF 短于黄柄/预览。
+        // 仅「非 keep 对齐」旧路径保留半帧垫；黑盒编辑/精确切一律 0。
+        const halfOpenPad =
+          opts.forceAccurateCut || opts.keepAligned || Number.isFinite(opts.startSec)
+            ? 0
+            : vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
         let encodeT = Math.max(0.05, span - halfOpenPad);
   
         try {
@@ -1564,9 +1568,9 @@
       }
 
       /**
-       * 编码片尾半开垫（秒）：预览 keep 已按 1/srcFps 收尾，编码侧再收半帧，
-       * 避免 ffmpeg fps/-t 在边界再吐出黄柄上那一帧（预览无、GIF 却有）。
-       * 取 max(半个 GIF 帧, 半个源帧)，高帧 GIF + 低垫时仍够。
+       * 编码片尾半开垫（秒）——仅旧「非 keep 对齐」路径使用。
+       * 黑盒编辑 keep 已按 1/srcFps 收尾；再垫会让 GIF 短于黄柄/预览（部分长片更明显）。
+       * keep 对齐时调用方传 forceAccurateCut / keepAligned / startSec → pad=0。
        */
       function vbbEncodeHalfOpenPadSec(gifFps, srcFps) {
         const g = 0.5 / Math.max(8, Number(gifFps) || 15);
@@ -2126,7 +2130,11 @@
         let segName = null;
         let encodeInput = inName;
         let encodeSs = startSec;
-        const halfOpenPad = vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
+        // keep 已半开；编辑/带 startSec·span 的路径不再二次垫，避免 GIF 短于预览
+        const halfOpenPad =
+          opts.forceAccurateCut || opts.keepAligned || Number.isFinite(opts.startSec)
+            ? 0
+            : vbbEncodeHalfOpenPadSec(fps, opts.srcFps);
         let encodeT = Math.max(0.05, span - halfOpenPad);
 
         try {
