@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.119";
+const BRIDGE_VERSION = "0.9.120";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -6178,12 +6178,13 @@ async function handleApi(req, res, url) {
       console.log(`[bridge] ← ${req.method} ${url.pathname}`);
       const stripped = url.pathname === "/pandoc" ? "/" : url.pathname.slice(7) || "/";
       const isPandocHealth = stripped === "/health" && req.method === "GET";
+      const isPandocProgress = stripped === "/progress" && req.method === "GET";
       const isSetXelatexPath =
         (stripped === "/set-xelatex-path" || stripped === "/set-engine-path") && req.method === "POST";
       const isConvert = stripped === "/convert" && req.method === "POST";
       const isInstall = stripped === "/install" && req.method === "POST";
 
-      if (!isPandocHealth && req.method !== "OPTIONS") {
+      if (!isPandocHealth && !isPandocProgress && req.method !== "OPTIONS") {
         try {
           requireToken(req);
         } catch (err) {
