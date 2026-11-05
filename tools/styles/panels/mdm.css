@@ -1,3 +1,5 @@
+@import url("./gif-shared.css");
+
 /* Markdown 文档管理 */
 .mdm-body { display: flex; flex-direction: column; gap: 0.55rem; min-height: 0; }
 

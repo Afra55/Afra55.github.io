@@ -262,18 +262,112 @@
       throw lastErr || new Error("转换失败");
     }
 
+    function openExportProgress(toLabel, { onCancel } = {}) {
+      const Prog = window.DevToolsPandocExportProgress;
+      if (!Prog?.open) {
+        return {
+          setLocal() {},
+          setLocalPct() {},
+          setAliveText() {},
+          setAliveUi() {},
+          startPoll() {},
+          markConvertPosted() {},
+          stop() {},
+          wasCancelled: () => false,
+          close() {},
+          onProgress: null,
+        };
+      }
+      return Prog.open(toLabel, {
+        baseUrl,
+        token,
+        onCancel,
+        modal: $("#docfmt-pandoc-modal"),
+        modalBox: $("#docfmt-pandoc-modal-box"),
+        idPrefix: "docfmt-pandoc-export",
+        hint:
+          "先上传到本机桥，再看 XeLaTeX/Pandoc 进度。<strong>PDF 无超时</strong>，跑完为止；Esc / 取消可中止。",
+      });
+    }
+
+    /**
+     * 带进度弹框的 /pandoc/convert（PDF 无前端超时；其它格式 6 分钟）。
+     * @param {{ body: object, toFmt: string, label?: string }} opts
+     */
+    async function pandocConvertWithProgress({ body, toFmt, label }) {
+      const isPdf = String(toFmt) === "pdf";
+      const toLabel = String(label || toFmt || "file").toUpperCase();
+      const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
+      let timeoutId = null;
+      if (abort && !isPdf) {
+        timeoutId = setTimeout(() => {
+          try {
+            abort.abort();
+          } catch (_) {}
+        }, 6 * 60 * 1000);
+      }
+      const prog = openExportProgress(toLabel, {
+        onCancel: () => {
+          try {
+            abort?.abort();
+          } catch (_) {}
+        },
+      });
+      try {
+        prog.setLocalPct(2);
+        prog.setLocal(
+          isPdf ? "准备印刷级 PDF" : "准备转换",
+          isPdf ? "上传到桥 · 无超时 · 下方应变为「桥进度正常」" : `Pandoc → ${toLabel}`
+        );
+        prog.startPoll();
+        prog.markConvertPosted?.();
+        prog.setAliveText?.("正在上传到桥并拉取进度…", "");
+        persist();
+        const res = await fetch(`${baseUrl()}/pandoc/convert`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Adb-Token": token(),
+            "X-Ffmpeg-Token": token(),
+          },
+          body: JSON.stringify(body),
+          signal: abort?.signal,
+          cache: "no-store",
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          prog.close();
+          throw new Error(data?.error || `HTTP ${res.status}`);
+        }
+        prog.setLocal("下载结果", data.filename || toLabel);
+        prog.close();
+        return data;
+      } catch (err) {
+        try {
+          prog.close();
+        } catch (_) {}
+        if (prog.wasCancelled?.() || err?.name === "AbortError") {
+          throw new Error(isPdf ? "已取消导出" : "已取消或超时");
+        }
+        throw err;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    }
+
     async function pandocFileTo(file, toFmt) {
       const dataBase64 = await fileToBase64(file);
+      const body = {
+        filename: file.name,
+        dataBase64,
+        to: toFmt,
+        quality: toFmt === "pdf" ? "print" : "max",
+      };
       async function once() {
-        return bridgeFetch("/pandoc/convert", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: file.name,
-            dataBase64,
-            to: toFmt,
-            quality: toFmt === "pdf" ? "print" : "max",
-          }),
+        return pandocConvertWithProgress({
+          body,
+          toFmt,
+          label: `${stemName(file.name)} → ${toFmt}`,
         });
       }
       try {
@@ -295,17 +389,18 @@
 
     async function pandocMdTo(text, toFmt, title) {
       const plan = QR().exportPandocPlan?.(toFmt) || { from: "gfm" };
+      const body = {
+        text,
+        to: toFmt,
+        from: plan.from || "gfm",
+        title,
+        quality: toFmt === "pdf" ? "print" : "max",
+      };
       async function once() {
-        return bridgeFetch("/pandoc/convert", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text,
-            to: toFmt,
-            from: plan.from || "gfm",
-            title,
-            quality: toFmt === "pdf" ? "print" : "max",
-          }),
+        return pandocConvertWithProgress({
+          body,
+          toFmt,
+          label: `${title || "document"} → ${toFmt}`,
         });
       }
       try {

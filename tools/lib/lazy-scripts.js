@@ -84,6 +84,10 @@
       src: "./lib/doc-quality-router.js",
       probe: () => typeof globalThis.DevToolsDocQualityRouter === "object",
     },
+    pandocprogress: {
+      src: "./lib/pandoc-export-progress.js",
+      probe: () => typeof globalThis.DevToolsPandocExportProgress?.open === "function",
+    },
     enspeakfill: {
       src: "./lib/enspeak-fill.js",
       probe: () => typeof globalThis.DevToolsEnspeakFill?.fillEnTemplate === "function",
@@ -221,8 +225,8 @@
     giftest: ["omggif"],
     dateremind: ["solarlunar"],
     ipgeo: ["leaflet"],
-    mdm: ["markdownit", "purify", "hljs", "cm6", "mdext", "mdmpure", "docquality"],
-    docfmt: ["docquality"],
+    mdm: ["markdownit", "purify", "hljs", "cm6", "mdext", "mdmpure", "docquality", "pandocprogress"],
+    docfmt: ["docquality", "pandocprogress"],
     enspeak: ["enspeakfill"],
   };
 

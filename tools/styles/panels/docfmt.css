@@ -1,3 +1,49 @@
+@import url("./gif-shared.css");
+
+/* 与 MDM 共用的 Pandoc 进度弹框壳 */
+#docfmt .dt-pandoc-export-modal,
+.dt-pandoc-export-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+#docfmt .dt-pandoc-export-modal[hidden],
+.dt-pandoc-export-modal[hidden] {
+  display: none !important;
+}
+#docfmt .dt-pandoc-export-box,
+.dt-pandoc-export-box {
+  background: var(--panel, #1b1b1f);
+  border: 1px solid var(--line, #333);
+  border-radius: 12px;
+  max-width: min(92vw, 520px);
+  max-height: 86vh;
+  overflow: auto;
+  padding: 0.9rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+#docfmt .dt-pandoc-export-head,
+.dt-pandoc-export-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+#docfmt .dt-pandoc-export-foot,
+.dt-pandoc-export-foot {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 #docfmt .docfmt-tabs {
   display: flex;
   gap: 0.35rem;
