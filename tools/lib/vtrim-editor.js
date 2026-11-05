@@ -454,8 +454,8 @@
               : "拖绿框 · 双击重置 · 底部/空格播放"
             : editMode === "cut"
               ? phone
-                ? "添加红段 → 点选 → 用片头/片尾 ±0.1 · 「跳到接点」后播放"
-                : "添加删除段 → 点选红段 → 片头/片尾 ±0.1 · 「跳到接点」后播放核对"
+                ? "拖红柄看该帧 · 起点/终点 ±0.1 · 播完停原端 · 接点用「跳到接点」"
+                : "拖红柄停在该端画面 · 起点/终点 ±0.1 · 播放从该端附近开 · 「跳到接点」核对接切"
               : phone
                 ? "拖黄柄裁片头片尾 · 点底部播放 · 下方可微调"
                 : "拖黄柄裁片头片尾 · 底部/空格播放 · ←/→ 微调进度";
@@ -706,7 +706,9 @@
     }
 
     /**
-     * 微调松手：对齐解码器实际帧到红柄，再停在接点保留侧（与拖拽抬手一致 → 预览≡GIF）。
+     * 微调松手：对齐解码器实际帧到红柄，并停在该端点画面。
+     * 点起点停起点、点终点停终点（勿再跳回接点/片头，否则终点预览会「回到起点」）。
+     * 接点播放请用「跳到接点」。
      */
     async function snapCutNudgeToShown(edge) {
       const idx = selectedCutout;
@@ -734,15 +736,8 @@
           : Math.min(want, shown)
         : want;
       setCutoutEdge(idx, kindEdge, quantizeTrimSec(snapped));
-      const keeps = keepRangesLocal();
-      const cut = normalizeCutoutsList(cutouts, startSec, endSec)[idx];
-      if (cut && keeps.length) {
-        const prevKeep = [...keeps].reverse().find((k) => Number(k.end) <= Number(cut.start) + 0.08);
-        const joinAt = prevKeep
-          ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.05)
-          : Math.max(startSec, Number(cut.start) - 0.05);
-        await seekPlayheadExact(joinAt);
-      }
+      // setCutoutEdge 里的 previewSeek 可能被 0.03 近邻短路；强制停在端点所见帧
+      await seekRawExact(kindEdge === "end" ? cutouts[idx].end : cutouts[idx].start);
       syncCutoutUi();
       paintTimeline();
       updateLabels();
@@ -861,7 +856,9 @@
       if (scrubSeekWanted == null) return;
       const t = Math.max(0, Math.min(duration || 0, scrubSeekWanted));
       scrubSeekWanted = null;
-      if (Math.abs((Number(video.currentTime) || 0) - t) < 0.03 && !video.seeking) {
+      // 近邻阈值跟帧格走：固定 0.03s 在 ≥30fps 上会吞掉约 1 帧，造成「预览总靠前几帧」
+      const nearEps = Math.max(0.001, Math.min(0.012, frameSnapSec * 0.2));
+      if (Math.abs((Number(video.currentTime) || 0) - t) < nearEps && !video.seeking) {
         paintTimeline();
         updateLabels();
         return;
@@ -1431,17 +1428,14 @@
               : Math.min(want, shown)
             : want;
           setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", snapped);
-          // 红柄抬手：停在接点保留侧最后一帧（与 GIF 跳切所见一致）
+          // 红柄抬手：停在刚调的那一端（起点→起点画面，终点→终点画面）
+          // 勿 seek 到接点：终点抬手会跳回起点侧，播放也就从前面开
           selectedCutout = idx;
-          const keeps = keepRangesLocal();
-          const cut = normalizeCutoutsList(cutouts, startSec, endSec)[idx];
-          if (cut && keeps.length) {
-            const prevKeep = [...keeps].reverse().find((k) => Number(k.end) <= Number(cut.start) + 0.08);
-            const joinAt = prevKeep
-              ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.05)
-              : Math.max(startSec, Number(cut.start) - 0.05);
-            await seekPlayheadExact(joinAt);
-          }
+          const parkT =
+            kind === "cut-end"
+              ? Number(cutouts[idx]?.end) || snapped
+              : Number(cutouts[idx]?.start) || snapped;
+          await seekRawExact(parkT);
           flashSnapFeedback(kind === "cut-end" ? "end" : "start", Math.abs(snapped - live) > frameSnapSec * 0.35);
         } else {
           clipCutoutsToWindow();
@@ -1484,6 +1478,31 @@
       return { kind: "seek" };
     }
 
+    /**
+     * 原始精确 seek：不走 keep 重映射。
+     * 红柄落在「将删除」的闭区间上，必须能停在起点/终点所见帧；
+     * seekPlayheadExact 会把删段内时间跳到下一段保留区，终点预览会跑丢。
+     */
+    async function seekRawExact(t) {
+      const target = clamp(Number(t) || 0, 0, Math.max(0, (duration || 0) - 1e-4));
+      scrubSeekWanted = null;
+      if (dragSeekTimer) {
+        clearTimeout(dragSeekTimer);
+        dragSeekTimer = 0;
+      }
+      scrubSeekInflight = false;
+      try {
+        video.pause();
+      } catch (_) {}
+      try {
+        video.currentTime = target;
+      } catch (_) {}
+      await waitSeek(video);
+      paintTimeline();
+      updateLabels();
+      return Number(video.currentTime) || target;
+    }
+
     async function seekPlayheadExact(t) {
       let target = clamp(t, startSec, endKeepSec());
       // 与外预览同一套 keepRanges：落在删段/半开尾则跳到应播点
@@ -1510,6 +1529,42 @@
         await waitSeek(video);
       }
       return target;
+    }
+
+    /** 当前播放头落在哪一段删区（含两端所见帧）；不在则 null */
+    function cutoutAtTime(t) {
+      const cur = Number(t);
+      if (!Number.isFinite(cur)) return null;
+      const list = normalizeCutoutsList(cutouts, startSec, endSec);
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i];
+        if (cur >= c.start - 0.02 && cur <= c.end + 0.02) return { cut: c, index: i };
+      }
+      return null;
+    }
+
+    /**
+     * 停在红段内时点播放：按靠近起点/终点决定开播位置，避免被 keep 重映射甩到错误侧。
+     * - 靠近起点 → 接点前（上一段保留区尾），核对跳切
+     * - 靠近终点 → 删段后第一帧，勿跳回起点
+     */
+    function playFromWhenInsideCut(hit) {
+      const cut = hit.cut;
+      const cur = Number(video.currentTime) || 0;
+      const distStart = Math.abs(cur - cut.start);
+      const distEnd = Math.abs(cur - cut.end);
+      const keeps = keepRangesLocal();
+      const frame = Math.max(1 / 240, endKeepStepSec());
+      if (distStart <= distEnd) {
+        const prevKeep = [...keeps].reverse().find((k) => Number(k.end) <= cut.start + 0.08);
+        if (prevKeep) {
+          return Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - frame);
+        }
+        return Math.max(startSec, cut.start - frame);
+      }
+      const after = previewSeekForKeepRanges(keeps, cut.end + 1e-4, { paused: true });
+      if (after != null && Number.isFinite(after)) return after;
+      return Math.min(endKeepSec(), cut.end + frame);
     }
 
     function loopPlayToStart() {
@@ -1571,10 +1626,17 @@
       if (video.paused) {
         const cur = Number(video.currentTime) || 0;
         const keep = endKeepSec();
-        const needStart = cur < startSec - 0.01 || cur >= keep - 0.001 || Math.abs(cur - startSec) < 0.02;
-        // 刚拖完片头时 currentTime≈startSec，仍强制精确 seek 再播，锁住用户拖到的位置
         playWindowLooping = false;
-        await seekPlayheadExact(needStart ? startSec : cur);
+        const hitCut = cutoutAtTime(cur);
+        if (hitCut) {
+          // 停在红柄/删段内：按端点开播，终点侧不要被拉去起点
+          const from = playFromWhenInsideCut(hitCut);
+          await seekRawExact(from);
+        } else {
+          const needStart = cur < startSec - 0.01 || cur >= keep - 0.001 || Math.abs(cur - startSec) < 0.02;
+          // 刚拖完片头时 currentTime≈startSec，仍强制精确 seek 再播，锁住用户拖到的位置
+          await seekPlayheadExact(needStart ? startSec : cur);
+        }
         await video.play().catch(() => {});
       } else {
         playWindowGen += 1;
