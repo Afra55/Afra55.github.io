@@ -5891,7 +5891,12 @@ a{color:${v.accent}}
         }
         n += 1;
         try {
-          const svgRaw = await renderMermaidSourceToSvg(code);
+          const withTimeout = (p, ms, label) =>
+            Promise.race([
+              p,
+              new Promise((_, rej) => setTimeout(() => rej(new Error(`${label}超时 ${ms / 1000}s`)), ms)),
+            ]);
+          const svgRaw = await withTimeout(renderMermaidSourceToSvg(code), 45000, `图表${n}渲染`);
           const alt = `图表${n}`;
           if (mode === "html") {
             // HTML 单文件：优先内联 SVG（清晰、不依赖栅格化）；占位符避开 markdown 解析超长 URL
@@ -5902,7 +5907,7 @@ a{color:${v.accent}}
             images.push({ token, n, alt, svg: markup });
             out += `\n\n${token}\n\n`;
           } else {
-            const b64 = await svgMarkupToPngBase64(svgRaw, scale);
+            const b64 = await withTimeout(svgMarkupToPngBase64(svgRaw, scale), 45000, `图表${n}栅格化`);
             if (mode === "data") {
               out += `\n\n![${alt}](data:image/png;base64,${b64})\n\n`;
             } else {
@@ -6328,9 +6333,9 @@ a{color:${v.accent}}
 
     /**
      * Pandoc 长导出进度弹框。
-     * 仅在 convert 进行中轮询 /pandoc/progress（约 1.2s 一次）；结束或 Esc 必须停。
+     * 仅在 convert 进行中轮询 /pandoc/progress；结束 / Esc / 取消必须停。
      */
-    function openPandocExportProgress(toLabel) {
+    function openPandocExportProgress(toLabel, { onCancel } = {}) {
       try {
         pandocProgressCtl?.stop?.();
       } catch (_) {}
@@ -6341,15 +6346,19 @@ a{color:${v.accent}}
       let stopped = false;
       let tick = null;
       let pollTimer = null;
+      let cancelled = false;
       els.modal.hidden = false;
       box.innerHTML =
         `<div class="mdm-modal-head"><strong>正在导出 ${escapeHtml(toLabel)}</strong></div>` +
         `<div class="mdm-modal-body" style="text-align:left">` +
         `<p id="mdm-pandoc-export-stage" style="margin:0 0 8px">准备中…</p>` +
         `<p class="hint tight" id="mdm-pandoc-export-detail" style="margin:0 0 8px;min-height:1.2em"></p>` +
-        `<p class="hint tight">导出进行中才会请求进度；结束后自动停止。黑窗有 <span class="mono">[pandoc]</span> 即在跑。</p>` +
+        `<p class="hint tight">PDF 首次常会在黑窗里<strong>下载 MiKTeX 宏包</strong>，请看黑窗有没有进度。正常一般几分钟；超过约 8–10 分钟会自动失败，可改浏览器打印。</p>` +
         `</div>` +
-        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-pandoc-export-elapsed">已用时 0 秒</p></div>`;
+        `<div class="mdm-modal-foot" style="flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center">` +
+        `<p class="hint tight" id="mdm-pandoc-export-elapsed" style="margin:0">已用时 0 秒</p>` +
+        `<button type="button" class="ghost-btn" id="mdm-pandoc-export-cancel">取消导出</button>` +
+        `</div>`;
       const stageEl = () => document.getElementById("mdm-pandoc-export-stage");
       const detailEl = () => document.getElementById("mdm-pandoc-export-detail");
       const elapsedEl = () => document.getElementById("mdm-pandoc-export-elapsed");
@@ -6369,13 +6378,31 @@ a{color:${v.accent}}
         pollTimer = null;
         if (pandocProgressCtl && pandocProgressCtl.stop === stop) pandocProgressCtl = null;
       };
+      document.getElementById("mdm-pandoc-export-cancel")?.addEventListener("click", () => {
+        cancelled = true;
+        try {
+          onCancel?.();
+        } catch (_) {}
+        setLocal("已取消", "正在中止请求…");
+        stop();
+        if (els.modal && !els.modal.hidden) {
+          els.modal.hidden = true;
+          els.modalBox.innerHTML = "";
+        }
+      });
       tick = setInterval(() => {
         if (stopped || els.modal?.hidden || !stageEl()) {
           stop();
           return;
         }
+        const sec = Math.round((Date.now() - t0) / 1000);
         const el = elapsedEl();
-        if (el) el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒`;
+        if (el) {
+          el.textContent =
+            sec >= 180
+              ? `已用时 ${sec} 秒 · 若黑窗在装宏包请继续等；可点取消`
+              : `已用时 ${sec} 秒`;
+        }
       }, 500);
       const startPoll = () => {
         if (stopped || pollTimer) return;
@@ -6403,6 +6430,7 @@ a{color:${v.accent}}
         setLocal,
         startPoll,
         stop,
+        wasCancelled: () => cancelled,
         close() {
           stop();
           if (els.modal && !els.modal.hidden) {
@@ -6417,16 +6445,35 @@ a{color:${v.accent}}
 
     async function exportViaPandoc(text, to, title, retried = false) {
       const toLabel = String(to || "file").toUpperCase();
-      const prog = openPandocExportProgress(toLabel);
+      const isPdf = to === "pdf";
+      // PDF：前端最长等 10 分钟（桥端约 8 分钟杀进程）；避免再挂一小时
+      const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timeoutMs = isPdf ? 10 * 60 * 1000 : 6 * 60 * 1000;
+      let timeoutId = null;
+      if (abort) {
+        timeoutId = setTimeout(() => {
+          try {
+            abort.abort();
+          } catch (_) {}
+        }, timeoutMs);
+      }
+      const prog = openPandocExportProgress(toLabel, {
+        onCancel: () => {
+          try {
+            abort?.abort();
+          } catch (_) {}
+        },
+      });
       try {
         // 图表先烤成 PNG 再交给 Pandoc；PDF 用 3x 清晰度照顾复杂图
-        prog.setLocal("渲染图表", to === "pdf" ? "高清栅格化 Mermaid…" : "处理中…");
-        const chartScale = to === "pdf" ? 3 : 2;
+        prog.setLocal("渲染图表", isPdf ? "高清栅格化 Mermaid…" : "处理中…");
+        const chartScale = isPdf ? 3 : 2;
         const baked = await bakeChartsForExport(text, { mode: "file", scale: chartScale }).catch(() => ({
           text,
           images: [],
           chartCount: 0,
         }));
+        if (prog.wasCancelled?.()) throw new Error("已取消导出");
         prog.setLocal(
           "收集图片资源",
           baked.chartCount ? `已嵌入 ${baked.chartCount} 个图表` : "读取本地图片…"
@@ -6435,7 +6482,7 @@ a{color:${v.accent}}
         const images = [...assetImages, ...(baked.images || [])];
         const plan =
           typeof QR.exportPandocPlan === "function" ? QR.exportPandocPlan(to) : { from: "gfm", args: [] };
-        prog.setLocal("上传到本机桥", `Pandoc → ${toLabel}`);
+        prog.setLocal("上传到本机桥", `Pandoc → ${toLabel}${isPdf ? "（请看黑窗）" : ""}`);
         prog.startPoll();
         let res;
         try {
@@ -6450,9 +6497,17 @@ a{color:${v.accent}}
               images,
               quality: "max",
             }),
+            signal: abort?.signal,
           });
-        } catch (_) {
+        } catch (err) {
           prog.close();
+          if (prog.wasCancelled?.() || err?.name === "AbortError") {
+            throw new Error(
+              isPdf
+                ? "已取消或超时。若黑窗卡在装宏包，可等它装完再导出；或用浏览器打印另存 PDF。"
+                : "已取消或超时"
+            );
+          }
           showBridgeHelpModal("导出为 Pandoc 格式");
           throw new Error("本机桥未启动");
         }
@@ -6490,6 +6545,8 @@ a{color:${v.accent}}
           prog.close();
         } catch (_) {}
         throw err;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
       }
     }
 
