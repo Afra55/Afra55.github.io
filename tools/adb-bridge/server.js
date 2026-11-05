@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.126";
+const BRIDGE_VERSION = "0.9.127";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -6182,8 +6182,6 @@ async function handleApi(req, res, url) {
 
     // 统一桥：Pandoc 转换 API 挂在 /pandoc/*
     if (url.pathname === "/pandoc" || url.pathname.startsWith("/pandoc/")) {
-      // 一进门就打日志，避免 Token/读 body 失败时黑窗完全无字
-      console.log(`[bridge] ← ${req.method} ${url.pathname}`);
       const stripped = url.pathname === "/pandoc" ? "/" : url.pathname.slice(7) || "/";
       const isPandocHealth = stripped === "/health" && req.method === "GET";
       const isPandocProgress = stripped === "/progress" && req.method === "GET";
@@ -6191,6 +6189,10 @@ async function handleApi(req, res, url) {
         (stripped === "/set-xelatex-path" || stripped === "/set-engine-path") && req.method === "POST";
       const isConvert = stripped === "/convert" && req.method === "POST";
       const isInstall = stripped === "/install" && req.method === "POST";
+      // progress/health 轮询很密，不逐条刷黑窗；其它请求仍打日志
+      if (!isPandocProgress && !isPandocHealth) {
+        console.log(`[bridge] ← ${req.method} ${url.pathname}`);
+      }
 
       if (!isPandocHealth && !isPandocProgress && req.method !== "OPTIONS") {
         try {
