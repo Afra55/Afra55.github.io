@@ -1354,7 +1354,12 @@ a.secondary-btn {
   color: var(--muted);
   font-size: 0.84rem;
   text-align: center;
+  cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.fu-drop:hover {
+  border-color: var(--accent);
+  color: var(--ink);
 }
 .fu-drop.is-over {
   border-color: var(--accent);
@@ -1383,7 +1388,12 @@ a.secondary-btn {
   color: var(--muted);
   font-size: 0.84rem;
   text-align: center;
+  cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.fp-drop:hover {
+  border-color: var(--accent);
+  color: var(--ink);
 }
 .fp-drop.is-over {
   border-color: var(--accent);

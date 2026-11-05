@@ -728,7 +728,7 @@
     };
   }
 
-  /** 从拖放事件尽量解析本机绝对路径（浏览器通常不给 File.path，依赖 file:// / 文本） */
+  /** 从拖放事件尽量解析本机绝对路径（https 页通常不给 File.path；尽量多源试） */
   function pathsFromDataTransfer(dt) {
     if (!dt) return [];
     const out = [];
@@ -741,7 +741,8 @@
           p = decodeURIComponent(u.pathname || "");
           // Windows: /C:/Users/... → C:/Users/...
           if (/^\/[A-Za-z]:\//.test(p)) p = p.slice(1);
-          p = p.replace(/\//g, p.includes("\\") ? "\\" : "/");
+          // file URL 在 Windows 上 pathname 用 /，转成本地风格
+          if (/^[A-Za-z]:\//.test(p)) p = p.replace(/\//g, "\\");
         } catch (_) {
           return;
         }
@@ -751,21 +752,37 @@
       if (!out.includes(p)) out.push(p);
     };
 
-    const uriList = dt.getData?.("text/uri-list") || "";
-    for (const line of String(uriList).split(/\r?\n/)) {
-      if (!line || line.startsWith("#")) continue;
-      push(line);
-    }
-    const plain = dt.getData?.("text/plain") || "";
-    for (const line of String(plain).split(/\r?\n/)) push(line);
+    try {
+      const uriList = dt.getData?.("text/uri-list") || "";
+      for (const line of String(uriList).split(/\r?\n/)) {
+        if (!line || line.startsWith("#")) continue;
+        push(line);
+      }
+    } catch (_) {}
+    try {
+      const plain = dt.getData?.("text/plain") || "";
+      for (const line of String(plain).split(/\r?\n/)) push(line);
+    } catch (_) {}
 
     try {
       for (const f of dt.files || []) {
-        if (f && f.path) push(f.path);
+        if (!f) continue;
+        // Chromium/旧 Edge 偶发暴露；Electron 等壳也有
+        push(f.path || f.mozFullPath || "");
       }
-    } catch (_) {
-      /* ignore */
-    }
+    } catch (_) {}
+
+    try {
+      const items = dt.items;
+      if (items && items.length) {
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          if (!it || it.kind !== "file") continue;
+          const f = typeof it.getAsFile === "function" ? it.getAsFile() : null;
+          if (f) push(f.path || f.mozFullPath || "");
+        }
+      }
+    } catch (_) {}
     return out;
   }
 

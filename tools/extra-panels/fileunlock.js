@@ -176,43 +176,43 @@
 
     $p("#fu-check")?.addEventListener("click", () => void doCheck());
 
-    // ---- 拖拽：文件 / 文件夹拖进来即填入并检查 ----
+    // ---- 拖拽 / 点击选区：有绝对路径就用；没有就直接打开系统选择框（https 页通常拿不到 File.path）----
     const dropEl = $p("#fu-drop");
     async function handleDrop(e) {
       if (!e.dataTransfer) return;
       e.preventDefault();
+      e.stopPropagation();
       dropEl?.classList.remove("is-over");
       let p = "";
       try {
         const list = window.devtoolsBridgeToken?.pathsFromDataTransfer?.(e.dataTransfer) || [];
         if (list.length) p = String(list[0]);
       } catch (_) {}
-      if (!p) {
-        const name = [...(e.dataTransfer.files || [])][0]?.name || "";
-        if (name) {
-          setMeta(`按名称在本机定位「${name}」…`);
-          try {
-            const r = await api("/resolve", { method: "POST", body: { name } });
-            p = r?.path || "";
-          } catch (err) {
-            setMeta("");
-            setError(err.message || String(err));
-            return;
-          }
-        }
-      }
-      if (!p) {
-        setError("浏览器出于安全不会把本地完整路径交给网页。请把路径粘到输入框，或用「选择文件」按钮。");
+      if (p) {
+        if (pathInput) pathInput.value = p;
+        setError("");
+        void doCheck();
         return;
       }
-      if (pathInput) pathInput.value = p;
-      setError("");
-      void doCheck();
+      // 不再做「按文件名全盘反查」（慢且常失败）；直接弹系统选框
+      setMeta("浏览器拿不到拖拽路径，正在打开系统选择框…（请选中刚才那个文件/文件夹）");
+      toast?.("请在弹出的窗口里选择文件");
+      const looksDir = [...(e.dataTransfer.items || [])].some((it) => {
+        try {
+          return it.webkitGetAsEntry?.()?.isDirectory;
+        } catch (_) {
+          return false;
+        }
+      });
+      void doPick(looksDir ? "dir" : "file");
     }
     ["dragenter", "dragover"].forEach((ev) =>
       root.addEventListener(ev, (e) => {
         if (!e.dataTransfer) return;
         e.preventDefault();
+        try {
+          e.dataTransfer.dropEffect = "copy";
+        } catch (_) {}
         dropEl?.classList.add("is-over");
       })
     );
@@ -220,6 +220,16 @@
       if (e.target === root || e.target === dropEl) dropEl?.classList.remove("is-over");
     });
     root.addEventListener("drop", (e) => void handleDrop(e));
+    dropEl?.addEventListener("click", (e) => {
+      e.preventDefault();
+      void doPick("file");
+    });
+    dropEl?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        void doPick("file");
+      }
+    });
     pickFileBtn?.addEventListener("click", (e) => {
       e.preventDefault();
       void doPick("file");
