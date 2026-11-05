@@ -5982,6 +5982,27 @@ a{color:${v.accent}}
           // 先探测再装：避免一点击就 /convert → 立刻失败 → 误报「自动安装未完成」
           let attemptedInstall = false;
           let lastErr = null;
+          const runPdfExport = async (opts = {}) => {
+            await exportViaPandoc(text, "pdf", title, true);
+            toast("已导出印刷级 PDF");
+          };
+          const handlePathOrRetry = async (act, hints) => {
+            if (act === "path-ok") {
+              // 路径已写入桥：跳过再次下载，直接转换
+              await runPdfExport();
+              return true;
+            }
+            if (act === "retry") {
+              const again = await ensurePrintPdfReady({ skipInstall: false });
+              if (again.ok) {
+                await runPdfExport();
+                return true;
+              }
+              toast("仍未探测到引擎：请完全退出并重启本机桥后再试");
+              throw new Error(normalizePdfBridgeError(again.error || "印刷级 PDF 环境未就绪"));
+            }
+            return false;
+          };
           try {
             const ready = await ensurePrintPdfReady({
               onInstallStart: () => {
@@ -5989,22 +6010,13 @@ a{color:${v.accent}}
               },
             });
             if (!ready.ok) {
-              lastErr = new Error(ready.error || "印刷级 PDF 环境未就绪");
-              if (attemptedInstall || /XeLaTeX|PDF 引擎|Typst|MiKTeX|印刷级/i.test(lastErr.message)) {
+              lastErr = new Error(normalizePdfBridgeError(ready.error || "印刷级 PDF 环境未就绪"));
+              if (attemptedInstall || /XeLaTeX|PDF 引擎|Typst|MiKTeX|印刷级|旧版|前端打印/i.test(lastErr.message)) {
                 const act = await showXelatexNotReadyModal({
                   error: lastErr.message,
                   hints: ready.installHints || null,
                 });
-                if (act === "retry") {
-                  const again = await ensurePrintPdfReady({});
-                  if (again.ok) {
-                    await exportViaPandoc(text, "pdf", title, true);
-                    toast("已导出印刷级 PDF");
-                    return;
-                  }
-                  toast("仍未探测到引擎：请完全退出并重启本机桥后再试");
-                  throw new Error(again.error || lastErr.message);
-                }
+                if (await handlePathOrRetry(act, ready.installHints)) return;
                 if (act !== "print") throw lastErr;
               } else {
                 const okPrint = await confirmModal({
@@ -6023,38 +6035,33 @@ a{color:${v.accent}}
               setTimeout(() => w.print(), 300);
               return;
             }
-            await exportViaPandoc(text, "pdf", title, true);
-            toast("已导出印刷级 PDF");
+            await runPdfExport();
             return;
           } catch (err) {
             lastErr = err;
-            const msg = String(err?.message || err);
+            let msg = normalizePdfBridgeError(String(err?.message || err));
+            if (/旧版|前端打印|Pandoc 模块过旧|needsBridgeUpdate/i.test(msg)) {
+              void requestBridgeSelfUpdate();
+              toast("正在请求桥自更新，请看黑窗…");
+            }
             // 转换阶段仍报缺引擎：再装一次 XeLaTeX 后重试（装完 PATH 偶发未刷新）
-            if (/未找到印刷级 PDF 引擎|未找到.*XeLaTeX|未找到.*Typst|pdf-engine|MiKTeX/i.test(msg)) {
+            if (/未找到印刷级 PDF 引擎|未找到.*XeLaTeX|未找到.*Typst|pdf-engine|MiKTeX/i.test(msg) && !/旧版|前端打印/i.test(msg)) {
               try {
                 attemptedInstall = true;
                 toast("仍缺 PDF 引擎，继续安装 XeLaTeX…");
                 await runXelatexInstall();
-                await exportViaPandoc(text, "pdf", title, true);
-                toast("已导出印刷级 PDF");
+                await runPdfExport();
                 return;
               } catch (err2) {
                 lastErr = err2;
+                msg = normalizePdfBridgeError(String(err2?.message || err2));
               }
             }
-            const failMsg = String(lastErr?.message || lastErr || "导出失败");
+            const failMsg = msg || "导出失败";
             if (/本机桥未启动|未找到本机桥|Failed to fetch/i.test(failMsg)) throw lastErr;
-            if (attemptedInstall || /XeLaTeX|PDF 引擎|MiKTeX|TinyTeX|印刷级/i.test(failMsg)) {
+            if (attemptedInstall || /XeLaTeX|PDF 引擎|MiKTeX|TinyTeX|印刷级|旧版|前端打印/i.test(failMsg)) {
               const act = await showXelatexNotReadyModal({ error: failMsg });
-              if (act === "retry") {
-                const again = await ensurePrintPdfReady({});
-                if (again.ok) {
-                  await exportViaPandoc(text, "pdf", title, true);
-                  toast("已导出印刷级 PDF");
-                  return;
-                }
-                throw new Error(again.error || failMsg);
-              }
+              if (await handlePathOrRetry(act)) return;
               if (act !== "print") throw lastErr || new Error(failMsg);
             } else {
               const okPrint = await confirmModal({
@@ -6142,6 +6149,62 @@ a{color:${v.accent}}
       return { res, data };
     }
 
+    /** 旧桥抛「请用前端打印」时，改写成可执行的更新提示 */
+    function normalizePdfBridgeError(msg) {
+      const s = String(msg || "").trim();
+      if (/PDF 请用前端打印|需额外 LaTeX 引擎|needsBridgeUpdate|Pandoc 模块过旧/i.test(s)) {
+        return "本机桥还是旧版（会拒绝印刷级 PDF）。请完全退出黑窗后重新启动桥，等自动更新完成，再点导出。已填写的引擎路径会保留。";
+      }
+      return s;
+    }
+
+    async function requestBridgeSelfUpdate() {
+      try {
+        await fetch(`${baseUrl()}/bridge/self-update`, {
+          method: "POST",
+          headers: { "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+        });
+      } catch (_) {}
+    }
+
+    /** 把弹框/本地记住的引擎路径提交给桥（不触发下载） */
+    async function applySavedXelatexPath(pathVal) {
+      const p = String(pathVal || "").trim();
+      if (!p) return { ok: false, error: "路径为空" };
+      try {
+        localStorage.setItem("mdm-xelatex-path", p);
+      } catch (_) {}
+      const headers = {
+        "Content-Type": "application/json",
+        "X-Adb-Token": token(),
+        "X-Ffmpeg-Token": token(),
+      };
+      const payloads = [
+        { url: `${baseUrl()}/pandoc/install`, body: { package: "xelatex", path: p } },
+        { url: `${baseUrl()}/pandoc/set-xelatex-path`, body: { path: p } },
+      ];
+      let lastErr = "";
+      for (const item of payloads) {
+        try {
+          const res = await fetch(item.url, { method: "POST", headers, body: JSON.stringify(item.body) });
+          const jd = await res.json().catch(() => null);
+          const errText = String(jd?.error || jd?.message || (!res.ok ? `HTTP ${res.status}` : ""));
+          if (/未知接口/i.test(errText)) {
+            lastErr = errText;
+            continue;
+          }
+          if (!res.ok || !jd?.ok) {
+            lastErr = errText || `HTTP ${res.status}`;
+            continue;
+          }
+          return { ok: true, data: jd, installed: !!(jd.installed || jd.pdf?.printReady) };
+        } catch (err) {
+          lastErr = String(err?.message || err);
+        }
+      }
+      return { ok: false, error: lastErr || "指定路径失败" };
+    }
+
     /** 探测 pandoc + 印刷级 PDF 引擎是否就绪 */
     async function probePrintPdfEnv() {
       try {
@@ -6175,7 +6238,7 @@ a{color:${v.accent}}
      * 导出 PDF 前：缺 pandoc / 缺 XeLaTeX 则先安装，成功后再允许 /convert。
      * @returns {Promise<{ ok: boolean, error?: string, preferred?: string }>}
      */
-    async function ensurePrintPdfReady({ onInstallStart } = {}) {
+    async function ensurePrintPdfReady({ onInstallStart, skipInstall = false } = {}) {
       let env = await probePrintPdfEnv();
       let installHints = null;
       if (!env.bridgeOk) {
@@ -6183,6 +6246,7 @@ a{color:${v.accent}}
         return { ok: false, error: "本机桥未启动" };
       }
       if (!env.pandocOk) {
+        if (skipInstall) return { ok: false, error: "pandoc 未就绪" };
         onInstallStart?.();
         toast("未找到 pandoc，开始自动安装…");
         try {
@@ -6196,6 +6260,32 @@ a{color:${v.accent}}
         }
       }
       if (!env.printReady) {
+        // 先用本地已填路径，避免「路径明明对了却又去下安装包」
+        let saved = "";
+        try {
+          saved = String(localStorage.getItem("mdm-xelatex-path") || "").trim();
+        } catch (_) {}
+        if (saved) {
+          toast("正在使用已保存的引擎路径…");
+          const applied = await applySavedXelatexPath(saved);
+          if (applied.installed) {
+            env = await probePrintPdfEnv();
+            if (env.printReady) {
+              return { ok: true, preferred: env.preferred || "", installHints };
+            }
+            // 路径桥侧已认，探测偶发滞后：仍允许继续 convert
+            if (applied.ok) {
+              return { ok: true, preferred: "xelatex", installHints, trustedPath: true };
+            }
+          }
+        }
+        if (skipInstall) {
+          return {
+            ok: false,
+            error: "尚未探测到 XeLaTeX。请确认路径指向 miktex-xetex.exe，或重启本机桥后再试",
+            installHints,
+          };
+        }
         onInstallStart?.();
         toast("缺少 PDF 引擎，开始从国内镜像下载 MiKTeX（黑窗有百分比）…");
         try {
@@ -6261,7 +6351,11 @@ a{color:${v.accent}}
       }
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
-        const msg = data?.error || `本机桥未响应（HTTP ${res.status}），请确认桥已启动且装了 pandoc`;
+        let msg = data?.error || `本机桥未响应（HTTP ${res.status}），请确认桥已启动且装了 pandoc`;
+        if (data?.needsBridgeUpdate || /PDF 请用前端打印|需额外 LaTeX|Pandoc 模块过旧/i.test(msg)) {
+          void requestBridgeSelfUpdate();
+          msg = normalizePdfBridgeError(msg);
+        }
         if (/未找到本机桥|未启动|Failed to fetch/i.test(msg)) {
           showBridgeHelpModal("导出为 Pandoc 格式");
           throw new Error(msg);
@@ -6354,7 +6448,7 @@ a{color:${v.accent}}
         } catch (_) {}
       }
       h = h || {};
-      const errLine = String(error || "").trim();
+      const errLine = normalizePdfBridgeError(String(error || "").trim());
       let probeDetail = "";
       try {
         const pdf = await probePdfEnginesOnly();
@@ -6369,7 +6463,7 @@ a{color:${v.accent}}
       const savedPath = String(h.savedXelatexPath || "").trim();
       const pathHint =
         String(h.pathHint || "").trim() ||
-        "要找的是 xelatex.exe（不是 miktex.exe）。可填该文件全路径，或填到 MiKTeX 安装目录让桥自动找。";
+        "填 miktex-xetex.exe 全路径（现行真实文件名），或填到 bin\\x64 目录。";
       const bodyHtml =
         (errLine
           ? `<p style="margin:0 0 10px;color:var(--danger,#b91c1c)"><strong>原因：</strong>${escapeHtml(
@@ -6379,10 +6473,10 @@ a{color:${v.accent}}
         (probeDetail
           ? `<p class="hint tight" style="margin:0 0 8px">${escapeHtml(probeDetail.slice(0, 300))}</p>`
           : "") +
-        `<p class="hint tight" style="margin:0 0 8px">桥目录没有引擎时，请在下方<strong>手动填写路径</strong>（不会全盘搜索）。</p>` +
+        `<p class="hint tight" style="margin:0 0 8px">路径填对后点「使用此路径」会立刻导出；若提示桥过旧，请重启黑窗等自动更新。</p>` +
         `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--line,#cbd5e1);border-radius:8px;background:rgba(0,0,0,.03)">` +
         `<p style="margin:0 0 6px"><strong>填写引擎位置</strong></p>` +
-        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.115。填 <code>miktex-xetex.exe</code> 全路径，或 <code>bin\\x64</code> 目录。</p>` +
+        `<p class="hint tight" style="margin:0 0 6px">需本机桥 ≥0.9.117。填 <code>miktex-xetex.exe</code> 全路径，或 <code>bin\\x64</code> 目录。</p>` +
         `<p class="hint tight" style="margin:0 0 6px">${escapeHtml(pathHint)}</p>` +
         `<input id="mdm-xelatex-path" type="text" spellcheck="false" placeholder="例如 …\\miktex\\bin\\x64\\miktex-xetex.exe" value="${escapeHtml(
           savedPath || (typeof localStorage !== "undefined" ? localStorage.getItem("mdm-xelatex-path") || "" : "")
@@ -6419,17 +6513,12 @@ a{color:${v.accent}}
             const msg = box.querySelector("#mdm-xelatex-path-msg");
             const pathVal = String(input?.value || "").trim();
             if (!pathVal) {
-              if (msg) msg.textContent = "请先粘贴 xelatex.exe 全路径（不是 miktex.exe），或 MiKTeX 安装目录";
+              if (msg) msg.textContent = "请先粘贴 miktex-xetex.exe 全路径，或 bin\\x64 目录";
               return;
             }
             if (msg) msg.textContent = "先检查本机桥连通…";
             b.disabled = true;
             try {
-              const headers = {
-                "Content-Type": "application/json",
-                "X-Adb-Token": token(),
-                "X-Ffmpeg-Token": token(),
-              };
               // 先 health：桥没开时黑窗必然无字
               let ver = "";
               try {
@@ -6437,7 +6526,6 @@ a{color:${v.accent}}
                   headers: { "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
                 });
                 const hd = await h.json().catch(() => null);
-                // 统一桥版本在根 /health；pandoc 子模块 version 是 pandoc-bridge 自身
                 ver = String(hd?.version || "");
                 if (!h.ok) throw new Error(hd?.error || `health HTTP ${h.status}`);
               } catch (err) {
@@ -6457,59 +6545,29 @@ a{color:${v.accent}}
                   ? `桥版本 ${ver} · 正在提交路径（黑窗应立刻出现「指定路径」字样）…`
                   : "正在提交路径（请看黑窗）…";
               }
-              try {
-                localStorage.setItem("mdm-xelatex-path", pathVal);
-              } catch (_) {}
-              // 两路由都试：新桥在 adb-bridge 内直接处理，不再依赖 pandoc「未知接口」
-              const payloads = [
-                { url: `${baseUrl()}/pandoc/install`, body: { package: "xelatex", path: pathVal } },
-                { url: `${baseUrl()}/pandoc/set-xelatex-path`, body: { path: pathVal } },
-              ];
-              let data = null;
-              let lastErr = "";
-              for (const p of payloads) {
-                try {
-                  const res = await fetch(p.url, {
-                    method: "POST",
-                    headers,
-                    body: JSON.stringify(p.body),
-                  });
-                  const jd = await res.json().catch(() => null);
-                  const errText = String(jd?.error || jd?.message || (!res.ok ? `HTTP ${res.status}` : ""));
-                  if (/未知接口/i.test(errText)) {
-                    lastErr = errText;
-                    continue;
-                  }
-                  if (!res.ok || !jd?.ok) {
-                    lastErr = errText || `HTTP ${res.status}`;
-                    continue;
-                  }
-                  data = jd;
-                  break;
-                } catch (err) {
-                  lastErr = String(err?.message || err);
-                }
-              }
-              if (!data) {
+              const applied = await applySavedXelatexPath(pathVal);
+              if (!applied.ok) {
                 throw new Error(
-                  /未知接口/i.test(lastErr)
-                    ? "本机桥仍是旧版（未知接口）。请更新并完全重启桥到 ≥0.9.109，硬刷新网页后再试"
-                    : lastErr || "指定路径失败"
+                  /未知接口/i.test(applied.error || "")
+                    ? "本机桥仍是旧版（未知接口）。请更新并完全重启桥到 ≥0.9.117，硬刷新网页后再试"
+                    : applied.error || "指定路径失败"
                 );
               }
-              if (data.installed || data.pdf?.printReady) {
+              const data = applied.data || {};
+              if (data.installed || data.pdf?.printReady || applied.installed) {
                 toast(`已使用：${data.bin || data.savedPath || data.output || pathVal}`);
-                done("retry");
+                // path-ok：直接导出，不要再走「下载 MiKTeX」
+                done("path-ok");
                 return;
               }
               if (msg) {
                 msg.textContent = String(
                   data.message ||
-                    "未识别到 xelatex。请确认路径下有 miktex\\bin\\x64\\xelatex.exe；并更新重启桥 ≥0.9.109"
+                    "未识别到引擎。请确认是 miktex-xetex.exe（或该文件所在的 bin\\x64）；桥 ≥0.9.117"
                 ).slice(0, 240);
               }
             } catch (err) {
-              if (msg) msg.textContent = String(err?.message || err).slice(0, 240);
+              if (msg) msg.textContent = normalizePdfBridgeError(String(err?.message || err)).slice(0, 240);
             } finally {
               b.disabled = false;
             }

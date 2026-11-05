@@ -14,7 +14,7 @@ const {
   setXelatexPath,
 } = require("./pandoc-ops");
 
-const BRIDGE_VERSION = "0.1.7";
+const BRIDGE_VERSION = "0.1.8";
 const FEATURES = { pandoc: true, importToMarkdown: true, printPdf: true };
 
 function readBody(req, limit = 96 * 1024 * 1024, { onProgress } = {}) {
@@ -89,13 +89,18 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname === "/convert" && req.method === "POST") {
       console.log("");
       console.log("[pandoc] ════ 收到转换请求 · 正在接收上传…");
-      const raw = await readBody(req, 96 * 1024 * 1024, {
-        onProgress: (n) => {
-          console.log(`[pandoc] 上传中… ${Math.round(n / 1024)} KB`);
-        },
-      });
-      console.log(`[pandoc] 上传完成 · ${Math.round(raw.length / 1024)} KB`);
-      const body = parseJsonBody(raw);
+      let body = opts.preloadedBody;
+      if (body == null) {
+        const raw = await readBody(req, 96 * 1024 * 1024, {
+          onProgress: (n) => {
+            console.log(`[pandoc] 上传中… ${Math.round(n / 1024)} KB`);
+          },
+        });
+        console.log(`[pandoc] 上传完成 · ${Math.round(raw.length / 1024)} KB`);
+        body = parseJsonBody(raw);
+      } else {
+        console.log("[pandoc] 使用预读 body（统一桥已拦截校验）");
+      }
       const name = String(body.filename || body.name || "(text)");
       console.log(`[pandoc] 开始处理「${name}」…`);
       const t0 = Date.now();
