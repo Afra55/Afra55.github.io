@@ -6353,7 +6353,9 @@ a{color:${v.accent}}
         `<div class="mdm-modal-body" style="text-align:left">` +
         `<p id="mdm-pandoc-export-stage" style="margin:0 0 8px">准备中…</p>` +
         `<p class="hint tight" id="mdm-pandoc-export-detail" style="margin:0 0 8px;min-height:1.2em"></p>` +
-        `<p class="hint tight">PDF 首次常会在黑窗里<strong>下载 MiKTeX 宏包</strong>，请看黑窗有没有进度。正常一般几分钟；超过约 8–10 分钟会自动失败，可改浏览器打印。</p>` +
+        `<p class="hint tight" id="mdm-pandoc-export-alive" style="margin:0 0 8px;min-height:1.2em;font-weight:600">等待桥心跳…</p>` +
+        `<p class="hint tight" id="mdm-pandoc-export-lastlog" style="margin:0 0 8px;min-height:1.2em;word-break:break-all"></p>` +
+        `<p class="hint tight">大文档超 8 分钟<strong>很正常</strong>。看本行「仍在转换」= 桥有心跳；黑窗在下宏包也可等。无心跳超过约 20 秒才像卡住。</p>` +
         `</div>` +
         `<div class="mdm-modal-foot" style="flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center">` +
         `<p class="hint tight" id="mdm-pandoc-export-elapsed" style="margin:0">已用时 0 秒</p>` +
@@ -6361,6 +6363,8 @@ a{color:${v.accent}}
         `</div>`;
       const stageEl = () => document.getElementById("mdm-pandoc-export-stage");
       const detailEl = () => document.getElementById("mdm-pandoc-export-detail");
+      const aliveEl = () => document.getElementById("mdm-pandoc-export-alive");
+      const lastLogEl = () => document.getElementById("mdm-pandoc-export-lastlog");
       const elapsedEl = () => document.getElementById("mdm-pandoc-export-elapsed");
       const setLocal = (stage, detail = "") => {
         if (stopped) return;
@@ -6368,6 +6372,48 @@ a{color:${v.accent}}
         const d = detailEl();
         if (s) s.textContent = stage || "处理中…";
         if (d) d.textContent = detail || "";
+      };
+      const setAliveUi = (data) => {
+        if (stopped) return;
+        const a = aliveEl();
+        const lg = lastLogEl();
+        const el = elapsedEl();
+        if (!data) return;
+        const hb = data.heartbeatAgeSec != null ? Number(data.heartbeatAgeSec) : null;
+        const limit = Number(data.timeoutSec) || 0;
+        if (a) {
+          if (data.active && data.alive) {
+            a.textContent =
+              hb != null
+                ? `● 仍在转换（心跳 ${hb}s 前）`
+                : "● 仍在转换（桥有心跳）";
+            a.style.color = "var(--ok, #15803d)";
+          } else if (data.active) {
+            a.textContent =
+              hb != null
+                ? `○ 超过 ${hb}s 无心跳 — 可能卡住，可看黑窗或取消`
+                : "○ 暂无心跳 — 可能卡住，可看黑窗或取消";
+            a.style.color = "var(--warn, #b45309)";
+          } else {
+            a.textContent = "桥端已结束本阶段";
+            a.style.color = "";
+          }
+        }
+        if (lg) {
+          const bits = [];
+          if (data.lastLog) bits.push(`最近输出：${data.lastLog}`);
+          if (data.outPdfBytes > 0) {
+            bits.push(`临时 PDF 已写 ${Math.round(data.outPdfBytes / 1024)} KB`);
+          }
+          lg.textContent = bits.join(" · ");
+        }
+        if (el && data.elapsedSec != null) {
+          const lim =
+            limit > 0 ? ` · 上限约 ${Math.round(limit / 60)} 分钟` : "";
+          el.textContent = `已用时 ${data.elapsedSec} 秒${lim}${
+            data.active ? (data.alive ? " · 进行中" : " · 无心跳") : ""
+          }`;
+        }
       };
       const stop = () => {
         if (stopped) return;
@@ -6395,12 +6441,13 @@ a{color:${v.accent}}
           stop();
           return;
         }
-        const sec = Math.round((Date.now() - t0) / 1000);
+        // 本地秒表作兜底；有桥进度后以 setAliveUi 为准
         const el = elapsedEl();
-        if (el) {
+        if (el && !el.dataset.fromBridge) {
+          const sec = Math.round((Date.now() - t0) / 1000);
           el.textContent =
-            sec >= 180
-              ? `已用时 ${sec} 秒 · 若黑窗在装宏包请继续等；可点取消`
+            sec >= 480
+              ? `已用时 ${sec} 秒 · 大文档仍可能在排版；看上方「仍在转换」`
               : `已用时 ${sec} 秒`;
         }
       }, 500);
@@ -6417,9 +6464,11 @@ a{color:${v.accent}}
             if (res.ok && data) {
               if (data.stage) setLocal(data.stage, data.detail || "");
               const el = elapsedEl();
-              if (el && data.elapsedSec != null) {
-                el.textContent = `已用时 ${data.elapsedSec} 秒${data.active ? " · 桥端进行中" : ""}`;
-              }
+              if (el) el.dataset.fromBridge = "1";
+              setAliveUi(data);
+              try {
+                ctl.onProgress?.(data);
+              } catch (_) {}
             }
           } catch (_) {}
         };
@@ -6428,8 +6477,10 @@ a{color:${v.accent}}
       };
       const ctl = {
         setLocal,
+        setAliveUi,
         startPoll,
         stop,
+        onProgress: null,
         wasCancelled: () => cancelled,
         close() {
           stop();
@@ -6443,20 +6494,38 @@ a{color:${v.accent}}
       return ctl;
     }
 
+    /** 与桥端 estimatePdfTimeoutSec 对齐：大 MD 超 8 分钟正常 */
+    function estimateClientPdfTimeoutMs(text, images) {
+      const chars = String(text || "").length;
+      const imgN = Array.isArray(images) ? images.length : 0;
+      let sec = 12 * 60;
+      sec += Math.floor(chars / 20000) * 120;
+      sec += imgN * 20;
+      sec = Math.min(45 * 60, Math.max(12 * 60, sec));
+      // 前端比桥端多留 90s，避免桥还在跑就被 Abort 掐断
+      return (sec + 90) * 1000;
+    }
+
     async function exportViaPandoc(text, to, title, retried = false) {
       const toLabel = String(to || "file").toUpperCase();
       const isPdf = to === "pdf";
-      // PDF：前端最长等 10 分钟（桥端约 8 分钟杀进程）；避免再挂一小时
       const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
-      const timeoutMs = isPdf ? 10 * 60 * 1000 : 6 * 60 * 1000;
+      // PDF：按正文规模放宽（最长约 46 分钟）；非 PDF 仍 6 分钟
+      const exportT0 = Date.now();
+      let timeoutMs = isPdf ? estimateClientPdfTimeoutMs(text, []) : 6 * 60 * 1000;
       let timeoutId = null;
-      if (abort) {
+      const armTimeout = (ms) => {
+        if (!abort) return;
+        timeoutMs = Math.max(timeoutMs, Number(ms) || 0);
+        if (timeoutId) clearTimeout(timeoutId);
+        const remain = Math.max(1000, timeoutMs - (Date.now() - exportT0));
         timeoutId = setTimeout(() => {
           try {
             abort.abort();
           } catch (_) {}
-        }, timeoutMs);
-      }
+        }, remain);
+      };
+      armTimeout(timeoutMs);
       const prog = openPandocExportProgress(toLabel, {
         onCancel: () => {
           try {
@@ -6464,6 +6533,11 @@ a{color:${v.accent}}
           } catch (_) {}
         },
       });
+      prog.onProgress = (data) => {
+        if (!isPdf || !data?.timeoutSec) return;
+        // 桥端上报上限后，前端对齐（+90s）
+        armTimeout((Number(data.timeoutSec) + 90) * 1000);
+      };
       try {
         // 图表先烤成 PNG 再交给 Pandoc；PDF 用 3x 清晰度照顾复杂图
         prog.setLocal("渲染图表", isPdf ? "高清栅格化 Mermaid…" : "处理中…");
@@ -6480,9 +6554,15 @@ a{color:${v.accent}}
         );
         const assetImages = await collectReferencedAssetsWithData(baked.text).catch(() => []);
         const images = [...assetImages, ...(baked.images || [])];
+        if (isPdf) armTimeout(estimateClientPdfTimeoutMs(baked.text, images));
         const plan =
           typeof QR.exportPandocPlan === "function" ? QR.exportPandocPlan(to) : { from: "gfm", args: [] };
-        prog.setLocal("上传到本机桥", `Pandoc → ${toLabel}${isPdf ? "（请看黑窗）" : ""}`);
+        prog.setLocal(
+          "上传到本机桥",
+          isPdf
+            ? `Pandoc → PDF · 上限约 ${Math.round(timeoutMs / 60000)} 分钟（大文档更久属正常）· 请看黑窗与「仍在转换」`
+            : `Pandoc → ${toLabel}`
+        );
         prog.startPoll();
         let res;
         try {
@@ -6504,7 +6584,7 @@ a{color:${v.accent}}
           if (prog.wasCancelled?.() || err?.name === "AbortError") {
             throw new Error(
               isPdf
-                ? "已取消或超时。若黑窗卡在装宏包，可等它装完再导出；或用浏览器打印另存 PDF。"
+                ? "已取消或超时。看弹框是否长期「无心跳」；黑窗若仍在下宏包可再导出一次，或用浏览器打印。"
                 : "已取消或超时"
             );
           }

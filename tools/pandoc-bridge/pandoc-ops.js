@@ -129,9 +129,15 @@ function runCmd(file, args, { input, timeout = 300000, cwd, env } = {}) {
 /**
  * PDF 专用：输出打到黑窗，超时杀进程树，避免 MiKTeX 装包/弹窗把请求挂死一小时。
  */
-function runCmdLogged(file, args, { timeout = 480000, cwd, env, logPrefix = "[pandoc]" } = {}) {
+function runCmdLogged(
+  file,
+  args,
+  { timeout = 480000, cwd, env, logPrefix = "[pandoc]", watchFile = "", timeoutSec = 0 } = {}
+) {
   const label = [file, ...(args || []).slice(0, 8)].join(" ");
+  const limitSec = timeoutSec || Math.round(timeout / 1000);
   console.log(`${logPrefix} ▶ ${label}${args && args.length > 8 ? " …" : ""}`);
+  console.log(`${logPrefix} 预计最长 ${limitSec}s（大文档/首次装宏包会更久，属正常）`);
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
       cwd,
@@ -143,18 +149,30 @@ function runCmdLogged(file, args, { timeout = 480000, cwd, env, logPrefix = "[pa
     let settled = false;
     let stdout = "";
     let stderr = "";
+    let lastLog = "";
     const t0 = Date.now();
+    const touchProgress = (stage, detail) => {
+      let outPdfBytes = 0;
+      if (watchFile) {
+        try {
+          if (fs.existsSync(watchFile)) outPdfBytes = fs.statSync(watchFile).size || 0;
+        } catch (_) {}
+      }
+      setConvertProgress(stage, detail, { lastLog, timeoutSec: limitSec, outPdfBytes });
+    };
     const beat = setInterval(() => {
       const sec = Math.round((Date.now() - t0) / 1000);
-      console.log(`${logPrefix} …仍在运行 · 已用时 ${sec}s（可看上方 XeLaTeX/MiKTeX 输出）`);
-      setConvertProgress("Pandoc + XeLaTeX 排版中", `已用时 ${sec}s · 黑窗若在装宏包请等它下完`);
-    }, 8000);
+      console.log(`${logPrefix} …仍在运行 · 已用时 ${sec}s / 上限 ${limitSec}s`);
+      const bits = [`已用时 ${sec}s`, `上限约 ${Math.round(limitSec / 60)} 分钟`];
+      if (lastLog) bits.push(`最近：${lastLog.slice(0, 80)}`);
+      touchProgress("Pandoc + XeLaTeX 排版中（进行中）", bits.join(" · "));
+    }, 4000);
     const timer = setTimeout(() => {
-      console.log(`${logPrefix} ✖ 超时 ${Math.round(timeout / 1000)}s，结束进程树 pid=${child.pid}`);
+      console.log(`${logPrefix} ✖ 超时 ${limitSec}s，结束进程树 pid=${child.pid}`);
       killProcessTree(child.pid);
       finish(() => {
         const err = new Error(
-          `PDF 排版超时（>${Math.round(timeout / 1000)}s）。常见原因：MiKTeX 首次缺宏包在下载、或弹窗在任务栏待点。请看黑窗；也可改用浏览器打印。`
+          `PDF 排版超时（>${limitSec}s）。若黑窗仍在下宏包，可再导出一次；大文档也可拆篇。或用浏览器打印。`
         );
         err.stdout = stdout;
         err.stderr = stderr || "timeout";
@@ -177,9 +195,18 @@ function runCmdLogged(file, args, { timeout = 480000, cwd, env, logPrefix = "[pa
       for (const line of text.split(/\r?\n/)) {
         const s = line.trim();
         if (!s) continue;
+        lastLog = s.slice(0, 200);
         console.log(`${logPrefix} ${isErr ? "!" : "|"} ${s.slice(0, 240)}`);
-        if (/installing|downloading|package|宏包|下载/i.test(s)) {
-          setConvertProgress("MiKTeX 正在装/下宏包", s.slice(0, 160));
+        if (/installing|downloading|package|宏包|下载|Output written|Transcript/i.test(s)) {
+          touchProgress(
+            /installing|downloading|package|宏包|下载/i.test(s)
+              ? "MiKTeX 正在装/下宏包（仍在转换）"
+              : "XeLaTeX 排版中（仍在转换）",
+            s.slice(0, 160)
+          );
+        } else {
+          // 任意输出都刷新心跳，前端据此判断「还活着」
+          touchProgress("Pandoc + XeLaTeX 排版中（进行中）", s.slice(0, 160));
         }
       }
     };
@@ -892,16 +919,37 @@ function pdfEngineCliArg(engineName, pdfInfo) {
 }
 
 /** 当前转换进度（供前端轮询 /pandoc/progress，避免长任务「没动静」） */
-let convertProgress = { active: false, stage: "", detail: "", startedAt: 0, updatedAt: 0 };
+let convertProgress = {
+  active: false,
+  stage: "",
+  detail: "",
+  lastLog: "",
+  startedAt: 0,
+  updatedAt: 0,
+  timeoutSec: 0,
+  outPdfBytes: 0,
+};
 
-function setConvertProgress(stage, detail = "") {
+function setConvertProgress(stage, detail = "", extra = {}) {
   const now = Date.now();
   convertProgress = {
     active: true,
-    stage: String(stage || ""),
+    stage: String(stage || convertProgress.stage || ""),
     detail: String(detail || "").slice(0, 240),
+    lastLog:
+      extra.lastLog != null
+        ? String(extra.lastLog).slice(0, 200)
+        : convertProgress.lastLog || "",
     startedAt: convertProgress.active && convertProgress.startedAt ? convertProgress.startedAt : now,
     updatedAt: now,
+    timeoutSec:
+      extra.timeoutSec != null
+        ? Number(extra.timeoutSec) || 0
+        : Number(convertProgress.timeoutSec) || 0,
+    outPdfBytes:
+      extra.outPdfBytes != null
+        ? Number(extra.outPdfBytes) || 0
+        : Number(convertProgress.outPdfBytes) || 0,
   };
   const elapsed = Math.max(0, Math.round((now - convertProgress.startedAt) / 1000));
   console.log(`[pandoc] ▶ ${convertProgress.stage}${detail ? ` · ${detail}` : ""} · ${elapsed}s`);
@@ -916,23 +964,52 @@ function clearConvertProgress(finalStage = "") {
       updatedAt: Date.now(),
     };
   } else {
-    convertProgress = { active: false, stage: "", detail: "", startedAt: 0, updatedAt: 0 };
+    convertProgress = {
+      active: false,
+      stage: "",
+      detail: "",
+      lastLog: "",
+      startedAt: 0,
+      updatedAt: 0,
+      timeoutSec: 0,
+      outPdfBytes: 0,
+    };
   }
 }
 
 function getConvertProgress() {
   const p = convertProgress || {};
   const startedAt = Number(p.startedAt) || 0;
+  const updatedAt = Number(p.updatedAt) || 0;
   const elapsedSec = startedAt ? Math.max(0, Math.round((Date.now() - startedAt) / 1000)) : 0;
+  const heartbeatAgeSec = updatedAt ? Math.max(0, Math.round((Date.now() - updatedAt) / 1000)) : 0;
+  // 15s 内有心跳 = 仍在转换（黑窗有输出或定时 beat）
+  const alive = !!p.active && heartbeatAgeSec <= 15;
   return {
     ok: true,
     active: !!p.active,
+    alive,
     stage: p.stage || "",
     detail: p.detail || "",
+    lastLog: p.lastLog || "",
     startedAt,
-    updatedAt: Number(p.updatedAt) || 0,
+    updatedAt,
     elapsedSec,
+    heartbeatAgeSec,
+    timeoutSec: Number(p.timeoutSec) || 0,
+    outPdfBytes: Number(p.outPdfBytes) || 0,
   };
+}
+
+/** 按正文/图片规模估算 PDF 最长等待（秒）：大文档超 8 分钟完全正常 */
+function estimatePdfTimeoutSec(text, images) {
+  const chars = String(text || "").length;
+  const imgN = Array.isArray(images) ? images.length : 0;
+  // 基准 12 分钟；每 2 万字 +2 分钟；每张图 +20 秒；上限 45 分钟
+  let sec = 12 * 60;
+  sec += Math.floor(chars / 20000) * 120;
+  sec += imgN * 20;
+  return Math.min(45 * 60, Math.max(12 * 60, sec));
 }
 
 /** 印刷级 PDF：仅 XeLaTeX（复杂图表 + 中文） */
@@ -974,19 +1051,26 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
   );
   if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
 
-  console.log(`[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp}`);
+  const timeoutSec = estimatePdfTimeoutSec(text, images);
+  const timeoutMs = timeoutSec * 1000;
+  console.log(
+    `[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · tmp=${tmp} · 上限 ${timeoutSec}s`
+  );
   setConvertProgress(
-    "Pandoc + XeLaTeX 排版中",
-    `引擎 ${useEngine} · 最长约 8 分钟；首次可能在下宏包，请看黑窗`
+    "Pandoc + XeLaTeX 排版中（进行中）",
+    `引擎 ${useEngine} · 上限约 ${Math.round(timeoutSec / 60)} 分钟（大文档更久属正常）· 请看黑窗`,
+    { timeoutSec }
   );
   const miktexEnv = await ensureMiktexQuietAutoInstall(engineCli);
   try {
-    // 8 分钟硬超时 + 进程树清理；输出进黑窗，避免「藏弹窗挂一小时」
+    // 按文档规模自适应超时；杀进程树；黑窗可见输出；进度带心跳
     await runCmdLogged(resolvePandocBin(), args, {
       cwd: tmp,
-      timeout: 480000,
+      timeout: timeoutMs,
+      timeoutSec,
       env: miktexEnv,
       logPrefix: "[pandoc/pdf]",
+      watchFile: outPath,
     });
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 20) {
       throw new Error("PDF 输出为空（请检查字体与 XeLaTeX/MiKTeX 是否完整；黑窗是否有缺包错误）");
