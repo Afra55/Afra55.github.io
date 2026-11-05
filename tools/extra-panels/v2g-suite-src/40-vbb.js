@@ -649,7 +649,6 @@
         const keeps = [];
         let cursor = trimStart;
         const resolveEnd = window.DevToolsVtrimEditor?.resolveEndKeepSec;
-        const resolveStart = window.DevToolsVtrimEditor?.resolveStartKeepSec;
         const fps = Number(stamped?.srcFps) || 0;
         const endKeep =
           typeof resolveEnd === "function"
@@ -659,20 +658,12 @@
               : Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
                 ? window.DevToolsVtrimEditor.END_KEEP_SEC
                 : 1 / 25;
-        const startKeep =
-          typeof resolveStart === "function"
-            ? resolveStart(stamped)
-            : Math.min(
-                Number(window.DevToolsVtrimEditor?.START_KEEP_SEC) > 0
-                  ? window.DevToolsVtrimEditor.START_KEEP_SEC
-                  : 1 / 50,
-                endKeep * 0.5
-              );
         for (const c of cuts) {
           const cutStart = Math.max(trimStart, Number(c.start) || 0);
           const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
           const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep);
-          const resumeAt = Math.min(trimEnd, cutEnd + endKeep + startKeep);
+          // 与 vtrim keepRangesFromEdit：cut.end 起空 2 帧，防 GIF 接点多吐
+          const resumeAt = Math.min(trimEnd, cutEnd + endKeep * 2);
           if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
           cursor = Math.max(cursor, resumeAt);
         }
@@ -686,13 +677,36 @@
       }
 
       /**
-       * 成片/拼接/外预览播放共用 ≡ 黄/红柄所见（所见即所得，不多删垫）。
+       * 成片 keep：无删段 ≡ 预览；有删中间时接点再收 1 源帧（对齐 vtrim keepRangesForEncode）。
        */
       function vbbKeepRangesForEncode(edit, duration) {
         const stamped = vbbEditWithSrcFps(edit);
         const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
         if (typeof fn === "function") return fn(stamped, duration);
-        return vbbKeepRangesFromEdit(stamped, duration);
+        const preview = vbbKeepRangesFromEdit(stamped, duration);
+        const trimStart = Math.max(0, Number(stamped?.trimStart) || 0);
+        const trimEnd = Math.max(trimStart + VBB_MIN_SPAN, Number(stamped?.trimEnd) || duration || 0);
+        const cuts = vbbNormalizeCutouts(stamped?.cutouts, trimStart, trimEnd);
+        if (!cuts.length || preview.length <= 1) return preview;
+        const resolveEnd = window.DevToolsVtrimEditor?.resolveEndKeepSec;
+        const padFrames = Math.max(
+          1,
+          Number(window.DevToolsVtrimEditor?.ENCODE_CUT_JUNCTION_PAD_FRAMES) || 1
+        );
+        const endKeep =
+          typeof resolveEnd === "function"
+            ? resolveEnd(stamped)
+            : Number(window.DevToolsVtrimEditor?.END_KEEP_SEC) > 0
+              ? window.DevToolsVtrimEditor.END_KEEP_SEC
+              : 1 / 25;
+        const pad = endKeep * padFrames;
+        return preview.map((k, i) => {
+          let start = Number(k.start) || 0;
+          let end = Math.max(start + 0.05, Number(k.end) || 0);
+          if (i > 0) start = Math.min(end - 0.05, start + pad);
+          if (i < preview.length - 1) end = Math.max(start + 0.05, end - pad);
+          return { start, end };
+        });
       }
 
       function vbbEditIsDirty(edit, duration, srcW, srcH) {

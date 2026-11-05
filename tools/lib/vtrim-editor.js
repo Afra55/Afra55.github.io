@@ -74,7 +74,12 @@
     const endKeep = resolveEndKeepSec(editOrFps);
     return Math.min(START_KEEP_SEC, endKeep * 0.5);
   }
-  /** @deprecated 已取消「成片多删垫」；保留导出字段以免旧调用报错 */
+  /**
+   * 仅「删中间」接点：成片相对预览 keep 再收 1 帧（编码器/fps 滤镜易多吐边界帧）。
+   * 无 cutouts 时仍为 0，黄柄片头片尾所见即所得不叠加。
+   */
+  const ENCODE_CUT_JUNCTION_PAD_FRAMES = 1;
+  /** @deprecated 全局黄柄垫已取消；保留 0 以免旧调用/测试读字段报错 */
   const ENCODE_BOUND_PAD_SEC = 0;
   let uidSeq = 0;
 
@@ -2523,19 +2528,18 @@
     const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
     const trimEnd = Math.min(d, Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || d));
     const cuts = normalizeCutouts(edit?.cutouts, trimStart, trimEnd);
-    // 与编辑器 endKeepStepSec 同一公式（resolveEndKeepSec / resolveStartKeepSec）
+    // 与编辑器 endKeepStepSec 同一公式（resolveEndKeepSec）
     const endKeep = resolveEndKeepSec(edit);
-    const startKeep = resolveStartKeepSec(edit);
     const keeps = [];
     let cursor = trimStart;
     for (const c of cuts) {
       // 闭区间：红柄 cut.start / cut.end 所见帧都要删。
-      // 上一段按片尾半开在 start 前收掉 endKeep，避免 HTML5 播到 start 仍画出该帧；
-      // 下一段从 end+endKeep 起再加 startKeep 片头半开，与成片一致。
+      // 上一段在 cut.start 前收 endKeep；下一段从 cut.end 起空 2 帧再接（宁可多删 1 帧），
+      // 否则 GIF 在「中间段片尾」接点常往前多吐几帧删不掉的画面（预览跳切看不出）。
       const cutStart = Math.max(trimStart, Number(c.start) || 0);
       const cutEnd = Math.min(trimEnd, Number(c.end) || 0);
       const keepEnd = Math.max(cursor + 0.05, cutStart - endKeep);
-      const resumeAt = Math.min(trimEnd, cutEnd + endKeep + startKeep);
+      const resumeAt = Math.min(trimEnd, cutEnd + endKeep * 2);
       if (keepEnd > cursor + 0.02) keeps.push({ start: cursor, end: keepEnd });
       cursor = Math.max(cursor, resumeAt);
     }
@@ -2549,11 +2553,26 @@
   }
 
   /**
-   * 成片/导出 keep ≡ 预览 keep（黄/红柄所见）。
-   * 禁止再叠「多删几帧」垫，否则手机拖拽位置与 GIF 对不齐。
+   * 成片 keep：无删段时 ≡ 预览 keep（黄柄所见即所得）。
+   * 有删中间时：接点两端再各收 1 源帧——ffmpeg trim/fps 比 HTML5 跳切更容易多带边界帧，
+   * 表现为「红柄终点预览对、GIF 中间段片尾往前多几帧」。
    */
   function keepRangesForEncode(edit, duration) {
-    return keepRangesFromEdit(edit, duration);
+    const preview = keepRangesFromEdit(edit, duration);
+    const trimStart = Math.max(0, Number(edit?.trimStart) || 0);
+    const trimEnd = Math.max(trimStart + MIN_SPAN, Number(edit?.trimEnd) || duration || 0);
+    const cuts = normalizeCutouts(edit?.cutouts, trimStart, trimEnd);
+    if (!cuts.length || preview.length <= 1) return preview;
+    const pad = resolveEndKeepSec(edit) * Math.max(1, ENCODE_CUT_JUNCTION_PAD_FRAMES);
+    return preview.map((k, i) => {
+      let start = Number(k.start) || 0;
+      let end = Math.max(start + 0.05, Number(k.end) || 0);
+      // 刚过删段终点的下一段：起点再推后，避免接点多吐 cut.end 附近帧
+      if (i > 0) start = Math.min(end - 0.05, start + pad);
+      // 将进入删段起点的上一段：终点再提前
+      if (i < preview.length - 1) end = Math.max(start + 0.05, end - pad);
+      return { start, end };
+    });
   }
 
   /**
@@ -2745,6 +2764,7 @@
     END_KEEP_SEC,
     START_KEEP_SEC,
     ENCODE_BOUND_PAD_SEC,
+    ENCODE_CUT_JUNCTION_PAD_FRAMES,
     FRAME_SNAP_SEC,
   };
 })();

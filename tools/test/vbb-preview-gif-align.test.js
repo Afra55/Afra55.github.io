@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * 所见即所得：黄/红柄拖到哪一帧，预览与 GIF 就对准哪一帧（不多删垫）。
+ * 黄柄所见即所得；删中间接点成片可再收 1 帧（防 GIF 多吐）。
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -38,6 +38,7 @@ function loadKeepFns() {
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
     const END_KEEP_SEC = 1 / 25, START_KEEP_SEC = 1 / 50, FRAME_SNAP_SEC = 1 / 30;
     const ENCODE_BOUND_PAD_SEC = 0;
+    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 1;
     ${normalizeFps[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
@@ -52,8 +53,21 @@ function loadKeepFns() {
   return box;
 }
 
-t("成片 keep ≡ 预览 keep（禁止再多删垫）", () => {
+t("无删段：成片 keep ≡ 预览 keep（黄柄所见即所得）", () => {
   assert.ok(/ENCODE_BOUND_PAD_SEC\s*=\s*0/.test(vtrim));
+  assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*1/.test(vtrim));
+  const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
+  const edit = { trimStart: 5, trimEnd: 95, cutouts: [] };
+  const a = keepRangesFromEdit(edit, 100);
+  const b = keepRangesForEncode(edit, 100);
+  assert.strictEqual(a.length, 1);
+  assert.strictEqual(b.length, 1);
+  assert.ok(Math.abs(a[0].start - b[0].start) < 1e-9);
+  assert.ok(Math.abs(a[0].end - b[0].end) < 1e-9);
+  assert.ok(Math.abs(a[0].start - 5) < 1e-9);
+});
+
+t("删中间：成片接点相对预览再收 1 帧", () => {
   const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = {
     trimStart: 5,
@@ -66,12 +80,17 @@ t("成片 keep ≡ 预览 keep（禁止再多删垫）", () => {
   const a = keepRangesFromEdit(edit, 100);
   const b = keepRangesForEncode(edit, 100);
   assert.strictEqual(a.length, b.length);
-  for (let i = 0; i < a.length; i++) {
-    assert.ok(Math.abs(a[i].start - b[i].start) < 1e-9, `start ${i}`);
-    assert.ok(Math.abs(a[i].end - b[i].end) < 1e-9, `end ${i}`);
-  }
-  // 片头对齐黄柄，不再 +pad
+  assert.ok(a.length >= 3);
+  const pad = 1 / 25;
+  // 片头仍对齐黄柄
   assert.ok(Math.abs(a[0].start - 5) < 1e-9);
+  assert.ok(Math.abs(b[0].start - 5) < 1e-9);
+  // 上一段终点：成片再提前 1 帧
+  assert.ok(Math.abs(b[0].end - (a[0].end - pad)) < 1e-9);
+  // 下一段起点：成片再推后 1 帧（中间段片尾接点）
+  assert.ok(Math.abs(b[1].start - (a[1].start + pad)) < 1e-9);
+  // 预览 keep 已从 cut.end 空 2 帧
+  assert.ok(Math.abs(a[1].start - (30 + pad * 2)) < 1e-9);
 });
 
 t("仅裁片头：成片起点 = 黄柄 trimStart", () => {
@@ -81,12 +100,13 @@ t("仅裁片头：成片起点 = 黄柄 trimStart", () => {
   assert.ok(Math.abs(enc[0].start - 10) < 1e-9);
 });
 
-t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
+t("keepRangesForEncode 有删段时收接点垫", () => {
   const fn = vtrim.slice(
     vtrim.indexOf("function keepRangesForEncode"),
     vtrim.indexOf("function previewSeekForKeepRanges")
   );
-  assert.ok(fn.includes("return keepRangesFromEdit(edit, duration)"));
+  assert.ok(fn.includes("ENCODE_CUT_JUNCTION_PAD_FRAMES"));
+  assert.ok(fn.includes("if (i > 0)"));
   assert.ok(!fn.includes("ENCODE_BOUND_PAD_SEC / 2"));
 });
 

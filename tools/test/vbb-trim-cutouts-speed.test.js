@@ -37,7 +37,10 @@ function loadVtrimKeepFns() {
   const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
   const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
-  assert.ok(fromEdit && forEnc && norm, "vtrim keep helpers");
+  const resolveEnd = vtrim.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const resolveStart = vtrim.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
+  const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
+  assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && normalizeFps, "vtrim keep helpers");
   const box = {};
   vm.runInNewContext(
     `
@@ -45,7 +48,12 @@ function loadVtrimKeepFns() {
     const MIN_CUTOUT = 0.2;
     const END_KEEP_SEC = 1 / 25;
     const START_KEEP_SEC = 1 / 50;
+    const FRAME_SNAP_SEC = 1 / 30;
     const ENCODE_BOUND_PAD_SEC = 0;
+    const ENCODE_CUT_JUNCTION_PAD_FRAMES = 1;
+    ${normalizeFps[0]}
+    ${resolveEnd[0]}
+    ${resolveStart[0]}
     ${norm[0]}
     ${fromEdit[0]}
     ${forEnc[0]}
