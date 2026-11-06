@@ -1,7 +1,9 @@
 "use strict";
 
 /**
- * 黄柄预览对、GIF 尾多帧：fps= 前须 trim 硬切，禁止 -frames:v 为凑帧读窗外。
+ * 黄柄预览对、GIF 尾多帧：
+ * 1) fps 前源 trim：禁止 -frames:v 为凑帧读窗外
+ * 2) fps 后成片 trim：丢掉 EOF flush 多吐的末帧（根治，不靠减帧猜测）
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -26,7 +28,6 @@ t("存在 vbbEncodeHardTrimFilters：setpts → trim=duration → setpts(/speed)
   const box = {};
   vm.runInNewContext(`${m[0]}; this.fn = vbbEncodeHardTrimFilters;`, box);
   const s1 = box.fn(1, 10);
-  // duration 微收，开区间丢掉贴上界帧
   assert.ok(s1.includes("trim=duration=9.999"));
   assert.ok(s1.includes("setpts=PTS-STARTPTS"));
   assert.ok(!s1.includes("/1,") && !s1.includes("/1."));
@@ -35,14 +36,25 @@ t("存在 vbbEncodeHardTrimFilters：setpts → trim=duration → setpts(/speed)
   assert.ok(s2.includes("/2"));
 });
 
-t("palette / gifski 链：crop + timeFilter + fps + select 限帧（硬切在 fps 前）", () => {
-  assert.ok(shared.includes("${cropFilter}${timeFilter}fps="));
-  assert.ok(shared.includes("select='lt(n") && shared.includes("${frameCount})'"));
-  assert.ok(shared.includes("select='lt(n") && shared.includes("${nMax})'"));
-  assert.ok(shared.includes("buildRawArgs(useDenoise, dur, chunkFrames)"));
+t("存在 vbbEncodeOutTrimFilters：fps 后按成片时长再 trim", () => {
+  assert.ok(shared.includes("function vbbEncodeOutTrimFilters"));
+  const m = shared.match(/function vbbEncodeOutTrimFilters\([\s\S]*?\n      \}/);
+  assert.ok(m);
+  const box = {};
+  vm.runInNewContext(`${m[0]}; this.fn = vbbEncodeOutTrimFilters;`, box);
+  const s = box.fn(2);
+  assert.ok(s.includes("trim=duration="));
+  assert.ok(s.includes("setpts=PTS-STARTPTS"));
 });
 
-t("注释说明根因：-frames:v 凑帧 / fps EOF flush", () => {
+t("palette / gifski 链：源 trim → fps → outTrim（硬切夹住 fps）", () => {
+  assert.ok(shared.includes("${cropFilter}${timeFilter}fps="));
+  assert.ok(shared.includes("${outTrim}"));
+  assert.ok(shared.includes("buildRawArgs(useDenoise, dur, chunkFrames)"));
+  assert.ok(!shared.includes("select='lt(n"));
+});
+
+t("注释说明根因：凑帧读窗外 + fps EOF flush", () => {
   assert.ok(shared.includes("为凑帧") || shared.includes("凑帧"));
   assert.ok(shared.includes("黄柄"));
   assert.ok(shared.includes("EOF flush") || shared.includes("flush"));
