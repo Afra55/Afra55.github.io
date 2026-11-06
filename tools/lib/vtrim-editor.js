@@ -436,6 +436,15 @@
     let playWindowLooping = false;
     /** 最近一帧 rVFC 已呈现的 mediaTime；currentTime 常滞后于画面，截断必须跟已绘帧 */
     let lastPresentedMediaTime = NaN;
+    /**
+     * 片尾±/抬手停帧的实际 currentTime。播放硬闸钉在此点（≡所见），
+     * 不单靠 endKeepSec()——量化/fps 抖动会让理论 park 比画面多出约 0.1s。
+     */
+    let endParkAtSec = NaN;
+    /** 切断后冻结时钟，避免 pause 前 currentTime 已越过停帧把 UI 刷成多 0.1s */
+    let freezeClockSec = NaN;
+    /** 按 rVFC 剩余时间预约 pause，弥补采样间隔导致的晚切 */
+    let parkCutTimer = 0;
     let cropLiveRaf = 0;
     let filmGen = 0;
     let closed = false;
@@ -929,13 +938,25 @@
 
     /** 片尾停帧世代：按钮按下与松手可能连续触发，只保留最后一次 */
     let endParkGen = 0;
+    function clearParkCutTimer() {
+      if (parkCutTimer) {
+        clearTimeout(parkCutTimer);
+        parkCutTimer = 0;
+      }
+    }
+
+    /** 播放截断点 ≡ 片尾停帧画面（优先 endParkAtSec） */
+    function playCutParkSec() {
+      if (Number.isFinite(endParkAtSec)) return Math.max(startSec, endParkAtSec);
+      return endKeepSec();
+    }
+
     /**
      * 片尾所见即所得：
      * - 黄柄 end = 半开上界（该帧起不进 GIF）
-     * - 停帧 = end - 1/srcFps（keep 末帧）
-     * 根因：HTML5 seek 非帧精确。若只按「理论 park=end-1/fps」再 seek 一次却不按
-     * 实际 shown 回收 end，画面停在偏早帧，播放硬闸仍切理论 park → 比所见多放几帧。
-     * 修法：以最终画面 shown 提交 end（成片/播放跟画面走）；禁止靠播放提前减帧对冲。
+     * - 停帧 = 实际 seek 后 shown（播放硬闸钉此点）
+     * 根因：HTML5 seek 非帧精确；理论 park=end-1/fps 与 shown 可差到约 0.1s（时钟一格）。
+     * 修法：shown 提交 end + 记录 endParkAtSec；禁止靠播放提前减帧对冲。
      */
     async function seekEndPreviewExact() {
       const gen = ++endParkGen;
@@ -947,6 +968,7 @@
         dragSeekTimer = 0;
       }
       scrubSeekInflight = false;
+      freezeClockSec = NaN;
       try {
         video.pause();
       } catch (_) {}
@@ -974,10 +996,15 @@
         }
       }
 
-      // 以实际停帧提交黄柄：end = shown+step（不超过按钮 want）；勿再二次 seek（会再次偏离）
+      // 以实际停帧提交：硬闸钉 shown；黄柄 = shown+step（≤ want）
+      endParkAtSec = shown;
       endSec = quantizeTrimSec(
         clamp(Math.min(want, shown + step), startSec + MIN_SPAN, duration)
       );
+      // 量化若把理论 park 抬高过 shown，再压回（否则播放会比所见多出一截）
+      if (endKeepSec() > shown + 1e-4) {
+        endSec = clamp(Math.min(want, shown + step), startSec + MIN_SPAN, duration);
+      }
       paintTimeline();
       updateLabels();
       return shown;
@@ -1045,7 +1072,9 @@
     }
 
     function updateLabels() {
-      const now = video.currentTime || startSec;
+      const now = Number.isFinite(freezeClockSec)
+        ? freezeClockSec
+        : video.currentTime || startSec;
       if (clockEl) clockEl.textContent = `${formatClock(now)} / ${formatClock(duration)}`;
       const keeps = keepRangesLocal();
       const keepSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
@@ -1432,6 +1461,8 @@
     function setEnd(t, { preview = true, immediateSeek = false } = {}) {
       const prev = endSec;
       endSec = clamp(t, startSec + MIN_SPAN, duration);
+      // 拖拽中尚未停帧：先跟理论 park，抬手 seekEndPreviewExact 再钉 shown
+      if (!(immediateSeek || !drag)) endParkAtSec = endKeepSec();
       activeHandle = "end";
       syncActiveHandleUi();
       clipCutoutsToWindow();
@@ -1456,6 +1487,7 @@
       nextStart = clamp(nextStart, 0, duration - span);
       startSec = nextStart;
       endSec = nextStart + span;
+      endParkAtSec = endKeepSec();
       previewSeek(startSec, { throttle: Boolean(drag) });
       paintTimeline();
       updateLabels();
@@ -1718,6 +1750,8 @@
       playWindowLooping = true;
       const gen = ++playWindowGen;
       lastPresentedMediaTime = NaN;
+      freezeClockSec = NaN;
+      clearParkCutTimer();
       try {
         video.pause();
       } catch (_) {}
@@ -1743,11 +1777,11 @@
           ? lastPresentedMediaTime
           : clock;
       const cur = Math.max(clock, presented);
-      const park = endKeepSec();
+      const park = playCutParkSec();
       const step = endKeepStepSec();
-      // 硬闸：与片尾±停帧同一点（endKeepSec）切断；截断时刻跟已绘帧，不靠提前减帧
+      // 硬闸钉停帧 shown（endParkAtSec）；并封顶 exclusive end，防止多出约 0.1s
       let jump = null;
-      if (cur >= park - 1e-4) {
+      if (cur >= park - 1e-4 || cur >= endSec - 1e-4) {
         jump = startSec;
       } else {
         jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
@@ -1757,9 +1791,14 @@
       }
       if (jump == null || !Number.isFinite(jump)) return false;
       if (Math.abs(jump - cur) < 0.001) return false;
+      clearParkCutTimer();
+      // 先冻时钟再 pause：避免 UI 把越过停帧的 currentTime 刷成多 0.1s
+      freezeClockSec = park;
       try {
         video.pause();
       } catch (_) {}
+      updateLabels();
+      paintTimeline();
       playWindowLooping = true;
       const gen = ++playWindowGen;
       lastPresentedMediaTime = NaN;
@@ -1767,6 +1806,7 @@
         try {
           await seekPlayheadExact(jump);
           if (closed || gen !== playWindowGen) return;
+          freezeClockSec = NaN;
           await video.play().catch(() => {});
           if (closed || gen !== playWindowGen || video.paused) return;
           armFrameWatch();
@@ -1788,7 +1828,22 @@
         if (closed || gen !== playWindowGen || video.paused || playWindowLooping) return;
         const mt = Number(meta?.mediaTime);
         if (Number.isFinite(mt)) lastPresentedMediaTime = mt;
-        if (clipPlayWindow(mt)) return;
+        if (clipPlayWindow(Number.isFinite(mt) ? mt : undefined)) return;
+        // 距停帧 < 2 源帧：按剩余媒体时间预约切断（对冲 rVFC/currentTime 采样间隔，不改 park）
+        const park = playCutParkSec();
+        if (Number.isFinite(mt) && mt < park - 1e-4) {
+          const remain = park - mt;
+          const step = endKeepStepSec();
+          if (remain <= step * 2 && !parkCutTimer) {
+            const rate = Math.max(0.05, Number(video.playbackRate) || 1);
+            const waitMs = Math.max(0, (remain / rate) * 1000 - 4);
+            parkCutTimer = window.setTimeout(() => {
+              parkCutTimer = 0;
+              if (closed || gen !== playWindowGen || video.paused || playWindowLooping) return;
+              clipPlayWindow(park);
+            }, waitMs);
+          }
+        }
         try {
           video.requestVideoFrameCallback(onFrame);
         } catch (_) {}
@@ -1802,9 +1857,11 @@
       if (!video.src) return;
       if (video.paused) {
         const cur = Number(video.currentTime) || 0;
-        const keep = endKeepSec();
+        const keep = playCutParkSec();
         playWindowLooping = false;
         lastPresentedMediaTime = NaN;
+        freezeClockSec = NaN;
+        clearParkCutTimer();
         const hitCut = cutoutAtTime(cur);
         if (hitCut) {
           // 停在红柄/删段内：按端点开播，终点侧不要被拉去起点
@@ -1943,6 +2000,8 @@
       filmGen += 1;
       playWindowGen += 1;
       playWindowLooping = false;
+      freezeClockSec = NaN;
+      clearParkCutTimer();
       if (tipHoldTimer) {
         clearTimeout(tipHoldTimer);
         tipHoldTimer = 0;
@@ -2508,6 +2567,7 @@
         }
         startSec = clamp(Number(initial.trimStart) || 0, 0, Math.max(0, duration - MIN_SPAN));
         endSec = clamp(Number(initial.trimEnd) || duration, startSec + MIN_SPAN, duration || MIN_SPAN);
+        endParkAtSec = endKeepSec();
         cutouts = normalizeCutoutsList(initial.cutouts || [], startSec, endSec);
         selectedCutout = -1;
         if (initial.crop && initial.cropOn) {

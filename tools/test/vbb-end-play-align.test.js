@@ -48,14 +48,22 @@ t("停帧与播放截断同一点 end-1/fps", () => {
   assert.ok(park != null && Math.abs(park - lastStart) < 1e-9);
 });
 
-t("clipPlayWindow 硬闸用 park 而非提前减帧", () => {
+t("clipPlayWindow 硬闸钉 endParkAtSec，不提前减帧", () => {
   const fn = vtrim.slice(vtrim.indexOf("function clipPlayWindow"), vtrim.indexOf("function armFrameWatch"));
+  assert.ok(fn.includes("playCutParkSec()"));
   assert.ok(fn.includes("cur >= park - 1e-4"));
   assert.ok(!fn.includes("park - step +"));
   assert.ok(fn.includes("video.pause()"));
   assert.ok(!fn.includes("video.currentTime = park"));
-  assert.ok(fn.includes("lastPresentedMediaTime") || fn.includes("presented"));
+  assert.ok(fn.includes("freezeClockSec"));
   assert.ok(fn.includes("Math.max(clock, presented)"));
+});
+
+t("停帧记录 endParkAtSec；临近预约切断（不改 park）", () => {
+  assert.ok(vtrim.includes("let endParkAtSec"));
+  assert.ok(vtrim.includes("endParkAtSec = shown"));
+  assert.ok(vtrim.includes("parkCutTimer"));
+  assert.ok(vtrim.includes("remain <= step * 2"));
 });
 
 t("playEndPad 为 1×endKeep（与停帧对齐，不盲目减帧）", () => {
@@ -69,13 +77,14 @@ t("playEndPad 为 1×endKeep（与停帧对齐，不盲目减帧）", () => {
   assert.ok(!fallback.includes("endKeep * 2"));
 });
 
-t("seekEndPreviewExact 按最终 shown 提交 end，禁止二次 seek 再偏", () => {
+t("seekEndPreviewExact 按最终 shown 提交 end + endParkAtSec", () => {
   const fn = vtrim.slice(
     vtrim.indexOf("async function seekEndPreviewExact"),
     vtrim.indexOf("async function seekStartPreviewExact")
   );
-  assert.ok(fn.includes("以实际停帧提交") || fn.includes("shown + step"));
-  assert.ok(fn.includes("勿再二次 seek") || fn.includes("HTML5 seek"));
+  assert.ok(fn.includes("endParkAtSec = shown"));
+  assert.ok(fn.includes("shown + step"));
+  assert.ok(fn.includes("HTML5 seek") || fn.includes("理论 park"));
   // 最终不得再 currentTime = endKeepSec() 后直接 return（那是根因）
   assert.ok(!/target = endKeepSec\(\);\s*try \{\s*video\.currentTime = target/.test(fn));
 });
