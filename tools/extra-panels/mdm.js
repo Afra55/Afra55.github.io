@@ -6224,20 +6224,29 @@
           const svgRaw = await withTimeout(renderMermaidSourceToSvg(code), 45000, `图表${n}渲染`);
           const alt = `图表${n}`;
           if (mode === "html") {
-            // HTML 单文件：内联流体 SVG（width=100% + viewBox），导出页可铺满屏宽
-            const el = parseSvgMarkup(svgRaw);
-            const markup = el ? mermaidSvgForHtmlEmbed(el) : String(svgRaw || "");
-            if (!markup || !/<svg[\s>]/i.test(markup)) throw new Error("空 SVG");
+            // HTML 单文件：烤浅色 PNG，导出后再注入（避开 MD/DOMPurify 吃掉超长 data URL；
+            // 也避开 SVG height=auto 在部分浏览器高度塌成 0「图表不显示」）
+            const b64 = await withTimeout(svgMarkupToPngBase64(svgRaw, scale), 45000, `图表${n}栅格化`);
+            if (!b64 || b64.length < 32) throw new Error("空 PNG");
             const token = `MDMCHART${n}X`;
-            images.push({ token, n, alt, svg: markup });
+            images.push({ token, n, alt, kind: "png", b64 });
             out += `\n\n${token}\n\n`;
           } else if (mode === "rawhtml") {
-            // Pandoc HTML：把流体 SVG 以 raw HTML 写入 MD（需 from=gfm+raw_html）
-            const el = parseSvgMarkup(svgRaw);
-            const markup = el ? mermaidSvgForHtmlEmbed(el) : String(svgRaw || "");
-            if (!markup || !/<svg[\s>]/i.test(markup)) throw new Error("空 SVG");
-            out +=
-              `\n\n<figure class="mdm-mermaid"><div class="mdm-mermaid-svg" aria-label="${escapeHtml(alt)}">${markup}</div></figure>\n\n`;
+            // Pandoc HTML：优先 PNG data URL（显示稳）；失败再退流体 SVG
+            let figInner = "";
+            try {
+              const b64 = await withTimeout(svgMarkupToPngBase64(svgRaw, scale), 45000, `图表${n}栅格化`);
+              if (b64 && b64.length >= 32) {
+                figInner = `<img src="data:image/png;base64,${b64}" alt="${escapeHtml(alt)}" style="width:100%;max-width:100%;height:auto;display:block;margin:0 auto" />`;
+              }
+            } catch (_) {}
+            if (!figInner) {
+              const el = parseSvgMarkup(svgRaw);
+              const markup = el ? mermaidSvgForHtmlEmbed(el) : String(svgRaw || "");
+              if (!markup || !/<svg[\s>]/i.test(markup)) throw new Error("空 SVG");
+              figInner = `<div class="mdm-mermaid-svg" aria-label="${escapeHtml(alt)}">${markup}</div>`;
+            }
+            out += `\n\n<figure class="mdm-mermaid">${figInner}</figure>\n\n`;
             chartCount += 1;
           } else {
             const b64 = await withTimeout(svgMarkupToPngBase64(svgRaw, scale), 45000, `图表${n}栅格化`);
@@ -6263,16 +6272,24 @@
       return { text: out, images, chartCount, failed };
     }
 
-    /** 把 HTML 导出占位符换成内联 SVG 图表（在 DOMPurify 之后注入） */
+    /** 把 HTML 导出占位符换成内联图表（DOMPurify 之后注入；PNG 优先） */
     function injectHtmlChartPlaceholders(html, images) {
       let out = String(html || "");
       for (const im of images || []) {
         const token = String(im.token || "");
         if (!token) continue;
-        const fig =
-          `<figure class="mdm-mermaid" data-mdm-chart="${im.n || ""}">` +
-          `<div class="mdm-mermaid-svg" aria-label="${escapeHtml(im.alt || "图表")}">${im.svg || ""}</div>` +
-          `</figure>`;
+        const alt = escapeHtml(im.alt || "图表");
+        let inner = "";
+        if (im.kind === "png" && im.b64) {
+          inner =
+            `<img src="data:image/png;base64,${im.b64}" alt="${alt}" ` +
+            `style="width:100%;max-width:100%;height:auto;display:block;margin:0 auto;background:#fff" />`;
+        } else if (im.svg) {
+          inner = `<div class="mdm-mermaid-svg" aria-label="${alt}">${im.svg}</div>`;
+        } else {
+          continue;
+        }
+        const fig = `<figure class="mdm-mermaid" data-mdm-chart="${im.n || ""}">${inner}</figure>`;
         // markdown-it 常包成 <p>TOKEN</p>
         const pRe = new RegExp(`<p>\\s*${token}\\s*</p>`, "g");
         const replaced = out.replace(pRe, fig);
@@ -6283,7 +6300,8 @@
 
     async function buildExportHtml(text) {
       await ensureKatex().catch(() => false);
-      const baked = await bakeChartsForExport(text, { mode: "html" });
+      // scale:2 清晰；浅色 mermaid → PNG，注入时不经 DOMPurify
+      const baked = await bakeChartsForExport(text, { mode: "html", scale: 2 });
       let html = renderMarkdown(baked.text);
       html = injectHtmlChartPlaceholders(html, baked.images);
       html = await inlineAssetsForExport(html);
@@ -8668,19 +8686,20 @@
       return body.startsWith("<?xml") ? body : `<?xml version="1.0" encoding="UTF-8"?>${body}`;
     }
 
-    /** HTML 单文件嵌入：保留 viewBox，宽度 100%，避免宽屏仍锁在预览像素宽 */
+    /** HTML 嵌入兜底：保留 viewBox；勿写 height="auto"（非法长度，易高度塌成 0） */
     function mermaidSvgForHtmlEmbed(svg) {
       const clone = svg.cloneNode(true);
       if (!clone.getAttribute("xmlns")) clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
       const { w, h } = measureSvgSize(svg);
       const rw = Math.max(1, Math.round(w));
       const rh = Math.max(1, Math.round(h));
-      if (!clone.getAttribute("viewBox")) clone.setAttribute("viewBox", `0 0 ${rw} ${rh}`);
-      clone.removeAttribute("style"); // 清掉 mermaid 内联固定宽
+      clone.setAttribute("viewBox", `0 0 ${rw} ${rh}`);
+      clone.removeAttribute("style");
+      clone.removeAttribute("height"); // 高度交给 CSS / viewBox，避免 auto 塌陷
       clone.setAttribute("width", "100%");
-      clone.setAttribute("height", "auto");
       clone.setAttribute("preserveAspectRatio", "xMidYMid meet");
-      clone.style.cssText = "width:100%;max-width:100%;height:auto;display:block";
+      clone.style.cssText =
+        `width:100%;max-width:100%;height:auto;display:block;aspect-ratio:${rw}/${rh};background:#fff`;
       return new XMLSerializer().serializeToString(clone);
     }
 
