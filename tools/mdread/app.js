@@ -159,10 +159,26 @@
     }
   }
 
-  const handoff = takeHandoff();
-  if (handoff) {
+  function consumeHandoff() {
+    const handoff = takeHandoff();
+    if (!handoff) return false;
     void openText(String(handoff.text), handoff.title ? `${handoff.title}.md` : "from-mdm.md");
+    return true;
   }
+
+  consumeHandoff();
+
+  // MDM 慢路径：先开本窗再写 localStorage → 用 storage 事件灌入（同页写入不触发，故另轮询）
+  window.addEventListener("storage", (e) => {
+    if (e.key === HANDOFF_KEY && e.newValue) consumeHandoff();
+  });
+  let handoffPolls = 0;
+  const handoffTimer = window.setInterval(() => {
+    handoffPolls += 1;
+    if (consumeHandoff() || handoffPolls >= 40 || hasDoc) {
+      window.clearInterval(handoffTimer);
+    }
+  }, 120);
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});

@@ -3639,7 +3639,8 @@
       applySplit();
       if (state.viewMode !== "edit") {
         if (state.previewStale) state.previewStale = false;
-        renderPreview();
+        // 用户点「预览/分屏」= 明确要看：大文档也直接渲染，勿再卡「仍然渲染一次」
+        renderPreview(true);
         renderOutline();
       } else {
         renderOutline();
@@ -4641,55 +4642,83 @@
     }
 
     /**
-     * 用独立 MD 阅读页打开。
-     * 先同步 window.open 保住用户手势（防弹窗拦截），正文走 localStorage 交接
-     * （noopener 新标签读不到 opener 的 sessionStorage）。
+     * 用独立 MD 阅读页打开（尽量 PWA/应用窗，而非浏览器标签）。
+     * - 禁止先开 about:blank（会掉成系统浏览器标签）
+     * - 手势内直接 open 阅读页 URL + popup 命名窗；正文 localStorage 交接
+     * - 阅读页监听 storage，晚到的交接也能灌入
      */
+    function openMdReadAppWindow(url) {
+      const aw = screen.availWidth || window.innerWidth || 1200;
+      const ah = screen.availHeight || window.innerHeight || 800;
+      const w = Math.min(1100, Math.max(720, Math.round(aw * 0.82)));
+      const h = Math.min(920, Math.max(560, Math.round(ah * 0.88)));
+      const left = Math.max(0, Math.round((aw - w) / 2));
+      const top = Math.max(0, Math.round((ah - h) / 2));
+      try {
+        return window.open(
+          url,
+          "devtools-mdread",
+          `popup=yes,width=${w},height=${h},left=${left},top=${top}`
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function writeMdReadHandoff(item, rawText) {
+      const HANDOFF_KEY = "devtools-mdread-doc";
+      const fm = parseFrontMatter(String(rawText || ""));
+      const body = fm.body != null ? String(fm.body) : String(rawText || "");
+      const payload = JSON.stringify({
+        text: body,
+        title:
+          item.title ||
+          String(item.fileName || "").replace(/\.(md|markdown|txt)$/i, "") ||
+          "document",
+        t: Date.now(),
+      });
+      try {
+        localStorage.setItem(HANDOFF_KEY, payload);
+      } catch (_) {}
+      try {
+        sessionStorage.setItem(HANDOFF_KEY, payload);
+      } catch (_) {}
+      return payload;
+    }
+
     async function openInMdRead(item) {
       if (!item) return;
       const url = new URL("./mdread/", location.href).href;
-      const HANDOFF_KEY = "devtools-mdread-doc";
-      // 手势内先开空白页；读盘完成后再写交接并跳转
-      let win = null;
+      // 尽量同步拿到正文：可先写交接再开窗（阅读页首屏即有内容）
+      let raw = null;
       try {
-        win = window.open("about:blank", "_blank");
+        if (state.currentId === item.id && state.view) {
+          // 编辑器里已是去 front matter 的正文
+          raw = getEditorText();
+        } else if (state.bodyCache?.has(item.id)) {
+          raw = state.bodyCache.get(item.id);
+        }
       } catch (_) {
-        win = null;
+        raw = null;
       }
       try {
-        const text = await readDocText(item);
-        const payload = JSON.stringify({
-          text: String(text || ""),
-          title:
-            item.title ||
-            String(item.fileName || "").replace(/\.(md|markdown|txt)$/i, "") ||
-            "document",
-          t: Date.now(),
-        });
-        try {
-          localStorage.setItem(HANDOFF_KEY, payload);
-        } catch (_) {}
-        try {
-          sessionStorage.setItem(HANDOFF_KEY, payload);
-        } catch (_) {}
-        if (win && !win.closed) {
-          try {
-            win.location.href = url;
-            return;
-          } catch (_) {
-            try {
-              win.close();
-            } catch (_) {}
+        if (raw != null) {
+          writeMdReadHandoff(item, raw);
+          const win = openMdReadAppWindow(url);
+          if (!win) {
+            setErr("浏览器拦截了阅读页窗口，请允许本站弹窗后重试；或先把「MD 阅读」加到桌面再打开");
           }
+          return;
         }
-        const again = window.open(url, "_blank");
-        if (!again) {
-          setErr("浏览器拦截了阅读页弹窗，请允许本站弹窗后重试，或直接打开「MD 阅读」拖入文件");
+        // 慢路径：手势内先开阅读页（应用窗），读盘后再写交接（storage 事件灌入）
+        const win = openMdReadAppWindow(url);
+        if (!win) {
+          setErr("浏览器拦截了阅读页窗口，请允许本站弹窗后重试；或先把「MD 阅读」加到桌面再打开");
+          return;
         }
+        const text = await readDocText(item);
+        writeMdReadHandoff(item, text);
       } catch (err) {
-        try {
-          win?.close();
-        } catch (_) {}
         setErr(`无法传到阅读页：${err?.message || err}（可直接打开阅读页拖入文件）`);
       }
     }

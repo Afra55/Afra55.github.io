@@ -39,18 +39,26 @@ t("拖入换文：全局 drop → openFile", () => {
   assert.ok(app.includes("openFile"));
 });
 
-t("MDM 交接：localStorage + 手势内先 open about:blank", () => {
+t("MDM 交接：直接开阅读页应用窗（禁止 about:blank）", () => {
+  assert.ok(mdm.includes("function openMdReadAppWindow"));
   const fn = mdm.slice(mdm.indexOf("async function openInMdRead"), mdm.indexOf("function showListCtx"));
-  assert.ok(fn.includes('localStorage.setItem(HANDOFF_KEY'));
-  assert.ok(fn.includes('window.open("about:blank"'));
-  assert.ok(fn.includes("win.location.href = url"));
-  assert.ok(!/window\.open\(url,\s*"_blank",\s*"noopener"\)/.test(fn));
+  assert.ok(fn.includes("openMdReadAppWindow"));
+  assert.ok(fn.includes("writeMdReadHandoff"));
+  assert.ok(!fn.includes("about:blank"));
+  assert.ok(mdm.includes("popup=yes"));
 });
 
-t("阅读页 takeHandoff 读 localStorage（兼容 sessionStorage）", () => {
+t("阅读页 takeHandoff + storage/轮询接慢路径", () => {
   assert.ok(app.includes("function takeHandoff"));
   assert.ok(app.includes("localStorage") && app.includes("sessionStorage"));
   assert.ok(app.includes('removeItem(HANDOFF_KEY)'));
+  assert.ok(app.includes('addEventListener("storage"'));
+  assert.ok(app.includes("handoffTimer") || app.includes("setInterval"));
+});
+
+t("点预览/分屏强制渲染，不卡「仍然渲染一次」", () => {
+  const apply = mdm.slice(mdm.indexOf("function applyViewMode"), mdm.indexOf("(function bindSplitter"));
+  assert.ok(apply.includes("renderPreview(true)"));
 });
 
 console.log(`mdread-focus.test.js: ${n} passed`);
