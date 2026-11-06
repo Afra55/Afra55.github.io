@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * 片尾：编辑停帧 ≡ 播放截断；拖拽 ≡ 按钮 1 源帧；播放须先 pause 再 seek。
+ * 片尾：暂停停末帧；播放提前 1 源帧截断（防解码超前多画）。
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -35,56 +35,37 @@ function loadSeek() {
   return box.fn;
 }
 
-t("暂停可停在末帧；播放在停帧处截断", () => {
+t("暂停可停在末帧；播放在停帧前一帧截断", () => {
   const seek = loadSeek();
   const keeps = [{ start: 1, end: 5 }];
   const ek = 1 / 30;
   const lastStart = 5 - ek;
   assert.strictEqual(seek(keeps, lastStart, { paused: true, endKeepSec: ek }), null);
-  assert.strictEqual(seek(keeps, lastStart + ek * 0.2, { paused: true, endKeepSec: ek }), null);
-  // 播放：到达停帧即循环（endLimit = end - endKeep）
+  // 播放：endLimit = end - 2/fps → 到达停帧即循环
   const atPark = seek(keeps, lastStart, { paused: false, endKeepSec: ek });
   assert.ok(atPark != null && Math.abs(atPark - 1) < 1e-9);
-  const pastPark = seek(keeps, lastStart + ek * 0.5, { paused: false, endKeepSec: ek });
-  assert.ok(pastPark != null && Math.abs(pastPark - 1) < 1e-9);
-  // 停帧前一帧仍可播
-  assert.strictEqual(seek(keeps, lastStart - ek * 0.5, { paused: false, endKeepSec: ek }), null);
+  // 停帧再往前超过 1 帧才仍可播（播放 endLimit = end-2/fps）
+  assert.strictEqual(seek(keeps, lastStart - ek * 1.1, { paused: false, endKeepSec: ek }), null);
   const park = seek(keeps, 5, { paused: true, endKeepSec: ek });
   assert.ok(park != null && Math.abs(park - lastStart) < 1e-9);
 });
 
-t("编辑内 clipPlayWindow 先 pause、钉停帧、finally 必清 looping", () => {
+t("clipPlayWindow：提前截断、先 pause、无钉回 park、finally 清 looping", () => {
   const fn = vtrim.slice(vtrim.indexOf("function clipPlayWindow"), vtrim.indexOf("function armFrameWatch"));
   assert.ok(fn.includes("video.pause()"));
-  assert.ok(fn.includes("endKeepSec()"));
-  assert.ok(fn.includes("seekPlayheadExact(jump)"));
-  assert.ok(fn.includes("video.currentTime = park"));
+  assert.ok(fn.includes("park - step"));
+  assert.ok(!fn.includes("video.currentTime = park"));
   assert.ok(fn.includes("finally"));
   assert.ok(fn.includes("playWindowLooping = false"));
-  assert.ok(fn.includes("armFrameWatch()"));
-  assert.ok(fn.includes("永久短路") || fn.includes("第 3 遍"));
+  assert.ok(fn.includes("钉回 park 反而") || fn.includes("解码画面常超前"));
 });
 
-t("拖拽中用 snapTrimHandle（与按钮同帧格）", () => {
-  const move = vtrim.slice(
-    vtrim.indexOf("function onTimelinePointerMove"),
-    vtrim.indexOf("function onTimelinePointerUp")
+t("外预览 playEndPad 为 2×endKeep", () => {
+  const fallback = vbb.slice(
+    vbb.indexOf("function vbbPreviewSeekForKeepRanges"),
+    vbb.indexOf("function vbbKeepRangesFromEdit")
   );
-  assert.ok(move.includes('snapTrimHandle(raw, "end")'));
-  assert.ok(move.includes('snapTrimHandle(raw, "start")'));
-  assert.ok(!/snapNearCutouts\(snapEdgeOnly\(raw/.test(move));
-});
-
-t("外预览 enforce：越过片尾先 pause，keepPlaying 不带播 seek", () => {
-  const enforce = vbb.slice(
-    vbb.indexOf("function enforceVbbEditPlaybackWindow"),
-    vbb.indexOf("function armVbbEditFrameWatch")
-  );
-  assert.ok(enforce.includes("earlySlop"));
-  assert.ok(enforce.includes("pastSlop"));
-  assert.ok(enforce.includes("vbbVideo.pause()"));
-  assert.ok(enforce.includes("keepPlaying: false"));
-  assert.ok(!/applyVbbSeek\(next, \{ keepPlaying: true \}\)/.test(enforce));
+  assert.ok(fallback.includes("endKeep * 2"));
 });
 
 console.log(`vbb-end-play-align.test.js: ${n} passed`);

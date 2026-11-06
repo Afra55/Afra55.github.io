@@ -1746,9 +1746,9 @@
       const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
       const park = endKeepSec();
       const step = endKeepStepSec();
-      // 硬闸：到达片尾停帧立刻停画（循环多遍后解码队列常超前，不能再放宽）
+      // 硬闸：停帧前 1 源帧就切（解码画面常超前 currentTime；钉回 park 反而每遍多画）
       let jump = null;
-      if (cur >= park - 1e-4) {
+      if (cur >= park - step + 1e-4) {
         jump = startSec;
       } else {
         jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
@@ -1758,7 +1758,6 @@
       }
       if (jump == null || !Number.isFinite(jump)) return false;
       if (Math.abs(jump - cur) < 0.001) return false;
-      // 先 pause 再 seek：否则异步 seek 前解码器会继续吐出片尾后几帧
       try {
         video.pause();
       } catch (_) {}
@@ -1766,14 +1765,6 @@
       const gen = ++playWindowGen;
       void (async () => {
         try {
-          // 循环多遍后解码帧会超前 currentTime：先钉回停帧冲掉脏帧，再回片头
-          if (cur >= park - step * 2) {
-            try {
-              video.currentTime = park;
-            } catch (_) {}
-            await waitSeek(video);
-            if (closed || gen !== playWindowGen) return;
-          }
           await seekPlayheadExact(jump);
           if (closed || gen !== playWindowGen) return;
           playWindowLooping = false;
@@ -1784,7 +1775,6 @@
         } catch (_) {
           /* finally 清 looping */
         } finally {
-          // gen 被更新时也必须清掉，否则第 3 遍起 clipPlayWindow 永久短路 → 多画几帧
           if (gen === playWindowGen) playWindowLooping = false;
         }
       })();
@@ -2643,8 +2633,8 @@
   /**
    * 外预览 / 编辑内播放：源时间若落在 keep 外（删中间 / 片头片尾外），返回应 seek 到的时间；否则 null。
    * keep 为半开 [start,end)；暂停停在末段最后一源帧（end - 1/fps）。
-   * 播放在「片尾停帧」(end-1/fps) 切断（与点片尾所见同一帧）；暂停可停在该帧。
-   * 真正防多画靠调用方先 pause 再 seek（单靠提前量挡不住解码器迟到）。
+   * 播放在「停帧前 1 源帧」切断（解码画面常超前 currentTime）；暂停仍停在末帧。
+   * 调用方须先 pause 再 seek。
    * @param {{start:number,end:number}[]} keeps
    * @param {number} t
    * @param {{ paused?: boolean, endKeepSec?: number, srcFps?: number }} [opts]
@@ -2663,8 +2653,8 @@
       Number(opts?.endKeepSec) > 0
         ? Number(opts.endKeepSec)
         : resolveEndKeepSec(opts?.srcFps || opts?.edit || 0);
-    // 播放：与停帧对齐（end-1/fps）；不再用 0.75（偏晚）或 2×（少播一帧）
-    const playEndPad = Math.max(endEps, endKeep);
+    // 播放：end - 2/fps（停帧再提前 1 帧），对冲解码超前
+    const playEndPad = Math.max(endEps, endKeep * 2);
     for (let i = 0; i < keeps.length; i++) {
       const k = keeps[i];
       const endLimit = paused ? k.end - endEps : k.end - playEndPad;
