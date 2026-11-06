@@ -96,10 +96,11 @@ t("预裁只复位 PTS，不在预裁阶段加速（避免编辑后再 ×speed �
   assert.ok(!/"copy"/.test(trimFn) && !/'copy'/.test(trimFn));
 });
 
-t("编码侧：crop 在 setpts 倍速之前（画面裁切坐标系不被加速打乱）", () => {
-  assert.ok(/cropFilter\}?\$\{?speedFilter|cropFilter\$\{speedFilter/.test(shared.replace(/\s+/g, "")));
-  // 更稳：同一条 chain 里 crop 在 setpts 前
-  assert.ok(shared.includes("${cropFilter}${speedFilter}fps="));
+t("编码侧：crop 在硬切/倍速之前；fps= 前须 trim 硬切黄柄", () => {
+  assert.ok(shared.includes("function vbbEncodeHardTrimFilters"));
+  assert.ok(shared.includes("trim=duration="));
+  // crop → timeFilter(含 trim) → fps，禁止 fps 先看到窗外画面
+  assert.ok(shared.includes("${cropFilter}${timeFilter}fps="));
 });
 
 t("原生桥：编辑起点 -ss + 片源 span（半开收尾），倍速只走 setpts", () => {

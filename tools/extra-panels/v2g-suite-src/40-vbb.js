@@ -5329,6 +5329,8 @@
                   speedLimitSec: vbbSpeedLimitSec(),
                   crop: vbbCrop,
                   forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05 || speedFac > 1.01,
+                  keepAligned: true,
+                  srcFps: Number(item.srcFps) || Number(item.edit?.srcFps) || 0,
                   ffmpeg: ffmpegLease || null,
                   isAborted: itemAborted,
                   onProgress: (local, text) => {
@@ -5611,6 +5613,8 @@
             speedLimitSec: vbbSpeedLimitSec(),
             crop: vbbCrop,
             forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
+            keepAligned: true,
+            srcFps: Number(win.edit?.srcFps) || Number(getActiveVbbEditItem()?.srcFps) || 0,
             isAborted: () => abortVbb,
             onProgress: (local, text) => {
               const p = Math.min(0.98, 0.12 + Math.min(0.86, local) * 0.86);
