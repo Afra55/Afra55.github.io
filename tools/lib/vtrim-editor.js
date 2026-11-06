@@ -1724,15 +1724,16 @@
     function loopPlayToStart() {
       if (playWindowLooping) return;
       playWindowLooping = true;
-      playWindowGen += 1;
-      const gen = playWindowGen;
+      const gen = ++playWindowGen;
       try {
         video.pause();
       } catch (_) {}
       seekPlayheadExact(startSec)
-        .then(() => {
+        .then(async () => {
           if (closed || gen !== playWindowGen) return;
-          return video.play();
+          playWindowLooping = false;
+          await video.play().catch(() => {});
+          if (!closed && gen === playWindowGen && !video.paused) armFrameWatch();
         })
         .catch(() => {})
         .finally(() => {
@@ -1745,9 +1746,9 @@
       const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
       const park = endKeepSec();
       const step = endKeepStepSec();
-      // 硬闸：越过停帧（允许停帧本身短暂停留）立刻停画，循环到片头
+      // 硬闸：到达片尾停帧立刻停画（循环多遍后解码队列常超前，不能再放宽）
       let jump = null;
-      if (cur >= park + Math.max(0.006, step * 0.2)) {
+      if (cur >= park - 1e-4) {
         jump = startSec;
       } else {
         jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
@@ -1763,15 +1764,30 @@
       } catch (_) {}
       playWindowLooping = true;
       const gen = ++playWindowGen;
-      seekPlayheadExact(jump)
-        .then(() => {
+      void (async () => {
+        try {
+          // 循环多遍后解码帧会超前 currentTime：先钉回停帧冲掉脏帧，再回片头
+          if (cur >= park - step * 2) {
+            try {
+              video.currentTime = park;
+            } catch (_) {}
+            await waitSeek(video);
+            if (closed || gen !== playWindowGen) return;
+          }
+          await seekPlayheadExact(jump);
           if (closed || gen !== playWindowGen) return;
           playWindowLooping = false;
-          return video.play();
-        })
-        .catch(() => {
-          playWindowLooping = false;
-        });
+          await video.play().catch(() => {});
+          if (closed || gen !== playWindowGen || video.paused) return;
+          armFrameWatch();
+          if (!playheadRaf) playheadRaf = requestAnimationFrame(tickPlayhead);
+        } catch (_) {
+          /* finally 清 looping */
+        } finally {
+          // gen 被更新时也必须清掉，否则第 3 遍起 clipPlayWindow 永久短路 → 多画几帧
+          if (gen === playWindowGen) playWindowLooping = false;
+        }
+      })();
       return true;
     }
 

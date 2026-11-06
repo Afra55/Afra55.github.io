@@ -53,11 +53,16 @@ t("暂停可停在末帧；播放在停帧处截断", () => {
   assert.ok(park != null && Math.abs(park - lastStart) < 1e-9);
 });
 
-t("编辑内 clipPlayWindow 先 pause 再 seek", () => {
+t("编辑内 clipPlayWindow 先 pause、钉停帧、finally 必清 looping", () => {
   const fn = vtrim.slice(vtrim.indexOf("function clipPlayWindow"), vtrim.indexOf("function armFrameWatch"));
   assert.ok(fn.includes("video.pause()"));
   assert.ok(fn.includes("endKeepSec()"));
   assert.ok(fn.includes("seekPlayheadExact(jump)"));
+  assert.ok(fn.includes("video.currentTime = park"));
+  assert.ok(fn.includes("finally"));
+  assert.ok(fn.includes("playWindowLooping = false"));
+  assert.ok(fn.includes("armFrameWatch()"));
+  assert.ok(fn.includes("永久短路") || fn.includes("第 3 遍"));
 });
 
 t("拖拽中用 snapTrimHandle（与按钮同帧格）", () => {
