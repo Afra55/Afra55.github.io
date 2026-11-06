@@ -157,17 +157,16 @@ t("编码：keep 对齐路径片尾垫>0；窗函数 encodeT 严小于半开上�
      this.win = vbbEncodeWindowFromKeepSpan;`,
     box
   );
-  // 编辑路径仍收 1 帧浮点余量；真正片尾靠 fps 前后双 trim
+  // 编辑路径收 4 帧垫；窗函数再 floor-2
   const pad = box.tail(15, 30, { startSec: 1.2 });
   assert.ok(pad + 1e-9 >= box.edge(15, 30));
-  assert.ok(pad + 1e-9 >= 1 / 30);
+  assert.ok(pad + 1e-9 >= 4 / 30);
   assert.ok(box.tail(15, 30, {}) + 1e-9 >= 0.5 / 15);
-  // 半开微收：encodeT = span-1e-3；frameCount = floor(effSpan*fps)，不再减 1
   const w = box.win(10, 1, 15);
   assert.ok(w.encodeT < 10 - 1e-9, `encodeT=${w.encodeT} 须 < 10`);
-  assert.ok(Math.abs(w.encodeT - (10 - 1e-3)) < 1e-9);
-  assert.ok(w.frameCount === Math.floor(w.effSpan * 15 + 1e-9));
+  assert.ok(w.frameCount <= Math.floor((10 - 1 / 15) * 15 + 1e-9) - 2);
   assert.ok((w.frameCount - 1) / 15 < 10 - 1e-9);
+  assert.ok(w.encodeT + 1e-9 >= w.frameCount / 15);
   assert.ok(shared.includes("function vbbEncodeOutTrimFilters"));
 });
 

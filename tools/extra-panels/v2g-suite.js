@@ -1356,15 +1356,15 @@
           }
   
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
-          // fps 前切源窗（防 -frames:v 凑帧读过黄柄）；fps 后再按成片时长切（防 EOF flush）
+          // fps 前切源窗（防凑帧读过黄柄）；fps 后再按成片时长切 + select 限帧（防 EOF flush）
           const timeFilter = vbbEncodeHardTrimFilters(speed, encodeT);
-          const outTrim = vbbEncodeOutTrimFilters(effSpan);
+          const outTrim = vbbEncodeOutTrimFilters(effSpan, fps);
           // 噪点：源有颗粒 + 大幅下采样（如 1170→300 是 4 倍）时，bicubic 会混叠、GIF 看着全是噪点。
           // 先轻度 hqdn3d 降噪、再用 lanczos 缩放。若 wasm 核心未编入 hqdn3d，exec 返回非 0，下面自动回退重跑。
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
           const buildFilterArgs = (denoise) => {
             const chain =
-              `${cropFilter}${timeFilter}fps=${fps},${outTrim}${denoise ? DENOISE : ""}` +
+              `${cropFilter}${timeFilter}fps=${fps},${outTrim}select='lt(n\\,${frameCount})',${denoise ? DENOISE : ""}` +
               `scale=${maxW}:-2:flags=lanczos${brightFilter}`;
             if (wmBytes && wmBytes.length) {
               return [
@@ -1623,14 +1623,15 @@
       }
 
       /**
-       * keep 对齐路径片尾垫（秒）：只留 1 源/GIF 帧浮点余量。
-       * 根因已用「源 trim（fps 前）+ 成片 trim（fps 后）」堵住凑帧/EOF flush，不再靠连收 3 帧碰运气。
+       * keep 对齐路径片尾垫（秒）。
+       * out-trim 按时间切时，EOF flush 帧的 PTS 常仍落在 duration 内，挡不住「多几帧」；
+       * 编码窗相对黄柄半开上界再收 4 源/GIF 帧（取较大），保证成片严格停在柄内。
        */
       function vbbEncodeKeepEdgePadSec(gifFps, srcFps) {
         const g = 1 / Math.max(8, Number(gifFps) || 15);
         const src = Number(srcFps) || 0;
         const s = src >= 5 && src <= 240 ? 1 / src : 1 / 25;
-        return Math.max(g, s);
+        return Math.max(4 * g, 4 * s);
       }
 
       /** @deprecated 同 vbbEncodeKeepEdgePadSec（片尾） */
@@ -1654,18 +1655,21 @@
 
       /**
        * 由（已收片尾垫的）keep 窗长推导编码 -t 与输出帧数。
-       * 半开微收即可；不再 floor 后减 1——EOF flush 由 fps 后的 out trim 按时间丢掉。
+       * floor 后再减 2：对冲 fps= EOF flush（PTS 仍落在 out-trim 窗内的那几帧）。
        */
       function vbbEncodeWindowFromKeepSpan(span, speed, gifFps) {
         const rawSpan = Math.max(0.05, Number(span) || 0.05);
         const spd = Math.max(1, Number(speed) || 1);
         const fpsOut = Math.max(8, Number(gifFps) || 15);
-        // 半开上界：源时长微收，避免 PTS==end 边界帧进窗
-        const encodeT = Math.max(0.05, rawSpan - 1e-3);
+        const encodeT = Math.max(0.05, rawSpan - 1 / fpsOut);
         const effSpan = encodeT / spd;
-        // 帧数上限 = 开区间自然采样数；真正片尾看 fps 后 trim=effSpan
-        const frameCount = Math.max(2, Math.floor(effSpan * fpsOut + 1e-9));
-        return { encodeT, frameCount, effSpan };
+        const frameCount = Math.max(2, Math.floor(effSpan * fpsOut + 1e-9) - 2);
+        const encodeT2 = Math.min(rawSpan, (frameCount / fpsOut) * spd);
+        return {
+          encodeT: Math.max(0.05, encodeT2),
+          frameCount,
+          effSpan: Math.max(0.05, encodeT2) / spd,
+        };
       }
 
       /**
@@ -1686,13 +1690,14 @@
       }
 
       /**
-       * fps= 之后按成片时间轴再 trim。
-       * 根因：wasm fps= 在输入 EOF 时常 flush 多 1 帧；按 n 减帧是猜，按成片时长再 trim 是根治。
+       * fps= 之后按成片时间轴再 trim，并再提前收 2 个输出帧。
+       * EOF flush 帧 PTS 往往仍落在原 duration 内，只切 duration=effSpan 不够。
        * @returns {string} 以逗号结尾（可接 denoise/scale）
        */
-      function vbbEncodeOutTrimFilters(outDurSec) {
+      function vbbEncodeOutTrimFilters(outDurSec, gifFps) {
+        const fpsOut = Math.max(8, Number(gifFps) || 15);
         const dur0 = Math.max(0.05, Number(outDurSec) || 0.05);
-        const dur = Math.max(0.05, dur0 - 1e-4);
+        const dur = Math.max(0.05, dur0 - 2 / fpsOut);
         return `trim=duration=${dur},setpts=PTS-STARTPTS,`;
       }
 
@@ -2297,10 +2302,10 @@
           const buildRawArgs = (denoise, sourceDurSec, maxFrames) => {
             const timeFilter = vbbEncodeHardTrimFilters(speed, sourceDurSec);
             const nMax = Math.max(2, Math.floor(Number(maxFrames) || 2));
-            // 本段成片时长 = nMax/fps；fps 后再 trim，丢掉 EOF flush
-            const outTrim = vbbEncodeOutTrimFilters(nMax / Math.max(8, fps));
+            // 本段成片时长 = nMax/fps；fps 后再 trim + select，丢掉 EOF flush
+            const outTrim = vbbEncodeOutTrimFilters(nMax / Math.max(8, fps), fps);
             const chain =
-              `${cropFilter}${timeFilter}fps=${fps},${outTrim}${denoise ? DENOISE : ""}` +
+              `${cropFilter}${timeFilter}fps=${fps},${outTrim}select='lt(n\\,${nMax})',${denoise ? DENOISE : ""}` +
               `scale=${outW}:${outH}:flags=lanczos${brightFilter},format=rgba`;
             if (wmBytes && wmBytes.length) {
               return [
