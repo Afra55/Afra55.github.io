@@ -1,7 +1,8 @@
 "use strict";
 
 /**
- * 根因：预览/成片共用源帧半开窗 [startF,endF)；禁止再叠编码垫。
+ * 预览/成片 keep 共用源帧半开窗 [startF,endF)。
+ * 编码 -t/frameCount 另收片尾垫 + 半帧 epsilon（防 fps= 多吐），不改预览 keep。
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -137,27 +138,36 @@ t("编辑后仍 forceAccurateCut", () => {
   assert.ok(vbb.includes("forceAccurateCut: Boolean(prepared.cutNote)"));
 });
 
-t("编码：keep 对齐路径垫=0；由 frameCount 钳 encodeT", () => {
+t("编码：keep 对齐路径片尾垫>0；窗函数 encodeT 严小于半开上界", () => {
   assert.ok(shared.includes("function vbbEncodeWindowFromKeepSpan"));
   assert.ok(shared.includes("function vbbEncodeSpanTailPadSec"));
+  assert.ok(shared.includes("function vbbEncodeKeepEdgePadSec"));
+  const mEdge = shared.match(/function vbbEncodeKeepEdgePadSec\([\s\S]*?\n      \}/);
   const m = shared.match(/function vbbEncodeSpanTailPadSec\([\s\S]*?\n      \}/);
   const mWin = shared.match(/function vbbEncodeWindowFromKeepSpan\([\s\S]*?\n      \}/);
-  assert.ok(m && mWin);
+  assert.ok(mEdge && m && mWin);
   const box = {};
   vm.runInNewContext(
-    `${m[0]}\n${mWin[0]}
+    `${mEdge[0]}\n${m[0]}\n${mWin[0]}
      function vbbEncodeHalfOpenPadSec(gifFps, srcFps) {
        return Math.max(0.5 / Math.max(8, gifFps || 15), 1 / 120);
      }
+     this.edge = vbbEncodeKeepEdgePadSec;
      this.tail = vbbEncodeSpanTailPadSec;
      this.win = vbbEncodeWindowFromKeepSpan;`,
     box
   );
-  assert.strictEqual(box.tail(15, 30, { startSec: 1.2 }), 0);
+  // 编辑路径必须收尾垫（073347 清零后 GIF 尾多帧）
+  const pad = box.tail(15, 30, { startSec: 1.2 });
+  assert.ok(pad + 1e-9 >= box.edge(15, 30));
+  assert.ok(pad + 1e-9 >= 2 / 30);
   assert.ok(box.tail(15, 30, {}) + 1e-9 >= 0.5 / 15);
+  // span*fps 整数时：半帧 epsilon 须让 encodeT < span，末采样 < 半开上界
   const w = box.win(10, 1, 15);
-  assert.strictEqual(w.frameCount, Math.floor(10 * 15 + 1e-9));
-  assert.ok(w.encodeT <= 10 + 1e-9);
+  assert.ok(w.encodeT < 10 - 1e-9, `encodeT=${w.encodeT} 须 < 10`);
+  assert.ok(w.encodeT <= 10 - 0.5 / 15 + 1e-9);
+  assert.ok(w.frameCount <= Math.floor((10 - 0.5 / 15) * 15 + 1e-9));
+  assert.ok((w.frameCount - 1) / 15 < 10 - 1e-9);
   assert.ok(w.encodeT + 1e-9 >= w.frameCount / 15);
 });
 

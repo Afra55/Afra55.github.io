@@ -1209,7 +1209,7 @@
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
-        // keep 源帧半开窗：不叠片头片尾垫；frameCount 与 -t 同一套推导
+        // keep 预览半开窗仍原样；编码再收片尾垫（见 vbbEncodeSpanTailPadSec），防 fps= 多吐
         const tailPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
         const keepSpan = Math.max(0.05, span - tailPad);
         let encodeSs = Math.max(0, startSec);
@@ -1570,31 +1570,50 @@
       }
 
       /**
-       * 根因修复后：keep 已是源帧半开窗 [start,end)，编辑/精确切路径不再叠片头片尾垫。
-       * 仅旧「非 keep 对齐」路径仍用半帧垫。
+       * keep 对齐路径片尾垫（秒）：预览 keep 已是源帧半开 [start,end)，但 wasm/ffmpeg
+       * 的 fps= 滤镜在 -t 贴上界时仍常多吐 1～数帧（预览对、GIF 尾多）。
+       * 073347 清零后回归；只动编码 -t/frameCount，不改预览 keep。
+       * 两端各按 2 源/GIF 帧取大（与 95d6760c 实证一致）。
        */
+      function vbbEncodeKeepEdgePadSec(gifFps, srcFps) {
+        const g = 1 / Math.max(8, Number(gifFps) || 15);
+        const src = Number(srcFps) || 0;
+        const s = src >= 5 && src <= 240 ? 1 / src : 1 / 25;
+        return Math.max(2 * g, 2 * s);
+      }
+
+      /** @deprecated 同 vbbEncodeKeepEdgePadSec（片尾） */
+      function vbbEncodeKeepTailPadSec(gifFps, srcFps) {
+        return vbbEncodeKeepEdgePadSec(gifFps, srcFps);
+      }
+
+      /** 编辑/精确切：片尾垫；其它走旧半开垫 */
       function vbbEncodeSpanTailPadSec(gifFps, srcFps, opts) {
         const o = opts || {};
-        if (o.forceAccurateCut || o.keepAligned || Number.isFinite(o.startSec)) return 0;
+        if (o.forceAccurateCut || o.keepAligned || Number.isFinite(o.startSec)) {
+          return vbbEncodeKeepEdgePadSec(gifFps, srcFps);
+        }
         return vbbEncodeHalfOpenPadSec(gifFps, srcFps);
       }
 
-      /** 编辑 keep 路径片头垫恒为 0（半开窗已由 keep.start 表达） */
+      /** 编辑 keep 路径片头垫恒为 0（半开窗已由 keep.start 表达；片尾多帧才是主诉） */
       function vbbEncodeSpanHeadPadSec(_gifFps, _srcFps, _opts, _startSec) {
         return 0;
       }
 
       /**
-       * 由 keep 窗长推导编码 -t 与输出帧数：先定 frameCount=floor(effSpan*gifFps)，
-       * 再把 encodeT 钳到这些帧所需的源时长，避免 fps 滤镜为凑帧读过半开上界。
+       * 由（已收片尾垫的）keep 窗长推导编码 -t 与输出帧数。
+       * 再收半个输出帧 epsilon（与桥 gifski-core 一致），避免 -t 贴上界时 fps= 多吐。
        */
       function vbbEncodeWindowFromKeepSpan(span, speed, gifFps) {
-        const srcSpan = Math.max(0.05, Number(span) || 0.05);
+        const rawSpan = Math.max(0.05, Number(span) || 0.05);
         const spd = Math.max(1, Number(speed) || 1);
         const fpsOut = Math.max(8, Number(gifFps) || 15);
+        const eps = 0.5 / fpsOut;
+        const srcSpan = Math.max(0.05, rawSpan - eps);
         const effSpan = srcSpan / spd;
         const frameCount = Math.max(2, Math.floor(effSpan * fpsOut + 1e-9));
-        const encodeT = Math.min(srcSpan, (frameCount / fpsOut) * spd);
+        const encodeT = Math.min(rawSpan, (frameCount / fpsOut) * spd);
         return { encodeT: Math.max(0.05, encodeT), frameCount, effSpan: encodeT / spd };
       }
 
@@ -1877,7 +1896,7 @@
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
-        // keep 半开窗原样下发；桥内仅保留半帧输出时钟 epsilon
+        // 面板先收 keep 片尾垫；桥内再收半帧，叠加以防片尾多吐
         const tailPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
         const encodeStart = Math.max(0, startSec);
         const { encodeT: encodeSpan, frameCount, effSpan } = vbbEncodeWindowFromKeepSpan(
