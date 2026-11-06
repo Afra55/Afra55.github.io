@@ -653,16 +653,31 @@
   // 约 100KB：日常粘贴/编辑够用；再大就输入时不上色，失焦/美化再上色，避免整篇重绘卡顿
   const JSON_LIVE_HL_MAX = 100000;
   const jsonHlTimers = new WeakMap();
-  /** @type {WeakMap<Element, { stack: string[], idx: number, typing: boolean, before: string, _idle?: number }>} */
+  /**
+   * 自管撤销栈（着色会清掉浏览器原生 undo）。
+   * 每项带 caret：Ctrl+Z / Y 后光标回到该快照位置，而不是整段末尾。
+   * @typedef {{ text: string, caret: number }} JsonHistEntry
+   * @type {WeakMap<Element, { stack: JsonHistEntry[], idx: number, typing: boolean, before: string, _idle?: number }>}
+   */
   const jsonHistByEl = new WeakMap();
 
-  function pushJsonExternalHist(el, text) {
+  function jsonHistEntry(text, caret) {
+    const t = text == null ? "" : String(text);
+    const c = Math.max(0, Math.min(t.length, Number.isFinite(caret) ? Number(caret) : t.length));
+    return { text: t, caret: c };
+  }
+
+  function pushJsonExternalHist(el, text, caret) {
     const hist = jsonHistByEl.get(el);
     if (!hist) return;
     const t = text == null ? getJsonText(el) : String(text);
-    if (hist.stack[hist.idx] === t) return;
+    const c = caret == null ? getJsonCaret(el) : caret;
+    if (hist.stack[hist.idx]?.text === t) {
+      hist.stack[hist.idx].caret = Math.max(0, Math.min(t.length, Number(c) || 0));
+      return;
+    }
     hist.stack = hist.stack.slice(0, hist.idx + 1);
-    hist.stack.push(t);
+    hist.stack.push(jsonHistEntry(t, c));
     if (hist.stack.length > 80) hist.stack.shift();
     else hist.idx += 1;
     hist.before = t;
@@ -700,36 +715,67 @@
       el.contentEditable = "true";
     }
     // contenteditable 每次 innerHTML 着色会清空浏览器原生撤销栈 → 自管 Ctrl+Z / Ctrl+Y
-    const hist = { stack: [getJsonText(el)], idx: 0, typing: false, before: getJsonText(el) };
+    const seed = getJsonText(el);
+    const hist = {
+      stack: [jsonHistEntry(seed, seed.length)],
+      idx: 0,
+      typing: false,
+      before: seed,
+    };
     jsonHistByEl.set(el, hist);
     const MAX_HIST = 80;
     let applyingHist = false;
 
-    function commitHist(text) {
+    function commitHist(text, caret) {
       const t = text == null ? getJsonText(el) : String(text);
-      if (hist.stack[hist.idx] === t) return;
+      const c = caret == null ? getJsonCaret(el) : caret;
+      if (hist.stack[hist.idx]?.text === t) {
+        hist.stack[hist.idx].caret = Math.max(0, Math.min(t.length, Number(c) || 0));
+        return;
+      }
       hist.stack = hist.stack.slice(0, hist.idx + 1);
-      hist.stack.push(t);
+      hist.stack.push(jsonHistEntry(t, c));
       if (hist.stack.length > MAX_HIST) hist.stack.shift();
       else hist.idx += 1;
+    }
+
+    /** 无快照 caret 时：停在 from→to 的首个差异处（撤回改动的起点） */
+    function caretFromDiff(fromText, toText) {
+      const a = String(fromText || "");
+      const b = String(toText || "");
+      const lim = Math.min(a.length, b.length);
+      let i = 0;
+      while (i < lim && a.charCodeAt(i) === b.charCodeAt(i)) i += 1;
+      return Math.max(0, Math.min(b.length, i));
     }
 
     function applyHistAt(i) {
       if (i < 0 || i >= hist.stack.length) return;
       applyingHist = true;
+      const prevText = hist.stack[hist.idx]?.text || getJsonText(el);
       hist.idx = i;
-      const t = hist.stack[i] || "";
+      const entry = hist.stack[i] || jsonHistEntry("", 0);
+      const t = entry.text || "";
       hist.before = t;
       hist.typing = false;
       setJsonText(el, t, { keepCaret: false });
-      setJsonCaret(el, t.length);
+      const caret =
+        Number.isFinite(entry.caret) ? entry.caret : caretFromDiff(prevText, t);
+      try {
+        el.focus({ preventScroll: true });
+      } catch (_) {
+        try {
+          el.focus();
+        } catch (_) {}
+      }
+      setJsonCaret(el, Math.max(0, Math.min(t.length, caret)));
       saveJsonDraft(el);
       applyingHist = false;
     }
 
     function undoJson() {
       if (hist.typing) {
-        commitHist(getJsonText(el));
+        commitHist(getJsonText(el), getJsonCaret(el));
         hist.typing = false;
       }
       if (hist.idx <= 0) return;
@@ -767,7 +813,8 @@
       if (applyingHist || composing || hist.typing) return;
       hist.before = getJsonText(el);
       hist.typing = true;
-      commitHist(hist.before);
+      // 记下改前正文 + 当时光标；撤回时回到这里，而不是整段末尾
+      commitHist(hist.before, getJsonCaret(el));
     });
     el.addEventListener("input", () => {
       if (composing || applyingHist) return;
@@ -775,7 +822,7 @@
       clearTimeout(hist._idle);
       hist._idle = window.setTimeout(() => {
         hist.typing = false;
-        commitHist(getJsonText(el));
+        commitHist(getJsonText(el), getJsonCaret(el));
       }, 400);
     });
     // 失焦时无论大小都上一次色（大文件也只付一次成本）
@@ -784,7 +831,7 @@
       clearTimeout(hist._idle);
       hist.typing = false;
       const raw = getJsonText(el);
-      commitHist(raw);
+      commitHist(raw, getJsonCaret(el));
       setJsonText(el, raw, { keepCaret: false });
       saveJsonDraft(el);
     });
@@ -793,7 +840,7 @@
       e.preventDefault();
       if (!hist.typing) {
         hist.before = getJsonText(el);
-        commitHist(hist.before);
+        commitHist(hist.before, getJsonCaret(el));
         hist.typing = true;
       }
       const text = e.clipboardData?.getData("text/plain") ?? "";
