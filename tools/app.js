@@ -1957,6 +1957,10 @@
     return raw ? String(raw).trim() : "";
   }
 
+  /** 防连点 / 双路径各开一次；同一 url 短时只开一扇 */
+  let lastToolLaunchAt = 0;
+  let lastToolLaunchUrl = "";
+
   function openToolLaunchUrl(id) {
     const raw = toolLaunchUrl(id);
     if (!raw) return false;
@@ -1966,9 +1970,19 @@
     } catch (_) {
       return false;
     }
+    const now = Date.now();
+    if (url === lastToolLaunchUrl && now - lastToolLaunchAt < 900) return true;
+    lastToolLaunchUrl = url;
+    lastToolLaunchAt = now;
+    // 勿把 noopener 写进 window.open 第 3 参：成功时仍常返回 null，会误走 <a> 兜底开第二扇
     try {
-      const w = window.open(url, "_blank", "noopener,noreferrer");
-      if (w) return true;
+      const w = window.open(url, "_blank");
+      if (w) {
+        try {
+          w.opener = null;
+        } catch (_) {}
+        return true;
+      }
     } catch (_) {}
     try {
       const a = document.createElement("a");

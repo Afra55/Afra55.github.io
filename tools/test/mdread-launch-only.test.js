@@ -29,6 +29,19 @@ t("navigateTo 对 launchUrl 提前返回", () => {
   assert.ok(nav.includes("return;"));
 });
 
+t("openToolLaunchUrl 不用 noopener 特征串（防返回 null 再开第二窗）", () => {
+  const fn = app.slice(app.indexOf("function openToolLaunchUrl"), app.indexOf("function fallbackToolAfterLaunch"));
+  assert.ok(fn.includes('window.open(url, "_blank")'));
+  assert.ok(!fn.includes('window.open(url, "_blank", "noopener'));
+  assert.ok(fn.includes("w.opener = null"));
+  assert.ok(fn.includes("lastToolLaunchUrl"));
+});
+
+t("mdread-tool 同样避免 noopener 双开", () => {
+  assert.ok(mdTool.includes('window.open(url, "_blank")'));
+  assert.ok(!mdTool.includes('noopener,noreferrer'));
+});
+
 t("applyRoute 深链开一次后回退真实工具", () => {
   assert.ok(app.includes("fallbackToolAfterLaunch"));
   assert.ok(app.includes("launchUrl 深链"));

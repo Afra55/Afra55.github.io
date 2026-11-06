@@ -7,9 +7,15 @@
   const linkEl = document.getElementById("mdread-link");
 
   function openRead() {
+    // 勿用 window.open(..., "noopener")：成功也常返回 null，易误判失败再开一次
     try {
-      const w = window.open(url, "_blank", "noopener,noreferrer");
-      if (w) return;
+      const w = window.open(url, "_blank");
+      if (w) {
+        try {
+          w.opener = null;
+        } catch (_) {}
+        return;
+      }
     } catch (_) {}
     location.assign(url);
   }
