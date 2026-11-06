@@ -1040,33 +1040,80 @@
     }
   }
 
-  function downloadJsonText(text, filename) {
-    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
+  /** iPhone/iPad 上 a[download]+blob 常被静默忽略，优先系统分享存文件 */
+  function preferJsonShareSave() {
+    const ua = navigator.userAgent || "";
+    const mobile = /Android|iPhone|iPod|Mobile/i.test(ua) ||
+      (/Macintosh/i.test(ua) && Number(navigator.maxTouchPoints || 0) > 1);
+    return mobile && typeof navigator.share === "function";
+  }
+
+  function triggerAnchorDownload(url, filename) {
     const a = document.createElement("a");
     a.href = url;
     a.download = filename || "data.json";
     a.rel = "noopener";
+    a.style.display = "none";
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  /**
+   * @returns {Promise<"shared"|"downloaded"|"copied"|"cancelled">}
+   */
+  async function saveJsonFile(text, filename) {
+    const name = filename || "data.json";
+    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+    const file = new File([blob], name, { type: "application/json" });
+
+    if (preferJsonShareSave()) {
+      try {
+        if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: name });
+          return "shared";
+        }
+      } catch (err) {
+        if (err && (err.name === "AbortError" || /abort|cancel|取消/i.test(String(err.message || "")))) {
+          return "cancelled";
+        }
+      }
+    }
+
+    try {
+      const url = URL.createObjectURL(blob);
+      triggerAnchorDownload(url, name);
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      return "downloaded";
+    } catch (_) {
+      /* fall through */
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      return "copied";
+    } catch (_) {
+      throw new Error("当前环境无法保存文件，请改用复制");
+    }
   }
 
   /** 下载某一栏：能 parse 则美化；坏 JSON 先修复再美化；写回编辑区后下 .json */
-  async function downloadJsonPane(el, label) {
+  async function downloadJsonPane(el, label, btn) {
     const raw0 = getJsonText(el)
       .replace(/^\uFEFF/, "")
       .replace(/[\u200B-\u200D\uFEFF]/g, "")
       .trim();
     if (!raw0) {
       setToolError(jsonError, `请先在 ${label} 输入 JSON`);
+      showToast(`请先在 ${label} 输入 JSON`);
       return;
     }
-    const btn = $(label === "A" ? "#json-dl-a" : "#json-dl-b");
+    const actionBtn = btn || $(label === "A" ? "#json-dl-a" : "#json-dl-b");
     try {
-      if (btn) btn.disabled = true;
+      if (actionBtn) actionBtn.disabled = true;
       setToolError(jsonError, "");
+      jsonMeta.textContent = `${label} 准备保存…`;
+      showToast(`${label} 准备保存…`);
       let data;
       let repaired = false;
       try {
@@ -1086,25 +1133,40 @@
       pushJsonExternalHist(el, pretty);
       saveJsonDraft(el);
       const name = `json-${label.toLowerCase()}-${Date.now()}.json`;
-      downloadJsonText(pretty, name);
+      const how = await saveJsonFile(pretty, name);
+      if (how === "cancelled") {
+        jsonMeta.textContent = `${label} 已取消保存`;
+        return;
+      }
+      const verb = how === "shared" ? "已分享" : how === "copied" ? "已复制到剪贴板" : "已下载";
       jsonMeta.textContent = repaired
-        ? `${label} 已修复并美化 · 已下载 ${name}`
-        : `${label} 已美化 · 已下载 ${name}`;
-      showToast(`已下载 ${name}`);
+        ? `${label} 已修复并美化 · ${verb} ${name}`
+        : `${label} 已美化 · ${verb} ${name}`;
+      showToast(`${verb} ${name}`);
     } catch (err) {
       jsonMeta.textContent = "";
       setToolError(jsonError, `${label} 无法下载：${err?.message || err}`);
+      showToast(`${label} 下载失败`);
     } finally {
-      if (btn) btn.disabled = false;
+      if (actionBtn) actionBtn.disabled = false;
     }
   }
 
-  $("#json-dl-a")?.addEventListener("click", () => {
-    void downloadJsonPane(jsonInput, "A");
-  });
-  $("#json-dl-b")?.addEventListener("click", () => {
-    if (jsonInputB) void downloadJsonPane(jsonInputB, "B");
-  });
+  // 委托绑定：避免晚注入 / 只绑一次；手机走系统分享（a[download]+blob 常静默失败）
+  const jsonPanelRoot = jsonInput.closest("#json") || document.getElementById("json");
+  if (jsonPanelRoot && !jsonPanelRoot.dataset.jsonDlBound) {
+    jsonPanelRoot.dataset.jsonDlBound = "1";
+    jsonPanelRoot.addEventListener("click", (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const btn = t.closest("[data-json-dl]");
+      if (!btn || !jsonPanelRoot.contains(btn)) return;
+      ev.preventDefault();
+      const which = String(btn.getAttribute("data-json-dl") || "").toUpperCase();
+      if (which === "A") void downloadJsonPane(jsonInput, "A", btn);
+      else if (which === "B" && jsonInputB) void downloadJsonPane(jsonInputB, "B", btn);
+    });
+  }
 
   $("#json-repair")?.addEventListener("click", () => {
     void runJsonRepair();
@@ -1482,10 +1544,13 @@
     if (!id || initedCorePanels.has(id)) return;
     const fn = CORE_PANEL_INIT[id];
     if (!fn) return;
+    const root = document.getElementById(id);
+    // 面板 HTML 未挂上就标 inited 会导致下载等监听永远绑不上
+    if (!root) return;
+    if (id === "json" && !document.getElementById("json-input")) return;
     initedCorePanels.add(id);
     fn();
-    const root = document.getElementById(id);
-    if (root) bindCopyButtons(root);
+    bindCopyButtons(root);
   }
 
   function bindCopyButtons(root = document) {

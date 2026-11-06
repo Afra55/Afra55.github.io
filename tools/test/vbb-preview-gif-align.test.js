@@ -162,11 +162,11 @@ t("编码：keep 对齐路径片尾垫>0；窗函数 encodeT 严小于半开上�
   assert.ok(pad + 1e-9 >= box.edge(15, 30));
   assert.ok(pad + 1e-9 >= 2 / 30);
   assert.ok(box.tail(15, 30, {}) + 1e-9 >= 0.5 / 15);
-  // span*fps 整数时：半帧 epsilon 须让 encodeT < span，末采样 < 半开上界
+  // span*fps 整数时：epsilon + floor 后再减 1（EOF flush），encodeT 严小于半开上界
   const w = box.win(10, 1, 15);
   assert.ok(w.encodeT < 10 - 1e-9, `encodeT=${w.encodeT} 须 < 10`);
-  assert.ok(w.encodeT <= 10 - 0.5 / 15 + 1e-9);
-  assert.ok(w.frameCount <= Math.floor((10 - 0.5 / 15) * 15 + 1e-9));
+  assert.ok(w.encodeT <= 10 - 1 / 15 + 1e-9);
+  assert.ok(w.frameCount <= Math.floor((10 - 1 / 15) * 15 + 1e-9) - 1);
   assert.ok((w.frameCount - 1) / 15 < 10 - 1e-9);
   assert.ok(w.encodeT + 1e-9 >= w.frameCount / 15);
 });

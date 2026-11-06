@@ -26,22 +26,26 @@ t("存在 vbbEncodeHardTrimFilters：setpts → trim=duration → setpts(/speed)
   const box = {};
   vm.runInNewContext(`${m[0]}; this.fn = vbbEncodeHardTrimFilters;`, box);
   const s1 = box.fn(1, 10);
-  assert.ok(s1.includes("trim=duration=10"));
+  // duration 微收，开区间丢掉贴上界帧
+  assert.ok(s1.includes("trim=duration=9.999"));
   assert.ok(s1.includes("setpts=PTS-STARTPTS"));
   assert.ok(!s1.includes("/1,") && !s1.includes("/1."));
   const s2 = box.fn(2, 8.5);
-  assert.ok(s2.includes("trim=duration=8.5"));
+  assert.ok(s2.includes("trim=duration=8.499"));
   assert.ok(s2.includes("/2"));
 });
 
-t("palette / gifski 链：crop + timeFilter + fps（硬切在 fps 前）", () => {
+t("palette / gifski 链：crop + timeFilter + fps + select 限帧（硬切在 fps 前）", () => {
   assert.ok(shared.includes("${cropFilter}${timeFilter}fps="));
-  assert.ok(shared.includes("buildRawArgs(useDenoise, dur)"));
+  assert.ok(shared.includes("select='lt(n") && shared.includes("${frameCount})'"));
+  assert.ok(shared.includes("select='lt(n") && shared.includes("${nMax})'"));
+  assert.ok(shared.includes("buildRawArgs(useDenoise, dur, chunkFrames)"));
 });
 
-t("注释说明根因：-frames:v 凑帧读过黄柄", () => {
+t("注释说明根因：-frames:v 凑帧 / fps EOF flush", () => {
   assert.ok(shared.includes("为凑帧") || shared.includes("凑帧"));
   assert.ok(shared.includes("黄柄"));
+  assert.ok(shared.includes("EOF flush") || shared.includes("flush"));
 });
 
 console.log(`vbb-yellow-end-trim.test.js: ${n} passed`);

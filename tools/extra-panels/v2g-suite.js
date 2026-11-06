@@ -1362,8 +1362,9 @@
           // 先轻度 hqdn3d 降噪、再用 lanczos 缩放。若 wasm 核心未编入 hqdn3d，exec 返回非 0，下面自动回退重跑。
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
           const buildFilterArgs = (denoise) => {
+            // select 限住 fps= EOF flush 多吐的那一帧（-frames:v 在 palette 后计数不可靠）
             const chain =
-              `${cropFilter}${timeFilter}fps=${fps},${denoise ? DENOISE : ""}` +
+              `${cropFilter}${timeFilter}fps=${fps},select='lt(n\\,${frameCount})',${denoise ? DENOISE : ""}` +
               `scale=${maxW}:-2:flags=lanczos${brightFilter}`;
             if (wmBytes && wmBytes.length) {
               return [
@@ -1655,17 +1656,18 @@
 
       /**
        * 由（已收片尾垫的）keep 窗长推导编码 -t 与输出帧数。
-       * 再收半个输出帧 epsilon（与桥 gifski-core 一致），避免 -t 贴上界时 fps= 多吐。
+       * 根因补充：wasm fps= 在 trim EOF 时常再 flush 1 帧（末包），仅靠 duration 垫不够；
+       * 这里 epsilon + floor 后再减 1，encodeT 与 -frames:v / select 对齐。
        */
       function vbbEncodeWindowFromKeepSpan(span, speed, gifFps) {
         const rawSpan = Math.max(0.05, Number(span) || 0.05);
         const spd = Math.max(1, Number(speed) || 1);
         const fpsOut = Math.max(8, Number(gifFps) || 15);
-        // 再收约 1 个输出帧，避免 -frames:v 上限贴满时尾多一帧
         const eps = 1 / fpsOut;
         const srcSpan = Math.max(0.05, rawSpan - eps);
         const effSpan = srcSpan / spd;
-        const frameCount = Math.max(2, Math.floor(effSpan * fpsOut + 1e-9));
+        // floor 后再丢 1：对冲 fps= EOF flush（实测尾多约一帧）
+        const frameCount = Math.max(2, Math.floor(effSpan * fpsOut + 1e-9) - 1);
         const encodeT = Math.min(rawSpan, (frameCount / fpsOut) * spd);
         return { encodeT: Math.max(0.05, encodeT), frameCount, effSpan: encodeT / spd };
       }
@@ -1674,10 +1676,13 @@
        * 编码滤镜：在 fps= 之前按片源时长硬切。
        * 仅靠 -t + -frames:v 时，fps= 少吐会为凑帧继续解码，把黄柄后画面带进 GIF
        * （预览半开停对、成片尾多几帧）。trim 后 fps 根本看不到窗外的包。
+       * duration 再微收，避免贴上界时仍放出边界帧。
        * @returns {string} 以逗号结尾的滤镜前缀（可接 fps=）
        */
       function vbbEncodeHardTrimFilters(speed, sourceDurSec) {
-        const dur = Math.max(0.05, Number(sourceDurSec) || 0.05);
+        const dur0 = Math.max(0.05, Number(sourceDurSec) || 0.05);
+        // 开区间：贴 duration 上界的那一帧不进滤镜
+        const dur = Math.max(0.05, dur0 - 1e-3);
         const spd = Math.max(1, Number(speed) || 1);
         // 归零 PTS → 片源时长硬切 → 再倍速（倍速后的时间轴不再用于切尾）
         let s = `setpts=PTS-STARTPTS,trim=duration=${dur},setpts=PTS-STARTPTS`;
@@ -2283,10 +2288,11 @@
 
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
-          const buildRawArgs = (denoise, sourceDurSec) => {
+          const buildRawArgs = (denoise, sourceDurSec, maxFrames) => {
             const timeFilter = vbbEncodeHardTrimFilters(speed, sourceDurSec);
+            const nMax = Math.max(2, Math.floor(Number(maxFrames) || 2));
             const chain =
-              `${cropFilter}${timeFilter}fps=${fps},${denoise ? DENOISE : ""}` +
+              `${cropFilter}${timeFilter}fps=${fps},select='lt(n\\,${nMax})',${denoise ? DENOISE : ""}` +
               `scale=${outW}:${outH}:flags=lanczos${brightFilter},format=rgba`;
             if (wmBytes && wmBytes.length) {
               return [
@@ -2354,9 +2360,9 @@
               try {
                 ffmpeg.on("log", onChunkFfmpegLog);
               } catch (_) {}
-              code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(useDenoise, dur), ...outArgs]);
+              code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(useDenoise, dur, chunkFrames), ...outArgs]);
               if (code !== 0 && useDenoise) {
-                code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(false, dur), ...outArgs]);
+                code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(false, dur, chunkFrames), ...outArgs]);
               }
             } finally {
               window.clearInterval(chunkHb);
