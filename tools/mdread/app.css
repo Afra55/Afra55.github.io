@@ -278,20 +278,44 @@ html[data-theme-scheme="light"] .hljs-deletion { color: #b31d28; }
   transform-origin: center center;
   max-width: none;
 }
+/* 代码放大：与预览 pre / hljs 同色，铺满舞台勿浮层卡片 */
+.lb-stage:has(.lb-host.is-code) {
+  background: rgba(0, 0, 0, 0.3);
+  overflow: auto;
+}
+html[data-theme-scheme="light"] .lb-stage:has(.lb-host.is-code) {
+  background: rgba(0, 0, 0, 0.06);
+}
+.lb-host.is-code {
+  left: 0;
+  top: 0;
+  transform: none;
+  transform-origin: top left;
+  min-width: 100%;
+  min-height: 100%;
+}
 .lb-host.is-code pre {
   margin: 0;
-  padding: 1rem 1.1rem;
-  background: rgba(0, 0, 0, 0.3);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  padding: 1.1rem 1.25rem 1.4rem;
+  min-width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  color: #e6edf3;
+  border: 0;
+  border-radius: 0;
   text-align: left;
   white-space: pre;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+  line-height: 1.6;
+  font-size: 0.95rem;
+  box-shadow: none;
 }
 html[data-theme-scheme="light"] .lb-host.is-code pre {
-  background: rgba(0, 0, 0, 0.06);
-  box-shadow: 0 10px 28px rgba(26, 39, 56, 0.12);
+  color: #24292e;
+}
+.lb-host.is-code code {
+  background: none !important;
+  padding: 0;
 }
 .lb-host.is-table table {
   border-collapse: collapse;

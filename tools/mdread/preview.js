@@ -376,13 +376,23 @@
     let exporting = false;
 
     const sync = () => {
-      host.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
+      if (mode === "code") {
+        host.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+      } else {
+        host.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
+      }
       if (pct) pct.textContent = `${Math.round(view.scale * 100)}%`;
     };
     const fit = () => {
-      view.scale = mode === "code" || mode === "table" ? 0.95 : 1;
+      view.scale = mode === "table" ? 0.95 : 1;
       view.x = 0;
       view.y = 0;
+      try {
+        if (mode === "code" && stage) {
+          stage.scrollTop = 0;
+          stage.scrollLeft = 0;
+        }
+      } catch (_) {}
       sync();
     };
     const close = () => {
@@ -490,6 +500,8 @@
         const code = document.createElement("code");
         if (data.html) code.innerHTML = data.html;
         else code.textContent = data.text || "";
+        const cls = String(data.className || "");
+        code.className = /\bhljs\b/.test(cls) ? cls : `hljs ${cls}`.trim();
         pre.appendChild(code);
         host.appendChild(pre);
       } else if (kind === "table") {
@@ -556,7 +568,7 @@
         if (act === "zoom") {
           lb.open(
             "code",
-            { text, html: code?.innerHTML || "", name: "code.txt" },
+            { text, html: code?.innerHTML || "", className: code?.className || "", name: "code.txt" },
             "代码 · 滚轮缩放 · 可下载源码/图片"
           );
         }

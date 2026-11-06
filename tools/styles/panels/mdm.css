@@ -349,43 +349,54 @@
   overflow: visible;
 }
 .mdm-lightbox-svghost[hidden] { display: none !important; }
+/* 代码放大：舞台本身当 pre 底，代码铺满阅读，勿再做浮层卡片 */
+.mdm-lightbox-stage.is-code-mode {
+  background: rgba(0, 0, 0, 0.3);
+  overflow: auto;
+  cursor: text;
+  touch-action: pan-x pan-y;
+}
+html[data-theme-scheme="light"] .mdm-lightbox-stage.is-code-mode {
+  background: rgba(0, 0, 0, 0.06);
+}
 .mdm-lightbox-codehost {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  left: 0;
+  top: 0;
   max-width: none;
   max-height: none;
+  min-width: 100%;
+  min-height: 100%;
   margin: 0;
-  padding: 1rem 1.1rem;
-  border-radius: 8px;
-  /* 与预览 .markdown-body pre 一致：深色 0.3 / 浅色 0.06 */
-  background: rgba(0, 0, 0, 0.3);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  transform: translate(-50%, -50%);
-  transform-origin: center center;
+  padding: 1.1rem 1.25rem 1.4rem;
+  border-radius: 0;
+  /* 底色交给 stage；这里透明，避免双层泥色 */
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  /* 与 .hljs 深色字色一致；勿用 var(--ink)+inherit 压过高亮 */
+  color: #e6edf3;
+  transform-origin: top left;
   overflow: visible;
   text-align: left;
   user-select: text;
   -webkit-user-select: text;
   white-space: pre;
-  line-height: 1.55;
-  font-size: 0.92rem;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+  line-height: 1.6;
+  font-size: 0.95rem;
+  box-sizing: border-box;
 }
 html[data-theme-scheme="light"] .mdm-lightbox-codehost {
-  background: rgba(0, 0, 0, 0.06);
-  box-shadow: 0 10px 28px rgba(26, 39, 56, 0.12);
+  color: #24292e;
 }
 .mdm-lightbox-codehost code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  background: none;
+  background: none !important;
   padding: 0;
   white-space: inherit;
-  color: inherit;
+  /* 让 .hljs / .hljs-* 接管颜色 */
 }
 .mdm-lightbox-codehost[hidden] { display: none !important; }
-.mdm-lightbox-stage.is-code-mode,
 .mdm-lightbox-stage.is-table-mode { cursor: text; touch-action: pan-y; }
 .mdm-lightbox-tablehost {
   position: absolute;

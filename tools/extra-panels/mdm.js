@@ -8909,7 +8909,12 @@
 
       function syncTransform() {
         const el = activeLayer();
-        el.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
+        if (previewMode === "code") {
+          // 左上角原点：铺满阅读面，缩放不漂成浮层卡片
+          el.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+        } else {
+          el.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
+        }
         if (pctEl) pctEl.textContent = `${Math.round(view.scale * 100)}%`;
       }
 
@@ -8926,12 +8931,14 @@
             nh = sz.h;
           }
         } else if (previewMode === "code") {
-          // 代码块：默认贴近舞台宽度，高度可滚动/缩放
-          nw = Math.max(codeHost.scrollWidth || 1, sw * 0.92);
-          nh = Math.max(codeHost.scrollHeight || 1, sh * 0.5);
-          view.scale = Math.min(1.15, Math.max(0.55, sw / nw));
+          // 默认 100%：舞台可滚动；缩放留给按钮/滚轮
+          view.scale = 1;
           view.x = 0;
           view.y = 0;
+          try {
+            stage.scrollTop = 0;
+            stage.scrollLeft = 0;
+          } catch (_) {}
           syncTransform();
           return;
         } else if (previewMode === "table") {
@@ -8958,11 +8965,19 @@
 
       function zoomAt(clientX, clientY, nextScale) {
         const rect = stage.getBoundingClientRect();
-        const cx = clientX - rect.left - rect.width / 2;
-        const cy = clientY - rect.top - rect.height / 2;
         const ratio = nextScale / view.scale;
-        view.x = cx - (cx - view.x) * ratio;
-        view.y = cy - (cy - view.y) * ratio;
+        if (previewMode === "code") {
+          // 左上原点：坐标相对舞台左上角
+          const cx = clientX - rect.left;
+          const cy = clientY - rect.top;
+          view.x = cx - (cx - view.x) * ratio;
+          view.y = cy - (cy - view.y) * ratio;
+        } else {
+          const cx = clientX - rect.left - rect.width / 2;
+          const cy = clientY - rect.top - rect.height / 2;
+          view.x = cx - (cx - view.x) * ratio;
+          view.y = cy - (cy - view.y) * ratio;
+        }
         view.scale = nextScale;
         syncTransform();
       }
@@ -9182,14 +9197,16 @@
         tableHost.innerHTML = "";
         codeHost.hidden = false;
         const codeEl = codeHost.querySelector("code") || codeHost;
-        // 保留预览高亮：克隆源 code 的 HTML；无则纯文本
+        // 保留预览高亮：克隆源 code 的 HTML；无则纯文本；确保带 hljs 以吃主题色
         const srcCode = pre.querySelector("code");
         if (srcCode && srcCode.innerHTML && srcCode.innerHTML !== srcCode.textContent) {
           codeEl.innerHTML = srcCode.innerHTML;
-          codeEl.className = srcCode.className || "";
+          const cls = String(srcCode.className || "");
+          codeEl.className = /\bhljs\b/.test(cls) ? cls : `hljs ${cls}`.trim();
         } else {
           codeEl.textContent = text;
-          codeEl.className = srcCode?.className || "";
+          const cls = String(srcCode?.className || "");
+          codeEl.className = /\bhljs\b/.test(cls) ? cls : `hljs ${cls}`.trim();
         }
         syncDownloadUi();
         view.scale = 1;
