@@ -121,12 +121,13 @@ t("仅裁片头片尾：成片起点=黄柄，终点=黄柄半开上界", () => 
   assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("exportKeepVideo -ss 回退须两端再收，防少删", () => {
+t("exportKeepVideo 用源帧 trim；-ss 回退禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes("if (!useTrim)"));
-  assert.ok(/bias\s*=\s*1\s*\/\s*30/.test(exp));
+  assert.ok(exp.includes("trim=start_frame="));
+  assert.ok(exp.includes('mode === "frame"') || exp.includes('"frame"'));
+  assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
 });
 
 t("ENCODE 叠垫已清零（根因用源帧窗）", () => {

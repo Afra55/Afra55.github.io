@@ -124,13 +124,14 @@ t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
   assert.ok(fn.includes("return keepRangesFromEdit(edit, duration)"));
 });
 
-t("exportKeepVideo：trim 路径不额外 endBias；仅 -ss 回退可收", () => {
+t("exportKeepVideo：源帧 trim；禁止 -ss 两端 bias", () => {
   const exp = vtrim.slice(
     vtrim.indexOf("async function exportKeepVideo"),
     vtrim.indexOf("window.DevToolsVtrimEditor =")
   );
+  assert.ok(exp.includes("trim=start_frame="));
+  assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp));
   assert.ok(!/endBias\s*=\s*1\s*\/\s*60/.test(exp));
-  assert.ok(exp.includes("if (!useTrim)"));
 });
 
 t("编辑后仍 forceAccurateCut", () => {

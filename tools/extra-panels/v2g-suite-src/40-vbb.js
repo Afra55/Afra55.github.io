@@ -896,13 +896,27 @@
           const start0 = Math.max(0, Number(k.start) || 0);
           const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // 优先 trim 半开；失败再 -ss/-t（回退路径两端再收 1 帧，防少删）
+          // 与 keep 同一源帧钟：优先 start_frame/end_frame；秒级 trim；最后 -i 后 -ss（勿两端 bias）
+          const keepFps =
+            typeof window.DevToolsVtrimEditor?.resolveKeepFps === "function"
+              ? window.DevToolsVtrimEditor.resolveKeepFps(edit)
+              : Number(edit?.srcFps) >= 5
+                ? Number(edit.srcFps)
+                : 30;
+          const toFrame =
+            typeof window.DevToolsVtrimEditor?.secToFrame === "function"
+              ? (t) => window.DevToolsVtrimEditor.secToFrame(t, keepFps)
+              : (t) => Math.round(Math.max(0, Number(t) || 0) * keepFps);
+          let startF = toFrame(start0);
+          let endF = toFrame(end0);
+          if (endF <= startF) endF = startF + 1;
+          const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
           let args = [
             "-i",
             inName,
             "-an",
             "-vf",
-            `trim=start=${start0}:end=${end0},setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`,
+            `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS,${scalePad}`,
             "-c:v",
             "libx264",
             "-preset",
@@ -918,20 +932,39 @@
           ];
           let code = await ffmpeg.exec(args).catch(() => 1);
           if (code !== 0) {
-            const bias = 1 / 30;
-            const start = Math.min(end0 - 0.05, start0 + bias);
-            const end = Math.max(start + 0.05, end0 - bias);
-            const dur = Math.max(0.05, end - start);
+            args = [
+              "-i",
+              inName,
+              "-an",
+              "-vf",
+              `trim=start=${start0}:end=${end0},setpts=PTS-STARTPTS,${scalePad}`,
+              "-c:v",
+              "libx264",
+              "-preset",
+              "ultrafast",
+              "-crf",
+              "18",
+              "-pix_fmt",
+              "yuv420p",
+              "-movflags",
+              "+faststart",
+              "-y",
+              out,
+            ];
+            code = await ffmpeg.exec(args).catch(() => 1);
+          }
+          if (code !== 0) {
+            const dur = Math.max(0.05, end0 - start0);
             args = [
               "-i",
               inName,
               "-ss",
-              String(start),
+              String(start0),
               "-t",
               String(dur),
               "-an",
               "-vf",
-              `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`,
+              scalePad,
               "-c:v",
               "libx264",
               "-preset",
