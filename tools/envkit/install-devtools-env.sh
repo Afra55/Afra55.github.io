@@ -388,7 +388,7 @@ sync_bridges() {
   done
 
   # Pandoc 转换（可选；需本机装 pandoc）
-  for f in server.js pandoc-ops.js; do
+  for f in server.js pandoc-ops.js table-wrap.lua; do
     info "pandoc-bridge/$f"
     download_file "${BASE_URL}/pandoc-bridge/$f" "$BRIDGE_DIR/pandoc-bridge/$f" || warn "下载失败 $f"
   done
@@ -431,6 +431,7 @@ sync_bridges() {
     "$BRIDGE_DIR/fileunlock-bridge/purge-ops.js" \
     "$BRIDGE_DIR/pandoc-bridge/server.js" \
     "$BRIDGE_DIR/pandoc-bridge/pandoc-ops.js" \
+    "$BRIDGE_DIR/pandoc-bridge/table-wrap.lua" \
     "$BRIDGE_DIR/mineru-bridge/server.js" \
     "$BRIDGE_DIR/mineru-bridge/mineru-ops.js" \
     "$BRIDGE_DIR/mineru-bridge/pyhooks/ensure_image_min_tokens.py" \

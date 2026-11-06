@@ -32,6 +32,7 @@
     "fileunlock-bridge/purge-ops.js",
     "pandoc-bridge/server.js",
     "pandoc-bridge/pandoc-ops.js",
+    "pandoc-bridge/table-wrap.lua",
     "docling-bridge/server.js",
     "docling-bridge/docling-ops.js",
     "mineru-bridge/server.js",

@@ -691,7 +691,7 @@ function makeBridgeTemp(prefix) {
   }
 }
 
-/** 宽/长表格：缩小字号与列距，减少 PDF 裁切「显示不全」 */
+/** 宽/长表格：缩小字号与列距；配合 table-wrap.lua 让单元格可换行 */
 function writePdfTableFitHeader(tmp) {
   const p = path.join(tmp, "mdm-table-fit.tex");
   fs.writeFileSync(
@@ -700,9 +700,21 @@ function writePdfTableFitHeader(tmp) {
       "% auto: MDM PDF table fit",
       "\\usepackage{etoolbox}",
       "\\usepackage{array}",
-      "\\AtBeginEnvironment{longtable}{\\footnotesize\\setlength{\\tabcolsep}{3pt}}",
-      "\\AtBeginEnvironment{tabular}{\\footnotesize\\setlength{\\tabcolsep}{3pt}}",
-      "\\AtBeginEnvironment{tabular*}{\\footnotesize\\setlength{\\tabcolsep}{3pt}}",
+      "\\usepackage{booktabs}",
+      "\\setlength{\\LTleft}{0pt}",
+      "\\setlength{\\LTright}{0pt}",
+      "\\AtBeginEnvironment{longtable}{%",
+      "  \\small\\setlength{\\tabcolsep}{2.5pt}%",
+      "  \\renewcommand{\\arraystretch}{1.12}%",
+      "}",
+      "\\AtBeginEnvironment{tabular}{%",
+      "  \\small\\setlength{\\tabcolsep}{2.5pt}%",
+      "  \\renewcommand{\\arraystretch}{1.12}%",
+      "}",
+      "\\AtBeginEnvironment{tabular*}{%",
+      "  \\small\\setlength{\\tabcolsep}{2.5pt}%",
+      "  \\renewcommand{\\arraystretch}{1.12}%",
+      "}",
       "",
     ].join("\n"),
     "utf8"
@@ -710,14 +722,42 @@ function writePdfTableFitHeader(tmp) {
   return p;
 }
 
+function resolveTableWrapLua(tmp) {
+  const candidates = [
+    path.join(__dirname, "table-wrap.lua"),
+    path.join(resolveBridgeRoot(), "pandoc-bridge", "table-wrap.lua"),
+  ];
+  let src = "";
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c)) {
+        src = c;
+        break;
+      }
+    } catch (_) {}
+  }
+  if (!src) return "";
+  const dest = path.join(tmp, "table-wrap.lua");
+  try {
+    fs.copyFileSync(src, dest);
+    return dest;
+  } catch (_) {
+    return src;
+  }
+}
+
 function pushPdfLayoutArgs(args, tmp) {
   const header = writePdfTableFitHeader(tmp);
   args.push(
     "-V",
-    "geometry:margin=1.5cm",
+    "geometry:margin=1.2cm",
     "-H",
     header
   );
+  const lua = resolveTableWrapLua(tmp);
+  if (lua) {
+    args.push("--lua-filter", lua);
+  }
 }
 
 function resolveCmdCandidates(name) {

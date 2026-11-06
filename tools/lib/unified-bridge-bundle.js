@@ -101,6 +101,7 @@
         unlockPurgeJs,
         pandocServerJs,
         pandocOpsJs,
+        pandocTableWrapLua,
         doclingServerJs,
         doclingOpsJs,
         mineruServerJs,
@@ -128,6 +129,7 @@
         fetchTextAsset("./fileunlock-bridge/purge-ops.js").catch(() => ""),
         fetchTextAsset("./pandoc-bridge/server.js").catch(() => ""),
         fetchTextAsset("./pandoc-bridge/pandoc-ops.js").catch(() => ""),
+        fetchTextAsset("./pandoc-bridge/table-wrap.lua").catch(() => ""),
         fetchTextAsset("./docling-bridge/server.js").catch(() => ""),
         fetchTextAsset("./docling-bridge/docling-ops.js").catch(() => ""),
         fetchTextAsset("./mineru-bridge/server.js").catch(() => ""),
@@ -164,7 +166,7 @@
         "  - ffmpeg-bridge/server.js + ytdlp-core.js + gifski-core.js",
         "  - git-bridge/server.js + git-ops.js + noop-editor.*",
         "  - fileunlock-bridge/server.js + lock-ops.js + purge-ops.js（占用解锁 + 安全擦除）",
-        "  - pandoc-bridge/server.js + pandoc-ops.js（Markdown → 任意格式，需本机装 pandoc）",
+        "  - pandoc-bridge/server.js + pandoc-ops.js + table-wrap.lua（Markdown → 任意格式，需本机装 pandoc）",
         "  - mineru-bridge/server.js + mineru-ops.js + pyhooks/ensure_image_min_tokens.py（PDF→MD 质量主力，建议 GPU：pip install \"mineru[full]\"）",
         "  - docling-bridge/server.js + docling-ops.js（无 GPU / 未装 MinerU 时回退 OCR）",
         "  - lanboard-bridge/server.js（局域网看板文字快照 / 媒体暂存）",
@@ -203,6 +205,7 @@
       if (unlockPurgeJs) zip.file("fileunlock-bridge/purge-ops.js", unlockPurgeJs);
       if (pandocServerJs) zip.file("pandoc-bridge/server.js", pandocServerJs);
       if (pandocOpsJs) zip.file("pandoc-bridge/pandoc-ops.js", pandocOpsJs);
+      if (pandocTableWrapLua) zip.file("pandoc-bridge/table-wrap.lua", pandocTableWrapLua);
       if (doclingServerJs) zip.file("docling-bridge/server.js", doclingServerJs);
       if (doclingOpsJs) zip.file("docling-bridge/docling-ops.js", doclingOpsJs);
       if (mineruServerJs) zip.file("mineru-bridge/server.js", mineruServerJs);
