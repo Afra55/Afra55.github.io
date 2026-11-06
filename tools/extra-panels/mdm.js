@@ -1559,17 +1559,8 @@
       });
     }
 
-    /** 超大文档：暂停自动预览，避免 markdown-it + 高亮 + 大纲把页面卡死 */
+    /** 超大文档：仍默认渲染（不再卡「仍然渲染一次」）；仅拉长去抖并弱化小地图 */
     const LARGE_DOC_CHARS = 120000;
-    function largeDocHint(len) {
-      if (!els.preview) return;
-      els.preview.innerHTML =
-        `<p class="hint mdm-large-doc">文档较大（${Number(len).toLocaleString()} 字符），已暂停实时预览以免卡顿。` +
-        `<button type="button" class="secondary-btn" data-render-now>仍然渲染一次</button></p>`;
-    }
-    els.preview?.addEventListener("click", (e) => {
-      if (e.target.closest?.("[data-render-now]")) renderPreview(true);
-    });
     // 预览内的锚点链接（如目录 #标题）：拦截掉，避免改 location.hash 被 SPA 路由当成「切换工具」
     els.preview?.addEventListener("click", (e) => {
       const a = e.target.closest?.('a[href^="#"]');
@@ -1596,7 +1587,7 @@
       window.clearTimeout(state.previewTimer);
       // 按文档大小自适应去抖：长文渲染更贵，延长等待
       const len = state.view?.state?.doc ? state.view.state.doc.length : 0;
-      const delay = len > 20000 ? 700 : len > 8000 ? 450 : 260;
+      const delay = len > LARGE_DOC_CHARS ? 1100 : len > 20000 ? 700 : len > 8000 ? 450 : 260;
       state.previewTimer = window.setTimeout(() => {
         if (state.viewMode === "edit") {
           state.previewStale = true; // 纯编辑模式不渲染预览，切回分屏/预览时再补
@@ -1604,23 +1595,14 @@
           return;
         }
         state.previewStale = false;
-        if (len > LARGE_DOC_CHARS) {
-          largeDocHint(len);
-          renderOutline();
-          return;
-        }
         renderPreview();
         renderOutline();
       }, delay);
     }
 
-    function renderPreview(force) {
+    function renderPreview(_force) {
       if (!els.preview) return;
       const src = getEditorText();
-      if (!force && src.length > LARGE_DOC_CHARS) {
-        largeDocHint(src.length);
-        return;
-      }
       // 含公式且 KaTeX 尚未加载：按需加载后重渲一次（避免开工具就下载 KaTeX）
       if (!katexReady && !window.markdownItKatex && /\$[^$\n]+\$|\$\$[\s\S]*?\$\$/.test(src)) {
         void ensureKatex().then((ok) => {
@@ -5905,6 +5887,18 @@
       };
     }
 
+    /** 导出单文件用浅色可读配色（独立打开不跟站内暗色；图表亦浅底） */
+    function exportDocThemeVars() {
+      return {
+        bg: "#ffffff",
+        ink: "#1a2738",
+        line: "rgba(26, 39, 56, 0.16)",
+        accent: "#1a7f74",
+        panel: "#f1f4f8",
+        muted: "#55657c",
+      };
+    }
+
     function buildToc(bodyHtml) {
       const heads = [...String(bodyHtml).matchAll(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi)];
       if (heads.length < 3) return "";
@@ -5919,26 +5913,27 @@
 
     /** 导出 HTML 共用：强制正文/图表/表格铺满视口（浏览器单文件 + Pandoc 后处理） */
     function exportHtmlFullWidthCss(extra = "") {
-      const v = themeVars();
+      const v = exportDocThemeVars();
       return (
-        `:root{color-scheme:${isDarkScheme() ? "dark" : "light"}}` +
+        `:root{color-scheme:light}` +
         `*{box-sizing:border-box}` +
         `html,body{width:100%!important;min-height:100%;margin:0!important;max-width:none!important}` +
         `body{max-width:none!important;width:100%!important;margin:0!important;padding:1rem clamp(.5rem,1.5vw,1.25rem) 2rem!important;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}` +
         /* 覆盖 Pandoc 默认 .container / titleblock 等窄栏 */
         `#TOC,.title,.author,.date,header,main,article,section,.container,.main-container,.main,.content,div.sourceCode,` +
         `pre,table,p,ul,ol,blockquote,h1,h2,h3,h4,h5,h6,.toc,.mdm-mermaid,figure,.mdm-mermaid-svg{max-width:none!important;width:100%!important}` +
-        `pre{background:${v.panel};padding:.8rem;border-radius:8px;overflow:auto}` +
+        `pre{background:rgba(0,0,0,0.06);padding:.8rem;border-radius:8px;overflow:auto;color:#24292e}` +
         `code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}` +
         `pre code{background:none}` +
-        `table{border-collapse:collapse}th,td{border:1px solid ${v.line};padding:.35rem .6rem}` +
+        `:not(pre)>code{background:rgba(127,127,127,0.14);padding:.1em .35em;border-radius:5px}` +
+        `table{border-collapse:collapse;table-layout:auto}th,td{border:1px solid ${v.line};padding:.35rem .6rem;word-break:break-word}` +
         `img{max-width:100%!important;height:auto!important;display:block}` +
         `blockquote{border-left:3px solid ${v.line};margin:0;padding-left:1rem;color:${v.muted}}` +
         `a{color:${v.accent}}` +
         `.toc,#TOC{border:1px solid ${v.line};border-radius:8px;padding:.6rem .9rem;margin-bottom:1.4rem}` +
         `.toc ul,#TOC ul{margin:.35rem 0 0;padding-left:1.2rem}` +
         `.toc-l2{padding-left:.8rem}.toc-l3,.toc-l4,.toc-l5,.toc-l6{padding-left:1.6rem}` +
-        `.mdm-mermaid,figure,.mdm-mermaid-svg{margin:1rem 0;text-align:center}` +
+        `.mdm-mermaid,figure,.mdm-mermaid-svg{margin:1rem 0;text-align:center;background:#fff}` +
         `.mdm-mermaid svg,.mdm-mermaid-svg svg,figure svg,figure img{display:block;width:100%!important;max-width:100%!important;height:auto!important;margin:0 auto}` +
         `.katex-display{overflow-x:auto;overflow-y:hidden}` +
         `@media print{@page{margin:18mm 16mm}body{max-width:none;width:auto;margin:0;padding:0;background:#fff;color:#111}pre,table,blockquote,img,.mdm-mermaid{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc,#TOC{page-break-after:always}}` +
@@ -6110,12 +6105,13 @@
       return Boolean(window.mermaid);
     }
 
-    /** 导出用浅色主题渲染，避免暗色图在 Word/PDF 里发黑难认 */
+    /** 导出用浅色主题渲染，避免暗色图在 Word/PDF/HTML 里看不见或发黑难认 */
     async function renderMermaidSourceToSvg(src) {
       const code = String(src || "").trim();
       if (!code) throw new Error("空图表");
       const cacheKey = `export::${code}`;
-      const cached = state.mermaidCache.get(cacheKey) || state.mermaidCache.get(code);
+      // 绝不能回落到预览缓存：预览可能是 dark 主题 SVG，导出页浅底上会「空白」
+      const cached = state.mermaidCache.get(cacheKey);
       if (cached && !/Syntax error in text/i.test(cached)) return cached;
       if (!(await ensureMermaidLib())) throw new Error("Mermaid 未加载");
       try {
@@ -6145,6 +6141,15 @@
         throw err;
       } finally {
         clearMermaidStage();
+        // 恢复预览主题，避免后续预览重渲被卡在 default
+        try {
+          window.mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: "strict",
+            suppressErrorRendering: true,
+            theme: document.documentElement.dataset.themeScheme === "light" ? "default" : "dark",
+          });
+        } catch (_) {}
       }
     }
 

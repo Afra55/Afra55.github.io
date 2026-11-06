@@ -358,7 +358,10 @@
   margin: 0;
   padding: 1rem 1.1rem;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.35);
+  /* 与预览 .markdown-body pre 一致：深色 0.3 / 浅色 0.06 */
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--ink);
+  border: 1px solid var(--line);
   transform: translate(-50%, -50%);
   transform-origin: center center;
   overflow: visible;
@@ -368,12 +371,18 @@
   white-space: pre;
   line-height: 1.55;
   font-size: 0.92rem;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+}
+html[data-theme-scheme="light"] .mdm-lightbox-codehost {
+  background: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 28px rgba(26, 39, 56, 0.12);
 }
 .mdm-lightbox-codehost code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   background: none;
   padding: 0;
   white-space: inherit;
+  color: inherit;
 }
 .mdm-lightbox-codehost[hidden] { display: none !important; }
 .mdm-lightbox-stage.is-code-mode,

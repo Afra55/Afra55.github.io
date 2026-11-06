@@ -280,11 +280,18 @@ html[data-theme-scheme="light"] .hljs-deletion { color: #b31d28; }
 }
 .lb-host.is-code pre {
   margin: 0;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.35);
+  padding: 1rem 1.1rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--ink);
+  border: 1px solid var(--line);
   border-radius: 8px;
   text-align: left;
   white-space: pre;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+}
+html[data-theme-scheme="light"] .lb-host.is-code pre {
+  background: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 28px rgba(26, 39, 56, 0.12);
 }
 .lb-host.is-table table {
   border-collapse: collapse;

@@ -56,9 +56,14 @@ t("阅读页 takeHandoff + storage/轮询接慢路径", () => {
   assert.ok(app.includes("handoffTimer") || app.includes("setInterval"));
 });
 
-t("点预览/分屏强制渲染，不卡「仍然渲染一次」", () => {
+t("大文档默认渲染，不卡「仍然渲染一次」", () => {
+  assert.ok(!mdm.includes("largeDocHint"));
+  assert.ok(!mdm.includes("data-render-now"));
   const apply = mdm.slice(mdm.indexOf("function applyViewMode"), mdm.indexOf("(function bindSplitter"));
   assert.ok(apply.includes("renderPreview(true)"));
+  const sched = mdm.slice(mdm.indexOf("function schedulePreview"), mdm.indexOf("function renderPreview"));
+  assert.ok(sched.includes("renderPreview()"));
+  assert.ok(!sched.includes("largeDocHint"));
 });
 
 console.log(`mdread-focus.test.js: ${n} passed`);

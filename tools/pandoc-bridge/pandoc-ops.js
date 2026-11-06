@@ -691,6 +691,35 @@ function makeBridgeTemp(prefix) {
   }
 }
 
+/** 宽/长表格：缩小字号与列距，减少 PDF 裁切「显示不全」 */
+function writePdfTableFitHeader(tmp) {
+  const p = path.join(tmp, "mdm-table-fit.tex");
+  fs.writeFileSync(
+    p,
+    [
+      "% auto: MDM PDF table fit",
+      "\\usepackage{etoolbox}",
+      "\\usepackage{array}",
+      "\\AtBeginEnvironment{longtable}{\\footnotesize\\setlength{\\tabcolsep}{3pt}}",
+      "\\AtBeginEnvironment{tabular}{\\footnotesize\\setlength{\\tabcolsep}{3pt}}",
+      "\\AtBeginEnvironment{tabular*}{\\footnotesize\\setlength{\\tabcolsep}{3pt}}",
+      "",
+    ].join("\n"),
+    "utf8"
+  );
+  return p;
+}
+
+function pushPdfLayoutArgs(args, tmp) {
+  const header = writePdfTableFitHeader(tmp);
+  args.push(
+    "-V",
+    "geometry:margin=1.5cm",
+    "-H",
+    header
+  );
+}
+
 function resolveCmdCandidates(name) {
   const n = String(name || "").trim();
   const candidates = [];
@@ -1257,11 +1286,10 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     `CJKmainfont=${cjkFont}`,
     "-V",
     `mainfont=${cjkFont}`,
-    "-V",
-    "geometry:margin=2cm",
     "--pdf-engine-opt=-interaction=nonstopmode",
     "--verbose"
   );
+  pushPdfLayoutArgs(args, tmp);
   if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
 
   console.log(
@@ -1465,13 +1493,12 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngi
       `CJKmainfont=${cjkFont}`,
       "-V",
       `mainfont=${cjkFont}`,
-      "-V",
-      "geometry:margin=2cm",
       "--pdf-engine-opt=-interaction=nonstopmode",
       "-o",
       outPath,
       inPath,
     ];
+    pushPdfLayoutArgs(args, tmp);
   } else {
     args = ["-f", fromFmt, "-t", toFmt];
     if (outIsMd) args.push("--wrap=none");
@@ -2083,6 +2110,8 @@ async function ensureTinytexPandocPackages(xelatexBin) {
     "setspace",
     "booktabs",
     "longtable",
+    "etoolbox",
+    "array",
     "fancyvrb",
     "hyperref",
     "xcolor",
