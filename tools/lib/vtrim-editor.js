@@ -2771,23 +2771,28 @@
     const W = evenDim(srcW);
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
+    // 与 keepRangesFromEdit 同一源帧钟：用 start_frame/end_frame，避免秒级 trim PTS 边界抖
+    // 导致中间段片头片尾相对预览各往前挪约 1 帧
+    const keepFps = resolveKeepFps(edit);
     const parts = [];
-    const trySlice = async (k, i, useTrim) => {
-      let start = Math.max(0, Number(k.start) || 0);
-      let end = Math.max(start + 0.05, Number(k.end) || 0);
-      // trim 路径严格按 keep（所见即所得）；仅 -ss 回退时两端略收，对抗关键帧
-      if (!useTrim) {
-        const bias = 1 / 30;
-        start = Math.min(end - 0.05, start + bias);
-        end = Math.max(start + 0.05, end - bias);
-      }
+    const trySlice = async (k, i, mode) => {
+      const start = Math.max(0, Number(k.start) || 0);
+      const end = Math.max(start + 0.05, Number(k.end) || 0);
+      let startF = secToFrame(start, keepFps);
+      let endF = secToFrame(end, keepFps);
+      if (endF <= startF) endF = startF + 1;
       const dur = Math.max(0.05, end - start);
       const out = `keep${i}.mp4`;
-      // trim=start:end 半开 [start,end)，与 keep 一致；失败再退 -ss/-t
+      // frame：半开 [startF,endF) ≡ keep；sec：秒级 trim 回退；ss：-i 后精确 -ss（勿再两端 bias）
+      const trimVf =
+        mode === "frame"
+          ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
+          : mode === "sec"
+            ? `trim=start=${start}:end=${end},setpts=PTS-STARTPTS`
+            : "";
       const vfCore = [
         cropVf,
-        useTrim ? `trim=start=${start}:end=${end}` : "",
-        useTrim ? "setpts=PTS-STARTPTS" : "",
+        trimVf,
         `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
         `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2`,
         "setsar=1",
@@ -2795,9 +2800,10 @@
       ]
         .filter(Boolean)
         .join(",");
-      const args = useTrim
-        ? ["-i", inName, "-an", "-vf", vfCore]
-        : ["-i", inName, "-ss", String(start), "-t", String(dur), "-an", "-vf", vfCore];
+      const args =
+        mode === "ss"
+          ? ["-i", inName, "-ss", String(start), "-t", String(dur), "-an", "-vf", vfCore]
+          : ["-i", inName, "-an", "-vf", vfCore];
       args.push(
         "-c:v",
         "libx264",
@@ -2817,8 +2823,10 @@
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      let { code, out } = await trySlice(keeps[i], i, true);
-      if (code !== 0) ({ code, out } = await trySlice(keeps[i], i, false));
+      let { code, out } = await trySlice(keeps[i], i, "frame");
+      if (code !== 0) ({ code, out } = await trySlice(keeps[i], i, "sec"));
+      // -i 后再 -ss 已是解码级精确；禁止再 ±1/30 bias（会把中间段首尾相对预览往前挪）
+      if (code !== 0) ({ code, out } = await trySlice(keeps[i], i, "ss"));
       if (code !== 0) throw new Error(`切片失败（段 ${i + 1}）`);
       parts.push(out);
     }
