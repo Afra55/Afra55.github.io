@@ -1743,13 +1743,24 @@
     function clipPlayWindow(mediaTime) {
       if (closed || !duration || video.paused || playWindowLooping || drag) return false;
       const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
-      // 播放截断由 previewSeekForKeepRanges（paused:false）提前约 0.75 帧，与片尾停帧一致
-      const jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
-        paused: false,
-        endKeepSec: endKeepStepSec(),
-      });
+      const park = endKeepSec();
+      const step = endKeepStepSec();
+      // 硬闸：越过停帧（允许停帧本身短暂停留）立刻停画，循环到片头
+      let jump = null;
+      if (cur >= park + Math.max(0.006, step * 0.2)) {
+        jump = startSec;
+      } else {
+        jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
+          paused: false,
+          endKeepSec: step,
+        });
+      }
       if (jump == null || !Number.isFinite(jump)) return false;
       if (Math.abs(jump - cur) < 0.001) return false;
+      // 先 pause 再 seek：否则异步 seek 前解码器会继续吐出片尾后几帧
+      try {
+        video.pause();
+      } catch (_) {}
       playWindowLooping = true;
       const gen = ++playWindowGen;
       seekPlayheadExact(jump)
@@ -2616,7 +2627,8 @@
   /**
    * 外预览 / 编辑内播放：源时间若落在 keep 外（删中间 / 片头片尾外），返回应 seek 到的时间；否则 null。
    * keep 为半开 [start,end)；暂停停在末段最后一源帧（end - 1/fps）。
-   * 播放提前约 0.75 帧离开 keep，避免画出半开上界帧（与片尾停帧所见一致）。
+   * 播放在「片尾停帧」(end-1/fps) 切断（与点片尾所见同一帧）；暂停可停在该帧。
+   * 真正防多画靠调用方先 pause 再 seek（单靠提前量挡不住解码器迟到）。
    * @param {{start:number,end:number}[]} keeps
    * @param {number} t
    * @param {{ paused?: boolean, endKeepSec?: number, srcFps?: number }} [opts]
@@ -2635,8 +2647,8 @@
       Number(opts?.endKeepSec) > 0
         ? Number(opts.endKeepSec)
         : resolveEndKeepSec(opts?.srcFps || opts?.edit || 0);
-    // 播放：提前 0.75 帧截断；暂停：用到 exclusive end（停帧点仍算 keep 内）
-    const playEndPad = Math.max(endEps, endKeep * 0.75);
+    // 播放：与停帧对齐（end-1/fps）；不再用 0.75（偏晚）或 2×（少播一帧）
+    const playEndPad = Math.max(endEps, endKeep);
     for (let i = 0; i < keeps.length; i++) {
       const k = keeps[i];
       const endLimit = paused ? k.end - endEps : k.end - playEndPad;

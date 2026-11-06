@@ -8402,7 +8402,7 @@
         const last = keeps[keeps.length - 1];
         const endEps = 0.0005;
         const startEps = 0.0005;
-        const playEndPad = Math.max(endEps, endKeep * 0.75);
+        const playEndPad = Math.max(endEps, endKeep);
         for (let i = 0; i < keeps.length; i++) {
           const k = keeps[i];
           const endLimit = paused ? k.end - endEps : k.end - playEndPad;
@@ -9373,16 +9373,22 @@
           return;
         }
         const keepPlaying = !vbbVideo.paused;
+        // 先停再 seek：播放越过片尾时若带着 keepPlaying 改 currentTime，会多画几帧
+        if (keepPlaying) {
+          try {
+            vbbVideo.pause();
+          } catch (_) {}
+        }
         vbbEditSkipBusy = true;
         vbbEditEnforceAcceptTarget = next;
         vbbEditEnforceAcceptUntil = now + 650;
         lockVbbPlayUi(420);
-        applyVbbSeek(next, { keepPlaying: true });
+        applyVbbSeek(next, { keepPlaying: false });
         const finish = () => {
           vbbVideo.removeEventListener("seeked", finish);
           window.clearTimeout(watch);
           vbbEditSkipBusy = false;
-          if (keepPlaying && vbbVideo.paused) vbbVideo.play().catch(() => {});
+          if (keepPlaying) vbbVideo.play().catch(() => {});
         };
         const watch = window.setTimeout(finish, 360);
         vbbVideo.addEventListener("seeked", finish);

@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * 片尾：编辑停帧 ≡ 外预览/播放截断；拖拽步进 ≡ 按钮 1 源帧。
+ * 片尾：编辑停帧 ≡ 播放截断；拖拽 ≡ 按钮 1 源帧；播放须先 pause 再 seek。
  */
 const assert = require("assert");
 const fs = require("fs");
@@ -35,19 +35,29 @@ function loadSeek() {
   return box.fn;
 }
 
-t("播放在末帧后半提前截断，暂停可停在末帧起点", () => {
+t("暂停可停在末帧；播放在停帧处截断", () => {
   const seek = loadSeek();
   const keeps = [{ start: 1, end: 5 }];
   const ek = 1 / 30;
   const lastStart = 5 - ek;
   assert.strictEqual(seek(keeps, lastStart, { paused: true, endKeepSec: ek }), null);
   assert.strictEqual(seek(keeps, lastStart + ek * 0.2, { paused: true, endKeepSec: ek }), null);
-  // 播放：越过 end-0.75帧 须循环
-  const playCut = seek(keeps, 5 - ek * 0.2, { paused: false, endKeepSec: ek });
-  assert.ok(playCut != null && Math.abs(playCut - 1) < 1e-9);
-  // 暂停贴 exclusive end → 拉回末帧
+  // 播放：到达停帧即循环（endLimit = end - endKeep）
+  const atPark = seek(keeps, lastStart, { paused: false, endKeepSec: ek });
+  assert.ok(atPark != null && Math.abs(atPark - 1) < 1e-9);
+  const pastPark = seek(keeps, lastStart + ek * 0.5, { paused: false, endKeepSec: ek });
+  assert.ok(pastPark != null && Math.abs(pastPark - 1) < 1e-9);
+  // 停帧前一帧仍可播
+  assert.strictEqual(seek(keeps, lastStart - ek * 0.5, { paused: false, endKeepSec: ek }), null);
   const park = seek(keeps, 5, { paused: true, endKeepSec: ek });
   assert.ok(park != null && Math.abs(park - lastStart) < 1e-9);
+});
+
+t("编辑内 clipPlayWindow 先 pause 再 seek", () => {
+  const fn = vtrim.slice(vtrim.indexOf("function clipPlayWindow"), vtrim.indexOf("function armFrameWatch"));
+  assert.ok(fn.includes("video.pause()"));
+  assert.ok(fn.includes("endKeepSec()"));
+  assert.ok(fn.includes("seekPlayheadExact(jump)"));
 });
 
 t("拖拽中用 snapTrimHandle（与按钮同帧格）", () => {
@@ -60,15 +70,16 @@ t("拖拽中用 snapTrimHandle（与按钮同帧格）", () => {
   assert.ok(!/snapNearCutouts\(snapEdgeOnly\(raw/.test(move));
 });
 
-t("外预览 enforce：越过片尾不吞，仅容忍偏早关键帧", () => {
+t("外预览 enforce：越过片尾先 pause，keepPlaying 不带播 seek", () => {
   const enforce = vbb.slice(
     vbb.indexOf("function enforceVbbEditPlaybackWindow"),
     vbb.indexOf("function armVbbEditFrameWatch")
   );
   assert.ok(enforce.includes("earlySlop"));
   assert.ok(enforce.includes("pastSlop"));
-  assert.ok(enforce.includes("delta >= 0"));
-  assert.ok(!/Math\.abs\(t - next\) < nearSlop/.test(enforce));
+  assert.ok(enforce.includes("vbbVideo.pause()"));
+  assert.ok(enforce.includes("keepPlaying: false"));
+  assert.ok(!/applyVbbSeek\(next, \{ keepPlaying: true \}\)/.test(enforce));
 });
 
 console.log(`vbb-end-play-align.test.js: ${n} passed`);
