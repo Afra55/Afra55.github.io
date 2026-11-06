@@ -128,9 +128,11 @@ body.is-dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
 
 .preview { line-height: 1.7; word-wrap: break-word; }
 .preview h1, .preview h2 { border-bottom: 1px solid var(--line); padding-bottom: 0.25rem; }
-.preview pre {
+/* 与文档管理预览 mdm.css 一致：深色 0.3 / 浅色 0.06（勿用 0.28，观感会偏深） */
+.preview pre,
+.markdown-body pre {
   position: relative;
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(0, 0, 0, 0.3);
   padding: 0.7rem 0.8rem;
   border-radius: 8px;
   overflow: auto;
@@ -202,8 +204,25 @@ body.is-dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
 .hljs-comment, .hljs-quote { color: #8b949e; font-style: italic; }
 .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #ff7b72; }
 .hljs-string, .hljs-attr, .hljs-addition { color: #a5d6ff; }
-.hljs-number, .hljs-built_in, .hljs-variable { color: #79c0ff; }
+.hljs-number, .hljs-built_in, .hljs-builtin-name, .hljs-variable, .hljs-template-variable { color: #79c0ff; }
 .hljs-title, .hljs-section, .hljs-name { color: #d2a8ff; }
+.hljs-tag { color: #7ee787; }
+.hljs-meta, .hljs-deletion { color: #ffa657; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+
+@media (prefers-color-scheme: light) {
+  .preview pre,
+  .markdown-body pre { background: rgba(0, 0, 0, 0.06); }
+  .hljs { color: #24292e; }
+  .hljs-comment, .hljs-quote { color: #6a737d; }
+  .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #d73a49; }
+  .hljs-string, .hljs-attr, .hljs-addition { color: #032f62; }
+  .hljs-number, .hljs-built_in, .hljs-builtin-name, .hljs-variable, .hljs-template-variable { color: #005cc5; }
+  .hljs-title, .hljs-section, .hljs-name { color: #6f42c1; }
+  .hljs-tag { color: #22863a; }
+  .hljs-meta, .hljs-deletion { color: #b31d28; }
+}
 
 .mdread-lightbox {
   border: 0;
