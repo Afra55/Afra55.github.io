@@ -639,9 +639,11 @@
         const last = keeps[keeps.length - 1];
         const endEps = 0.0005;
         const startEps = 0.0005;
+        const playEndPad = Math.max(endEps, endKeep * 0.75);
         for (let i = 0; i < keeps.length; i++) {
           const k = keeps[i];
-          if (time >= k.start - startEps && time < k.end - endEps) return null;
+          const endLimit = paused ? k.end - endEps : k.end - playEndPad;
+          if (time >= k.start - startEps && time < endLimit) return null;
         }
         if (time < first.start - startEps) return first.start;
         for (let i = 0; i < keeps.length; i++) {
@@ -1589,17 +1591,22 @@
         }
         const fps = Math.max(5, srcFps >= 5 && srcFps <= 240 ? srcFps : 30);
         const frame = 1 / fps;
-        // 关键帧吸附常偏 0.05~0.5s；0.001 会 seek→pause/play 死循环（按钮狂切）
-        const nearSlop = Math.max(0.05, 2 * frame);
-        if (Math.abs(t - next) < nearSlop) return;
+        // 关键帧常「偏早到不了」；片尾越过目标必须拉回，否则外预览比编辑停帧多画几帧
+        const earlySlop = Math.max(0.05, 2 * frame);
+        const pastSlop = Math.max(0.012, 0.35 * frame);
+        const delta = next - t; // >0 还需往后 seek；<0 已越过目标
+        if (delta >= 0 && delta < earlySlop) return;
+        if (delta < 0 && -delta < pastSlop) return;
         const now =
           typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
         if (
           vbbEditEnforceAcceptTarget != null &&
           Math.abs(vbbEditEnforceAcceptTarget - next) < frame &&
           now < vbbEditEnforceAcceptUntil &&
-          Math.abs(t - next) < Math.max(0.75, 15 * frame)
+          delta >= 0 &&
+          delta < Math.max(0.75, 15 * frame)
         ) {
+          // 仅接受「同一目标仍偏早」；越过片尾停帧的不吞
           return;
         }
         const keepPlaying = !vbbVideo.paused;

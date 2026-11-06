@@ -1743,8 +1743,7 @@
     function clipPlayWindow(mediaTime) {
       if (closed || !duration || video.paused || playWindowLooping || drag) return false;
       const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
-      // 播放时提前约 0.75 帧截断，减少 rVFC/timeupdate 迟到导致片尾多画出几帧
-      // 与 keep/GIF 同一截断点，勿再提前 endLead（否则播放比成片少几帧）
+      // 播放截断由 previewSeekForKeepRanges（paused:false）提前约 0.75 帧，与片尾停帧一致
       const jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
         paused: false,
         endKeepSec: endKeepStepSec(),
@@ -2273,12 +2272,12 @@
         return;
       }
       const raw = ratioFromClientX(e.clientX) * duration;
-      // 拖拽中就有边磁吸（片头/片尾/红段），松手再帧格对齐
+      // 拖拽中即按源帧格对齐（与片头±/片尾± 同一步长），并保留边/红段磁吸
       let t = raw;
-      if (drag.kind === "start") t = snapNearCutouts(snapEdgeOnly(raw, "start"));
-      else if (drag.kind === "end") t = snapNearCutouts(snapEdgeOnly(raw, "end"));
-      else if (drag.kind === "cut-start") t = snapNearCutouts(snapEdgeOnly(raw, "start"));
-      else if (drag.kind === "cut-end") t = snapNearCutouts(snapEdgeOnly(raw, "end"));
+      if (drag.kind === "start") t = snapTrimHandle(raw, "start");
+      else if (drag.kind === "end") t = snapTrimHandle(raw, "end");
+      else if (drag.kind === "cut-start") t = snapTrimHandle(raw, "start");
+      else if (drag.kind === "cut-end") t = snapTrimHandle(raw, "end");
       if (Math.abs(t - raw) > 0.0005 && Math.abs(t - raw) <= SNAP_EDGE_SEC) {
         if (!drag._magnetAt || Math.abs(drag._magnetAt - t) > 0.001) {
           drag._magnetAt = t;
@@ -2615,8 +2614,9 @@
   }
 
   /**
-   * 外预览：源时间若落在 keep 外（删中间 / 片头片尾外），返回应 seek 到的时间；否则 null。
+   * 外预览 / 编辑内播放：源时间若落在 keep 外（删中间 / 片头片尾外），返回应 seek 到的时间；否则 null。
    * keep 为半开 [start,end)；暂停停在末段最后一源帧（end - 1/fps）。
+   * 播放提前约 0.75 帧离开 keep，避免画出半开上界帧（与片尾停帧所见一致）。
    * @param {{start:number,end:number}[]} keeps
    * @param {number} t
    * @param {{ paused?: boolean, endKeepSec?: number, srcFps?: number }} [opts]
@@ -2635,9 +2635,12 @@
       Number(opts?.endKeepSec) > 0
         ? Number(opts.endKeepSec)
         : resolveEndKeepSec(opts?.srcFps || opts?.edit || 0);
+    // 播放：提前 0.75 帧截断；暂停：用到 exclusive end（停帧点仍算 keep 内）
+    const playEndPad = Math.max(endEps, endKeep * 0.75);
     for (let i = 0; i < keeps.length; i++) {
       const k = keeps[i];
-      if (time >= k.start - startEps && time < k.end - endEps) return null;
+      const endLimit = paused ? k.end - endEps : k.end - playEndPad;
+      if (time >= k.start - startEps && time < endLimit) return null;
     }
     if (time < first.start - startEps) return first.start;
     for (let i = 0; i < keeps.length; i++) {

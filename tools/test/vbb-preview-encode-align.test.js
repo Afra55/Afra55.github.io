@@ -79,7 +79,8 @@ t("外预览播放/落点走 vbbKeepRangesForEncode", () => {
   assert.ok(!enforce.includes("vbbKeepRangesFromEdit("));
   assert.ok(vbb.includes("外预览落点与成片 keep 首帧一致"));
   assert.ok(/vbbKeepRangesForEncode\(item\.edit,\s*item\.duration\)/.test(vbb));
-  assert.ok(enforce.includes("nearSlop"), "keep-seek 须容忍关键帧，防播放按钮狂切");
+  assert.ok(enforce.includes("earlySlop"), "keep-seek 须容忍偏早关键帧，防播放按钮狂切");
+  assert.ok(enforce.includes("pastSlop"), "越过片尾停帧必须拉回");
 });
 
 t("多段删中间：预览≡成片；红柄闭区间；黄柄为半开上界", () => {

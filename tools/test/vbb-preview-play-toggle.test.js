@@ -23,7 +23,8 @@ t("enforce 有关键帧 slop，不再用 0.001 死磕", () => {
     vbb.indexOf("function enforceVbbEditPlaybackWindow"),
     vbb.indexOf("function armVbbEditFrameWatch")
   );
-  assert.ok(enforce.includes("nearSlop"));
+  assert.ok(enforce.includes("earlySlop"));
+  assert.ok(enforce.includes("pastSlop"));
   assert.ok(enforce.includes("vbbEditEnforceAcceptTarget"));
   assert.ok(!/Math\.abs\(t - next\) < 0\.001/.test(enforce));
   assert.ok(enforce.includes("lockVbbPlayUi"));
