@@ -1746,9 +1746,9 @@
       const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
       const park = endKeepSec();
       const step = endKeepStepSec();
-      // 硬闸：停帧前 1 源帧就切（解码画面常超前 currentTime；钉回 park 反而每遍多画）
+      // 硬闸：与片尾±停帧同一点（endKeepSec）切断，保证「点片尾所见 = 播放最后一帧」
       let jump = null;
-      if (cur >= park - step + 1e-4) {
+      if (cur >= park - 1e-4) {
         jump = startSec;
       } else {
         jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
@@ -2633,8 +2633,8 @@
   /**
    * 外预览 / 编辑内播放：源时间若落在 keep 外（删中间 / 片头片尾外），返回应 seek 到的时间；否则 null。
    * keep 为半开 [start,end)；暂停停在末段最后一源帧（end - 1/fps）。
-   * 播放在「停帧前 1 源帧」切断（解码画面常超前 currentTime）；暂停仍停在末帧。
-   * 调用方须先 pause 再 seek。
+   * 播放与暂停同一停帧（end-1/fps）：点片尾±所见 = 播放最后一帧。
+   * 调用方须先 pause 再 seek，避免解码器在 seek 前继续吐帧。
    * @param {{start:number,end:number}[]} keeps
    * @param {number} t
    * @param {{ paused?: boolean, endKeepSec?: number, srcFps?: number }} [opts]
@@ -2653,8 +2653,8 @@
       Number(opts?.endKeepSec) > 0
         ? Number(opts.endKeepSec)
         : resolveEndKeepSec(opts?.srcFps || opts?.edit || 0);
-    // 播放：end - 2/fps（停帧再提前 1 帧），对冲解码超前
-    const playEndPad = Math.max(endEps, endKeep * 2);
+    // 播放截断点 = 停帧（end-1/fps）；勿再提前整帧，否则片尾±预览与播放末帧错位
+    const playEndPad = Math.max(endEps, endKeep);
     for (let i = 0; i < keeps.length; i++) {
       const k = keeps[i];
       const endLimit = paused ? k.end - endEps : k.end - playEndPad;

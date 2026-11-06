@@ -639,7 +639,7 @@
         const last = keeps[keeps.length - 1];
         const endEps = 0.0005;
         const startEps = 0.0005;
-        const playEndPad = Math.max(endEps, endKeep * 2);
+        const playEndPad = Math.max(endEps, endKeep);
         for (let i = 0; i < keeps.length; i++) {
           const k = keeps[i];
           const endLimit = paused ? k.end - endEps : k.end - playEndPad;

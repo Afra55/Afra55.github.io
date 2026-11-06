@@ -1,8 +1,6 @@
 "use strict";
 
-/**
- * 片尾：暂停停末帧；播放提前 1 源帧截断（防解码超前多画）。
- */
+/** 片尾±停帧 ≡ 播放截断点（所见即所得） */
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
@@ -35,37 +33,39 @@ function loadSeek() {
   return box.fn;
 }
 
-t("暂停可停在末帧；播放在停帧前一帧截断", () => {
+t("停帧与播放截断同一点 end-1/fps", () => {
   const seek = loadSeek();
   const keeps = [{ start: 1, end: 5 }];
   const ek = 1 / 30;
   const lastStart = 5 - ek;
   assert.strictEqual(seek(keeps, lastStart, { paused: true, endKeepSec: ek }), null);
-  // 播放：endLimit = end - 2/fps → 到达停帧即循环
+  // 播放到达停帧即循环（playEndPad = endKeep）
   const atPark = seek(keeps, lastStart, { paused: false, endKeepSec: ek });
   assert.ok(atPark != null && Math.abs(atPark - 1) < 1e-9);
-  // 停帧再往前超过 1 帧才仍可播（播放 endLimit = end-2/fps）
-  assert.strictEqual(seek(keeps, lastStart - ek * 1.1, { paused: false, endKeepSec: ek }), null);
+  // 停帧前仍可播
+  assert.strictEqual(seek(keeps, lastStart - ek * 0.5, { paused: false, endKeepSec: ek }), null);
   const park = seek(keeps, 5, { paused: true, endKeepSec: ek });
   assert.ok(park != null && Math.abs(park - lastStart) < 1e-9);
 });
 
-t("clipPlayWindow：提前截断、先 pause、无钉回 park、finally 清 looping", () => {
+t("clipPlayWindow 硬闸用 park 而非 park-step", () => {
   const fn = vtrim.slice(vtrim.indexOf("function clipPlayWindow"), vtrim.indexOf("function armFrameWatch"));
+  assert.ok(fn.includes("cur >= park - 1e-4"));
+  assert.ok(!fn.includes("park - step +"));
   assert.ok(fn.includes("video.pause()"));
-  assert.ok(fn.includes("park - step"));
   assert.ok(!fn.includes("video.currentTime = park"));
-  assert.ok(fn.includes("finally"));
-  assert.ok(fn.includes("playWindowLooping = false"));
-  assert.ok(fn.includes("钉回 park 反而") || fn.includes("解码画面常超前"));
+  assert.ok(fn.includes("片尾±停帧同一点") || fn.includes("点片尾所见"));
 });
 
-t("外预览 playEndPad 为 2×endKeep", () => {
+t("playEndPad 为 1×endKeep（与停帧对齐）", () => {
+  assert.ok(vtrim.includes("playEndPad = Math.max(endEps, endKeep)"));
+  assert.ok(!vtrim.includes("playEndPad = Math.max(endEps, endKeep * 2)"));
   const fallback = vbb.slice(
     vbb.indexOf("function vbbPreviewSeekForKeepRanges"),
     vbb.indexOf("function vbbKeepRangesFromEdit")
   );
-  assert.ok(fallback.includes("endKeep * 2"));
+  assert.ok(fallback.includes("Math.max(endEps, endKeep)"));
+  assert.ok(!fallback.includes("endKeep * 2"));
 });
 
 console.log(`vbb-end-play-align.test.js: ${n} passed`);
