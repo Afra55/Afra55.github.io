@@ -114,6 +114,8 @@
       /** 同一 keep 目标刚 seek 过后，容忍关键帧吸附偏差，避免 enforce 死循环 */
       let vbbEditEnforceAcceptTarget = null;
       let vbbEditEnforceAcceptUntil = 0;
+      /** 最近已呈现 mediaTime；外预览截断跟已绘帧，不跟滞后 currentTime */
+      let vbbLastPresentedMediaTime = NaN;
       let vbbScrubRaf = 0;
       let abortVbb = false;
       /** 批处理并行 FFmpeg 实例；取消时必须一并 terminate，否则点取消无响应 */
@@ -1578,7 +1580,14 @@
         // 与成片同一套 keep，预览接点才不会比 GIF 少跳/多带帧
         const keeps = vbbKeepRangesForEncode(item.edit, item.duration);
         if (!keeps.length) return;
-        const t = Number.isFinite(mediaTime) ? mediaTime : Number(vbbVideo.currentTime) || 0;
+        const clock = Number(vbbVideo.currentTime) || 0;
+        // 根因同编辑器：currentTime 滞后于已绘帧；截断跟 max(clock, presented)，勿盲目减帧
+        const presented = Number.isFinite(mediaTime)
+          ? mediaTime
+          : Number.isFinite(vbbLastPresentedMediaTime)
+            ? vbbLastPresentedMediaTime
+            : clock;
+        const t = Math.max(clock, presented);
         const srcFps = Number(item.edit?.srcFps) || Number(item.srcFps) || 0;
         const next = vbbPreviewSeekForKeepRanges(keeps, t, {
           paused: vbbVideo.paused,
@@ -1593,7 +1602,8 @@
         const frame = 1 / fps;
         // 关键帧常「偏早到不了」；片尾越过目标必须拉回，否则外预览比编辑停帧多画几帧
         const earlySlop = Math.max(0.05, 2 * frame);
-        const pastSlop = Math.max(0.012, 0.35 * frame);
+        // 越过停帧：禁止 pastSlop 吞掉（哪怕半帧也要拉回），否则外预览比片尾±所见多画
+        const pastSlop = vbbVideo.paused ? Math.max(0.012, 0.35 * frame) : 0;
         const delta = next - t; // >0 还需往后 seek；<0 已越过目标
         if (delta >= 0 && delta < earlySlop) return;
         if (delta < 0 && -delta < pastSlop) return;
@@ -1635,7 +1645,9 @@
         if (typeof vbbVideo?.requestVideoFrameCallback !== "function") return;
         const onFrame = (_now, meta) => {
           if (!vbbVideo || vbbVideo.paused || vbbBusy) return;
-          enforceVbbEditPlaybackWindow(Number(meta?.mediaTime));
+          const mt = Number(meta?.mediaTime);
+          if (Number.isFinite(mt)) vbbLastPresentedMediaTime = mt;
+          enforceVbbEditPlaybackWindow(mt);
           if (!vbbVideo.paused) {
             try {
               vbbVideo.requestVideoFrameCallback(onFrame);
@@ -7460,6 +7472,7 @@
           // 用户手势播放：清掉 accept，让 keep 窗重新校正一次
           vbbEditEnforceAcceptTarget = null;
           vbbEditEnforceAcceptUntil = 0;
+          vbbLastPresentedMediaTime = NaN;
           vbbVideo.play().catch(() => {});
         } else {
           pauseVbbPreview();
