@@ -236,6 +236,10 @@
     });
     root.dataset.themeScheme = finalVars["--theme-scheme"] || "dark";
     syncThemeColor(finalVars["--bg-0"]);
+    // 给 mdread 等同源独立页复用当前主题（含自定义推导后的完整变量）
+    try {
+      localStorage.setItem("devtools-theme-vars-v1", JSON.stringify(finalVars));
+    } catch (_) {}
   }
 
   function clearInlineVars() {

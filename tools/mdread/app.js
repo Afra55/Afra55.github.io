@@ -11,9 +11,66 @@
   const outlineBody = $("#mr-outline-body");
 
   const HANDOFF_KEY = "devtools-mdread-doc";
+  const THEME_STATE_KEY = "devtools-theme-v1";
+  const THEME_VARS_KEY = "devtools-theme-vars-v1";
   let currentName = "";
   let engine = null;
   let hasDoc = false;
+
+  /** 与 tools/theme.js 同步：阅读页正文色跟 MDM 预览同一套变量 */
+  function applyThemeVars(vars) {
+    if (!vars || typeof vars !== "object") return;
+    const root = document.documentElement;
+    Object.entries(vars).forEach(([k, v]) => {
+      if (k.startsWith("--") && v != null && String(v).trim() !== "") {
+        root.style.setProperty(k, String(v));
+      }
+    });
+    const scheme = vars["--theme-scheme"] || "dark";
+    root.dataset.themeScheme = scheme;
+    root.style.setProperty("--bg", vars["--bg-0"] || "");
+    root.style.setProperty("--err", vars["--danger"] || "");
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && vars["--bg-0"]) meta.setAttribute("content", String(vars["--bg-0"]).trim());
+  }
+
+  function syncThemeFromTools() {
+    // 1) theme.js 落盘的完整变量（含自定义推导）
+    try {
+      const raw = localStorage.getItem(THEME_VARS_KEY);
+      if (raw) {
+        const vars = JSON.parse(raw);
+        if (vars && typeof vars === "object" && vars["--bg-0"]) {
+          applyThemeVars(vars);
+          return;
+        }
+      }
+    } catch (_) {}
+    // 2) 从预设 id 重建（未跑过 theme.js 时）
+    try {
+      const presets = window.DevToolsThemePresets || [];
+      const byId = (id) => presets.find((p) => p.id === id) || presets[0];
+      let state = { preset: "default", useCustom: false, custom: {} };
+      try {
+        const raw = localStorage.getItem(THEME_STATE_KEY);
+        if (raw) state = { ...state, ...JSON.parse(raw) };
+      } catch (_) {}
+      const legacy = { sage: "pine", dusk: "ink", charcoal: "graphite", fog: "paper", sepia: "sky" };
+      if (legacy[state.preset]) state.preset = legacy[state.preset];
+      let vars;
+      if (state.useCustom && state.custom && typeof state.custom === "object") {
+        vars = { ...(byId("default")?.vars || {}), ...state.custom };
+      } else {
+        vars = { ...(byId(state.preset)?.vars || {}) };
+      }
+      if (vars["--bg-0"]) applyThemeVars(vars);
+    } catch (_) {}
+  }
+
+  syncThemeFromTools();
+  window.addEventListener("storage", (e) => {
+    if (e.key === THEME_VARS_KEY || e.key === THEME_STATE_KEY) syncThemeFromTools();
+  });
 
   function setError(text) {
     if (!errEl) return;

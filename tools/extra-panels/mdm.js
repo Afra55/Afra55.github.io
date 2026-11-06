@@ -4665,10 +4665,47 @@
       }
     }
 
+    function snapshotThemeVarsForMdRead() {
+      // 把当前预览页已生效的主题变量交给阅读页，保证打开瞬间颜色一致
+      try {
+        const cs = getComputedStyle(document.documentElement);
+        const keys = [
+          "--bg-0",
+          "--bg-1",
+          "--ink",
+          "--muted",
+          "--line",
+          "--accent",
+          "--accent-2",
+          "--link",
+          "--link-hover",
+          "--danger",
+          "--panel",
+          "--panel-strong",
+          "--bg-base-0",
+          "--bg-base-1",
+          "--bg-base-2",
+          "--theme-scheme",
+        ];
+        const vars = {};
+        keys.forEach((k) => {
+          const v = cs.getPropertyValue(k).trim();
+          if (v) vars[k] = v;
+        });
+        if (!vars["--theme-scheme"]) {
+          vars["--theme-scheme"] = document.documentElement.dataset.themeScheme || "dark";
+        }
+        if (vars["--bg-0"]) {
+          localStorage.setItem("devtools-theme-vars-v1", JSON.stringify(vars));
+        }
+      } catch (_) {}
+    }
+
     function writeMdReadHandoff(item, rawText) {
       const HANDOFF_KEY = "devtools-mdread-doc";
       const fm = parseFrontMatter(String(rawText || ""));
       const body = fm.body != null ? String(fm.body) : String(rawText || "");
+      snapshotThemeVarsForMdRead();
       const payload = JSON.stringify({
         text: body,
         title:

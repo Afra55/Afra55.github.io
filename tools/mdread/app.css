@@ -1,34 +1,34 @@
+/* 与 DevTools / MDM 预览同一套 token（默认 = 深海青绿）；浅色由 data-theme-scheme 切换，勿跟系统 prefers */
 :root {
-  color-scheme: dark light;
-  --bg: #0f1419;
-  --panel: #161b22;
-  --ink: #e6edf3;
-  --muted: #8b949e;
-  --line: #30363d;
+  color-scheme: dark;
+  --bg-0: #0b1320;
+  --bg-1: #131c2e;
+  --ink: #eef3fb;
+  --muted: #9aabc4;
+  --line: rgba(238, 243, 251, 0.13);
   --accent: #2ec4b6;
+  --accent-2: #f0a46a;
+  --link: #6ef0e2;
+  --link-hover: #b4fff7;
+  --danger: #ff6b7a;
+  --panel: rgba(15, 23, 38, 0.84);
+  --panel-strong: rgba(11, 18, 32, 0.96);
+  --theme-scheme: dark;
+  --bg: var(--bg-0);
   --ok: #3fb950;
-  --err: #f85149;
+  --err: var(--danger);
 }
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f6f8fa;
-    --panel: #ffffff;
-    --ink: #1f2328;
-    --muted: #656d76;
-    --line: #d0d7de;
-    --accent: #0d9488;
-    --ok: #1a7f37;
-    --err: #cf222e;
-  }
+html[data-theme-scheme="light"] {
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
   min-height: 100%;
-  background: var(--bg);
+  background: var(--bg-0);
   color: var(--ink);
-  font-family: -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
 }
 body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -153,6 +153,7 @@ body.is-dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
   color: var(--muted);
 }
 .preview a { color: var(--accent); }
+.markdown-body { color: var(--ink); }
 .preview .mdm-task { list-style: none; margin-left: -1.1em; }
 .preview .mdm-task-cb { margin-right: 0.4em; vertical-align: middle; }
 .preview .katex-display { overflow-x: auto; overflow-y: hidden; }
@@ -211,18 +212,30 @@ body.is-dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
 
-@media (prefers-color-scheme: light) {
-  .preview pre,
-  .markdown-body pre { background: rgba(0, 0, 0, 0.06); }
-  .hljs { color: #24292e; }
-  .hljs-comment, .hljs-quote { color: #6a737d; }
-  .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #d73a49; }
-  .hljs-string, .hljs-attr, .hljs-addition { color: #032f62; }
-  .hljs-number, .hljs-built_in, .hljs-builtin-name, .hljs-variable, .hljs-template-variable { color: #005cc5; }
-  .hljs-title, .hljs-section, .hljs-name { color: #6f42c1; }
-  .hljs-tag { color: #22863a; }
-  .hljs-meta, .hljs-deletion { color: #b31d28; }
-}
+/* 浅色主题：与 mdm.css 一致，跟站点 data-theme-scheme，不跟系统 */
+html[data-theme-scheme="light"] .preview pre,
+html[data-theme-scheme="light"] .markdown-body pre { background: rgba(0, 0, 0, 0.06); }
+html[data-theme-scheme="light"] .hljs { color: #24292e; }
+html[data-theme-scheme="light"] .hljs-comment,
+html[data-theme-scheme="light"] .hljs-quote { color: #6a737d; }
+html[data-theme-scheme="light"] .hljs-keyword,
+html[data-theme-scheme="light"] .hljs-selector-tag,
+html[data-theme-scheme="light"] .hljs-literal,
+html[data-theme-scheme="light"] .hljs-type { color: #d73a49; }
+html[data-theme-scheme="light"] .hljs-string,
+html[data-theme-scheme="light"] .hljs-attr,
+html[data-theme-scheme="light"] .hljs-addition { color: #032f62; }
+html[data-theme-scheme="light"] .hljs-number,
+html[data-theme-scheme="light"] .hljs-built_in,
+html[data-theme-scheme="light"] .hljs-builtin-name,
+html[data-theme-scheme="light"] .hljs-variable,
+html[data-theme-scheme="light"] .hljs-template-variable { color: #005cc5; }
+html[data-theme-scheme="light"] .hljs-title,
+html[data-theme-scheme="light"] .hljs-section,
+html[data-theme-scheme="light"] .hljs-name { color: #6f42c1; }
+html[data-theme-scheme="light"] .hljs-tag { color: #22863a; }
+html[data-theme-scheme="light"] .hljs-meta,
+html[data-theme-scheme="light"] .hljs-deletion { color: #b31d28; }
 
 .mdread-lightbox {
   border: 0;
@@ -236,7 +249,7 @@ body.is-dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
   box-shadow: 0 22px 64px rgba(0, 0, 0, 0.45);
 }
 .mdread-lightbox::backdrop {
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-0) 72%, transparent);
 }
 .lb-inner {
   display: grid;
@@ -275,7 +288,7 @@ body.is-dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
 }
 .lb-host.is-table table {
   border-collapse: collapse;
-  background: var(--bg);
+  background: var(--bg-0);
 }
 .lb-host.is-table th, .lb-host.is-table td {
   border: 1px solid var(--line);
