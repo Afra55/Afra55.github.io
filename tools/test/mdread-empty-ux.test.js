@@ -38,7 +38,14 @@ t("空态可打开 / 粘贴", () => {
 });
 
 t("SW 壳缓存已升版", () => {
-  assert.ok(/mdread-shell-v8/.test(sw));
+  assert.ok(/mdread-shell-v9/.test(sw));
+});
+
+t("空页不会被 display:grid 顶出「未命名」", () => {
+  assert.ok(css.includes(".layout[hidden]"));
+  assert.ok(css.includes("body:not(.has-doc) .layout"));
+  assert.ok(css.includes("body.has-doc .drop-hint"));
+  assert.ok(!html.includes(">未命名<"));
 });
 
 console.log(`mdread-empty-ux.test.js: ${n} passed`);

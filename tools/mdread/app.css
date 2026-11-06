@@ -62,6 +62,13 @@ body.is-dragging .empty-zone {
 .error { color: var(--err); margin: 0.5rem 1rem; font-size: 0.9rem; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
+/* author 的 display:grid/flex 会盖掉 UA 的 [hidden]{display:none}，空页会露出「未命名」大片空白 */
+.layout[hidden],
+.drop-hint[hidden],
+.error[hidden] {
+  display: none !important;
+}
+
 .drop-hint {
   margin: 0;
   min-height: 100dvh;
@@ -207,6 +214,12 @@ body.is-dragging .empty-zone {
   grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr);
   gap: 0;
   min-height: 100dvh;
+}
+body:not(.has-doc) .layout {
+  display: none !important;
+}
+body.has-doc .drop-hint {
+  display: none !important;
 }
 .outline {
   border-right: 1px solid var(--line);
