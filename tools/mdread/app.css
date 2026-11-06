@@ -32,44 +32,10 @@ html, body {
 }
 body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  min-height: 100dvh;
 }
 body.is-dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
 
-.top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  backdrop-filter: blur(8px);
-}
-.brand { font-size: 1.05rem; }
-.top-actions { display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: center; }
-
-button, .file-btn, a.ghost {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-  border-radius: 8px;
-  padding: 0.35rem 0.7rem;
-  font: inherit;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-}
-.file-btn { display: inline-flex; align-items: center; }
-.file-btn input { display: none; }
-.primary, .file-btn.primary {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-}
-.ghost, .ghost-btn { opacity: 0.92; }
 .ghost-btn {
   border: 1px solid var(--line);
   background: var(--panel);
@@ -78,35 +44,50 @@ button, .file-btn, a.ghost {
   padding: 0.35rem 0.7rem;
   font: inherit;
   cursor: pointer;
+  opacity: 0.92;
 }
 .hint.tight { margin: 0; }
-.hint { color: var(--muted); font-size: 0.88rem; margin: 0.65rem 1rem; }
+.hint { color: var(--muted); font-size: 0.88rem; margin: 0.65rem 0 0; }
 .error { color: var(--err); margin: 0.5rem 1rem; font-size: 0.9rem; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
 .drop-hint {
-  margin: 2.5rem auto;
-  max-width: 28rem;
+  margin: 0;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  padding: 1.5rem;
-  border: 1px dashed var(--line);
-  border-radius: 14px;
+  padding: 2rem 1.25rem;
+  cursor: pointer;
+  user-select: none;
+  border: 0;
+  outline: none;
 }
-.drop-title { margin: 0 0 0.5rem; font-size: 1.15rem; }
+.drop-hint:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.drop-hint .drop-title {
+  margin: 0 0 0.45rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.drop-hint .hint { max-width: 22rem; }
 
 .layout {
   display: grid;
   grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr);
   gap: 0;
-  min-height: calc(100vh - 7rem);
+  min-height: 100dvh;
 }
 .outline {
   border-right: 1px solid var(--line);
   padding: 0.75rem 0.6rem;
   overflow: auto;
-  max-height: calc(100vh - 4rem);
+  max-height: 100dvh;
   position: sticky;
-  top: 3.2rem;
+  top: 0;
   align-self: start;
 }
 .outline-label {
@@ -223,14 +204,6 @@ button, .file-btn, a.ghost {
 .hljs-string, .hljs-attr, .hljs-addition { color: #a5d6ff; }
 .hljs-number, .hljs-built_in, .hljs-variable { color: #79c0ff; }
 .hljs-title, .hljs-section, .hljs-name { color: #d2a8ff; }
-
-.install-card {
-  margin: 1rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-}
 
 .mdread-lightbox {
   border: 0;

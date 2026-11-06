@@ -1,7 +1,7 @@
 /* 独立 MD 阅读 PWA · 缓存本目录壳；vendor 网络优先再缓存 */
 "use strict";
 
-const CACHE = "mdread-shell-v1";
+const CACHE = "mdread-shell-v2";
 const PRECACHE = ["./", "./index.html", "./app.js", "./app.css", "./preview.js", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

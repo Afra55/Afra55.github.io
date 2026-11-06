@@ -4640,24 +4640,58 @@
       }
     }
 
-    /** 用独立 MD 阅读页打开（sessionStorage 交接，一次一篇） */
+    /**
+     * 用独立 MD 阅读页打开。
+     * 先同步 window.open 保住用户手势（防弹窗拦截），正文走 localStorage 交接
+     * （noopener 新标签读不到 opener 的 sessionStorage）。
+     */
     async function openInMdRead(item) {
       if (!item) return;
+      const url = new URL("./mdread/", location.href).href;
+      const HANDOFF_KEY = "devtools-mdread-doc";
+      // 手势内先开空白页；读盘完成后再写交接并跳转
+      let win = null;
+      try {
+        win = window.open("about:blank", "_blank");
+      } catch (_) {
+        win = null;
+      }
       try {
         const text = await readDocText(item);
-        sessionStorage.setItem(
-          "devtools-mdread-doc",
-          JSON.stringify({
-            text: String(text || ""),
-            title: item.title || String(item.fileName || "").replace(/\.(md|markdown|txt)$/i, "") || "document",
-          })
-        );
+        const payload = JSON.stringify({
+          text: String(text || ""),
+          title:
+            item.title ||
+            String(item.fileName || "").replace(/\.(md|markdown|txt)$/i, "") ||
+            "document",
+          t: Date.now(),
+        });
+        try {
+          localStorage.setItem(HANDOFF_KEY, payload);
+        } catch (_) {}
+        try {
+          sessionStorage.setItem(HANDOFF_KEY, payload);
+        } catch (_) {}
+        if (win && !win.closed) {
+          try {
+            win.location.href = url;
+            return;
+          } catch (_) {
+            try {
+              win.close();
+            } catch (_) {}
+          }
+        }
+        const again = window.open(url, "_blank");
+        if (!again) {
+          setErr("浏览器拦截了阅读页弹窗，请允许本站弹窗后重试，或直接打开「MD 阅读」拖入文件");
+        }
       } catch (err) {
-        setErr(`无法传到阅读页：${err?.message || err}（可直接打开阅读页选文件）`);
-        return;
+        try {
+          win?.close();
+        } catch (_) {}
+        setErr(`无法传到阅读页：${err?.message || err}（可直接打开阅读页拖入文件）`);
       }
-      const url = new URL("./mdread/", location.href).href;
-      window.open(url, "_blank", "noopener");
     }
 
     function showListCtx(x, y, item) {
