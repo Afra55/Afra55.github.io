@@ -7871,6 +7871,12 @@
       let vbbScrubSeekInflight = false;
       let vbbScrubSeekToken = 0;
       let vbbEditSkipBusy = false;
+      /** 程序化 keep-seek 期间锁播放按钮文案，避免 currentTime 触发的 pause/play 狂切 */
+      let vbbPlayUiLock = false;
+      let vbbPlayUiUnlockTimer = 0;
+      /** 同一 keep 目标刚 seek 过后，容忍关键帧吸附偏差，避免 enforce 死循环 */
+      let vbbEditEnforceAcceptTarget = null;
+      let vbbEditEnforceAcceptUntil = 0;
       let vbbScrubRaf = 0;
       let abortVbb = false;
       /** 批处理并行 FFmpeg 实例；取消时必须一并 terminate，否则点取消无响应 */
@@ -8072,7 +8078,9 @@
           }
         }
         if (vbbMarkTap) vbbMarkTap.textContent = vbbDraftStart == null ? "打起点" : "打终点";
-        if (vbbPlay) vbbPlay.textContent = vbbPlaying ? "暂停" : "播放";
+        if (vbbPlay && !vbbPlayUiLock) {
+          vbbPlay.textContent = vbbPlaying ? "暂停" : "播放";
+        }
         if (!vbbScrubbing) syncVbbScrubFromVideo();
       }
   
@@ -9312,6 +9320,18 @@
         }
       }
 
+      function lockVbbPlayUi(ms) {
+        vbbPlayUiLock = true;
+        window.clearTimeout(vbbPlayUiUnlockTimer);
+        vbbPlayUiUnlockTimer = window.setTimeout(() => {
+          vbbPlayUiLock = false;
+          vbbPlayUiUnlockTimer = 0;
+          // 解锁后按真实播放态校正一次文案
+          vbbPlaying = Boolean(vbbVideo && !vbbVideo.paused);
+          if (vbbPlay) vbbPlay.textContent = vbbPlaying ? "暂停" : "播放";
+        }, Math.max(80, Number(ms) || 280));
+      }
+
       function enforceVbbEditPlaybackWindow(mediaTime) {
         if (isVbbManualMode() || vbbBusy || !vbbVideo?.src || vbbEditSkipBusy) return;
         const item = getActiveVbbEditItem();
@@ -9320,16 +9340,36 @@
         const keeps = vbbKeepRangesForEncode(item.edit, item.duration);
         if (!keeps.length) return;
         const t = Number.isFinite(mediaTime) ? mediaTime : Number(vbbVideo.currentTime) || 0;
+        const srcFps = Number(item.edit?.srcFps) || Number(item.srcFps) || 0;
         const next = vbbPreviewSeekForKeepRanges(keeps, t, {
           paused: vbbVideo.paused,
           edit: item.edit,
-          srcFps: item.edit?.srcFps || item.srcFps,
+          srcFps,
         });
-        if (next == null || !Number.isFinite(next)) return;
-        // 须小于约 1 帧；原先 0.04 会让删段尾近边界少跳、外预览偏后
-        if (Math.abs(t - next) < 0.001) return;
+        if (next == null || !Number.isFinite(next)) {
+          vbbEditEnforceAcceptTarget = null;
+          return;
+        }
+        const fps = Math.max(5, srcFps >= 5 && srcFps <= 240 ? srcFps : 30);
+        const frame = 1 / fps;
+        // 关键帧吸附常偏 0.05~0.5s；0.001 会 seek→pause/play 死循环（按钮狂切）
+        const nearSlop = Math.max(0.05, 2 * frame);
+        if (Math.abs(t - next) < nearSlop) return;
+        const now =
+          typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+        if (
+          vbbEditEnforceAcceptTarget != null &&
+          Math.abs(vbbEditEnforceAcceptTarget - next) < frame &&
+          now < vbbEditEnforceAcceptUntil &&
+          Math.abs(t - next) < Math.max(0.75, 15 * frame)
+        ) {
+          return;
+        }
         const keepPlaying = !vbbVideo.paused;
         vbbEditSkipBusy = true;
+        vbbEditEnforceAcceptTarget = next;
+        vbbEditEnforceAcceptUntil = now + 650;
+        lockVbbPlayUi(420);
         applyVbbSeek(next, { keepPlaying: true });
         const finish = () => {
           vbbVideo.removeEventListener("seeked", finish);
@@ -15116,17 +15156,23 @@
         if (vbbVideo.paused) {
           const d = vbbVideoDuration();
           if (d >= VBB_LONG_VIDEO_SEC) toast("长视频播放较耗内存，建议拖动定位");
+          // 用户手势播放：清掉 accept，让 keep 窗重新校正一次
+          vbbEditEnforceAcceptTarget = null;
+          vbbEditEnforceAcceptUntil = 0;
           vbbVideo.play().catch(() => {});
         } else {
           pauseVbbPreview();
         }
       });
       vbbVideo?.addEventListener("play", () => {
-        vbbPlaying = true;
-        if (vbbPlay) vbbPlay.textContent = "暂停";
+        if (!vbbPlayUiLock) {
+          vbbPlaying = true;
+          if (vbbPlay) vbbPlay.textContent = "暂停";
+        }
         armVbbEditFrameWatch();
       });
       vbbVideo?.addEventListener("pause", () => {
+        if (vbbPlayUiLock) return;
         vbbPlaying = false;
         if (vbbPlay) vbbPlay.textContent = "播放";
       });
