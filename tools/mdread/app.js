@@ -6,6 +6,9 @@
   const errEl = $("#mr-error");
   const layout = $("#mr-layout");
   const empty = $("#mr-empty");
+  const emptyZone = $("#mr-empty-zone");
+  const openBtn = $("#mr-open-btn");
+  const pasteBtn = $("#mr-paste-btn");
   const titleEl = $("#mr-title");
   const previewEl = $("#mr-preview");
   const outlineBody = $("#mr-outline-body");
@@ -152,16 +155,52 @@
     } catch (_) {}
   });
 
-  // 空态：点击 / 回车选文件
-  empty?.addEventListener("click", (e) => {
-    e.preventDefault();
-    pickFile();
-  });
-  empty?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") {
+  function bindPick(el) {
+    if (!el) return;
+    el.addEventListener("click", (e) => {
       e.preventDefault();
+      e.stopPropagation();
       pickFile();
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        pickFile();
+      }
+    });
+  }
+  bindPick(emptyZone);
+  bindPick(openBtn);
+
+  async function pasteMarkdownText() {
+    setError("");
+    try {
+      let text = "";
+      if (navigator.clipboard?.readText) {
+        text = await navigator.clipboard.readText();
+      }
+      if (!String(text || "").trim()) {
+        setError("剪贴板没有文本，请先复制 Markdown 后再试");
+        return;
+      }
+      await openText(text, "clipboard.md");
+    } catch (err) {
+      setError(err?.message || "无法读取剪贴板，可改用 Ctrl+V / ⌘V 直接粘贴");
     }
+  }
+  pasteBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void pasteMarkdownText();
+  });
+
+  // 空页直接粘贴正文
+  window.addEventListener("paste", (e) => {
+    if (hasDoc) return;
+    const text = e.clipboardData?.getData("text/plain");
+    if (!String(text || "").trim()) return;
+    e.preventDefault();
+    void openText(text, "clipboard.md");
   });
 
   // 拖拽换文：有文无文都接；一次一篇

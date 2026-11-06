@@ -35,9 +35,34 @@
     </main>
   </div>
 
-  <div class="drop-hint" id="mr-empty" role="button" tabindex="0" aria-label="点击或拖入 Markdown">
-    <p class="drop-title">点击选择，或拖入 Markdown</p>
-    <p class="hint">一次一篇 · 再拖新文件即可换文</p>
+  <div class="drop-hint" id="mr-empty" tabindex="-1" aria-label="MD 阅读空状态">
+    <div class="empty-shell">
+      <p class="empty-brand">MD 阅读</p>
+      <p class="empty-lead">专注预览一篇 Markdown，本地打开，不上传</p>
+
+      <div
+        class="empty-zone"
+        id="mr-empty-zone"
+        role="button"
+        tabindex="0"
+        aria-label="点击选择 Markdown 文件，也可拖入"
+      >
+        <span class="empty-zone-mark" aria-hidden="true"></span>
+        <p class="empty-zone-title">把文件拖到这里</p>
+        <p class="empty-zone-sub">支持 .md · .markdown · .txt</p>
+      </div>
+
+      <div class="empty-actions">
+        <button type="button" class="empty-cta" id="mr-open-btn">打开文件</button>
+        <button type="button" class="ghost-btn empty-secondary" id="mr-paste-btn">粘贴文本</button>
+      </div>
+
+      <ul class="empty-tips">
+        <li>一次只读一篇，再拖新文件即可换文</li>
+        <li>也可从 DevTools「Markdown」右键 → 用阅读页打开</li>
+        <li>空页时可直接按粘贴快捷键贴入正文</li>
+      </ul>
+    </div>
   </div>
 
   <script src="./preview.js" defer></script>
