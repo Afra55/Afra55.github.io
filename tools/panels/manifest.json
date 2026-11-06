@@ -265,7 +265,12 @@
     {
       "id": "markdown",
       "file": "./panels/markdown.html",
-      "bytes": 815
+      "bytes": 931
+    },
+    {
+      "id": "mdread",
+      "file": "./panels/mdread.html",
+      "bytes": 1022
     },
     {
       "id": "mathedit",

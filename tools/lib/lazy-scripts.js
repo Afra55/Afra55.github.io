@@ -94,9 +94,10 @@
     },
   };
 
-  const EXTERNAL_SITE_TOOLS = new Set([]);
+  const EXTERNAL_SITE_TOOLS = new Set(["mdread"]);
 
   const TOOL_FILES = {
+    mdread: "./mdread-tool.js",
     acupoint: "./acupoint.js",
     healthread: "./healthread.js",
     vtrim: "./vtrim.js",

@@ -38,7 +38,7 @@ t("空态可打开 / 粘贴", () => {
 });
 
 t("SW 壳缓存已升版", () => {
-  assert.ok(/mdread-shell-v7/.test(sw));
+  assert.ok(/mdread-shell-v8/.test(sw));
 });
 
 console.log(`mdread-empty-ux.test.js: ${n} passed`);
