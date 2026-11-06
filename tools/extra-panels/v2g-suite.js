@@ -10388,6 +10388,7 @@
 
       function serializeVbbEditDraft(edit) {
         if (!edit) return null;
+        const srcFps = Number(edit.srcFps) || 0;
         return {
           trimStart: Number(edit.trimStart) || 0,
           trimEnd: Number(edit.trimEnd) || 0,
@@ -10406,7 +10407,22 @@
                 h: Number(edit.crop.h) || 0,
               }
             : null,
+          ...(srcFps >= 5 && srcFps <= 240 ? { srcFps } : {}),
         };
+      }
+
+      /** 当前会话里正在打开的源文件（用于合并草稿时只替换这些键） */
+      function vbbEditDraftSessionFiles() {
+        /** @type {File[]} */
+        const files = [];
+        if (isVbbBatchMode() && vbbBatchFiles.length) {
+          vbbBatchFiles.forEach((it) => {
+            if (it?.file) files.push(it.file);
+          });
+        } else if (vbbSourceFile) {
+          files.push(vbbSourceFile);
+        }
+        return files;
       }
 
       /**
@@ -10503,11 +10519,28 @@
 
       /**
        * 同步写入 localStorage（取消/切后台/刷新前保住未完成裁剪；不含视频文件）。
-       * 全部已成功时清空草稿键，避免下次误恢复。
+       * 按「当前会话文件」合并：只更新/剔除本会话条目，保留其它视频草稿。
+       * 根因修复：选文件前 clearVbb 时内存已空，旧逻辑 items=[] 会整键擦掉，导致下次同片恢复失败。
        */
       function saveVbbEditDraftsSync() {
         try {
-          const items = collectVbbEditDraftItems();
+          const fresh = collectVbbEditDraftItems();
+          const sessionFiles = vbbEditDraftSessionFiles();
+          const prev = readVbbEditDraftPayload()?.items || [];
+          if (!sessionFiles.length && !fresh.length) {
+            // 无会话且无新草稿（刷新后 clearVbb / 空 pagehide）：不动已有 LS
+            return prev.length;
+          }
+          const sessionExact = new Set(sessionFiles.map((f) => vbbFileDraftKey(f)).filter(Boolean));
+          const sessionSoft = new Set(sessionFiles.map((f) => vbbFileDraftSoftKey(f)).filter(Boolean));
+          const kept = prev.filter((d) => {
+            const key = String(d?.key || "");
+            const soft = vbbFileDraftSoftKey(d);
+            if (key && sessionExact.has(key)) return false;
+            if (soft && sessionSoft.has(soft)) return false;
+            return true;
+          });
+          const items = kept.concat(fresh);
           if (!items.length) {
             localStorage.removeItem(VBB_EDIT_DRAFT_LS_KEY);
             return 0;
@@ -10537,6 +10570,7 @@
         if (!item || !draft) return false;
         let changed = false;
         if (draft.edit) {
+          const fps = Number(draft.edit.srcFps) || Number(item.srcFps) || 0;
           item.edit = {
             trimStart: Number(draft.edit.trimStart) || 0,
             trimEnd: Number(draft.edit.trimEnd) || item.duration,
@@ -10550,7 +10584,9 @@
             crop: draft.edit.crop
               ? { ...draft.edit.crop }
               : { x: 0, y: 0, w: item.srcW, h: item.srcH },
+            ...(fps >= 5 && fps <= 240 ? { srcFps: fps } : {}),
           };
+          if (fps >= 5 && fps <= 240) item.srcFps = fps;
           clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
           changed = true;
         }
@@ -11890,6 +11926,7 @@
         if (!(duration > 0) || !vbbVideo.videoWidth) throw new Error("视频时长或尺寸无效");
         if (duration < VBB_MIN_SPAN) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
         vbbSingleEdit = makeVbbEditState(duration, vbbVideo.videoWidth, vbbVideo.videoHeight);
+        let restored = 0;
         {
           const probe = {
             file: pinned,
@@ -11899,7 +11936,7 @@
             edit: vbbSingleEdit,
             marks: [],
           };
-          const restored = restoreVbbEditDrafts([probe]);
+          restored = restoreVbbEditDrafts([probe]);
           if (restored > 0) {
             vbbSingleEdit = probe.edit;
             if (Array.isArray(probe.marks) && probe.marks.length) vbbMarks = probe.marks.slice();
@@ -11919,9 +11956,23 @@
         syncVbbWorkflowUi();
         syncVbbEditUi();
         syncVbbEditPreview();
+        if (restored > 0 && !isVbbManualMode()) {
+          const encodeKeeps = vbbKeepRangesForEncode(vbbSingleEdit, duration);
+          const seekTo = Number(encodeKeeps[0]?.start);
+          applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(vbbSingleEdit?.trimStart) || 0, {
+            keepPlaying: false,
+          });
+          enforceVbbEditPlaybackWindow();
+        }
         setVbbButtons();
         prefetchVbbVtrimEditor();
-        toast(vbbWorkflow === "single" ? "视频已就绪 · 可点「编辑」裁时长/画面，再「一键黑盒」" : "视频已就绪，点「一键黑盒」即可");
+        toast(
+          restored > 0
+            ? "已恢复上次编辑 · 可继续改或「一键黑盒」"
+            : vbbWorkflow === "single"
+              ? "视频已就绪 · 可点「编辑」裁时长/画面，再「一键黑盒」"
+              : "视频已就绪，点「一键黑盒」即可"
+        );
       }
   
       async function runVbbManualBlackbox() {

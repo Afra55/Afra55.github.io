@@ -73,6 +73,55 @@ t("未完成才进草稿，全部成功则清空 localStorage 键", () => {
   assert.ok(src.includes("localStorage.removeItem(VBB_EDIT_DRAFT_LS_KEY)"));
 });
 
+t("保存草稿按会话合并，空会话不擦其它视频草稿", () => {
+  assert.ok(src.includes("function vbbEditDraftSessionFiles"));
+  const start = src.indexOf("function saveVbbEditDraftsSync");
+  const end = src.indexOf("function readVbbEditDraftPayload");
+  assert.ok(start > 0 && end > start);
+  const body = src.slice(start, end);
+  assert.ok(body.includes("vbbEditDraftSessionFiles"));
+  assert.ok(body.includes("kept.concat(fresh)"));
+  assert.ok(body.includes("无会话且无新草稿"));
+  assert.ok(src.includes("已恢复上次编辑"));
+});
+
+/** 与 saveVbbEditDraftsSync 合并语义对齐的纯函数（防回归：选文件前空会话误擦） */
+function mergeDraftItems(prev, fresh, sessionFiles, softKey, exactKey) {
+  if (!sessionFiles.length && !fresh.length) return prev.slice();
+  const sessionExact = new Set(sessionFiles.map((f) => exactKey(f)).filter(Boolean));
+  const sessionSoft = new Set(sessionFiles.map((f) => softKey(f)).filter(Boolean));
+  const kept = prev.filter((d) => {
+    const key = String(d?.key || "");
+    const soft = softKey(d);
+    if (key && sessionExact.has(key)) return false;
+    if (soft && sessionSoft.has(soft)) return false;
+    return true;
+  });
+  return kept.concat(fresh);
+}
+
+t("合并语义：无会话空 fresh 保留旧草稿；有会话可剔除本片", () => {
+  const { vbbFileDraftKey, vbbFileDraftSoftKey } = loadDraftMatchers();
+  const prev = [
+    { key: "a.mp4|100|1", name: "a.mp4", size: 100, edit: { trimStart: 1 } },
+    { key: "b.mp4|200|2", name: "b.mp4", size: 200, edit: { trimStart: 2 } },
+  ];
+  const soft = (x) => vbbFileDraftSoftKey(x);
+  const exact = (f) => vbbFileDraftKey(f);
+  // 刷新后 clearVbb：无会话
+  const keep = mergeDraftItems(prev, [], [], soft, exact);
+  assert.equal(keep.length, 2);
+  // 打开 a 且已重置/出片：会话有 a，fresh 空 → 只删 a
+  const afterA = mergeDraftItems(prev, [], [{ name: "a.mp4", size: 100, lastModified: 9 }], soft, exact);
+  assert.equal(afterA.length, 1);
+  assert.equal(afterA[0].name, "b.mp4");
+  // 保存 a 新编辑
+  const fresh = [{ key: "a.mp4|100|9", name: "a.mp4", size: 100, edit: { trimStart: 3 } }];
+  const upsert = mergeDraftItems(prev, fresh, [{ name: "a.mp4", size: 100, lastModified: 9 }], soft, exact);
+  assert.equal(upsert.length, 2);
+  assert.equal(upsert.find((d) => d.name === "a.mp4").edit.trimStart, 3);
+});
+
 t("无实质编辑不写草稿，避免清除后被 pagehide 复活", () => {
   assert.ok(src.includes("vbbDraftPayloadWorthSaving"));
   assert.ok(src.includes("确有编辑内容"));
