@@ -434,6 +434,8 @@
     let playheadRaf = 0;
     let playWindowGen = 0;
     let playWindowLooping = false;
+    /** 最近一帧 rVFC 已呈现的 mediaTime；currentTime 常滞后于画面，截断必须跟已绘帧 */
+    let lastPresentedMediaTime = NaN;
     let cropLiveRaf = 0;
     let filmGen = 0;
     let closed = false;
@@ -931,8 +933,9 @@
      * 片尾所见即所得：
      * - 黄柄 end = 半开上界（该帧起不进 GIF）
      * - 停帧 = end - 1/srcFps（keep 末帧）
-     * - 解码偏早 → 收紧 end 对齐 shown（成片跟画面走）
-     * - 解码偏后/贴柄 → 最多再往前试 1 帧，并同步收紧 end（禁止只改画面不改黄柄，否则拖柄≠预览≠GIF）
+     * 根因：HTML5 seek 非帧精确。若只按「理论 park=end-1/fps」再 seek 一次却不按
+     * 实际 shown 回收 end，画面停在偏早帧，播放硬闸仍切理论 park → 比所见多放几帧。
+     * 修法：以最终画面 shown 提交 end（成片/播放跟画面走）；禁止靠播放提前减帧对冲。
      */
     async function seekEndPreviewExact() {
       const gen = ++endParkGen;
@@ -958,7 +961,7 @@
       if (!Number.isFinite(shown)) shown = target;
 
       if (shown >= want - step * 0.5) {
-        // 贴柄/越界：再往前一帧，并把黄柄收到 shown+step（画面与成片同一末帧）
+        // 贴柄/越界：再往前一帧
         const earlier = Math.max(startSec, target - step);
         if (earlier < target - 1e-4) {
           try {
@@ -969,26 +972,15 @@
           shown = Number(video.currentTime);
           if (!Number.isFinite(shown)) shown = earlier;
         }
-        endSec = quantizeTrimSec(
-          clamp(Math.min(want, shown + step), startSec + MIN_SPAN, duration)
-        );
-      } else if (shown + step < want - 0.001) {
-        // 偏早：收紧 end，使 keep 末帧 = 当前所见
-        endSec = quantizeTrimSec(
-          clamp(shown + step, startSec + MIN_SPAN, duration)
-        );
       }
 
-      // 最终停在 keep 末（与播放截断 / GIF 同一点）
-      target = endKeepSec();
-      try {
-        video.currentTime = target;
-      } catch (_) {}
-      await waitSeek(video);
-      if (gen !== endParkGen || closed) return target;
+      // 以实际停帧提交黄柄：end = shown+step（不超过按钮 want）；勿再二次 seek（会再次偏离）
+      endSec = quantizeTrimSec(
+        clamp(Math.min(want, shown + step), startSec + MIN_SPAN, duration)
+      );
       paintTimeline();
       updateLabels();
-      return Number(video.currentTime) || target;
+      return shown;
     }
 
     /**
@@ -1725,13 +1717,13 @@
       if (playWindowLooping) return;
       playWindowLooping = true;
       const gen = ++playWindowGen;
+      lastPresentedMediaTime = NaN;
       try {
         video.pause();
       } catch (_) {}
       seekPlayheadExact(startSec)
         .then(async () => {
           if (closed || gen !== playWindowGen) return;
-          playWindowLooping = false;
           await video.play().catch(() => {});
           if (!closed && gen === playWindowGen && !video.paused) armFrameWatch();
         })
@@ -1743,10 +1735,17 @@
 
     function clipPlayWindow(mediaTime) {
       if (closed || !duration || video.paused || playWindowLooping || drag) return false;
-      const cur = Number.isFinite(mediaTime) ? mediaTime : Number(video.currentTime) || 0;
+      const clock = Number(video.currentTime) || 0;
+      // 根因：播放时 currentTime 常滞后于已呈现帧；只用 currentTime 会在画面已过 park 后才切
+      const presented = Number.isFinite(mediaTime)
+        ? mediaTime
+        : Number.isFinite(lastPresentedMediaTime)
+          ? lastPresentedMediaTime
+          : clock;
+      const cur = Math.max(clock, presented);
       const park = endKeepSec();
       const step = endKeepStepSec();
-      // 硬闸：与片尾±停帧同一点（endKeepSec）切断，保证「点片尾所见 = 播放最后一帧」
+      // 硬闸：与片尾±停帧同一点（endKeepSec）切断；截断时刻跟已绘帧，不靠提前减帧
       let jump = null;
       if (cur >= park - 1e-4) {
         jump = startSec;
@@ -1763,11 +1762,11 @@
       } catch (_) {}
       playWindowLooping = true;
       const gen = ++playWindowGen;
+      lastPresentedMediaTime = NaN;
       void (async () => {
         try {
           await seekPlayheadExact(jump);
           if (closed || gen !== playWindowGen) return;
-          playWindowLooping = false;
           await video.play().catch(() => {});
           if (closed || gen !== playWindowGen || video.paused) return;
           armFrameWatch();
@@ -1775,6 +1774,7 @@
         } catch (_) {
           /* finally 清 looping */
         } finally {
+          // 须在 play + arm 之后才放行，避免空窗期靠滞后 currentTime 漏切
           if (gen === playWindowGen) playWindowLooping = false;
         }
       })();
@@ -1786,7 +1786,9 @@
       const gen = playWindowGen;
       const onFrame = (_now, meta) => {
         if (closed || gen !== playWindowGen || video.paused || playWindowLooping) return;
-        if (clipPlayWindow(Number(meta?.mediaTime))) return;
+        const mt = Number(meta?.mediaTime);
+        if (Number.isFinite(mt)) lastPresentedMediaTime = mt;
+        if (clipPlayWindow(mt)) return;
         try {
           video.requestVideoFrameCallback(onFrame);
         } catch (_) {}
@@ -1802,6 +1804,7 @@
         const cur = Number(video.currentTime) || 0;
         const keep = endKeepSec();
         playWindowLooping = false;
+        lastPresentedMediaTime = NaN;
         const hitCut = cutoutAtTime(cur);
         if (hitCut) {
           // 停在红柄/删段内：按端点开播，终点侧不要被拉去起点
