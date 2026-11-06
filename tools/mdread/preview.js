@@ -304,6 +304,38 @@
     }
   }
 
+  function ensureHtml2Canvas() {
+    if (typeof window.html2canvas === "function") return Promise.resolve(true);
+    return loadScript(`${VENDOR_BASE}html2canvas.min.js`)
+      .then(() => typeof window.html2canvas === "function")
+      .catch(() => false);
+  }
+
+  async function rasterizeDomAsImage(el, mime, scale = 2) {
+    const ok = await ensureHtml2Canvas();
+    if (!ok) throw new Error("截图库加载失败");
+    const clone = el.cloneNode(true);
+    clone.style.cssText =
+      "position:static;transform:none;left:auto;top:auto;margin:0;max-width:none;display:block;";
+    const holder = document.createElement("div");
+    holder.style.cssText =
+      "position:fixed;left:-100000px;top:0;pointer-events:none;padding:16px;background:#ffffff;color:#111111;";
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
+    try {
+      const canvas = await window.html2canvas(holder, {
+        backgroundColor: "#ffffff",
+        scale,
+        logging: false,
+        useCORS: true,
+      });
+      const quality = mime === "image/png" ? undefined : 0.92;
+      return await new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
+    } finally {
+      holder.remove();
+    }
+  }
+
   function createLightbox(toast) {
     let dlg = document.getElementById("mdread-lightbox");
     if (!dlg) {
@@ -321,7 +353,14 @@
         `<span class="mono" id="mdread-lb-pct">100%</span>` +
         `<button type="button" class="ghost-btn" id="mdread-lb-in">＋</button>` +
         `<button type="button" class="ghost-btn" id="mdread-lb-reset">还原</button>` +
-        `<button type="button" class="ghost-btn" id="mdread-lb-dl">下载</button>` +
+        `<details class="lb-dl" id="mdread-lb-dl">` +
+        `<summary class="ghost-btn" id="mdread-lb-dl-sum">下载</summary>` +
+        `<div class="lb-dl-menu" role="menu">` +
+        `<button type="button" data-fmt="src" id="mdread-lb-dl-src">源文件</button>` +
+        `<button type="button" data-fmt="png">PNG 图片</button>` +
+        `<button type="button" data-fmt="jpeg">JPEG 图片</button>` +
+        `<button type="button" data-fmt="webp">WebP 图片</button>` +
+        `</div></details>` +
         `</div></div>`;
       document.body.appendChild(dlg);
     }
@@ -329,9 +368,12 @@
     const host = dlg.querySelector("#mdread-lb-host");
     const cap = dlg.querySelector("#mdread-lb-cap");
     const pct = dlg.querySelector("#mdread-lb-pct");
+    const dlWrap = dlg.querySelector("#mdread-lb-dl");
+    const dlSrcBtn = dlg.querySelector("#mdread-lb-dl-src");
     const view = { scale: 1, x: 0, y: 0 };
     let mode = "svg";
     let payload = null;
+    let exporting = false;
 
     const sync = () => {
       host.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
@@ -351,7 +393,15 @@
       }
       host.innerHTML = "";
       payload = null;
+      if (dlWrap) dlWrap.open = false;
     };
+
+    function syncDlMenu() {
+      if (dlSrcBtn) {
+        dlSrcBtn.textContent =
+          mode === "svg" ? "SVG" : mode === "table" ? "CSV" : mode === "code" ? "源码文件" : "源文件";
+      }
+    }
 
     dlg.querySelector("#mdread-lb-close")?.addEventListener("click", close);
     dlg.addEventListener("click", (e) => {
@@ -376,18 +426,57 @@
       },
       { passive: false }
     );
-    dlg.querySelector("#mdread-lb-dl")?.addEventListener("click", () => {
-      if (!payload) return;
-      if (mode === "svg" && payload.svg) {
-        downloadBlob(new Blob([payload.svg], { type: "image/svg+xml;charset=utf-8" }), "mermaid-chart.svg");
-        toast?.("已下载 mermaid-chart.svg");
-      } else if (mode === "code") {
-        downloadBlob(new Blob([payload.text || ""], { type: "text/plain;charset=utf-8" }), payload.name || "code.txt");
-        toast?.(`已下载 ${payload.name || "code.txt"}`);
-      } else if (mode === "table") {
-        downloadBlob(new Blob(["\ufeff" + (payload.csv || "")], { type: "text/csv;charset=utf-8" }), "table.csv");
-        toast?.("已下载 table.csv");
+
+    async function exportFmt(fmt) {
+      if (!payload || exporting) return;
+      if (fmt === "src") {
+        if (mode === "svg" && payload.svg) {
+          downloadBlob(new Blob([payload.svg], { type: "image/svg+xml;charset=utf-8" }), "mermaid-chart.svg");
+          toast?.("已下载 mermaid-chart.svg");
+        } else if (mode === "code") {
+          downloadBlob(new Blob([payload.text || ""], { type: "text/plain;charset=utf-8" }), payload.name || "code.txt");
+          toast?.(`已下载 ${payload.name || "code.txt"}`);
+        } else if (mode === "table") {
+          downloadBlob(new Blob(["\ufeff" + (payload.csv || "")], { type: "text/csv;charset=utf-8" }), "table.csv");
+          toast?.("已下载 table.csv");
+        }
+        if (dlWrap) dlWrap.open = false;
+        return;
       }
+      const mime = fmt === "jpeg" ? "image/jpeg" : fmt === "webp" ? "image/webp" : "image/png";
+      const ext = fmt === "jpeg" ? "jpg" : fmt;
+      const base = mode === "code" ? "code" : mode === "table" ? "table" : "mermaid-chart";
+      exporting = true;
+      const sum = dlg.querySelector("#mdread-lb-dl-sum");
+      if (sum) sum.textContent = "导出中…";
+      try {
+        toast?.("正在导出图片…");
+        let blob = null;
+        if (mode === "svg" && payload.svg) {
+          // 离屏灌 SVG 再截
+          const wrap = document.createElement("div");
+          wrap.innerHTML = payload.svg;
+          blob = await rasterizeDomAsImage(wrap, mime);
+        } else {
+          blob = await rasterizeDomAsImage(host, mime);
+        }
+        if (!blob) throw new Error("浏览器无法编码该格式");
+        downloadBlob(blob, `${base}.${ext}`);
+        toast?.(`已下载 ${base}.${ext}`);
+        if (dlWrap) dlWrap.open = false;
+      } catch (err) {
+        toast?.(`下载失败：${err?.message || err}`);
+      } finally {
+        exporting = false;
+        if (sum) sum.textContent = "下载";
+      }
+    }
+
+    dlWrap?.querySelector(".lb-dl-menu")?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("button[data-fmt]");
+      if (!b) return;
+      e.preventDefault();
+      void exportFmt(b.getAttribute("data-fmt") || "png");
     });
 
     function open(kind, data, caption) {
@@ -407,6 +496,8 @@
         host.appendChild(data.node);
       }
       if (cap) cap.textContent = caption || "";
+      syncDlMenu();
+      if (dlWrap) dlWrap.open = false;
       try {
         dlg.showModal();
       } catch (_) {
@@ -427,7 +518,7 @@
         const svg = div?.querySelector("svg");
         if (!svg) return toast?.("图表尚未渲染");
         const markup = svgForExport(svg);
-        lb.open("svg", { svg: markup, html: markup }, "图表 · 滚轮缩放 · 可下载 SVG");
+        lb.open("svg", { svg: markup, html: markup }, "图表 · 滚轮缩放 · 可下载 SVG/图片");
         return;
       }
       const dlM = e.target.closest?.(".mdm-mermaid-dl");
@@ -466,7 +557,7 @@
           lb.open(
             "code",
             { text, html: code?.innerHTML || "", name: "code.txt" },
-            "代码 · 滚轮缩放 · 可下载"
+            "代码 · 滚轮缩放 · 可下载源码/图片"
           );
         }
         return;
@@ -491,7 +582,7 @@
         }
         if (act === "zoom") {
           const clone = table.cloneNode(true);
-          lb.open("table", { node: clone, csv: tableToCsv(table) }, "表格 · 滚轮缩放 · 可下载 CSV");
+          lb.open("table", { node: clone, csv: tableToCsv(table) }, "表格 · 滚轮缩放 · 可下载 CSV/图片");
         }
       }
     });

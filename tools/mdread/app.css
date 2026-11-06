@@ -268,6 +268,42 @@ body.is-dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
   justify-content: center;
   gap: 0.45rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+.lb-dl { position: relative; }
+.lb-dl > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.lb-dl > summary::-webkit-details-marker { display: none; }
+.lb-dl-menu {
+  position: absolute;
+  bottom: calc(100% + 0.35rem);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 7.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  z-index: 5;
+}
+.lb-dl-menu button {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+.lb-dl-menu button:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 @media (max-width: 860px) {

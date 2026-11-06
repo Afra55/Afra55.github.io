@@ -8798,8 +8798,8 @@
       let lightboxExporting = false;
       let mermaidOpenToken = 0;
       const SVG_PREVIEW_CAP = "图表预览 · 滚轮缩放 · 空白处拖动 · 可划词复制 · 可下载";
-      const CODE_PREVIEW_CAP = "代码预览 · 滚轮缩放 · 拖动平移 · 可划词复制 · 可下载";
-      const TABLE_PREVIEW_CAP = "表格预览 · 滚轮缩放 · Shift+拖平移 · 可划词 · 可下载 CSV/HTML";
+      const CODE_PREVIEW_CAP = "代码预览 · 滚轮缩放 · 拖动平移 · 可划词 · 可下载源码/图片";
+      const TABLE_PREVIEW_CAP = "表格预览 · 滚轮缩放 · Shift+拖平移 · 可划词 · 可下载 CSV/HTML/图片";
 
       function activeLayer() {
         if (previewMode === "svg") return svgHost;
@@ -8903,11 +8903,40 @@
         if (dlCodeBtn) dlCodeBtn.hidden = !isCode;
         if (dlCsvBtn) dlCsvBtn.hidden = !isTable;
         if (dlTableHtmlBtn) dlTableHtmlBtn.hidden = !isTable;
+        // 代码/表格放大后也可下 PNG/JPEG/WebP（html2canvas）
         dlWrap?.querySelectorAll('button[data-fmt="png"],button[data-fmt="jpeg"],button[data-fmt="webp"]').forEach((b) => {
-          b.hidden = isCode || isTable;
+          b.hidden = false;
         });
         if (dlWrap) {
           dlWrap.open = false;
+        }
+      }
+
+      /** 代码/表格宿主 → 位图（去掉缩放 transform，离屏白底截图） */
+      async function rasterizeLightboxDom(el, mime, scale = 2) {
+        await ensureVendor("html2canvas");
+        if (typeof window.html2canvas !== "function") throw new Error("截图库加载失败");
+        if (!el) throw new Error("无可截取内容");
+        const clone = el.cloneNode(true);
+        clone.removeAttribute("hidden");
+        clone.style.cssText =
+          "position:static;transform:none;left:auto;top:auto;margin:0;max-width:none;display:block;";
+        const holder = document.createElement("div");
+        holder.style.cssText =
+          "position:fixed;left:-100000px;top:0;pointer-events:none;padding:16px;background:#ffffff;color:#111111;";
+        holder.appendChild(clone);
+        document.body.appendChild(holder);
+        try {
+          const canvas = await window.html2canvas(holder, {
+            backgroundColor: "#ffffff",
+            scale,
+            logging: false,
+            useCORS: true,
+          });
+          const quality = mime === "image/png" ? undefined : 0.92;
+          return await new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
+        } finally {
+          holder.remove();
         }
       }
 
@@ -9232,16 +9261,8 @@
             if (dlWrap) dlWrap.open = false;
             return;
           }
-          if (previewMode === "code") {
-            toast("代码请用「源码文件」下载");
-            return;
-          }
-          if (previewMode === "table") {
-            toast("表格请用 CSV / HTML 下载");
-            return;
-          }
           const ext = fmt === "jpeg" ? "jpg" : fmt;
-          const name = `${exportBaseName}.${ext}`;
+          const name = `${exportBaseName || (previewMode === "code" ? "code" : previewMode === "table" ? "table" : "image")}.${ext}`;
           lightboxExporting = true;
           setLightboxExportUi(true, "导出中…");
           // 最佳质量（scale:2）可能要几秒：立刻给反馈，避免以为卡死
@@ -9259,6 +9280,9 @@
                 throw err2;
               }
             }
+          } else if (previewMode === "code" || previewMode === "table") {
+            const layer = previewMode === "code" ? codeHost : tableHost;
+            blob = await rasterizeLightboxDom(layer, mime);
           } else if (imgEl.naturalWidth) {
             blob = await rasterizeImgElement(imgEl, mime);
           }
