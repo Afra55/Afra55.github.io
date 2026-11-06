@@ -1040,6 +1040,72 @@
     }
   }
 
+  function downloadJsonText(text, filename) {
+    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "data.json";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  /** 下载某一栏：能 parse 则美化；坏 JSON 先修复再美化；写回编辑区后下 .json */
+  async function downloadJsonPane(el, label) {
+    const raw0 = getJsonText(el)
+      .replace(/^\uFEFF/, "")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
+      .trim();
+    if (!raw0) {
+      setToolError(jsonError, `请先在 ${label} 输入 JSON`);
+      return;
+    }
+    const btn = $(label === "A" ? "#json-dl-a" : "#json-dl-b");
+    try {
+      if (btn) btn.disabled = true;
+      setToolError(jsonError, "");
+      let data;
+      let repaired = false;
+      try {
+        data = JSON.parse(raw0);
+      } catch (_) {
+        jsonMeta.textContent = `${label} 非法，正在修复…`;
+        await window.DevToolsLazy?.loadVendor("jsonrepair");
+        const jsonrepair = globalThis.JSONRepair?.jsonrepair;
+        if (typeof jsonrepair !== "function") throw new Error("JSON 修复库未就绪");
+        const fixed = jsonrepair(raw0);
+        data = JSON.parse(fixed);
+        repaired = true;
+      }
+      const pretty = JSON.stringify(data, null, 2);
+      pushJsonExternalHist(el, getJsonText(el));
+      setJsonText(el, pretty);
+      pushJsonExternalHist(el, pretty);
+      saveJsonDraft(el);
+      const name = `json-${label.toLowerCase()}-${Date.now()}.json`;
+      downloadJsonText(pretty, name);
+      jsonMeta.textContent = repaired
+        ? `${label} 已修复并美化 · 已下载 ${name}`
+        : `${label} 已美化 · 已下载 ${name}`;
+      showToast(`已下载 ${name}`);
+    } catch (err) {
+      jsonMeta.textContent = "";
+      setToolError(jsonError, `${label} 无法下载：${err?.message || err}`);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  $("#json-dl-a")?.addEventListener("click", () => {
+    void downloadJsonPane(jsonInput, "A");
+  });
+  $("#json-dl-b")?.addEventListener("click", () => {
+    if (jsonInputB) void downloadJsonPane(jsonInputB, "B");
+  });
+
   $("#json-repair")?.addEventListener("click", () => {
     void runJsonRepair();
   });

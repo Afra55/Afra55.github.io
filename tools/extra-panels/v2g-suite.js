@@ -1625,13 +1625,13 @@
        * keep 对齐路径片尾垫（秒）：预览 keep 已是源帧半开 [start,end)，但 wasm/ffmpeg
        * 的 fps= 滤镜在 -t 贴上界时仍常多吐 1～数帧（预览对、GIF 尾多）。
        * 073347 清零后回归；只动编码 -t/frameCount，不改预览 keep。
-       * 两端各按 2 源/GIF 帧取大（与 95d6760c 实证一致）。
+       * 取 3 源/GIF 帧较大者（2 帧仍有尾多一帧反馈）。
        */
       function vbbEncodeKeepEdgePadSec(gifFps, srcFps) {
         const g = 1 / Math.max(8, Number(gifFps) || 15);
         const src = Number(srcFps) || 0;
         const s = src >= 5 && src <= 240 ? 1 / src : 1 / 25;
-        return Math.max(2 * g, 2 * s);
+        return Math.max(3 * g, 3 * s);
       }
 
       /** @deprecated 同 vbbEncodeKeepEdgePadSec（片尾） */
@@ -1661,7 +1661,8 @@
         const rawSpan = Math.max(0.05, Number(span) || 0.05);
         const spd = Math.max(1, Number(speed) || 1);
         const fpsOut = Math.max(8, Number(gifFps) || 15);
-        const eps = 0.5 / fpsOut;
+        // 再收约 1 个输出帧，避免 -frames:v 上限贴满时尾多一帧
+        const eps = 1 / fpsOut;
         const srcSpan = Math.max(0.05, rawSpan - eps);
         const effSpan = srcSpan / spd;
         const frameCount = Math.max(2, Math.floor(effSpan * fpsOut + 1e-9));
