@@ -94,7 +94,7 @@
     },
   };
 
-  const EXTERNAL_SITE_TOOLS = new Set(["mdread"]);
+  const EXTERNAL_SITE_TOOLS = new Set([]);
 
   const TOOL_FILES = {
     mdread: "./mdread-tool.js",

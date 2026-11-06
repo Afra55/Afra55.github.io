@@ -1951,6 +1951,47 @@
     return TOOL_META[id]?.name || id;
   }
 
+  /** 侧栏「只开新窗」工具（如 MD 阅读）：不切面板、不占当前选中 */
+  function toolLaunchUrl(id) {
+    const raw = TOOL_META[id]?.launchUrl;
+    return raw ? String(raw).trim() : "";
+  }
+
+  function openToolLaunchUrl(id) {
+    const raw = toolLaunchUrl(id);
+    if (!raw) return false;
+    let url;
+    try {
+      url = new URL(raw, location.href).href;
+    } catch (_) {
+      return false;
+    }
+    try {
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if (w) return true;
+    } catch (_) {}
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function fallbackToolAfterLaunch(preferred) {
+    const cand = [preferred, loadLastToolId(), "markdown", "timestamp"].map((x) => String(x || "").trim());
+    for (const id of cand) {
+      if (id && DEFAULT_ORDER.includes(id) && !toolLaunchUrl(id) && isNavToolVisible(id)) return id;
+    }
+    return "timestamp";
+  }
+
   function sanitizeToolIds(raw) {
     const seen = new Set();
     const out = [];
@@ -2310,6 +2351,8 @@
   /** 在新窗口/新标签打开某个工具（PWA 下配合 manifest 的 launch_handler 会开独立窗口） */
   function openToolInNewWindow(id) {
     if (!id) return false;
+    // launchUrl 工具：直接开目标页，不要 #mdread 再套一层工具壳
+    if (toolLaunchUrl(id)) return openToolLaunchUrl(id);
     try {
       const url = new URL(`./index.html#${encodeURIComponent(id)}`, location.href).href;
       const w = window.open(url, "_blank");
@@ -2411,6 +2454,7 @@
 
   function saveLastTool(id) {
     if (!DEFAULT_ORDER.includes(id) || SITE_NAV_IDS.has(id)) return;
+    if (toolLaunchUrl(id)) return;
     if (!isNavToolVisible(id)) return;
     try {
       localStorage.setItem(LAST_TOOL_KEY, id);
@@ -2428,11 +2472,19 @@
           saved = sessionStorage.getItem(LAST_TOOL_SESSION_KEY);
         } catch (_) {}
       }
-      if (saved && DEFAULT_ORDER.includes(saved) && !SITE_NAV_IDS.has(saved) && isNavToolVisible(saved)) {
+      if (
+        saved &&
+        DEFAULT_ORDER.includes(saved) &&
+        !SITE_NAV_IDS.has(saved) &&
+        !toolLaunchUrl(saved) &&
+        isNavToolVisible(saved)
+      ) {
         return saved;
       }
     } catch (_) {}
-    return loadRecent().find((id) => !SITE_NAV_IDS.has(id) && isNavToolVisible(id)) || null;
+    return (
+      loadRecent().find((id) => !SITE_NAV_IDS.has(id) && !toolLaunchUrl(id) && isNavToolVisible(id)) || null
+    );
   }
 
   function toolIdToHash(id) {
@@ -2441,7 +2493,7 @@
   }
 
   function pushRecent(id) {
-    if (!DEFAULT_ORDER.includes(id)) return;
+    if (!DEFAULT_ORDER.includes(id) || toolLaunchUrl(id)) return;
     const next = [id, ...loadRecent().filter((x) => x !== id)];
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
     // 占位路由上的默认 timestamp 不应覆盖已保存的上次工具（手机冷启动常见）
@@ -3620,6 +3672,16 @@
         if (`#${path}` !== target) history.replaceState(null, "", target);
       }
     }
+    // launchUrl 深链：开一次新窗后立刻退回上一个真实工具，避免占着选中态反复弹窗
+    if (toolLaunchUrl(route.tool)) {
+      openToolLaunchUrl(route.tool);
+      const safe = fallbackToolAfterLaunch(loadLastToolId());
+      route = { tool: safe };
+      const canonicalLaunch = routeHash(safe);
+      if (`#${String(location.hash || "").replace(/^#/, "")}` !== canonicalLaunch) {
+        history.replaceState(null, "", canonicalLaunch);
+      }
+    }
     // 手机深链 #ffbridge / #adb → 网页视频工具，避免空白桥面板
     if (isPhoneLikeClient() && (route.tool === "ffbridge" || route.tool === "adb")) {
       const mobileTool = route.tool === "ffbridge" ? "audio" : loadLastToolId() || "gifmaker";
@@ -3772,6 +3834,11 @@
   function navigateTo(tool, _tab, { replace = false } = {}) {
     let nextTool = String(tool || "").trim();
     if (!nextTool) return;
+    // launchUrl：只开新窗，不切当前工具页（返回工具站时也不会反复弹窗）
+    if (toolLaunchUrl(nextTool)) {
+      if (!openToolLaunchUrl(nextTool)) showToast(`无法打开「${toolName(nextTool)}」，请允许弹窗后重试`);
+      return;
+    }
     // 手机打开本机桥/ADB：引导到网页视频能力，避免空白桥面板
     if (isPhoneLikeClient() && (nextTool === "ffbridge" || nextTool === "adb")) {
       nextTool = nextTool === "ffbridge" ? "audio" : loadLastToolId() || "gifmaker";
