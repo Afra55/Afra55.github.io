@@ -3995,7 +3995,7 @@ html[data-boot-loading="1"] body {
 }
 
 .tool-panel.is-tool-assets-loading .panel-body label.file-btn > input[type="file"] {
-  opacity: 0;
+  opacity: 0.01;
   cursor: pointer;
   z-index: 7;
 }

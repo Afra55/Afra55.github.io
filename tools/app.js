@@ -3167,12 +3167,33 @@
     else panel.prepend(shell);
   }
 
+  /** 防止懒加载失败/卡住后 is-tool-assets-loading 粘死，选文件一直点不动 */
+  const panelLoadSafetyTimers = new Map();
   function setPanelAssetLoading(toolId, loading) {
-    const panel = document.getElementById(toolId);
+    const id = String(toolId || "").trim();
+    const panel = document.getElementById(id);
     if (!panel) return;
+    const prev = panelLoadSafetyTimers.get(id);
+    if (prev) {
+      window.clearTimeout(prev);
+      panelLoadSafetyTimers.delete(id);
+    }
     panel.classList.toggle("is-tool-assets-loading", loading);
-    if (loading) panel.setAttribute("aria-busy", "true");
-    else panel.removeAttribute("aria-busy");
+    if (loading) {
+      panel.setAttribute("aria-busy", "true");
+      panelLoadSafetyTimers.set(
+        id,
+        window.setTimeout(() => {
+          panelLoadSafetyTimers.delete(id);
+          if (panel.classList.contains("is-tool-assets-loading")) {
+            panel.classList.remove("is-tool-assets-loading");
+            panel.removeAttribute("aria-busy");
+          }
+        }, 20000)
+      );
+    } else {
+      panel.removeAttribute("aria-busy");
+    }
   }
 
   function setToolLoadProgress(pct, label, gen = toolLoadGen) {
@@ -4579,7 +4600,9 @@
       },
       true
     );
-    // 选文件：嵌套 input 走原生；for= 兄弟则打开选择器（clipped/hidden 在部分浏览器点 label 无反应）
+    // 选文件：工具面板内一律程序化打开（嵌套/for= 都走这条）。
+    // 勿依赖原生 label→input：加载态曾把 input 设成 opacity:0，安卓/Chrome 会吞点击，
+    // 表现为「刷新好几次，点选择视频才有反应」。
     document.addEventListener(
       "click",
       (e) => {
@@ -4593,24 +4616,32 @@
         }
         if (!input || input.type !== "file" || input.disabled) return;
         const panel = input.closest(".tool-panel");
-        // 粘滞 loading 挡板会吃掉原生 label→input；点选文件时强制清掉
+        // 粘滞 loading：立刻清掉，避免同一次手势打在不可点的透明层上
         if (panel?.classList.contains("is-tool-assets-loading")) {
-          panel.classList.remove("is-tool-assets-loading");
-          panel.removeAttribute("aria-busy");
+          const pid = panel.id || "";
+          if (pid) setPanelAssetLoading(pid, false);
+          else {
+            panel.classList.remove("is-tool-assets-loading");
+            panel.removeAttribute("aria-busy");
+          }
         }
-
-        // 嵌套在 label 内（覆盖点击层）：交给浏览器原生。
-        // 安卓上若在同一次 click 里先清空 value，系统选文件框会卡住很久才弹出。
-        if (label.contains(input)) return;
 
         e.preventDefault();
         e.stopPropagation();
 
+        const nested = label.contains(input);
         const wasAttrHidden = input.hasAttribute("hidden");
         const prevInline = input.getAttribute("style") || "";
         const revealForPicker = () => {
           // [hidden]/display:none / 零尺寸 clip 时 showPicker/click 会静默失败
           if (wasAttrHidden) input.removeAttribute("hidden");
+          // 嵌套覆盖层已可点：只保证可见命中；兄弟 for= 则短暂提到视口
+          if (nested) {
+            input.style.opacity = "0.01";
+            input.style.pointerEvents = "auto";
+            input.style.zIndex = "2147483646";
+            return;
+          }
           input.style.cssText =
             "position:fixed!important;left:0!important;top:0!important;width:1px!important;height:1px!important;opacity:0.01!important;margin:0!important;padding:0!important;border:0!important;clip:auto!important;overflow:hidden!important;z-index:2147483646!important;";
         };
@@ -4625,6 +4656,7 @@
         const fallbackClick = () => {
           try {
             revealForPicker();
+            // 勿在同一次手势里清空 value（安卓会拖很久才弹窗）
             input.click();
           } catch (_) {
             restoreInput();

@@ -980,9 +980,9 @@ button.tool-nav-link {
   z-index: 6;
 }
 
-/* 嵌套 file input 保持透明覆盖层，勿被上面规则改成可见 / position:relative */
+/* 嵌套 file input：保持与常态相同的 0.01（勿用 0——安卓/Chrome 会吞掉点击，表现为要刷新多次才可选文件） */
 .tool-panel.is-tool-assets-loading .panel-body label.file-btn > input[type="file"] {
-  opacity: 0;
+  opacity: 0.01;
   cursor: pointer;
   z-index: 7;
 }

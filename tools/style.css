@@ -4362,8 +4362,9 @@ html[data-boot-loading="1"] body {
   z-index: 6;
 }
 
+/* 与 workspace-nav 常态一致用 0.01；opacity:0 会令部分 WebView 点「选择视频」无反应 */
 .tool-panel.is-tool-assets-loading .panel-body label.file-btn > input[type="file"] {
-  opacity: 0;
+  opacity: 0.01;
   cursor: pointer;
   z-index: 7;
 }
