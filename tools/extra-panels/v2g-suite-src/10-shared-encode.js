@@ -916,6 +916,12 @@
        * @param {{ fps:number, maxW:number, quality:number, video?:HTMLVideoElement, workerScript?:string, progressBase?:number, progressSpan?:number, stageLabel?:string, onProgress?:(local:number,text:string)=>void }} opts
        */
       async function encodeV2gGif(opts) {
+        if (typeof globalThis.GIF !== "function") {
+          await window.DevToolsLazy?.ensureGifEncodeLibs?.();
+        }
+        if (typeof globalThis.GIF !== "function") {
+          throw new Error("GIF 编码库未加载，请强制刷新后重试");
+        }
         let ownedWorkerScript = "";
         let workerScript = opts.workerScript || "";
         const cleanupWorker = () => {

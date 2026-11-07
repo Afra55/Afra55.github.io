@@ -4856,6 +4856,10 @@
         const files = Array.from(el.files);
         store[tool] = files;
         emitPending(tool, files);
+        // 选出文件后再允许拉编码器，避免进页就抢 30MB
+        try {
+          window.DevToolsExtraMedia?.armFfmpegPrewarmAfterPick?.();
+        } catch (_) {}
       },
       true
     );
@@ -4884,6 +4888,10 @@
             panel.removeAttribute("aria-busy");
           }
         }
+        // 点选文件时立刻停自动预热，避免 WASM 下载拖死系统选框
+        try {
+          window.DevToolsExtraMedia?.pauseFfmpegAutoPrewarmForPicker?.(15000);
+        } catch (_) {}
 
         e.preventDefault();
         e.stopPropagation();
