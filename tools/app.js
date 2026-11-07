@@ -3542,22 +3542,24 @@
     }
 
     let overlayShown = false;
-    let lastPct = 8;
-    let lastLabel = `正在加载「${name}」…`;
+    let lastPct = 10;
+    let lastLabel = `准备加载「${name}」…`;
     // 立刻标 busy（无视觉遮挡），避免冒烟/无障碍在延迟进度条窗口误判已就绪
     if (gen === routeGen) {
       const panel = document.getElementById(toolLoadPanelId);
       if (panel) panel.setAttribute("aria-busy", "true");
     }
-    // 黑盒/切分等大包：更快亮进度，避免用户以为卡住；其它工具仍短延迟
+    // 黑盒等大包立刻出进度条（勿停在 8% 无文案）；其它工具短延迟
     const heavyFirstLoad = /^(vbb|v2g|vsplit|mdm|adb)$/.test(String(toolId || ""));
-    const showDelayMs = heavyFirstLoad ? 40 : 220;
-    const showDelay = window.setTimeout(() => {
-      if (gen !== routeGen) return;
+    const paintOverlay = () => {
+      if (gen !== routeGen || overlayShown) return;
       overlayShown = true;
       setPanelAssetLoading(toolLoadPanelId, true);
       setToolLoadProgress(lastPct, lastLabel, loadGen);
-    }, showDelayMs);
+    };
+    if (heavyFirstLoad) paintOverlay();
+    const showDelayMs = heavyFirstLoad ? 0 : 220;
+    const showDelay = window.setTimeout(paintOverlay, showDelayMs);
 
     void (async () => {
       try {
@@ -3765,16 +3767,10 @@
         }
       });
     };
-    // 先切页 + 显示加载条，不等面板 HTML / 脚本（点菜单立刻有反馈）
+    // 先切页；加载条由 startToolAssetLoad 用正确 gen 绘制（勿在此写 8%，否则 ++gen 后假死）
     switchActivePanel();
     toolLoadPanelId = routeToolId;
     mountToolLoadBar(routeToolId);
-    if (
-      !window.DevToolsLazy?.isToolReady?.(routeToolId) &&
-      !window.DevToolsLazy?.isToolWarm?.(routeToolId)
-    ) {
-      setToolLoadProgress(8, `正在加载「${toolName(routeToolId)}」…`, toolLoadGen);
-    }
 
     try {
       await window.DevToolsPanels?.bootReady;

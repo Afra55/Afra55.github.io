@@ -513,14 +513,19 @@
   }
 
   async function matchScriptCache(url) {
-    if (!window.caches?.match) return null;
+    if (!window.caches?.open) return null;
     try {
-      await pruneOldScriptCaches();
-      const hit = await caches.match(url, { ignoreSearch: false });
-      if (hit && hit.ok) return hit;
+      // 清理放到后台，避免每次打开黑盒都卡在 caches.keys
+      void pruneOldScriptCaches();
       const named = await caches.open(scriptCacheName());
       const exact = await named.match(url);
-      return exact && exact.ok ? exact : null;
+      if (exact && exact.ok) return exact;
+      // 兼容 SW 壳缓存里已有的同 URL
+      if (typeof caches.match === "function") {
+        const hit = await caches.match(url, { ignoreSearch: false });
+        if (hit && hit.ok) return hit;
+      }
+      return null;
     } catch (_) {
       return null;
     }
@@ -529,7 +534,7 @@
   async function putScriptCache(url, res) {
     if (!window.caches?.open || !res || !res.ok || res.type === "opaque") return;
     try {
-      await pruneOldScriptCaches();
+      void pruneOldScriptCaches();
       const cache = await caches.open(scriptCacheName());
       await cache.put(url, res.clone());
     } catch (_) {
@@ -626,10 +631,11 @@
           scriptSizeHint(src) >= 50000;
         if (useFetchProgress) {
           const runFetch = async () => {
+            reportDl(0.03, `查找${displayName}缓存…`);
             // 同版本优先本地 Cache（URL 含 ?v=BUILD）；发版换 v= 自然 miss 再下
             const cached = await matchScriptCache(key);
             if (cached) {
-              reportDl(0.4, `${displayName} · 本地缓存`);
+              reportDl(0.55, `${displayName} · 本地缓存`);
               const buf = await cached.arrayBuffer();
               reportDl(0.92, `${displayName}已从缓存加载 ${formatDlBytes(buf.byteLength)}，解析中…`);
               const blobUrl = URL.createObjectURL(
@@ -639,7 +645,7 @@
               return;
             }
 
-            reportDl(0.02, `首次下载${displayName}…`);
+            reportDl(0.06, `首次下载${displayName}…`);
             let res;
             try {
               // default：允许 HTTP 磁盘缓存；force-cache 在无条目时部分环境反而怪异
@@ -713,10 +719,19 @@
     return promise;
   }
 
-  async function ensurePure() {
+  async function ensurePure(onProgress) {
     if (window.DevToolsPure) return;
-    if (!window.DiffCore) await loadScript("./lib/diff-core.js");
-    await loadScript("./lib/pure.js");
+    const dl = (ratio, text) => onProgress?.(Math.max(0, Math.min(1, Number(ratio) || 0)), text);
+    if (!window.DiffCore) {
+      await loadScript("./lib/diff-core.js", {
+        onProgress: (r, t) => dl(r * 0.35, t || "比对核心"),
+        label: "比对核心",
+      });
+    }
+    await loadScript("./lib/pure.js", {
+      onProgress: (r, t) => dl(0.35 + r * 0.65, t || "计算核心"),
+      label: "计算核心（约 55KB）",
+    });
   }
 
   async function loadExtraCore(onProgress, { media = false } = {}) {
@@ -880,6 +895,9 @@
     mdext: "Markdown 扩展（脚注/定义列表）",
   };
 
+  /** 同工具并发 ensure：后到的进度回调也能收到当前加载进度（修 8% 假死） */
+  const ensureProgressListeners = new Map();
+
   async function ensureForTool(toolId, opts = {}) {
     const id = String(toolId || "").trim();
     if (!id) return;
@@ -887,7 +905,44 @@
     // 本会话 readyTools / loadedScriptKeys 仍应复用，否则每次进面板都全量走进度条。
     const force = Boolean(opts.force);
     const onProgress = typeof opts.onProgress === "function" ? opts.onProgress : null;
-    const report = (ratio, label) => onProgress?.(Math.max(0, Math.min(1, Number(ratio) || 0)), label);
+    const report = (ratio, label) => {
+      const r = Math.max(0, Math.min(1, Number(ratio) || 0));
+      const msg = label || "";
+      if (onProgress) {
+        try {
+          onProgress(r, msg);
+        } catch (_) {}
+      }
+      const set = ensureProgressListeners.get(id);
+      if (set) {
+        for (const fn of set) {
+          if (fn === onProgress) continue;
+          try {
+            fn(r, msg);
+          } catch (_) {}
+        }
+      }
+    };
+
+    if (onProgress) {
+      let set = ensureProgressListeners.get(id);
+      if (!set) {
+        set = new Set();
+        ensureProgressListeners.set(id, set);
+      }
+      set.add(onProgress);
+    }
+
+    const releaseProgress = () => {
+      if (!onProgress) return;
+      const set = ensureProgressListeners.get(id);
+      if (!set) return;
+      set.delete(onProgress);
+      if (!set.size) ensureProgressListeners.delete(id);
+    };
+
+    try {
+    report(0.02, "准备加载…");
 
     if (!force && readyTools.has(id)) {
       if (id === "memo" && !window.DevToolsMemo) {
@@ -897,7 +952,7 @@
         readyTools.delete("lanboard");
         bustToolScript(TOOL_FILES.lanboard);
       } else {
-        report(1, "已缓存");
+        report(1, "本会话已就绪");
         return;
       }
     }
@@ -905,14 +960,15 @@
     // 依赖已在内存：静默标记，避免重复进度条
     if (!force && isToolWarm(id)) {
       markToolReady(id);
-      report(1, "已缓存");
+      report(1, "本会话已就绪");
       return;
     }
 
     let run = ensureInflight.get(id);
     if (!force && run) {
+      report(0.08, "后台已在加载，接入进度…");
       await run;
-      report(1, "已缓存");
+      report(1, "加载完成");
       return;
     }
 
@@ -934,7 +990,7 @@
 
     if (!NO_PURE.has(id)) {
       report(0.08, "下载计算核心…");
-      await ensurePure();
+      await ensurePure((r, t) => report(0.08 + r * 0.08, t || "计算核心"));
       report(0.16, "计算核心已就绪");
     }
 
@@ -1021,6 +1077,9 @@
     } finally {
       if (ensureInflight.get(id) === run) ensureInflight.delete(id);
     }
+    } finally {
+      releaseProgress();
+    }
   }
 
   /** 空闲预取：不弹进度条；失败静默 */
@@ -1048,7 +1107,11 @@
 
   function prefetchTools(ids, { limit = 6 } = {}) {
     const list = [...new Set((ids || []).map((x) => String(x || "").trim()).filter(Boolean))];
-    const todo = list.filter((id) => !readyTools.has(id) && !isToolWarm(id)).slice(0, Math.max(0, limit));
+    // 大包（黑盒/切分套件）不后台预取：预取会占 ensureInflight，用户一点开就停在 8% 干等
+    const heavy = new Set(["vbb", "v2g", "vsplit"]);
+    const todo = list
+      .filter((id) => !readyTools.has(id) && !isToolWarm(id) && !heavy.has(id))
+      .slice(0, Math.max(0, limit));
     for (const id of todo) prefetchTool(id);
     return prefetchChain;
   }
