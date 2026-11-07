@@ -100,11 +100,32 @@
     return Math.max(0, Math.round(Number(frame) || 0)) / f;
   }
 
-  /** Chrome 在精确 k/F 常显示 k−1 帧；seek 落到格后 0.1ms 才稳定出第 k 帧 */
+  /**
+   * Chrome 在时刻 t 显示的源帧号（CFR 近似：pts[k]=k/fps）。
+   * 规则与实测一致：last k where round(pts*1e6) <= floor(t*1e6)。
+   * 手柄常被量化到毫秒（如 31/30→1.033），round(t*fps) 会得到 31，但 Chrome 仍显示 30——
+   * keep/导出必须用本函数，否则「预览对、导出偏一帧」。
+   */
+  function displayFrameAtSec(sec, fps) {
+    const f = Math.max(1, Number(fps) || DEFAULT_FRAME_FPS);
+    const t = Math.max(0, Number(sec) || 0);
+    const targetUs = Math.floor(t * 1e6 + 1e-7);
+    // 与 Chrome 一致：last k where round((k/f)*1e6) <= floor(t*1e6)（CFR pts=k/f）
+    let lo = 0;
+    let hi = Math.max(0, Math.ceil(t * f) + 4);
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (Math.round((mid / f) * 1e6) <= targetUs) lo = mid;
+      else hi = mid - 1;
+    }
+    return Math.max(0, lo);
+  }
+
+  /** seek 落到「该手柄时刻 Chrome 所见帧」的 PTS 之后 0.1ms，避免停在 k−1 */
   const DISPLAY_SEEK_EPS = 1e-4;
   function displaySeekSec(sec, fps) {
     const f = normalizeSourceFps(fps) || DEFAULT_FRAME_FPS;
-    return frameToSec(secToFrame(sec, f), f) + DISPLAY_SEEK_EPS;
+    return frameToSec(displayFrameAtSec(sec, f), f) + DISPLAY_SEEK_EPS;
   }
   let uidSeq = 0;
 
@@ -2655,10 +2676,13 @@
   function keepRangesFromEdit(edit, duration) {
     const fps = resolveKeepFps(edit);
     const d = Math.max(0, Number(duration) || 0);
-    const maxF = Math.max(0, secToFrame(d, fps));
+    const maxF = Math.max(0, displayFrameAtSec(d, fps));
     const minSpanF = Math.max(1, Math.ceil(MIN_SPAN * fps));
-    let startF = secToFrame(edit?.trimStart, fps);
-    let endF = secToFrame(edit?.trimEnd, fps);
+    // 手柄→帧：跟 Chrome 显示帧，禁止 round(t*fps)（毫秒量化后系统偏 +1）
+    // 片头：黄柄时刻所见帧起（含）。片尾：停帧=trimEnd-1/fps 所见帧（含）→ exclusive = 该帧+1
+    let startF = displayFrameAtSec(edit?.trimStart, fps);
+    const endParkSec = Math.max(0, Number(edit?.trimEnd) || 0) - 1 / fps;
+    let endF = displayFrameAtSec(endParkSec, fps) + 1;
     if (endF < startF + minSpanF) endF = startF + minSpanF;
     if (maxF > 0) {
       endF = Math.min(endF, maxF);
@@ -2669,8 +2693,8 @@
     const cuts = normalizeCutouts(edit?.cutouts, trimStartSec, trimEndSec);
     const cutFs = [];
     for (const c of cuts) {
-      let cs = secToFrame(c.start, fps);
-      let ce = secToFrame(c.end, fps);
+      let cs = displayFrameAtSec(c.start, fps);
+      let ce = displayFrameAtSec(c.end, fps);
       cs = Math.max(startF, Math.min(cs, endF - 1));
       ce = Math.max(cs, Math.min(ce, endF - 1));
       cutFs.push({ cs, ce });
@@ -2686,15 +2710,30 @@
     let cursor = startF;
     for (const c of merged) {
       if (c.cs > cursor) {
-        keeps.push({ start: frameToSec(cursor, fps), end: frameToSec(c.cs, fps) });
+        keeps.push({
+          start: frameToSec(cursor, fps),
+          end: frameToSec(c.cs, fps),
+          startF: cursor,
+          endF: c.cs,
+        });
       }
       cursor = Math.max(cursor, c.ce + 1);
     }
     if (endF > cursor) {
-      keeps.push({ start: frameToSec(cursor, fps), end: frameToSec(endF, fps) });
+      keeps.push({
+        start: frameToSec(cursor, fps),
+        end: frameToSec(endF, fps),
+        startF: cursor,
+        endF,
+      });
     }
     if (!keeps.length) {
-      keeps.push({ start: frameToSec(startF, fps), end: frameToSec(endF, fps) });
+      keeps.push({
+        start: frameToSec(startF, fps),
+        end: frameToSec(endF, fps),
+        startF,
+        endF,
+      });
     }
     return keeps;
   }
@@ -2799,19 +2838,20 @@
     const trySlice = async (k, i, mode) => {
       const start = Math.max(0, Number(k.start) || 0);
       const end = Math.max(start + 0.05, Number(k.end) || 0);
-      let startF = secToFrame(start, keepFps);
-      let endF = secToFrame(end, keepFps);
+      // 优先用 keep 自带的显示帧号（与预览同一套）；勿再 secToFrame(round) 拧回去
+      let startF = Number.isFinite(Number(k.startF)) ? Math.round(Number(k.startF)) : displayFrameAtSec(start, keepFps);
+      let endF = Number.isFinite(Number(k.endF)) ? Math.round(Number(k.endF)) : displayFrameAtSec(end, keepFps);
       if (endF <= startF) endF = startF + 1;
       const frameCount = Math.max(1, endF - startF);
-      const dur = Math.max(0.05, end - start);
+      const dur = Math.max(0.05, frameCount / keepFps);
       const out = `keep${i}.mp4`;
       const trimVf =
         mode === "frame"
           ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
           : mode === "sec"
-            ? `trim=start=${fmtSec(start)}:end=${fmtSec(end)},setpts=PTS-STARTPTS`
+            ? `trim=start=${fmtSec(frameToSec(startF, keepFps))}:end=${fmtSec(frameToSec(endF, keepFps))},setpts=PTS-STARTPTS`
             : "";
-      // fps 必须在 trim 前：按绝对时间轴抽格，段首不丢预览帧
+      // 先抽到 keep 帧格，再按帧号半开切（抽格后 start_frame ≡ 预览显示帧）
       const vfCore = [
         `fps=${keepFps}:round=up`,
         cropVf,
@@ -2825,7 +2865,17 @@
         .join(",");
       const args =
         mode === "ss"
-          ? ["-i", inName, "-ss", fmtSec(start), "-t", fmtSec(dur), "-an", "-vf", vfCore]
+          ? [
+              "-i",
+              inName,
+              "-ss",
+              fmtSec(frameToSec(startF, keepFps)),
+              "-t",
+              fmtSec(dur),
+              "-an",
+              "-vf",
+              vfCore,
+            ]
           : ["-i", inName, "-an", "-vf", vfCore];
       // 全 I 帧：避免段尾 B 帧在 concat 后解不出 → 中间段首尾各丢几帧
       args.push(
@@ -2865,8 +2915,8 @@
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 抽格后 sec trim ≡ 帧格半开；ss/frame 回退
-      const modes = ["sec", "ss", "frame"];
+      // 抽格后帧号半开最准；sec/ss 回退
+      const modes = ["frame", "sec", "ss"];
       let hit = null;
       for (const mode of modes) {
         hit = await trySlice(keeps[i], i, mode);
@@ -2973,6 +3023,8 @@
     resolveKeepFps,
     secToFrame,
     frameToSec,
+    displayFrameAtSec,
+    displaySeekSec,
     resolveEndKeepSec,
     resolveStartKeepSec,
     DEFAULT_FRAME_FPS,

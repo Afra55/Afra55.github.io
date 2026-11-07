@@ -34,9 +34,10 @@ function loadKeepFns() {
   const resolveKeep = vtrim.match(/function resolveKeepFps\(editOrFps\) \{[\s\S]*?\n  \}/);
   const secToFrame = vtrim.match(/function secToFrame\(sec, fps\) \{[\s\S]*?\n  \}/);
   const frameToSec = vtrim.match(/function frameToSec\(frame, fps\) \{[\s\S]*?\n  \}/);
+  const displayFrame = vtrim.match(/function displayFrameAtSec\(sec, fps\) \{[\s\S]*?\n  \}/);
   const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
   assert.ok(
-    fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && normalizeFps
+    fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && displayFrame && normalizeFps
   );
   const box = {};
   vm.runInNewContext(
@@ -50,6 +51,7 @@ function loadKeepFns() {
     ${resolveKeep[0]}
     ${secToFrame[0]}
     ${frameToSec[0]}
+    ${displayFrame[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
     ${norm[0]}
@@ -59,25 +61,26 @@ function loadKeepFns() {
     this.keepRangesForEncode = keepRangesForEncode;
     this.secToFrame = secToFrame;
     this.frameToSec = frameToSec;
+    this.displayFrameAtSec = displayFrameAtSec;
     `,
     box
   );
   return box;
 }
 
-t("无删段：成片 keep ≡ 预览 keep；end = 黄柄半开上界", () => {
+t("无删段：成片 keep ≡ 预览 keep；end = 停帧半开上界", () => {
   assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*0/.test(vtrim));
-  const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
+  const { keepRangesFromEdit, keepRangesForEncode, displayFrameAtSec } = loadKeepFns();
   const edit = { trimStart: 5, trimEnd: 95, cutouts: [], srcFps: 25 };
   const a = keepRangesFromEdit(edit, 100);
   const b = keepRangesForEncode(edit, 100);
+  const endEx = (displayFrameAtSec(95 - 1 / 25, 25) + 1) / 25;
   assert.strictEqual(a.length, 1);
   assert.strictEqual(b.length, 1);
   assert.ok(Math.abs(a[0].start - b[0].start) < 1e-9);
   assert.ok(Math.abs(a[0].end - b[0].end) < 1e-9);
   assert.ok(Math.abs(a[0].start - 5) < 1e-9);
-  // 不再减 1/fps：黄柄即 exclusive end
-  assert.ok(Math.abs(a[0].end - 95) < 1e-9);
+  assert.ok(Math.abs(a[0].end - endEx) < 1e-9);
 });
 
 t("多段删中间：闭区间删红柄帧；预览≡成片；无叠垫", () => {
@@ -108,12 +111,13 @@ t("多段删中间：闭区间删红柄帧；预览≡成片；无叠垫", () =>
   }
 });
 
-t("仅裁片头：起点 = 黄柄 trimStart", () => {
-  const { keepRangesForEncode } = loadKeepFns();
+t("仅裁片头：起点 = 黄柄 trimStart；终点 = 停帧半开", () => {
+  const { keepRangesForEncode, displayFrameAtSec } = loadKeepFns();
   const enc = keepRangesForEncode({ trimStart: 10, trimEnd: 40, cutouts: [], srcFps: 30 }, 60);
+  const endEx = (displayFrameAtSec(40 - 1 / 30, 30) + 1) / 30;
   assert.strictEqual(enc.length, 1);
   assert.ok(Math.abs(enc[0].start - 10) < 1e-9);
-  assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
+  assert.ok(Math.abs(enc[0].end - endEx) < 1e-9);
 });
 
 t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
@@ -129,8 +133,8 @@ t("exportKeepVideo：trim 前 fps=round=up；勿 -r cfr；禁止两端 bias", ()
     vtrim.indexOf("async function exportKeepVideo"),
     vtrim.indexOf("window.DevToolsVtrimEditor =")
   );
-  assert.ok(exp.includes('["sec", "ss", "frame"]'), "须 sec→ss→frame（≡预览）");
-  assert.ok(!exp.includes("hasRealFps"), "禁止 frame 优先");
+  assert.ok(exp.includes('["frame", "sec", "ss"]'), "抽格后须 frame→sec→ss");
+  assert.ok(exp.includes("displayFrameAtSec"), "须用 Chrome 显示帧映射");
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(/fps=\$\{keepFps\}:round=up/.test(exp), "须先抽格再 trim");
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(exp), "切片勿 -r keepFps（强制 CFR 丢段首）");
