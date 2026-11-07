@@ -390,6 +390,10 @@
   let ffmpegInstance = null;
   /** 预热后的资源 blob（持久，不计入临时占用，也不随清理撤销） */
   let ffmpegAssetBlobs = null;
+  /** 31MB wasm 等资源下载：与 Worker 初始化拆开，编辑中断不取消资源缓存 */
+  let ffmpegAssetLoadPromise = null;
+  /** @type {Set<(ratio:number, text:string)=>void>} */
+  const ffmpegAssetProgressListeners = new Set();
   let ffmpegWarmPromise = null;
   /** @type {"idle"|"warming"|"ready"|"error"} */
   let ffmpegWarmState = "idle";
@@ -819,36 +823,89 @@
     return buf;
   }
 
+  function reportFfmpegAssetProgress(ratio, text) {
+    for (const fn of ffmpegAssetProgressListeners) {
+      try {
+        fn(ratio, text);
+      } catch (_) {}
+    }
+  }
+
+  /**
+   * 拉取/复用编码器资源（约 31MB wasm）。进程级单飞，不受编辑 pause 的 Abort 打断，
+   * 避免「点编辑 → 下载中断 → 黑盒又从头下」的二次等待。
+   */
   async function ensureFfmpegAssets(onProgress, signal) {
-    if (ffmpegAssetBlobs?.coreBlob && ffmpegAssetBlobs?.wasmBlob) return ffmpegAssetBlobs;
-    const coreJsURL = new URL("core/ffmpeg-core.js", FFMPEG_VENDOR_BASE).href;
-    const wasmURL = new URL("core/ffmpeg-core.wasm", FFMPEG_VENDOR_BASE).href;
-    const workerURL = new URL("ff/worker.js", FFMPEG_VENDOR_BASE).href;
-    const coreBuf = await loadEngineBuffer(
-      FFMPEG_ASSET_KEY_CORE,
-      coreJsURL,
-      onProgress,
-      "首次准备本地编码器 core.js",
-      0.04,
-      0.08,
-      signal
-    );
-    const wasmBuf = await loadEngineBuffer(
-      FFMPEG_ASSET_KEY_WASM,
-      wasmURL,
-      onProgress,
-      "首次准备本地编码器 wasm",
-      0.08,
-      0.18,
-      signal
-    );
-    if (signal?.aborted) throw new Error("已取消");
-    ffmpegAssetBlobs = {
-      coreBlob: createEngineObjectURL(coreBuf, "text/javascript"),
-      wasmBlob: createEngineObjectURL(wasmBuf, "application/wasm"),
-      workerURL,
-    };
-    return ffmpegAssetBlobs;
+    if (typeof onProgress === "function") ffmpegAssetProgressListeners.add(onProgress);
+    try {
+      if (ffmpegAssetBlobs?.coreBlob && ffmpegAssetBlobs?.wasmBlob) {
+        onProgress?.(0.18, "编码器资源已就绪（本地缓存）");
+        return ffmpegAssetBlobs;
+      }
+      if (!ffmpegAssetLoadPromise) {
+        const coreJsURL = new URL("core/ffmpeg-core.js", FFMPEG_VENDOR_BASE).href;
+        const wasmURL = new URL("core/ffmpeg-core.wasm", FFMPEG_VENDOR_BASE).href;
+        const workerURL = new URL("ff/worker.js", FFMPEG_VENDOR_BASE).href;
+        ffmpegAssetLoadPromise = (async () => {
+          const coreBuf = await loadEngineBuffer(
+            FFMPEG_ASSET_KEY_CORE,
+            coreJsURL,
+            reportFfmpegAssetProgress,
+            "首次准备本地编码器 core.js",
+            0.04,
+            0.08,
+            null
+          );
+          const wasmBuf = await loadEngineBuffer(
+            FFMPEG_ASSET_KEY_WASM,
+            wasmURL,
+            reportFfmpegAssetProgress,
+            "首次准备本地编码器 wasm",
+            0.08,
+            0.18,
+            null
+          );
+          ffmpegAssetBlobs = {
+            coreBlob: createEngineObjectURL(coreBuf, "text/javascript"),
+            wasmBlob: createEngineObjectURL(wasmBuf, "application/wasm"),
+            workerURL,
+          };
+          return ffmpegAssetBlobs;
+        })().catch((err) => {
+          ffmpegAssetLoadPromise = null;
+          throw err;
+        });
+      }
+      // 编辑中断只取消「等 Worker」；资源下载继续。signal abort → 调用方提前退出。
+      if (signal) {
+        await Promise.race([
+          ffmpegAssetLoadPromise,
+          new Promise((_, reject) => {
+            const fail = () => reject(new Error("已取消"));
+            if (signal.aborted) fail();
+            else signal.addEventListener("abort", fail, { once: true });
+          }),
+        ]);
+        if (signal.aborted) throw new Error("已取消");
+        if (ffmpegAssetBlobs?.coreBlob && ffmpegAssetBlobs?.wasmBlob) return ffmpegAssetBlobs;
+      }
+      return await ffmpegAssetLoadPromise;
+    } finally {
+      if (typeof onProgress === "function") ffmpegAssetProgressListeners.delete(onProgress);
+    }
+  }
+
+  /** 仅缓存资源（不下 Worker），选片后尽早后台跑 */
+  function prefetchFfmpegAssets() {
+    if (ffmpegAssetBlobs?.coreBlob && ffmpegAssetBlobs?.wasmBlob) return Promise.resolve(ffmpegAssetBlobs);
+    return ensureFfmpegAssets((ratio, text) => {
+      if (ffmpegWarmState === "ready") return;
+      setFfmpegWarmProgress(Math.min(0.18, Number(ratio) || 0), text || "后台缓存编码器…");
+      if (ffmpegWarmState === "idle") {
+        ffmpegWarmState = "warming";
+        paintFfmpegWarmHint();
+      }
+    }, null).catch(() => null);
   }
 
   function beginFfmpegLoadAbort() {
@@ -1031,7 +1088,7 @@
     } else if (ffmpegSkipAutoPrewarm) {
       text = "编码器缓存已清理，开始转换时会重新下载";
     } else if (Date.now() < ffmpegPickerQuietUntil) {
-      text = "编辑优先：本地编码器稍后再准备（约 30MB，不上传视频）";
+      text = ffmpegWarmDetail?.text || "编辑优先：Worker 稍后启动，约 30MB 资源可后台继续缓存（不上传视频）";
     } else if (!ffmpegAutoPrewarmArmed) {
       text = "先选择视频；选好后才会准备本地编码器（约 30MB，仅下载一次，不上传视频）";
     } else {
@@ -1154,8 +1211,8 @@
   }
 
   /**
-   * 打开编辑器等交互：停预热 + 中断进行中的引擎下载，避免「加载 FFmpeg」时整页锁死。
-   * 已就绪的实例保留；真正转换时仍会 getFfmpegInstance。
+   * 打开编辑器等交互：停 Worker 预热，避免「加载 FFmpeg」锁死整页。
+   * 31MB 资源下载不中断（后台继续写入 IndexedDB），关掉编辑后再点黑盒通常只需初始化 Worker。
    */
   function pauseFfmpegForInteractiveUi(ms = 90000) {
     pauseFfmpegAutoPrewarmForPicker(ms);
@@ -1164,19 +1221,22 @@
       return;
     }
     const busy = ffmpegWarmState === "warming" || Boolean(ffmpegWarmPromise);
-    if (!busy) {
-      paintFfmpegWarmHint();
-      return;
+    if (busy) {
+      ffmpegEngineEpoch += 1;
+      try {
+        ffmpegLoadAbort?.abort();
+      } catch (_) {}
+      ffmpegLoadAbort = null;
+      ffmpegWarmPromise = null;
+      ffmpegWarmState = "idle";
+      ffmpegWarmError = "";
+      ffmpegWarmDetail = {
+        ratio: Math.min(0.18, Number(ffmpegWarmDetail?.ratio) || 0),
+        text: "编辑优先：编码器资源后台继续缓存…",
+      };
     }
-    ffmpegEngineEpoch += 1;
-    try {
-      ffmpegLoadAbort?.abort();
-    } catch (_) {}
-    ffmpegLoadAbort = null;
-    ffmpegWarmPromise = null;
-    ffmpegWarmState = "idle";
-    ffmpegWarmError = "";
-    ffmpegWarmDetail = { ratio: 0, text: "" };
+    // 后台继续/开始缓存 wasm，不抢主线程编译 Worker
+    prefetchFfmpegAssets();
     paintFfmpegWarmHint();
   }
 
@@ -1184,6 +1244,11 @@
   function armFfmpegPrewarmAfterPick() {
     ffmpegAutoPrewarmArmed = true;
     ffmpegPickerQuietUntil = 0;
+    // 立刻后台缓存资源（约 400ms 后），Worker 仍按原延迟再启，给「编辑」留窗口
+    window.setTimeout(() => {
+      if (!ffmpegAutoPrewarmArmed || ffmpegSkipAutoPrewarm) return;
+      prefetchFfmpegAssets();
+    }, 400);
     scheduleFfmpegPrewarm();
   }
 
@@ -2058,7 +2123,7 @@
     terminateFfmpegInstance, paintFfmpegWarmHint,
     setFfmpegWarmProgress, injectFfmpegPreloadLinks, isGifmakerActive, prewarmFfmpegEngine,
     scheduleFfmpegPrewarm, pauseFfmpegAutoPrewarmForPicker, pauseFfmpegForInteractiveUi,
-    armFfmpegPrewarmAfterPick,
+    armFfmpegPrewarmAfterPick, prefetchFfmpegAssets,
     bindFfmpegPrewarmTriggers, encodeAnimatedWebpFromStillFrames,
     paintToolsVersion, resolveToolsVendorFile, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions,

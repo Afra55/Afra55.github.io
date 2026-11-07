@@ -18,16 +18,24 @@ function t(name, fn) {
   n += 1;
 }
 
-t("提供 pauseFfmpegForInteractiveUi：停预热并中断下载", () => {
+t("提供 pauseFfmpegForInteractiveUi：停 Worker，资源下载继续", () => {
   assert.ok(media.includes("function pauseFfmpegForInteractiveUi"));
   assert.ok(media.includes("ffmpegLoadAbort"));
-  assert.ok(media.includes("编辑优先：本地编码器稍后再准备"));
+  assert.ok(media.includes("prefetchFfmpegAssets"));
+  assert.ok(media.includes("编码器资源后台继续缓存"));
   assert.ok(media.includes("beginFfmpegLoadAbort"));
+  assert.ok(media.includes("ffmpegAssetLoadPromise"));
 });
 
-t("选片后预热延迟加长，给编辑留窗口", () => {
+t("选片后先缓存资源，Worker 预热仍延迟给编辑留窗口", () => {
   assert.ok(media.includes("return 8000"));
   assert.ok(media.includes("return 3500"));
+  const arm = media.slice(
+    media.indexOf("function armFfmpegPrewarmAfterPick"),
+    media.indexOf("function scheduleFfmpegPrewarm")
+  );
+  assert.ok(arm.includes("prefetchFfmpegAssets"));
+  assert.ok(arm.includes("400"));
 });
 
 t("打开编辑先 pause FFmpeg，且不提前锁 body 滚动", () => {
