@@ -2904,20 +2904,34 @@
         return n;
       }
 
-      function downloadVbbEditDraftsJson() {
+      /** 组装「编辑草稿 + 撞档库」备份；任一有内容即可导出 */
+      function buildVbbBackupPayload() {
+        saveVbbEditDraftsSync();
         const items = collectVbbEditDraftItems();
-        if (!items.length) {
-          toast("当前没有可备份的未完成编辑（已成功出 GIF 的不会进备份）");
+        const schemes = exportVbbFeatureSchemesMap();
+        return {
+          v: 2,
+          at: Date.now(),
+          items,
+          schemes,
+        };
+      }
+
+      function downloadVbbEditDraftsJson() {
+        const payload = buildVbbBackupPayload();
+        const itemN = Array.isArray(payload.items) ? payload.items.length : 0;
+        const schemeN = payload.schemes ? Object.keys(payload.schemes).length : 0;
+        if (!itemN && !schemeN) {
+          toast("当前没有可备份的内容（无未完成编辑、也无撞档记录）");
           return false;
         }
-        saveVbbEditDraftsSync();
-        const blob = new Blob([JSON.stringify({ v: 1, at: Date.now(), items }, null, 2)], {
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {
           type: "application/json",
         });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `vbb-edits-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+        a.download = `vbb-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -2926,13 +2940,19 @@
             URL.revokeObjectURL(url);
           } catch (_) {}
         }, 2000);
-        toast(`已下载备份 JSON（${items.length}）· 还原请点「导入备份」，或刷新后重选同一批视频`);
+        const parts = [];
+        if (itemN) parts.push(`编辑 ${itemN}`);
+        if (schemeN) parts.push(`撞档 ${schemeN}`);
+        toast(`已下载备份（${parts.join(" · ")}）· 对方点「导入备份」可合并撞档`);
         return true;
       }
 
-      /** 从「备份编辑」的 JSON 写回本机草稿；若已选视频则立刻套上 */
+      /**
+       * 从「备份编辑」的 JSON 写回本机草稿，并合并撞档库（同键保留较新 at）。
+       * 兼容旧版只含 items、或只含 schemes 的文件。
+       */
       async function importVbbEditDraftsFromFile(file) {
-        if (!file) return 0;
+        if (!file) return { drafts: 0, schemes: null };
         let data;
         try {
           const text = await file.text();
@@ -2940,42 +2960,69 @@
         } catch (_) {
           throw new Error("备份文件不是有效 JSON");
         }
-        if (!data || !Array.isArray(data.items) || !data.items.length) {
-          throw new Error("备份里没有可还原的编辑");
+        if (!data || typeof data !== "object") {
+          throw new Error("备份文件格式无效");
         }
-        const payload = { v: 1, at: Date.now(), items: data.items };
-        localStorage.setItem(VBB_EDIT_DRAFT_LS_KEY, JSON.stringify(payload));
-        let n = 0;
-        if (isVbbBatchMode() && vbbBatchFiles.length) {
-          n = restoreVbbEditDrafts(vbbBatchFiles);
-          renderVbbBatchList({ keepSelection: true });
-          syncVbbBatchMeta();
-          syncVbbEditUi();
-          syncVbbEditPreview();
-        } else if (vbbSourceFile) {
-          const probe = {
-            file: vbbSourceFile,
-            duration: Number(vbbVideo?.duration) || 0,
-            srcW: Number(vbbVideo?.videoWidth) || 0,
-            srcH: Number(vbbVideo?.videoHeight) || 0,
-            edit: vbbSingleEdit,
-            marks: Array.isArray(vbbMarks) ? vbbMarks.slice() : [],
-          };
-          n = restoreVbbEditDrafts([probe]);
-          if (n > 0) {
-            vbbSingleEdit = probe.edit;
-            if (Array.isArray(probe.marks) && probe.marks.length) vbbMarks = probe.marks.slice();
-            if (probe.draftStart != null) vbbDraftStart = probe.draftStart;
+        const hasItems = Array.isArray(data.items) && data.items.length > 0;
+        const hasSchemes =
+          data.schemes && typeof data.schemes === "object" && !Array.isArray(data.schemes)
+            ? Object.keys(data.schemes).length > 0
+            : false;
+        if (!hasItems && !hasSchemes) {
+          throw new Error("备份里没有可还原的编辑或撞档");
+        }
+
+        let draftRestored = 0;
+        if (hasItems) {
+          const payload = { v: 1, at: Date.now(), items: data.items };
+          localStorage.setItem(VBB_EDIT_DRAFT_LS_KEY, JSON.stringify(payload));
+          if (isVbbBatchMode() && vbbBatchFiles.length) {
+            draftRestored = restoreVbbEditDrafts(vbbBatchFiles);
+            renderVbbBatchList({ keepSelection: true });
+            syncVbbBatchMeta();
             syncVbbEditUi();
             syncVbbEditPreview();
+          } else if (vbbSourceFile) {
+            const probe = {
+              file: vbbSourceFile,
+              duration: Number(vbbVideo?.duration) || 0,
+              srcW: Number(vbbVideo?.videoWidth) || 0,
+              srcH: Number(vbbVideo?.videoHeight) || 0,
+              edit: vbbSingleEdit,
+              marks: Array.isArray(vbbMarks) ? vbbMarks.slice() : [],
+            };
+            draftRestored = restoreVbbEditDrafts([probe]);
+            if (draftRestored > 0) {
+              vbbSingleEdit = probe.edit;
+              if (Array.isArray(probe.marks) && probe.marks.length) vbbMarks = probe.marks.slice();
+              if (probe.draftStart != null) vbbDraftStart = probe.draftStart;
+              syncVbbEditUi();
+              syncVbbEditPreview();
+            }
           }
         }
-        if (n > 0) {
-          toast(`已导入并还原 ${n} 个视频的编辑`);
-        } else {
-          toast(`已导入 ${data.items.length} 条备份 · 请重新选择对应视频即可自动套上`);
+
+        let schemeMerge = null;
+        if (hasSchemes) {
+          schemeMerge = mergeVbbFeatureSchemes(data.schemes);
         }
-        return data.items.length;
+
+        const bits = [];
+        if (hasItems) {
+          if (draftRestored > 0) bits.push(`编辑还原 ${draftRestored}`);
+          else bits.push(`编辑 ${data.items.length} 条已写入（重选对应视频可套上）`);
+        }
+        if (schemeMerge) {
+          bits.push(
+            `撞档 +${schemeMerge.added}/更${schemeMerge.updated}（共 ${schemeMerge.total}）`
+          );
+        }
+        toast(`已导入：${bits.join(" · ")}`);
+        return {
+          drafts: hasItems ? data.items.length : 0,
+          draftRestored,
+          schemes: schemeMerge,
+        };
       }
 
       function destroyVbbLiveFfmpegPool() {
@@ -7353,13 +7400,15 @@
         getActivePlan: () => (vbbAnalysis ? resolveActiveVbbPlan() : null),
         getClips: () => vbbClips.slice(),
         getBatchFiles: () => vbbBatchFiles.slice(),
-        /** 紧急：导出/导入/保存/清除编辑草稿（不含视频）；强制取消 */
+        /** 紧急：导出/导入/保存/清除（编辑草稿 + 撞档库；不含视频）；强制取消 */
         exportEditDrafts: () => downloadVbbEditDraftsJson(),
         importEditDrafts: (file) => importVbbEditDraftsFromFile(file),
         saveEditDrafts: () => saveVbbEditDraftsSync(),
         clearEditDrafts: (opts) => clearVbbStoredEditDrafts(opts || { resetCurrent: true }),
         forceAbort: () => forceAbortVbb(),
-        getEditDraftPayload: () => ({ v: 1, at: Date.now(), items: collectVbbEditDraftItems() }),
+        getEditDraftPayload: () => buildVbbBackupPayload(),
+        exportFeatureSchemes: () => exportVbbFeatureSchemesMap(),
+        mergeFeatureSchemes: (map) => mergeVbbFeatureSchemes(map),
         syncUi: () => {
           syncVbbEditUi();
           renderVbbBatchList({ keepSelection: true });

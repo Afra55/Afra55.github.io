@@ -3117,6 +3117,109 @@
         }
       }
 
+      /** 持久化特征库并与同轮内存 LRU 对齐 */
+      function persistVbbFeatureSchemes(map) {
+        const keys = Object.keys(map).sort((a, b) => (map[b].at || 0) - (map[a].at || 0));
+        while (keys.length > VBB_FEATURE_SCHEME_MAX) delete map[keys.pop()];
+        try {
+          purgeLegacyVbbSpanScheme();
+          localStorage.setItem(VBB_FEATURE_SCHEME_KEY, JSON.stringify(map));
+        } catch (_) {}
+        for (const k of [...vbbFeatureSchemeMem.keys()]) {
+          if (!(k in map)) vbbFeatureSchemeMem.delete(k);
+        }
+        for (const [k, entry] of Object.entries(map)) {
+          if (entry && Number(entry.fps) > 0) vbbFeatureSchemeMem.set(k, entry);
+        }
+        return map;
+      }
+
+      /** 导出可备份的撞档条目（仅当前 ver、有效 fps） */
+      function exportVbbFeatureSchemesMap() {
+        const map = loadVbbFeatureSchemes();
+        /** @type {Record<string, any>} */
+        const out = {};
+        for (const [k, hit] of Object.entries(map)) {
+          if (!k || !hit || !(Number(hit.fps) > 0)) continue;
+          if (Number(hit.ver) !== VBB_FEATURE_SCHEME_VER) continue;
+          out[k] = hit;
+        }
+        return out;
+      }
+
+      /** 规范化导入条目；缺字段则丢弃 */
+      function normalizeVbbFeatureSchemeEntry(raw) {
+        if (!raw || !(Number(raw.fps) > 0)) return null;
+        if (Number(raw.ver) !== VBB_FEATURE_SCHEME_VER) return null;
+        const srcW = Math.max(0, Number(raw.srcW) || 0);
+        const srcH = Math.max(0, Number(raw.srcH) || 0);
+        const effW = Math.max(0, Number(raw.effW) || srcW);
+        const effH = Math.max(0, Number(raw.effH) || srcH);
+        const srcFps = Math.max(0, Number(raw.srcFps) || 0);
+        const fileBytes = Math.max(0, Number(raw.fileBytes) || 0);
+        if (!vbbSchemeSizeBucket(effW || srcW, effH || srcH)) return null;
+        if (!vbbSrcFpsBucket(srcFps)) return null;
+        if (!vbbFileSizeBucket(fileBytes)) return null;
+        return {
+          ver: VBB_FEATURE_SCHEME_VER,
+          fps: Number(raw.fps) || 15,
+          maxW: Math.max(64, Number(raw.maxW) || V2G_BLACKBOX_BASE_W),
+          compressRounds: Number(raw.compressRounds) || 0,
+          usedFallback: Boolean(raw.usedFallback),
+          speed: Math.max(1, Number(raw.speed) || 1),
+          srcW,
+          srcH,
+          effW,
+          effH,
+          srcFps,
+          fileBytes,
+          qualityFirst: Boolean(raw.qualityFirst),
+          encode: raw.encode || "blackbox",
+          at: Math.max(0, Number(raw.at) || Date.now()),
+        };
+      }
+
+      /**
+       * 合并他人/本机备份的撞档库：同键保留 at 更新者；本地更新则不动。
+       * 返回 { added, updated, skipped, total }。
+       */
+      function mergeVbbFeatureSchemes(incoming) {
+        /** @type {Record<string, any>} */
+        const src =
+          incoming && typeof incoming === "object" && !Array.isArray(incoming) ? incoming : {};
+        const map = loadVbbFeatureSchemes();
+        let added = 0;
+        let updated = 0;
+        let skipped = 0;
+        for (const [k, raw] of Object.entries(src)) {
+          if (!k || typeof k !== "string") {
+            skipped += 1;
+            continue;
+          }
+          const entry = normalizeVbbFeatureSchemeEntry(raw);
+          if (!entry) {
+            skipped += 1;
+            continue;
+          }
+          const prev = map[k];
+          if (!prev || !(Number(prev.fps) > 0)) {
+            map[k] = entry;
+            added += 1;
+            continue;
+          }
+          const prevAt = Number(prev.at) || 0;
+          const nextAt = Number(entry.at) || 0;
+          if (nextAt > prevAt) {
+            map[k] = entry;
+            updated += 1;
+          } else {
+            skipped += 1;
+          }
+        }
+        persistVbbFeatureSchemes(map);
+        return { added, updated, skipped, total: Object.keys(map).length };
+      }
+
       function purgeLegacyVbbSpanScheme() {
         try {
           localStorage.removeItem("devtools-vbb-span-scheme-v1");
@@ -3170,16 +3273,9 @@
         };
         vbbFeatureSchemeMem.set(key, entry);
         try {
-          purgeLegacyVbbSpanScheme();
           const map = loadVbbFeatureSchemes();
           map[key] = entry;
-          const keys = Object.keys(map).sort((a, b) => (map[b].at || 0) - (map[a].at || 0));
-          while (keys.length > VBB_FEATURE_SCHEME_MAX) delete map[keys.pop()];
-          localStorage.setItem(VBB_FEATURE_SCHEME_KEY, JSON.stringify(map));
-          // 内存与持久 LRU 对齐，避免长会话 Map 只增不减
-          for (const k of [...vbbFeatureSchemeMem.keys()]) {
-            if (!(k in map)) vbbFeatureSchemeMem.delete(k);
-          }
+          persistVbbFeatureSchemes(map);
         } catch (_) {}
       }
 
