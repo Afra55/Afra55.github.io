@@ -132,17 +132,17 @@ assert(
   assert(/from currentTime|a = t|当前进度/.test(vtrimEd) && /addCutoutAtPlayhead/.test(vtrimEd), "删中间从播放头起");
   assert(/function resolveKeepFps/.test(vtrimEd) && /function secToFrame/.test(vtrimEd), "须有源帧时钟");
   assert(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*0/.test(vtrimEd), "成片不再叠接点垫");
-  assert(/return keepRangesFromEdit\(edit, duration\)/.test(vtrimEd), "成片 keep ≡ 预览 keep");
+  assert(/return keepRangesFromEdit\(edit, duration(?:,\s*\w+)?\)/.test(vtrimEd), "成片 keep ≡ 预览 keep");
   assert(/Math\.min\(\s*want\s*,\s*Math\.max\(\s*fromShown/.test(vtrimEd), "片尾抬手禁止推过拖点");
   assert(/trimStart:\s*quantizeTrimSec\(startSec\)/.test(vtrimEd), "完成编辑须提交黄柄所见 trimStart，勿预加 START_KEEP");
   assert(/function keepRangesForEncode/.test(vtrimEd), "成片须有 keepRangesForEncode");
   assert(/下载编辑后的视频/.test(vtrimEd) && /function exportKeepVideo/.test(vtrimEd), "编辑层须能下载编辑后 mp4");
   assert(/正在导出/.test(vtrimEd) && /export-progress/.test(vtrimEd), "下载编辑后视频须有进度反馈");
-  assert(/keepRangesForEncode\(edit, duration\)/.test(vtrimEd), "exportKeepVideo 须按成片 keep 切片");
+  assert(/keepRangesForEncode\(edit, duration(?:,\s*\w+)?\)/.test(vtrimEd), "exportKeepVideo 须按成片 keep 切片");
   {
     const n = vtrimEd.match(/function normalizeCutouts\([\s\S]*?return merged;\s*\}/);
-    const k = vtrimEd.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?return keeps;\s*\}/);
-    const ke = vtrimEd.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
+    const k = vtrimEd.match(/function keepRangesFromEdit\(edit, duration(?:,\s*\w+)?\) \{[\s\S]*?return keeps;\s*\}/);
+    const ke = vtrimEd.match(/function keepRangesForEncode\(edit, duration(?:,\s*\w+)?\) \{[\s\S]*?\n  \}/);
     const resolveEnd = vtrimEd.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
     const resolveStart = vtrimEd.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
     const resolveKeep = vtrimEd.match(/function resolveKeepFps\(editOrFps\) \{[\s\S]*?\n  \}/);
