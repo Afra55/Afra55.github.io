@@ -2781,7 +2781,11 @@
     // 禁止 trim 后 fps= / -r -vsync cfr——都会重时钟丢掉段首，多段表现为整体前移。
     // 帧号 trim 仅作空片回退（帧序号≠PTS 时比秒级更偏）。
     const keepFps = resolveKeepFps(edit);
+    // 预览 keep 是源帧半开窗；有真实 srcFps 时必须帧号优先，秒级 PTS 会与预览差 0~数帧
+    const hasRealFps = normalizeSourceFps(Number(edit?.srcFps) || 0) >= 5;
     const parts = [];
+    /** @type {number[]} 各段成片时长（秒）= 帧数/fps，供 GIF 按段采样 */
+    const segmentSpans = [];
     const MIN_PART_BYTES = 512;
     const fmtSec = (t) => {
       const n = Math.max(0, Number(t) || 0);
@@ -2793,6 +2797,7 @@
       let startF = secToFrame(start, keepFps);
       let endF = secToFrame(end, keepFps);
       if (endF <= startF) endF = startF + 1;
+      const frameCount = Math.max(1, endF - startF);
       const dur = Math.max(0.05, end - start);
       const out = `keep${i}.mp4`;
       const trimVf =
@@ -2851,19 +2856,20 @@
       } catch (_) {
         return null;
       }
-      return out;
+      return { out, spanSec: frameCount / keepFps, mode };
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 秒级 PTS 优先（≡预览 currentTime）；空片再帧号/-ss。帧号在 VFR/起点非 0 会切偏。
-      const modes = ["sec", "frame", "ss"];
-      let out = null;
+      // 有探测 fps：帧号优先（≡预览半开窗）；否则秒级 PTS → 帧号 → -ss
+      const modes = hasRealFps ? ["frame", "sec", "ss"] : ["sec", "frame", "ss"];
+      let hit = null;
       for (const mode of modes) {
-        out = await trySlice(keeps[i], i, mode);
-        if (out) break;
+        hit = await trySlice(keeps[i], i, mode);
+        if (hit) break;
       }
-      if (!out) throw new Error(`切片失败（段 ${i + 1}/${keeps.length}）`);
-      parts.push(out);
+      if (!hit) throw new Error(`切片失败（段 ${i + 1}/${keeps.length}）`);
+      parts.push(hit.out);
+      segmentSpans.push(Math.max(0.05, Number(hit.spanSec) || (keeps[i].end - keeps[i].start)));
     }
     onProgress(0.7, "拼接…");
     const filename = String(file?.name || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
@@ -2934,9 +2940,19 @@
         await ffmpeg.deleteFile(merged);
       } catch (_) {}
     }
-    const totalSpan = keeps.reduce((s, k) => s + Math.max(0, k.end - k.start), 0);
+    const totalSpan = segmentSpans.reduce((s, d) => s + Math.max(0, d), 0);
     onProgress(1, "完成");
-    return { file: outFile, blob, duration: totalSpan, srcW: W, srcH: H, filename };
+    return {
+      file: outFile,
+      blob,
+      duration: totalSpan,
+      srcW: W,
+      srcH: H,
+      filename,
+      segmentSpans,
+      keepFps,
+      slicedByFrame: hasRealFps,
+    };
   }
 
   window.DevToolsVtrimEditor = {
