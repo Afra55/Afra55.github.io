@@ -1581,6 +1581,8 @@
         }
         ensureVbbItemEdit(item);
         clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
+        const draftFps =
+          Number(item.edit?.srcFps) || Number(item.srcFps) || Number(vbbSingleSrcFps) || 0;
         const draft = {
           trimStart: item.edit.trimStart,
           trimEnd: item.edit.trimEnd,
@@ -1589,6 +1591,8 @@
             : [],
           cropOn: Boolean(item.edit.cropOn),
           crop: item.edit.crop ? { ...item.edit.crop } : { x: 0, y: 0, w: item.srcW, h: item.srcH },
+          // 备份/导入还原的 srcFps 一并带进编辑器（成片时钟锚点）
+          ...(draftFps >= 5 && draftFps <= 240 ? { srcFps: draftFps } : {}),
         };
         vbbEditOpening = true;
         vbbEditOpenStartedAt = Date.now();

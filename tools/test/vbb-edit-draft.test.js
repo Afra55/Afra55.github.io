@@ -279,4 +279,25 @@ t("任务世代：begin/finish/forceAbort 协同存在且 busy 只在 begin 置 
   assert.ok(src.includes("if (epoch !== vbbJobActiveEpoch) return false"));
 });
 
+t("备份/导入走成片时钟字段：serialize/apply 保留 srcFps，打开编辑也带入", () => {
+  assert.ok(src.includes("function serializeVbbEditDraft"));
+  assert.ok(src.includes("function applyVbbEditDraftToItem"));
+  const ser = src.slice(
+    src.indexOf("function serializeVbbEditDraft"),
+    src.indexOf("function vbbEditDraftSessionFiles")
+  );
+  assert.ok(ser.includes("srcFps"));
+  assert.ok(!ser.includes("chrome") && !ser.includes("VideoFrame"));
+  const apply = src.slice(
+    src.indexOf("function applyVbbEditDraftToItem"),
+    src.indexOf("function restoreVbbEditDrafts")
+  );
+  assert.ok(apply.includes("draft.edit.srcFps") || apply.includes("srcFps: fps"));
+  assert.ok(apply.includes("item.srcFps = fps") || apply.includes("item.srcFps = fps"));
+  // 打开编辑：备份还原的 fps 进 initial，成片锚点不丢
+  assert.ok(src.includes("备份/导入还原的 srcFps 一并带进编辑器") || src.includes("draftFps"));
+  const open = src.slice(src.indexOf("const draftFps"), src.indexOf("vbbEditOpening = true"));
+  assert.ok(open.includes("srcFps: draftFps") || open.includes("srcFps: draftFps"));
+});
+
 console.log(`vbb-edit-draft.test.js: ${n} passed`);
