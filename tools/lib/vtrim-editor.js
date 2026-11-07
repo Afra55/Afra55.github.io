@@ -99,6 +99,13 @@
     const f = Math.max(1, Number(fps) || DEFAULT_FRAME_FPS);
     return Math.max(0, Math.round(Number(frame) || 0)) / f;
   }
+
+  /** Chrome 在精确 k/F 常显示 k−1 帧；seek 落到格后 0.1ms 才稳定出第 k 帧 */
+  const DISPLAY_SEEK_EPS = 1e-4;
+  function displaySeekSec(sec, fps) {
+    const f = normalizeSourceFps(fps) || DEFAULT_FRAME_FPS;
+    return frameToSec(secToFrame(sec, f), f) + DISPLAY_SEEK_EPS;
+  }
   let uidSeq = 0;
 
   function toast(msg) {
@@ -770,7 +777,7 @@
         dragSeekTimer = 0;
       }
       try {
-        video.currentTime = want;
+        video.currentTime = displaySeekSec(want, sourceFps);
       } catch (_) {}
       await waitSeek(video);
       if (closed) return;
@@ -979,7 +986,7 @@
         video.pause();
       } catch (_) {}
 
-      let target = Math.max(startSec, want - step);
+      let target = Math.max(startSec, displaySeekSec(want, sourceFps) - step);
       try {
         video.currentTime = target;
       } catch (_) {}
@@ -990,7 +997,7 @@
 
       if (shown >= want - step * 0.5) {
         // 贴柄/越界：再往前一帧
-        const earlier = Math.max(startSec, target - step);
+        const earlier = Math.max(startSec, displaySeekSec(want, sourceFps) - step * 2);
         if (earlier < target - 1e-4) {
           try {
             video.currentTime = earlier;
@@ -1034,7 +1041,7 @@
       } catch (_) {}
       for (let i = 0; i < 3; i++) {
         try {
-          video.currentTime = target;
+          video.currentTime = displaySeekSec(target, sourceFps);
         } catch (_) {}
         await waitSeek(video);
         if (closed) return target;
@@ -1052,7 +1059,7 @@
         target = next;
       }
       try {
-        video.currentTime = startSec;
+        video.currentTime = displaySeekSec(startSec, sourceFps);
       } catch (_) {}
       await waitSeek(video);
       paintTimeline();
@@ -2729,14 +2736,14 @@
       const endLimit = paused ? k.end - endEps : k.end - playEndPad;
       if (time >= k.start - startEps && time < endLimit) return null;
     }
-    if (time < first.start - startEps) return first.start;
+    if (time < first.start - startEps) return first.start + DISPLAY_SEEK_EPS;
     for (let i = 0; i < keeps.length; i++) {
       const nxt = keeps[i + 1];
-      if (nxt && time < nxt.start) return nxt.start;
+      if (nxt && time < nxt.start) return nxt.start + DISPLAY_SEEK_EPS;
     }
     // 半开上界：暂停停在末帧起点，勿贴到 exclusive end（那一帧已不进 GIF）
-    if (paused) return Math.max(last.start, last.end - endKeep);
-    return first.start;
+    if (paused) return Math.max(last.start, last.end - endKeep) + DISPLAY_SEEK_EPS;
+    return first.start + DISPLAY_SEEK_EPS;
   }
 
   function evenDim(n) {
@@ -2777,9 +2784,9 @@
     const W = evenDim(srcW);
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
-    // 切片必须跟预览同一套钟：浏览器 currentTime = PTS 秒。
-    // 禁止优先 start_frame：解码帧序号在 VFR/非零 start/探测 fps≠真帧率时 ≠ 预览时间，
-    // 「下载编辑后的视频」会整段切偏，黑盒 GIF 再错。
+    // 切片对齐预览：先 fps=round=up 抽到 keep 帧格（≡ Chrome seek 到 k/F 所见），
+    // 再按秒半开 trim。纯 PTS trim 在 VFR/29.97 上会丢预览首帧、段尾多带删段第一帧。
+    // start_frame 仅作空片回退（帧序号在未抽格时 ≠ 预览）。
     const keepFps = resolveKeepFps(edit);
     const parts = [];
     /** @type {number[]} 各段时长（秒），供 GIF 按段采样 */
@@ -2795,17 +2802,18 @@
       let startF = secToFrame(start, keepFps);
       let endF = secToFrame(end, keepFps);
       if (endF <= startF) endF = startF + 1;
+      const frameCount = Math.max(1, endF - startF);
       const dur = Math.max(0.05, end - start);
       const out = `keep${i}.mp4`;
-      // sec：半开 [start,end) ≡ 预览 currentTime；frame 仅空片回退
       const trimVf =
         mode === "frame"
           ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
           : mode === "sec"
             ? `trim=start=${fmtSec(start)}:end=${fmtSec(end)},setpts=PTS-STARTPTS`
             : "";
-      // 不在滤镜链里 fps=：保留 trim 后每一源帧，避免段首被重采样丢掉
+      // fps 必须在 trim 前：按绝对时间轴抽格，段首不丢预览帧
       const vfCore = [
+        `fps=${keepFps}:round=up`,
         cropVf,
         trimVf,
         `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
@@ -2819,7 +2827,6 @@
         mode === "ss"
           ? ["-i", inName, "-ss", fmtSec(start), "-t", fmtSec(dur), "-an", "-vf", vfCore]
           : ["-i", inName, "-an", "-vf", vfCore];
-      // 勿 -r/-vsync cfr：强制 CFR 会按输出时钟重采，段首再丢几帧
       // 全 I 帧：避免段尾 B 帧在 concat 后解不出 → 中间段首尾各丢几帧
       args.push(
         "-c:v",
@@ -2854,11 +2861,11 @@
       } catch (_) {
         return null;
       }
-      return { out, spanSec: dur, mode };
+      return { out, spanSec: frameCount / keepFps, mode };
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 预览对齐：sec → ss；frame 最后（帧序号≠PTS）
+      // 抽格后 sec trim ≡ 帧格半开；ss/frame 回退
       const modes = ["sec", "ss", "frame"];
       let hit = null;
       for (const mode of modes) {

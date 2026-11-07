@@ -124,7 +124,7 @@ t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
   assert.ok(fn.includes("return keepRangesFromEdit(edit, duration)"));
 });
 
-t("exportKeepVideo：秒级 PTS 优先；切片勿 fps=/-r cfr；禁止两端 bias", () => {
+t("exportKeepVideo：trim 前 fps=round=up；勿 -r cfr；禁止两端 bias", () => {
   const exp = vtrim.slice(
     vtrim.indexOf("async function exportKeepVideo"),
     vtrim.indexOf("window.DevToolsVtrimEditor =")
@@ -132,7 +132,7 @@ t("exportKeepVideo：秒级 PTS 优先；切片勿 fps=/-r cfr；禁止两端 bi
   assert.ok(exp.includes('["sec", "ss", "frame"]'), "须 sec→ss→frame（≡预览）");
   assert.ok(!exp.includes("hasRealFps"), "禁止 frame 优先");
   assert.ok(exp.includes("MIN_PART_BYTES"));
-  assert.ok(!/fps=\$\{keepFps\},format/.test(exp), "trim 后 fps= 会丢段首帧导致整体前移");
+  assert.ok(/fps=\$\{keepFps\}:round=up/.test(exp), "须先抽格再 trim");
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(exp), "切片勿 -r keepFps（强制 CFR 丢段首）");
   assert.ok(exp.includes('"-vsync"') && exp.includes('"vfr"'), "切片用 vfr 保段首");
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp));
@@ -159,6 +159,12 @@ t("编码抽段/硬切用 PTS trim，避免 demux -ss 片头前移", () => {
 t("编辑后仍 forceAccurateCut", () => {
   assert.ok(shared.includes("forceAccurateCut"));
   assert.ok(vbb.includes("forceAccurateCut: Boolean(prepared.cutNote)"));
+});
+
+t("O3加宽/硬闸重编须带 vbbKeepFrameEncodeOpts；按段 -t=frameCount/fps", () => {
+  assert.ok(shared.includes("function vbbKeepFrameEncodeOpts"));
+  assert.ok((shared.match(/vbbKeepFrameEncodeOpts\(/g) || []).length >= 3, "核心+O3+硬闸三处共用");
+  assert.ok(/encodeT = \(frameCount \/ fps\) \* speed/.test(shared), "按段采样 -t 须盖住 ceil 帧之和");
 });
 
 t("编码：导出编辑片片尾垫=0；倍速括号正确；按段 fps；round=up", () => {
@@ -208,7 +214,7 @@ t("删中间 materialize 切片/拼接勿 -r cfr", () => {
   );
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(fn));
   assert.ok(fn.includes('"vfr"'));
-  assert.ok(fn.includes("勿 fps=") || fn.includes("整体前移"));
+  assert.ok(/fps=\$\{keepFps\}:round=up/.test(fn) || fn.includes("fps=${keepFps}:round=up"), "兜底切片须先抽格");
 });
 
 t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {

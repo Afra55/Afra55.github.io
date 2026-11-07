@@ -121,15 +121,20 @@ t("仅裁片头片尾：成片起点=黄柄，终点=黄柄半开上界", () => 
   assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("exportKeepVideo：秒级 PTS 优先（≡预览 currentTime）；滤镜禁止 fps=；禁止两端 bias", () => {
+t("exportKeepVideo：trim 前 fps=round=up；sec 优先；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes('["sec", "ss", "frame"]'), "须 sec→ss→frame（帧序号≠PTS）");
+  assert.ok(exp.includes('["sec", "ss", "frame"]'), "须 sec→ss→frame");
   assert.ok(!exp.includes("hasRealFps"), "禁止按 srcFps 改走 frame 优先");
   assert.ok(exp.includes("segmentSpans"), "回传各段时长");
   assert.ok(exp.includes("MIN_PART_BYTES"));
-  assert.ok(!/`fps=\$\{keepFps\}`/.test(exp) && !/fps=\$\{keepFps\},format/.test(exp), "切片/拼接滤镜勿 fps=");
+  assert.ok(/fps=\$\{keepFps\}:round=up/.test(exp), "须先抽格再 trim（≡预览 k/F）");
+  const vfCore = exp.slice(exp.indexOf("const vfCore"), exp.indexOf("const args"));
+  assert.ok(
+    /fps=\$\{keepFps\}:round=up[\s\S]*trimVf/.test(vfCore),
+    "vfCore 内 fps 须排在 trimVf 之前"
+  );
   assert.ok(exp.includes("format=yuv420p,setsar=1"));
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
 });
@@ -143,14 +148,15 @@ t("getEditState：未探测 fps 勿填默认 30（避免误判帧切）", () => 
   assert.ok(!/srcFps:\s*sourceFps\s*>=\s*5\s*\?\s*sourceFps\s*:\s*DEFAULT_FRAME_FPS/.test(block));
 });
 
-t("materialize：有编辑就导出；带回 segmentSpans；无滤镜 fps=", () => {
+t("materialize：有编辑就导出；带回 segmentSpans；切片先 fps=round=up", () => {
   const start = vbb.indexOf("async function materializeVbbKeepVideo");
   const end = vbb.indexOf("function shouldPrecutVbbWindow", start);
   const body = vbb.slice(start, end > start ? end : undefined);
   assert.ok(body.includes("segmentSpans"), "导出片带回各段时长供按段 fps");
   assert.ok(!/keeps\.length\s*<=\s*1/.test(body) || body.includes("单段 keep 也会导出"), "单段也要能导出");
   assert.ok(body.includes("out.segmentSpans") || body.includes("segmentSpans = out"), "优先用导出实测段长");
-  assert.ok(!/setsar=1,fps=\$\{keepFps\}/.test(body), "scalePad 勿带 fps=");
+  assert.ok(body.includes("fps=${keepFps}:round=up") || /fps=\$\{keepFps\}:round=up/.test(body), "兜底切片先抽格");
+  assert.ok(!/setsar=1,fps=\$\{keepFps\}/.test(body), "scalePad 勿再叠 fps=");
   assert.ok(!/\[\$\{i\}:v\]fps=\$\{keepFps\}/.test(body), "concat 勿再 fps=");
 });
 
