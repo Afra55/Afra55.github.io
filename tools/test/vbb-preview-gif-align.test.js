@@ -128,15 +128,15 @@ t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
   assert.ok(fn.includes("return keepRangesFromEdit(edit, duration)"));
 });
 
-t("exportKeepVideo：trim 前 fps=round=up；勿 -r cfr；禁止两端 bias", () => {
+t("exportKeepVideo：PTS sec 优先；勿 -r cfr；禁止两端 bias", () => {
   const exp = vtrim.slice(
     vtrim.indexOf("async function exportKeepVideo"),
     vtrim.indexOf("window.DevToolsVtrimEditor =")
   );
-  assert.ok(exp.includes('["frame", "sec", "ss"]'), "抽格后须 frame→sec→ss");
+  assert.ok(exp.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "须 sec 优先");
   assert.ok(exp.includes("displayFrameAtSec"), "须用 Chrome 显示帧映射");
   assert.ok(exp.includes("MIN_PART_BYTES"));
-  assert.ok(/fps=\$\{keepFps\}:round=up/.test(exp), "须先抽格再 trim");
+  assert.ok(/useGrid \? `fps=\$\{keepFps\}:round=up`/.test(exp), "仅 frameGrid 才抽格");
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(exp), "切片勿 -r keepFps（强制 CFR 丢段首）");
   assert.ok(exp.includes('"-vsync"') && exp.includes('"vfr"'), "切片用 vfr 保段首");
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp));
@@ -218,7 +218,7 @@ t("删中间 materialize 切片/拼接勿 -r cfr", () => {
   );
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(fn));
   assert.ok(fn.includes('"vfr"'));
-  assert.ok(/fps=\$\{keepFps\}:round=up/.test(fn) || fn.includes("fps=${keepFps}:round=up"), "兜底切片须先抽格");
+  assert.ok(fn.includes('["sec", "ss", "frameRaw", "frameGrid"]') || fn.includes("frameGrid"), "兜底须 PTS 优先");
 });
 
 t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {

@@ -2883,7 +2883,7 @@
     const W = evenDim(srcW);
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
-    // 切片对齐预览：先 fps=round=up 抽到 keep 帧格，再按帧号半开切。
+    // 切片对齐预览 currentTime：默认 PTS sec（手机 VFR 禁止先 fps+帧号）。
     const keepFps = resolveKeepFps(edit);
     const parts = [];
     /** @type {number[]} 各段时长（秒），供 GIF 按段采样 */
@@ -2895,29 +2895,30 @@
       const n = Math.max(0, Number(t) || 0);
       return (Math.round(n * 1e6) / 1e6).toFixed(6);
     };
+    const needScale = Boolean(cropVf) || srcW !== W || srcH !== H;
     const trySlice = async (k, i, mode) => {
+      // keep.start/end ≡ 预览 seek 的 PTS；Android 实拍多为 VFR，禁止优先 fps+start_frame
       const start = Math.max(0, Number(k.start) || 0);
       const end = Math.max(start + 0.05, Number(k.end) || 0);
-      // 优先用 keep 自带的显示帧号（与预览同一套）；勿再 secToFrame(round) 拧回去
       let startF = Number.isFinite(Number(k.startF)) ? Math.round(Number(k.startF)) : displayFrameAtSec(start, keepFps);
       let endF = Number.isFinite(Number(k.endF)) ? Math.round(Number(k.endF)) : displayFrameAtSec(end, keepFps);
       if (endF <= startF) endF = startF + 1;
       const frameCount = Math.max(1, endF - startF);
-      const dur = Math.max(0.05, frameCount / keepFps);
+      const dur = Math.max(0.05, end - start);
       const out = `keep${i}.mp4`;
-      const trimVf =
-        mode === "frame"
-          ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
-          : mode === "sec"
-            ? `trim=start=${fmtSec(frameToSec(startF, keepFps))}:end=${fmtSec(frameToSec(endF, keepFps))},setpts=PTS-STARTPTS`
-            : "";
-      // 先抽到 keep 帧格，再按帧号半开切（抽格后 start_frame ≡ 预览显示帧）
+      const useGrid = mode === "frameGrid";
+      const useFrame = mode === "frameRaw" || mode === "frameGrid" || mode === "frame";
+      const trimVf = useFrame
+        ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
+        : mode === "sec"
+          ? `trim=start=${fmtSec(start)}:end=${fmtSec(end)},setpts=PTS-STARTPTS`
+          : "";
       const vfCore = [
-        `fps=${keepFps}:round=up`,
+        useGrid ? `fps=${keepFps}:round=up` : "",
         cropVf,
         trimVf,
-        `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
-        `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2`,
+        needScale ? `scale=${W}:${H}:force_original_aspect_ratio=decrease` : "",
+        needScale ? `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2` : "",
         "setsar=1",
         "format=yuv420p",
       ]
@@ -2925,17 +2926,7 @@
         .join(",");
       const args =
         mode === "ss"
-          ? [
-              "-i",
-              inName,
-              "-ss",
-              fmtSec(frameToSec(startF, keepFps)),
-              "-t",
-              fmtSec(dur),
-              "-an",
-              "-vf",
-              vfCore,
-            ]
+          ? ["-i", inName, "-ss", fmtSec(start), "-t", fmtSec(dur), "-an", "-vf", vfCore]
           : ["-i", inName, "-an", "-vf", vfCore];
       // 全 I 帧：避免段尾 B 帧在 concat 后解不出 → 中间段首尾各丢几帧
       args.push(
@@ -2971,12 +2962,14 @@
       } catch (_) {
         return null;
       }
-      return { out, spanSec: frameCount / keepFps, mode };
+      // sec/ss：用 PTS 段长（≡预览）；帧模式才用帧数/fps
+      const spanSec = useFrame ? frameCount / keepFps : dur;
+      return { out, spanSec, mode };
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 抽格后帧号半开最准；sec/ss 回退
-      const modes = ["frame", "sec", "ss"];
+      // 预览 currentTime = PTS：sec 优先；帧号/抽格仅回退（手机 VFR 上 frame 会切偏）
+      const modes = ["sec", "ss", "frameRaw", "frameGrid"];
       let hit = null;
       for (const mode of modes) {
         hit = await trySlice(keeps[i], i, mode);

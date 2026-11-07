@@ -126,23 +126,18 @@ t("仅裁片头片尾：起点=黄柄所见；终点=停帧半开上界", () => 
   assert.ok(Math.abs(enc[0].end - endEx) < 1e-9);
 });
 
-t("exportKeepVideo：trim 前 fps=round=up；sec 优先；禁止两端 bias", () => {
+t("exportKeepVideo：PTS sec 优先（≡预览）；frameGrid 回退才 fps=；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes('["frame", "sec", "ss"]'), "抽格后须 frame→sec→ss");
-  assert.ok(exp.includes("displayFrameAtSec"), "keep/切片须用 Chrome 显示帧");
+  assert.ok(exp.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "须 sec→ss→frameRaw→frameGrid");
+  assert.ok(exp.includes("displayFrameAtSec"), "keep 须用 Chrome 显示帧");
   assert.ok(exp.includes("segmentSpans"), "回传各段时长");
   assert.ok(exp.includes("sliceLog"), "须回传切片诊断");
   assert.ok(exp.includes("opts.keeps"), "须支持传入预览同套 keeps");
   assert.ok(exp.includes("MIN_PART_BYTES"));
-  assert.ok(/fps=\$\{keepFps\}:round=up/.test(exp), "须先抽格再 trim（≡预览 k/F）");
-  const vfCore = exp.slice(exp.indexOf("const vfCore"), exp.indexOf("const args"));
-  assert.ok(
-    /fps=\$\{keepFps\}:round=up[\s\S]*trimVf/.test(vfCore),
-    "vfCore 内 fps 须排在 trimVf 之前"
-  );
-  assert.ok(exp.includes("format=yuv420p,setsar=1"));
+  assert.ok(/useGrid \? `fps=\$\{keepFps\}:round=up`/.test(exp), "仅 frameGrid 才抽格");
+  assert.ok(exp.includes("setsar=1"));
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
 });
 
@@ -187,7 +182,7 @@ t("materialize：有编辑就导出；带回 segmentSpans；切片先 fps=round=
   assert.ok(body.includes("segmentSpans"), "导出片带回各段时长供按段 fps");
   assert.ok(!/keeps\.length\s*<=\s*1/.test(body) || body.includes("单段 keep 也会导出"), "单段也要能导出");
   assert.ok(body.includes("out.segmentSpans") || body.includes("segmentSpans = out"), "优先用导出实测段长");
-  assert.ok(body.includes("fps=${keepFps}:round=up") || /fps=\$\{keepFps\}:round=up/.test(body), "兜底切片先抽格");
+  assert.ok(body.includes("frameGrid") && body.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "兜底 PTS 优先");
   assert.ok(!/setsar=1,fps=\$\{keepFps\}/.test(body), "scalePad 勿再叠 fps=");
   assert.ok(!/\[\$\{i\}:v\]fps=\$\{keepFps\}/.test(body), "concat 勿再 fps=");
 });

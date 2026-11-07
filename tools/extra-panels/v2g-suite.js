@@ -8960,8 +8960,7 @@
             : typeof window.DevToolsVtrimEditor?.secToFrame === "function"
               ? (t) => window.DevToolsVtrimEditor.secToFrame(t, keepFps)
               : (t) => Math.round(Math.max(0, Number(t) || 0) * keepFps);
-        // 先 fps=round=up 抽到 keep 帧格（≡预览），再 trim；勿 -r cfr
-        const gridVf = `fps=${keepFps}:round=up,`;
+        // 预览 currentTime=PTS：默认不要先 fps=（手机 VFR 上会切偏）；frameGrid 回退才抽格
         const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
         const MIN_PART_BYTES = 512;
         const fmtSec = (t) => {
@@ -8973,16 +8972,18 @@
           let endF = toFrame(end0);
           if (endF <= startF) endF = startF + 1;
           const dur = Math.max(0.05, end0 - start0);
-          const trimVf =
-            mode === "frame"
-              ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS,`
-              : mode === "sec"
-                ? `trim=start=${fmtSec(start0)}:end=${fmtSec(end0)},setpts=PTS-STARTPTS,`
-                : "";
+          const useGrid = mode === "frameGrid";
+          const useFrame = mode === "frame" || mode === "frameRaw" || mode === "frameGrid";
+          const trimVf = useFrame
+            ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS,`
+            : mode === "sec"
+              ? `trim=start=${fmtSec(start0)}:end=${fmtSec(end0)},setpts=PTS-STARTPTS,`
+              : "";
+          const head = useGrid ? `fps=${keepFps}:round=up,` : "";
           const args =
             mode === "ss"
-              ? ["-i", inName, "-ss", fmtSec(start0), "-t", fmtSec(dur), "-an", "-vf", `${gridVf}${scalePad}`]
-              : ["-i", inName, "-an", "-vf", `${gridVf}${trimVf}${scalePad}`];
+              ? ["-i", inName, "-ss", fmtSec(start0), "-t", fmtSec(dur), "-an", "-vf", `${head}${scalePad}`]
+              : ["-i", inName, "-an", "-vf", `${head}${trimVf}${scalePad}`];
           // 全 I 帧：中间段 concat 后不因 B 帧丢首尾
           args.push(
             "-c:v",
@@ -9026,8 +9027,8 @@
           const start0 = Math.max(0, Number(k.start) || 0);
           const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // 抽格后帧号半开最准（≡ Chrome 显示帧）
-          const modes = ["frame", "sec", "ss"];
+          // PTS 优先（≡预览）；帧号/抽格回退
+          const modes = ["sec", "ss", "frameRaw", "frameGrid"];
           let ok = false;
           for (const mode of modes) {
             ok = await tryPart(start0, end0, out, mode);
