@@ -128,8 +128,8 @@
           <button type="button" class="secondary-btn" id="vbb-merge-video" disabled title="把已选的多个视频按顺序拼成一个视频，然后当作一个视频走黑盒生成 GIF">拼接后转黑盒</button>
           <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF；宽高不一致会自动统一尺寸并补边；超限会自动压黑盒">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
-          <button type="button" class="ghost-btn" id="vbb-export-edits" title="可选应急：把未完成的裁剪方案存成 JSON 文件。平时不用点——每个视频在编辑里点保存后会自动记在本机；刷新后重新选同一批视频即可还原">备份编辑</button>
-          <label class="ghost-btn" for="vbb-import-edits" title="从之前「备份编辑」下载的 JSON 还原方案，然后重新选对应视频（或已选中的会立刻套上）">导入备份</label>
+          <button type="button" class="ghost-btn" id="vbb-export-edits" title="下载 JSON：含未完成裁剪草稿 + 撞档（成功出 GIF 的 fps/分辨率方案）。平时编辑会自动记本机；撞档库可交给别人导入合并">备份编辑</button>
+          <label class="ghost-btn" for="vbb-import-edits" title="导入 JSON：还原编辑草稿；撞档库与本机已有记录按特征键合并（同键保留较新的），不会整库覆盖">导入备份</label>
           <input id="vbb-import-edits" class="visually-hidden" type="file" accept="application/json,.json" />
           <button type="button" class="ghost-btn" id="vbb-clear-drafts" title="清掉本机自动保存的编辑草稿，并重置当前已打开视频的裁剪/打点。刷新后再选视频也不会恢复旧方案">清除草稿</button>
           <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载</button>

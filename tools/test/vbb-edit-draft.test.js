@@ -50,6 +50,12 @@ t("含编辑草稿保存/恢复/导出/清除", () => {
 t("含 JSON 备份导入还原", () => {
   assert.ok(src.includes("importVbbEditDraftsFromFile"));
   assert.ok(src.includes("importEditDrafts:"));
+  assert.ok(src.includes("buildVbbBackupPayload"));
+  assert.ok(src.includes("mergeVbbFeatureSchemes"));
+  assert.ok(src.includes("exportVbbFeatureSchemesMap"));
+  assert.ok(src.includes("schemes"));
+  assert.ok(panel.includes("撞档"));
+  assert.ok(panel.includes("合并"));
 });
 
 t("批量可重跑失败且保留成功 GIF", () => {
