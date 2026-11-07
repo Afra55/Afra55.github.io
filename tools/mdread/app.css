@@ -363,6 +363,7 @@ body.has-doc .drop-hint {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  box-sizing: border-box;
 }
 .outline-label {
   flex: 0 0 auto;
@@ -376,19 +377,26 @@ body.has-doc .drop-hint {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  flex: 1 1 auto;
+  /* 1 1 0：在定高侧栏内占满剩余高度并自滚动，勿让子项被压扁 */
+  flex: 1 1 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .outline-item {
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-height: 1.7em;
   text-align: left;
   border: 0;
   background: transparent;
   color: var(--muted);
   padding: 0.28rem 0.45rem;
   border-radius: 6px;
+  font: inherit;
   font-size: 0.82rem;
-  line-height: 1.35;
+  line-height: 1.45;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

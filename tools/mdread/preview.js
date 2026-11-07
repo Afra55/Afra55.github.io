@@ -175,9 +175,9 @@
     outlineEl.innerHTML = heads
       .map((h) => {
         const lvl = Number(h.tagName.slice(1)) || 1;
-        return `<button type="button" class="outline-item lv${lvl}" data-id="${escapeHtml(h.id)}">${escapeHtml(
-          h.textContent || ""
-        )}</button>`;
+        const text = String(h.textContent || "").trim();
+        const safe = escapeHtml(text);
+        return `<button type="button" class="outline-item lv${lvl}" data-id="${escapeHtml(h.id)}" title="${safe}">${safe}</button>`;
       })
       .join("");
   }
