@@ -166,7 +166,7 @@ async function openPage(browser, hash, port) {
         const meta = document.querySelector("#qr-meta")?.textContent || "";
         return n > 0 && /已生成/.test(meta);
       },
-      { timeout: 90000 }
+      { timeout: 120000 }
     );
   }
 
