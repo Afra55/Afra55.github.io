@@ -558,9 +558,34 @@
       scheduleCropLive();
     }
 
-    /** 微调一步 = 1 源帧（1/srcFps）；无 fps 时回退 endKeepStepSec */
+    /** 微调一步时长（无时间轴时）：1 源帧 */
     function nudgeStepSec() {
       return Math.max(1 / 240, endKeepStepSec());
+    }
+
+    /**
+     * 微调落到相邻成片采样 CTS（有 stts 时）；否则 ±1/fps。
+     * @param {number} cur
+     * @param {number} dir  +1 / -1
+     */
+    function nudgeEncodeSec(cur, dir) {
+      const sign = dir < 0 ? -1 : 1;
+      const raw = clamp(Number(cur) || 0, 0, duration);
+      const tl = sourceTimeline;
+      const api = window.DevToolsMp4Timeline;
+      if (tl?.ctsSec?.length && typeof api?.sampleIndexAtSec === "function") {
+        let idx = api.sampleIndexAtSec(tl, raw);
+        const cts = Number(tl.ctsSec[idx]);
+        if (sign > 0) {
+          if (raw >= cts - 1e-6) idx = Math.min(tl.ctsSec.length - 1, idx + 1);
+        } else if (Math.abs(raw - cts) <= 1e-6) {
+          idx = Math.max(0, idx - 1);
+        }
+        // else：落在两帧之间 → 回到 floor CTS（idx 已是 last<=raw）
+        const t = Number(tl.ctsSec[idx]);
+        if (Number.isFinite(t)) return clamp(t, 0, duration);
+      }
+      return clamp(raw + sign * nudgeStepSec(), 0, duration);
     }
 
     /** 同一排按钮：修剪=片头/片尾；删中间=红段起点/终点 */
@@ -786,8 +811,8 @@
       updateLabels();
     }
 
-    /** 对选中红段端点做 ± 步进（与预览/成片同一套 cutouts） */
-    function nudgeSelectedCutout(edge, delta) {
+    /** 对选中红段端点做 ± 步进（成片 CTS；与预览/导出同一套） */
+    function nudgeSelectedCutout(edge, dirOrDelta) {
       if (selectedCutout < 0 || selectedCutout >= cutouts.length) {
         toast("先点选一条红段");
         return false;
@@ -795,7 +820,12 @@
       const kind = edge === "end" ? "end" : "start";
       const c = cutouts[selectedCutout];
       const cur = kind === "end" ? Number(c.end) || 0 : Number(c.start) || 0;
-      setCutoutEdge(selectedCutout, kind, quantizeTrimSec(cur + delta));
+      const dir = Number(dirOrDelta);
+      const next =
+        dir === 1 || dir === -1
+          ? nudgeEncodeSec(cur, dir)
+          : quantizeTrimSec(cur + dir);
+      setCutoutEdge(selectedCutout, kind, quantizeTrimSec(next));
       return true;
     }
 
@@ -2339,36 +2369,32 @@
     bindNudgeHold(
       nudgeStartM,
       () => {
-        const step = nudgeStepSec();
-        if (editMode === "cut") nudgeSelectedCutout("start", -step);
-        else setStart(startSec - step, { immediateSeek: true });
+        if (editMode === "cut") nudgeSelectedCutout("start", -1);
+        else setStart(nudgeEncodeSec(startSec, -1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-start" : "start")
     );
     bindNudgeHold(
       nudgeStartP,
       () => {
-        const step = nudgeStepSec();
-        if (editMode === "cut") nudgeSelectedCutout("start", step);
-        else setStart(startSec + step, { immediateSeek: true });
+        if (editMode === "cut") nudgeSelectedCutout("start", 1);
+        else setStart(nudgeEncodeSec(startSec, 1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-start" : "start")
     );
     bindNudgeHold(
       nudgeEndM,
       () => {
-        const step = nudgeStepSec();
-        if (editMode === "cut") nudgeSelectedCutout("end", -step);
-        else setEnd(endSec - step, { immediateSeek: true });
+        if (editMode === "cut") nudgeSelectedCutout("end", -1);
+        else setEnd(nudgeEncodeSec(endSec, -1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-end" : "end")
     );
     bindNudgeHold(
       nudgeEndP,
       () => {
-        const step = nudgeStepSec();
-        if (editMode === "cut") nudgeSelectedCutout("end", step);
-        else setEnd(endSec + step, { immediateSeek: true });
+        if (editMode === "cut") nudgeSelectedCutout("end", 1);
+        else setEnd(nudgeEncodeSec(endSec, 1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-end" : "end")
     );

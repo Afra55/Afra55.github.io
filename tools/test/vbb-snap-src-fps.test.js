@@ -72,4 +72,11 @@ t("snapToFrameGrid 走可变 frameSnapSec；snapToEncodeClock 优先 CTS", () =>
   assert.ok(vtrim.includes("snapToEncodeClock(t)") || /snapEdgeOnly\(snapToEncodeClock/.test(vtrim));
 });
 
+t("底部微调按相邻 CTS 步进（nudgeEncodeSec）", () => {
+  assert.ok(vtrim.includes("function nudgeEncodeSec"));
+  assert.ok(vtrim.includes("nudgeEncodeSec(startSec"));
+  assert.ok(vtrim.includes("nudgeEncodeSec(endSec"));
+  assert.ok(vtrim.includes('nudgeSelectedCutout("start", -1)') || vtrim.includes("nudgeSelectedCutout(\"start\", -1)"));
+});
+
 console.log(`vbb-snap-src-fps.test.js: ${n} passed`);
