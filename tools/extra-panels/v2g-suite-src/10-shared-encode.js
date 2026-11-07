@@ -1332,7 +1332,7 @@
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
           // fps 前按 PTS 切源窗；导出多段则按段独立 fps=round=up，消接点相位
           const ptsStart = encodeSs > 0.001 ? encodeSs : 0;
-          const timeFilter = vbbEncodeHardTrimFilters(speed, encodeT, ptsStart);
+          const timeFilter = vbbEncodeHardTrimFilters(speed, encodeT, ptsStart, opts);
           const outTrim = vbbEncodeOutTrimFilters(effSpan, fps, opts);
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
           const buildFilterArgs = (denoise) => {
@@ -1676,15 +1676,22 @@
 
       /**
        * 编码滤镜：在 fps= 之前按片源时长硬切。
-       * 倍速必须写成 (PTS-STARTPTS)/speed，禁止 PTS-STARTPTS/speed（运算符优先级错误）。
+       * 已导出编辑片：不再 duration 硬切（会吃掉导出片真帧）；只归零 PTS + 可选倍速。
+       * 倍速必须写成 (PTS-STARTPTS)/speed。
        * @returns {string} 以逗号结尾的滤镜前缀（可接 fps=）
        */
-      function vbbEncodeHardTrimFilters(speed, sourceDurSec, startSec) {
+      function vbbEncodeHardTrimFilters(speed, sourceDurSec, startSec, opts) {
         const start = Math.max(0, Number(startSec) || 0);
         const dur0 = Math.max(0.05, Number(sourceDurSec) || 0.05);
+        const spd = Math.max(1, Number(speed) || 1);
+        const o = opts || {};
+        if ((o.exportedEdit || o.exactKeepFrames) && start <= 0.0005) {
+          let s = "setpts=PTS-STARTPTS";
+          if (spd > 1.01) s += `,setpts=(PTS-STARTPTS)/${spd}`;
+          return `${s},`;
+        }
         // 开区间：贴 duration 上界的那一帧不进滤镜
         const dur = Math.max(0.05, dur0 - 1e-3);
-        const spd = Math.max(1, Number(speed) || 1);
         let s;
         if (start > 0.0005) {
           const end = start + dur;
@@ -1699,17 +1706,15 @@
 
       /**
        * fps= 之后按成片时间轴再 trim。
-       * 导出编辑片：只贴 duration，不再提前收 2 输出帧。
+       * 导出编辑片：不再二次 duration 切（交给 select/frames 上限）。
        * @returns {string} 以逗号结尾（可接 denoise/scale）
        */
       function vbbEncodeOutTrimFilters(outDurSec, gifFps, opts) {
+        const o = opts || {};
+        if (o.exportedEdit || o.exactKeepFrames) return "";
         const fpsOut = Math.max(8, Number(gifFps) || 15);
         const dur0 = Math.max(0.05, Number(outDurSec) || 0.05);
-        const o = opts || {};
-        const dur =
-          o.exportedEdit || o.exactKeepFrames
-            ? dur0
-            : Math.max(0.05, dur0 - 2 / fpsOut);
+        const dur = Math.max(0.05, dur0 - 2 / fpsOut);
         return `trim=duration=${dur},setpts=PTS-STARTPTS,`;
       }
 
@@ -2382,7 +2387,7 @@
               }
               return ["-filter_complex", `${seg.fc};[vseg]${tail}[v]`, "-map", "[v]"];
             }
-            const timeFilter = vbbEncodeHardTrimFilters(speed, sourceDurSec, ptsStart);
+            const timeFilter = vbbEncodeHardTrimFilters(speed, sourceDurSec, ptsStart, opts);
             const outTrim = vbbEncodeOutTrimFilters(nMax / Math.max(8, fps), fps, opts);
             const chain =
               `${cropFilter}${timeFilter}fps=${fps}:round=up,${outTrim}select='lt(n\\,${nMax})',${den}` +

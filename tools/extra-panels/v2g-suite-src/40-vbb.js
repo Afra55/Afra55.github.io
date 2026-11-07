@@ -862,7 +862,7 @@
       async function materializeVbbKeepVideo(file, edit, srcW, srcH, duration, onProgress, ffmpegLease) {
         const keeps = vbbKeepRangesForEncode(edit, duration);
         const keepSpan = vbbKeepSpanSec(keeps);
-        const segmentSpans = keeps.map((k) =>
+        let segmentSpans = keeps.map((k) =>
           Math.max(0.05, (Number(k.end) || 0) - (Number(k.start) || 0))
         );
         if (!keeps.length) {
@@ -883,6 +883,9 @@
               outFile = await pinLocalMediaFile(outFile, () => {});
             }
           } catch (_) {}
+          if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === keeps.length) {
+            segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
+          }
           return {
             file: outFile,
             duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
@@ -977,8 +980,9 @@
           const start0 = Math.max(0, Number(k.start) || 0);
           const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // 秒级 PTS 优先；空片再帧号/-ss；勿两端 bias；勿滤镜内 fps=
-          const modes = ["sec", "frame", "ss"];
+          // 有真实 srcFps：帧号优先（≡预览）；否则秒级 PTS
+          const hasRealFps = Number(edit?.srcFps) >= 5;
+          const modes = hasRealFps ? ["frame", "sec", "ss"] : ["sec", "frame", "ss"];
           let ok = false;
           for (const mode of modes) {
             ok = await tryPart(start0, end0, out, mode);
@@ -1240,6 +1244,17 @@
         let segmentSpans = [];
         const fullDur = Math.max(0, Number(duration) || 0);
         if (!fromMark && edit && vbbEditNeedsExport(edit, duration)) {
+          // 导出切片与预览共用源帧时钟：编码前把探测到的 srcFps 写进 edit
+          const fpsHint =
+            Number(opts.srcFps) ||
+            Number(edit.srcFps) ||
+            Number(file?.srcFps) ||
+            0;
+          if (fpsHint >= 5 && !(Number(edit.srcFps) >= 5)) {
+            try {
+              edit.srcFps = fpsHint;
+            } catch (_) {}
+          }
           const keeps = vbbKeepRangesForEncode(edit, duration);
           const keepSpan = vbbKeepSpanSec(keeps);
           const cuts = vbbNormalizeCutouts(edit.cutouts, edit.trimStart, edit.trimEnd);
@@ -5636,6 +5651,7 @@
                     fromMark: job.fromMark,
                     startSec: win.startSec,
                     span: win.span,
+                    srcFps: Number(item.srcFps) || Number(item.edit?.srcFps) || 0,
                     ffmpeg: ffmpegLease || null,
                     onProgress: (local, text) => {
                       if (itemAborted()) return;
@@ -5953,6 +5969,11 @@
             {
               startSec: win.startSec,
               span: win.span,
+              srcFps:
+                Number(win.edit?.srcFps) ||
+                Number(getActiveVbbEditItem()?.srcFps) ||
+                Number(vbbSingleSrcFps) ||
+                0,
               onProgress: (local, text) => {
                 const stage = bumpVbbEncodeProgress(Math.min(0.12, local * 0.12), "整段转换", text || "应用删中间…");
                 setVbbClipJob(0, { status: "running", progress: Math.min(0.12, local * 0.12), text: stage });

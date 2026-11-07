@@ -33,16 +33,19 @@ t("存在 vbbEncodeHardTrimFilters：setpts → trim → (PTS-STARTPTS)/speed", 
   const s2 = box.fn(2, 8.5);
   assert.ok(s2.includes("trim=duration=8.499"));
   assert.ok(s2.includes("(PTS-STARTPTS)/2"), `须带括号：${s2}`);
+  const exported = box.fn(1, 10, 0, { exportedEdit: true });
+  assert.ok(exported.includes("setpts=PTS-STARTPTS"));
+  assert.ok(!exported.includes("trim=duration"), `导出片勿再硬切：${exported}`);
 });
 
-t("vbbEncodeOutTrimFilters：导出编辑片不砍 2 帧；旧路径仍可收", () => {
+t("vbbEncodeOutTrimFilters：导出编辑片不再二次切；旧路径仍可收", () => {
   assert.ok(shared.includes("function vbbEncodeOutTrimFilters"));
   const m = shared.match(/function vbbEncodeOutTrimFilters\([\s\S]*?\n      \}/);
   assert.ok(m);
   const box = {};
   vm.runInNewContext(`${m[0]}; this.fn = vbbEncodeOutTrimFilters;`, box);
   const exported = box.fn(2, 15, { exportedEdit: true });
-  assert.ok(exported.includes("trim=duration=2"), exported);
+  assert.strictEqual(exported, "");
   const legacy = box.fn(2, 15, {});
   assert.ok(legacy.includes("trim=duration=1.866"));
 });
