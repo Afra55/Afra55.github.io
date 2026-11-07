@@ -152,6 +152,24 @@ t("批处理开始前与结束后会保存草稿", () => {
   assert.ok(/runVbbBatchBlackbox[\s\S]*saveVbbEditDraftsSync/.test(src));
 });
 
+t("单段黑盒：开跑前+失败/finally 都落盘，刷新可恢复", () => {
+  const start = src.indexOf("async function runVbbSingleBlackbox");
+  const end = src.indexOf("async function runVbbOneClick");
+  assert.ok(start > 0 && end > start);
+  const body = src.slice(start, end);
+  assert.ok(body.includes("开跑前先落盘"));
+  assert.ok(body.includes("生成失败 · 编辑已保存"));
+  assert.ok(/finally\s*\{[\s\S]*saveVbbEditDraftsSync/.test(body));
+});
+
+t("草稿匹配含文件名+时长末档，防 size 漂移丢恢复", () => {
+  const start = src.indexOf("function findVbbEditDraftForItem");
+  const end = src.indexOf("function serializeVbbEditDraft");
+  assert.ok(start > 0 && end > start);
+  const body = src.slice(start, end);
+  assert.ok(body.includes("仅文件名 + 时长") || body.includes("byName"));
+});
+
 t("强制取消不清空编辑字段，只标任务状态", () => {
   assert.ok(src.includes("编辑方案绝不清空"));
   assert.ok(/jobStatus === "pending" \|\| c\.jobStatus === "running"/.test(src));
@@ -222,6 +240,30 @@ t("软匹配：同名同大小按时长消歧，且 used 不重复占用", () =>
   assert.equal(a.edit.id, "long");
   assert.equal(b.edit.id, "short");
   assert.equal(used.size, 2);
+});
+
+t("末档：size 变了仍能按名+时长找回唯一草稿", () => {
+  const { findVbbEditDraftForItem } = loadDraftMatchers();
+  const drafts = [
+    {
+      key: "clip.mp4|999|1",
+      name: "clip.mp4",
+      size: 999,
+      duration: 76.2,
+      srcW: 1280,
+      srcH: 720,
+      edit: { trimStart: 0, trimEnd: 16.4, cutouts: [{ start: 2, end: 3 }] },
+    },
+  ];
+  const used = new Set();
+  const hit = findVbbEditDraftForItem(
+    { file: { name: "clip.mp4", size: 1000000, lastModified: 42 }, duration: 76.2, srcW: 1280, srcH: 720 },
+    drafts,
+    used
+  );
+  assert.ok(hit);
+  assert.equal(hit.edit.trimEnd, 16.4);
+  assert.equal(hit.edit.cutouts.length, 1);
 });
 
 t("任务世代：begin/finish/forceAbort 协同存在且 busy 只在 begin 置 true", () => {

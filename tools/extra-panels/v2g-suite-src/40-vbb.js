@@ -2640,22 +2640,37 @@
           if (used.has(i)) continue;
           if (vbbFileDraftSoftKey(drafts[i]) === soft) softIdx.push(i);
         }
-        if (!softIdx.length) return null;
         if (softIdx.length === 1) return mark(softIdx[0]);
+        if (softIdx.length > 1) {
+          const dur = Number(item.duration) || 0;
+          const w = Number(item.srcW) || 0;
+          const h = Number(item.srcH) || 0;
+          const ranked = softIdx.filter((i) => {
+            const d = drafts[i];
+            const dd = Number(d?.duration) || 0;
+            const dw = Number(d?.srcW) || 0;
+            const dh = Number(d?.srcH) || 0;
+            if (dur > 0 && dd > 0 && Math.abs(dur - dd) > 0.35) return false;
+            if (w > 0 && dw > 0 && w !== dw) return false;
+            if (h > 0 && dh > 0 && h !== dh) return false;
+            return true;
+          });
+          return mark((ranked.length ? ranked : softIdx)[0]);
+        }
+        // 末档：仅文件名 + 时长（重选/拷贝后 size 偶发不一致时仍能找回未完成编辑）
+        const name = String(item.file.name || "");
+        if (!name) return null;
         const dur = Number(item.duration) || 0;
-        const w = Number(item.srcW) || 0;
-        const h = Number(item.srcH) || 0;
-        const ranked = softIdx.filter((i) => {
-          const d = drafts[i];
-          const dd = Number(d?.duration) || 0;
-          const dw = Number(d?.srcW) || 0;
-          const dh = Number(d?.srcH) || 0;
-          if (dur > 0 && dd > 0 && Math.abs(dur - dd) > 0.35) return false;
-          if (w > 0 && dw > 0 && w !== dw) return false;
-          if (h > 0 && dh > 0 && h !== dh) return false;
-          return true;
-        });
-        return mark((ranked.length ? ranked : softIdx)[0]);
+        const byName = [];
+        for (let i = 0; i < drafts.length; i++) {
+          if (used.has(i)) continue;
+          if (String(drafts[i]?.name || "") !== name) continue;
+          const dd = Number(drafts[i]?.duration) || 0;
+          if (dur > 0 && dd > 0 && Math.abs(dur - dd) > 0.5) continue;
+          byName.push(i);
+        }
+        if (byName.length === 1) return mark(byName[0]);
+        return null;
       }
 
       function serializeVbbEditDraft(edit) {
@@ -5681,6 +5696,10 @@
           const srcW = vbbVideo.videoWidth || 0;
           const srcH = vbbVideo.videoHeight || 0;
           if (!vbbSingleEdit) vbbSingleEdit = makeVbbEditState(duration, srcW, srcH);
+          // 开跑前先落盘：生成失败/刷新后仍能恢复裁剪与删段
+          try {
+            saveVbbEditDraftsSync();
+          } catch (_) {}
           const win = resolveVbbEncodeEdits({ edit: vbbSingleEdit, duration, srcW, srcH }, vbbSourceFile, duration, srcW, srcH);
           const jobEpoch = beginVbbJob();
           vbbSuppressGlobalProgress = true; // 只留卡片进度
@@ -5800,9 +5819,20 @@
               setVbbClipJob(0, { status: "error", progress: 0, text: "已取消" });
             }
             toastVbbCancelled();
-          } else setError(vbbError, err.message || String(err));
+          } else {
+            setError(vbbError, err.message || String(err));
+            // 失败也提示：编辑已留在本机，刷新重选同片可恢复
+            try {
+              if (saveVbbEditDraftsSync() > 0) {
+                toast("生成失败 · 编辑已保存，刷新后重选同片可继续");
+              }
+            } catch (_) {}
+          }
           setVbbProgress(false, 0, "");
         } finally {
+          try {
+            saveVbbEditDraftsSync();
+          } catch (_) {}
           finishVbbJob(jobEpoch);
         }
       }
@@ -7306,7 +7336,13 @@
             }
           });
         }
-      window.DevToolsTemp?.registerCleanup(clearVbb);
+      // 切工具/卸载面板：先落盘再 clear（clear 内也会 save；失败时仍保住未完成编辑）
+      window.DevToolsTemp?.registerCleanup(() => {
+        try {
+          saveVbbEditDraftsSync();
+        } catch (_) {}
+        clearVbb();
+      });
       // 供预估准确性测试读取（不影响 UI）
       window.DevToolsVbb = {
         getBps15: () => vbbAnalysis?.bps15 ?? null,
