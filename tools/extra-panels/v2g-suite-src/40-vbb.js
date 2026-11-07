@@ -105,6 +105,8 @@
       let vbbEditOpen = null;
       let vbbEditReset = null;
       let vbbEditOpening = false;
+      /** 打开编辑开始时间；超时可强制解锁，避免「点了没反应」 */
+      let vbbEditOpenStartedAt = 0;
       let vbbPreviewWrap = null;
       let vbbScrubSeekWanted = null;
       let vbbScrubSeekInflight = false;
@@ -1407,13 +1409,33 @@
         if (window.DevToolsVtrimEditor?.open) return window.DevToolsVtrimEditor;
         const load = window.DevToolsLazy?.loadScript;
         if (typeof load !== "function") throw new Error("脚本加载器不可用");
-        await load("./lib/vtrim-editor.js");
-        if (!window.DevToolsVtrimEditor?.open) throw new Error("视频编辑器加载失败");
-        return window.DevToolsVtrimEditor;
+        const loadP = Promise.resolve()
+          .then(() => load("./lib/vtrim-editor.js", { timeoutMs: 20000, label: "视频编辑器" }))
+          .then(() => {
+            if (!window.DevToolsVtrimEditor?.open) throw new Error("视频编辑器加载失败");
+            return window.DevToolsVtrimEditor;
+          });
+        const timed = new Promise((_, reject) => {
+          window.setTimeout(() => reject(new Error("编辑器加载超时（约 15 秒），请硬刷后再试")), 15000);
+        });
+        return Promise.race([loadP, timed]);
       }
 
       function prefetchVbbVtrimEditor() {
         ensureVbbVtrimEditor().catch(() => {});
+      }
+
+      function resetStaleVbbEditOpening(reason) {
+        vbbEditOpening = false;
+        vbbEditOpenStartedAt = 0;
+        try {
+          document.querySelectorAll(".vtrim-editor-boot").forEach((el) => el.remove());
+        } catch (_) {}
+        try {
+          syncVbbEditUi();
+          renderVbbBatchList({ keepSelection: true });
+        } catch (_) {}
+        if (reason) toast(reason);
       }
 
       function unlockVbbEditBootScroll(lockY, shell, shellY) {
@@ -1432,7 +1454,18 @@
       }
 
       async function openVbbEditEditor(targetItem) {
-        if (vbbBusy || vbbEditOpening) return;
+        // 上次打开挂死：超过 20s 强制解锁，避免按钮一直 disabled / 静默 return
+        if (vbbEditOpening && vbbEditOpenStartedAt && Date.now() - vbbEditOpenStartedAt > 20000) {
+          resetStaleVbbEditOpening("上次打开编辑超时，已重置");
+        }
+        if (vbbBusy) {
+          toast("正在处理中，请稍后再点编辑");
+          return;
+        }
+        if (vbbEditOpening) {
+          toast("正在打开编辑，请稍候…");
+          return;
+        }
         const item = targetItem || getActiveVbbEditItem();
         if (!item?.file) {
           toast("请先选择视频");
@@ -1450,6 +1483,7 @@
           crop: item.edit.crop ? { ...item.edit.crop } : { x: 0, y: 0, w: item.srcW, h: item.srcH },
         };
         vbbEditOpening = true;
+        vbbEditOpenStartedAt = Date.now();
         // 编辑只用浏览器播放器，不需要 FFmpeg；先停预热，否则「加载 FFmpeg」会抢主线程把整页卡死
         try {
           window.DevToolsExtraMedia?.pauseFfmpegForInteractiveUi?.(90000);
@@ -1463,8 +1497,10 @@
         boot.setAttribute("aria-busy", "true");
         boot.style.cssText =
           "position:fixed;inset:0;z-index:9195;display:grid;place-items:center;background:rgba(11,18,32,0.55);";
-        boot.innerHTML = `<div class="vtrim-editor-boot-card" style="padding:0.85rem 1.15rem;border-radius:12px;background:#121826;color:#e8eefc;font-size:0.95rem;text-align:center;line-height:1.45;">正在打开编辑…<br/><button type="button" data-vbb-edit-boot-cancel style="margin-top:0.65rem;padding:0.35rem 0.85rem;border-radius:8px;border:1px solid #3a4660;background:#1a2236;color:#e8eefc;font-size:0.85rem;">取消</button></div>`;
+        boot.innerHTML = `<div class="vtrim-editor-boot-card" style="padding:0.85rem 1.15rem;border-radius:12px;background:#121826;color:#e8eefc;font-size:0.95rem;text-align:center;line-height:1.45;"><span data-vbb-edit-boot-text>正在打开编辑…</span><br/><button type="button" data-vbb-edit-boot-cancel style="margin-top:0.65rem;padding:0.35rem 0.85rem;border-radius:8px;border:1px solid #3a4660;background:#1a2236;color:#e8eefc;font-size:0.85rem;">取消</button></div>`;
         let bootCancelled = false;
+        let bootWatch = 0;
+        const bootText = () => boot.querySelector("[data-vbb-edit-boot-text]");
         const onBootCancel = () => {
           bootCancelled = true;
           try {
@@ -1473,6 +1509,20 @@
         };
         boot.querySelector("[data-vbb-edit-boot-cancel]")?.addEventListener("click", onBootCancel);
         document.body.appendChild(boot);
+        bootWatch = window.setInterval(() => {
+          if (bootCancelled || !boot.isConnected) {
+            window.clearInterval(bootWatch);
+            return;
+          }
+          const sec = Math.round((Date.now() - vbbEditOpenStartedAt) / 1000);
+          const el = bootText();
+          if (el) el.textContent = sec >= 8 ? `仍在打开编辑…已 ${sec}s` : "正在打开编辑…";
+          if (sec >= 25) {
+            window.clearInterval(bootWatch);
+            bootCancelled = true;
+            resetStaleVbbEditOpening("打开编辑超时，请再点一次「编辑」");
+          }
+        }, 1000);
         syncVbbEditUi();
         renderVbbBatchList({ keepSelection: true });
         let editorOpened = false;
@@ -1482,7 +1532,7 @@
           pauseVbbPreview();
           // open 同步挂上真正编辑层后再撤 boot，中间不露底层
           // 不阻塞打开：已有 srcFps 立刻用；否则后台探测写入 item，编辑器内也会自探
-          const openSrcFps = Number(item.srcFps) || 0;
+          const openSrcFps = Number(item.srcFps) || Number(item.edit?.srcFps) || Number(vbbSingleSrcFps) || 0;
           if (!(openSrcFps >= 5) && typeof detectSourceFps === "function" && item.file) {
             detectSourceFps(item.file)
               .then((f) => {
@@ -1500,7 +1550,7 @@
             title: item.file.name || "视频",
             initial: draft,
             initialMode: "trim",
-            srcFps: openSrcFps,
+            srcFps: openSrcFps >= 5 ? openSrcFps : 0,
           });
           editorOpened = true;
           boot.remove();
@@ -1547,12 +1597,20 @@
             toast("已关闭，未保存本次改动");
           }
         } catch (err) {
-          setError(vbbError, err?.message || String(err));
+          if (!bootCancelled) {
+            const msg = err?.message || String(err);
+            setError(vbbError, msg);
+            toast(msg || "打开编辑失败");
+          }
         } finally {
+          try {
+            window.clearInterval(bootWatch);
+          } catch (_) {}
           try {
             boot.remove();
           } catch (_) {}
           vbbEditOpening = false;
+          vbbEditOpenStartedAt = 0;
           syncVbbEditUi();
           // finally 后再同步一次外预览，避免中间状态清掉 crop/keep
           syncVbbEditPreview();
@@ -1561,7 +1619,7 @@
           syncVbbBatchMeta();
           // 编辑结束再恢复编码器预热（转换仍需要）
           try {
-            if (!bootCancelled) window.DevToolsExtraMedia?.armFfmpegPrewarmAfterPick?.();
+            if (!bootCancelled && editorOpened) window.DevToolsExtraMedia?.armFfmpegPrewarmAfterPick?.();
           } catch (_) {}
         }
       }

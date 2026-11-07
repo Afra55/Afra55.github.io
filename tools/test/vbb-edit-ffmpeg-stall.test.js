@@ -42,4 +42,17 @@ t("打开编辑先 pause FFmpeg，且不提前锁 body 滚动", () => {
   assert.ok(suite.includes("pauseFfmpegForInteractiveUi"));
 });
 
+t("编辑打开有超时解锁与加载超时，避免卡死无反应", () => {
+  assert.ok(vbb.includes("resetStaleVbbEditOpening"));
+  assert.ok(vbb.includes("编辑器加载超时"));
+  assert.ok(vbb.includes("上次打开编辑超时"));
+  assert.ok(vbb.includes("正在处理中，请稍后再点编辑"));
+  const ensure = vbb.slice(
+    vbb.indexOf("async function ensureVbbVtrimEditor"),
+    vbb.indexOf("function prefetchVbbVtrimEditor")
+  );
+  assert.ok(ensure.includes("Promise.race"));
+  assert.ok(ensure.includes("15000"));
+});
+
 console.log(`vbb-edit-ffmpeg-stall.test.js: ${n} passed`);
