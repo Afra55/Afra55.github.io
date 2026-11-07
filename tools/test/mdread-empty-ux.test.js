@@ -25,6 +25,18 @@ t("空态有品牌与主 CTA", () => {
   assert.ok(html.includes('id="mr-empty-zone"'));
 });
 
+t("空态可选阅读三档配色，进入后专注阅读", () => {
+  assert.ok(html.includes('id="mr-theme"'));
+  assert.ok(html.includes('data-read-theme="paper"'));
+  assert.ok(html.includes('data-read-theme="sepia"'));
+  assert.ok(html.includes('data-read-theme="soft"'));
+  assert.ok(js.includes("READ_THEMES"));
+  assert.ok(js.includes("applyReadTheme"));
+  assert.ok(js.includes("devtools-mdread-theme-v1"));
+  assert.ok(js.includes('return "paper"'));
+  assert.ok(css.includes(".empty-theme-chip"));
+});
+
 t("样式覆盖拖放区与空态氛围", () => {
   assert.ok(css.includes(".empty-zone"));
   assert.ok(css.includes(".empty-cta"));
@@ -38,7 +50,7 @@ t("空态可打开 / 粘贴", () => {
 });
 
 t("SW 壳缓存已升版", () => {
-  assert.ok(/mdread-shell-v9/.test(sw));
+  assert.ok(/mdread-shell-v10/.test(sw));
 });
 
 t("空页不会被 display:grid 顶出「未命名」", () => {

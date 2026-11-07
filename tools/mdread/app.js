@@ -14,65 +14,115 @@
   const outlineBody = $("#mr-outline-body");
 
   const HANDOFF_KEY = "devtools-mdread-doc";
-  const THEME_STATE_KEY = "devtools-theme-v1";
-  const THEME_VARS_KEY = "devtools-theme-vars-v1";
+  const READ_THEME_KEY = "devtools-mdread-theme-v1";
   let currentName = "";
   let engine = null;
   let hasDoc = false;
 
-  /** 与 tools/theme.js 同步：阅读页正文色跟 MDM 预览同一套变量 */
-  function applyThemeVars(vars) {
-    if (!vars || typeof vars !== "object") return;
+  /** 长读专用三档（与工具站主题拆开）；默认纸张更护眼 */
+  const READ_THEMES = {
+    paper: {
+      label: "纸张",
+      scheme: "light",
+      vars: {
+        "--bg-0": "#FAF7F2",
+        "--bg-1": "#F3EEE6",
+        "--ink": "#292524",
+        "--muted": "#78716C",
+        "--line": "rgba(41, 37, 36, 0.14)",
+        "--accent": "#B45309",
+        "--accent-2": "#C08457",
+        "--link": "#9A3412",
+        "--link-hover": "#7C2D12",
+        "--danger": "#B91C1C",
+        "--panel": "rgba(255, 252, 248, 0.88)",
+        "--panel-strong": "rgba(250, 247, 242, 0.97)",
+        "--ok": "#15803D",
+      },
+    },
+    sepia: {
+      label: "羊皮纸",
+      scheme: "light",
+      vars: {
+        "--bg-0": "#FBF0D9",
+        "--bg-1": "#F3E4C4",
+        "--ink": "#5F4B32",
+        "--muted": "#8A7355",
+        "--line": "rgba(95, 75, 50, 0.16)",
+        "--accent": "#A16207",
+        "--accent-2": "#CA8A04",
+        "--link": "#92400E",
+        "--link-hover": "#78350F",
+        "--danger": "#B45309",
+        "--panel": "rgba(255, 248, 230, 0.9)",
+        "--panel-strong": "rgba(251, 240, 217, 0.97)",
+        "--ok": "#3F6212",
+      },
+    },
+    soft: {
+      label: "柔和深色",
+      scheme: "dark",
+      vars: {
+        "--bg-0": "#1C1917",
+        "--bg-1": "#292524",
+        "--ink": "#E7E5E4",
+        "--muted": "#A8A29E",
+        "--line": "rgba(231, 229, 228, 0.14)",
+        "--accent": "#D6A06C",
+        "--accent-2": "#E7B98A",
+        "--link": "#F0C48A",
+        "--link-hover": "#FDE68A",
+        "--danger": "#F87171",
+        "--panel": "rgba(28, 25, 23, 0.9)",
+        "--panel-strong": "rgba(22, 19, 17, 0.97)",
+        "--ok": "#4ADE80",
+      },
+    },
+  };
+
+  function getReadThemeId() {
+    try {
+      const id = String(localStorage.getItem(READ_THEME_KEY) || "").trim();
+      if (READ_THEMES[id]) return id;
+    } catch (_) {}
+    return "paper";
+  }
+
+  function applyReadTheme(id) {
+    const key = READ_THEMES[id] ? id : "paper";
+    const conf = READ_THEMES[key];
     const root = document.documentElement;
-    Object.entries(vars).forEach(([k, v]) => {
-      if (k.startsWith("--") && v != null && String(v).trim() !== "") {
-        root.style.setProperty(k, String(v));
-      }
-    });
-    const scheme = vars["--theme-scheme"] || "dark";
-    root.dataset.themeScheme = scheme;
-    root.style.setProperty("--bg", vars["--bg-0"] || "");
-    root.style.setProperty("--err", vars["--danger"] || "");
+    root.dataset.readTheme = key;
+    root.dataset.themeScheme = conf.scheme;
+    root.style.colorScheme = conf.scheme;
+    Object.entries(conf.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+    root.style.setProperty("--bg", conf.vars["--bg-0"]);
+    root.style.setProperty("--err", conf.vars["--danger"]);
+    root.style.setProperty("--theme-scheme", conf.scheme);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta && vars["--bg-0"]) meta.setAttribute("content", String(vars["--bg-0"]).trim());
-  }
-
-  function syncThemeFromTools() {
-    // 1) theme.js 落盘的完整变量（含自定义推导）
+    if (meta) meta.setAttribute("content", conf.vars["--bg-0"]);
+    document.querySelectorAll("[data-read-theme]").forEach((btn) => {
+      const on = btn.getAttribute("data-read-theme") === key;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
     try {
-      const raw = localStorage.getItem(THEME_VARS_KEY);
-      if (raw) {
-        const vars = JSON.parse(raw);
-        if (vars && typeof vars === "object" && vars["--bg-0"]) {
-          applyThemeVars(vars);
-          return;
-        }
-      }
-    } catch (_) {}
-    // 2) 从预设 id 重建（未跑过 theme.js 时）
-    try {
-      const presets = window.DevToolsThemePresets || [];
-      const byId = (id) => presets.find((p) => p.id === id) || presets[0];
-      let state = { preset: "default", useCustom: false, custom: {} };
-      try {
-        const raw = localStorage.getItem(THEME_STATE_KEY);
-        if (raw) state = { ...state, ...JSON.parse(raw) };
-      } catch (_) {}
-      const legacy = { sage: "pine", dusk: "ink", charcoal: "graphite", fog: "paper", sepia: "sky" };
-      if (legacy[state.preset]) state.preset = legacy[state.preset];
-      let vars;
-      if (state.useCustom && state.custom && typeof state.custom === "object") {
-        vars = { ...(byId("default")?.vars || {}), ...state.custom };
-      } else {
-        vars = { ...(byId(state.preset)?.vars || {}) };
-      }
-      if (vars["--bg-0"]) applyThemeVars(vars);
+      localStorage.setItem(READ_THEME_KEY, key);
     } catch (_) {}
   }
 
-  syncThemeFromTools();
+  applyReadTheme(getReadThemeId());
+  document.getElementById("mr-theme")?.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("[data-read-theme]");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    applyReadTheme(btn.getAttribute("data-read-theme"));
+  });
   window.addEventListener("storage", (e) => {
-    if (e.key === THEME_VARS_KEY || e.key === THEME_STATE_KEY) syncThemeFromTools();
+    if (e.key === READ_THEME_KEY && e.newValue && READ_THEMES[e.newValue]) {
+      applyReadTheme(e.newValue);
+    }
   });
 
   function setError(text) {
