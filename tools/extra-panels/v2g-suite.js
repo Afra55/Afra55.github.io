@@ -8970,6 +8970,84 @@
         if (!keeps.length) {
           return { file, duration, srcW, srcH, materialized: false, segmentSpans: [] };
         }
+        // 与编辑器「下载编辑后视频」同一套：优先按 Chrome 显示帧导出，GIF 才会对上预览
+        try {
+          if (!window.DevToolsVtrimEditor?.exportKeepByChromeDisplay) {
+            await ensureVbbVtrimEditor().catch(() => null);
+          }
+          const chromeExp = window.DevToolsVtrimEditor?.exportKeepByChromeDisplay;
+          if (typeof chromeExp === "function" && file) {
+            onProgress?.(0.05, "按预览帧导出编辑片…");
+            const v = document.createElement("video");
+            v.muted = true;
+            v.playsInline = true;
+            v.preload = "auto";
+            const url = URL.createObjectURL(file);
+            v.src = url;
+            try {
+              await new Promise((resolve, reject) => {
+                const to = setTimeout(() => reject(new Error("预览视频加载超时")), 20000);
+                v.onloadeddata = () => {
+                  clearTimeout(to);
+                  resolve();
+                };
+                v.onerror = () => {
+                  clearTimeout(to);
+                  reject(new Error("预览视频加载失败"));
+                };
+              });
+              const keepFps =
+                typeof window.DevToolsVtrimEditor?.resolveKeepFps === "function"
+                  ? window.DevToolsVtrimEditor.resolveKeepFps(edit)
+                  : Number(edit?.srcFps) >= 5
+                    ? Number(edit.srcFps)
+                    : 24;
+              const out = await chromeExp(v, keeps, {
+                keepFps,
+                srcW,
+                srcH,
+                applyCrop: false,
+                filenameBase: String(file.name || "video"),
+                onProgress,
+                ffmpeg: ffmpegLease || null,
+              });
+              if (out?.file && out.blob?.size > 0) {
+                let outFile = out.file;
+                try {
+                  if (
+                    typeof pinLocalMediaFile === "function" &&
+                    outFile &&
+                    !isPinnedLocalMediaFile?.(outFile)
+                  ) {
+                    outFile = await pinLocalMediaFile(outFile, () => {});
+                  }
+                } catch (_) {}
+                if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === keeps.length) {
+                  segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
+                }
+                return {
+                  file: outFile,
+                  duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
+                  srcW: out.srcW || srcW,
+                  srcH: out.srcH || srcH,
+                  materialized: true,
+                  segmentSpans,
+                  exportMethod: out.exportMethod || "chrome-VideoFrame",
+                };
+              }
+            } finally {
+              try {
+                URL.revokeObjectURL(url);
+              } catch (_) {}
+              try {
+                v.removeAttribute("src");
+                v.load();
+              } catch (_) {}
+            }
+          }
+        } catch (_) {
+          // 回退 ffmpeg
+        }
         const exp = window.DevToolsVtrimEditor?.exportKeepVideo;
         if (typeof exp === "function") {
           const out = await exp(file, edit, duration, {

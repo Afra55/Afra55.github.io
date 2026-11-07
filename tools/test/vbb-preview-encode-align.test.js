@@ -174,14 +174,15 @@ t("displayFrameAtSec：毫秒量化手柄跟 Chrome 所见帧", () => {
   assert.ok(keepM[0].includes("sampleIndexAtSec") || keepM[0].includes("nextStartAfterCutEnd"), "有采样表时按下一样本");
 });
 
-t("materialize：有编辑就导出；带回 segmentSpans；切片先 fps=round=up", () => {
+t("materialize：优先 Chrome 显示帧；带回 segmentSpans；ffmpeg 兜底", () => {
   const start = vbb.indexOf("async function materializeVbbKeepVideo");
   const end = vbb.indexOf("function shouldPrecutVbbWindow", start);
   const body = vbb.slice(start, end > start ? end : undefined);
   assert.ok(body.includes("segmentSpans"), "导出片带回各段时长供按段 fps");
+  assert.ok(body.includes("exportKeepByChromeDisplay"), "GIF 须与下载同一套预览帧");
   assert.ok(!/keeps\.length\s*<=\s*1/.test(body) || body.includes("单段 keep 也会导出"), "单段也要能导出");
   assert.ok(body.includes("out.segmentSpans") || body.includes("segmentSpans = out"), "优先用导出实测段长");
-  assert.ok(body.includes("frameGrid") && body.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "兜底 PTS 优先");
+  assert.ok(body.includes("frameGrid") && body.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "ffmpeg 兜底 PTS");
   assert.ok(!/setsar=1,fps=\$\{keepFps\}/.test(body), "scalePad 勿再叠 fps=");
   assert.ok(!/\[\$\{i\}:v\]fps=\$\{keepFps\}/.test(body), "concat 勿再 fps=");
 });

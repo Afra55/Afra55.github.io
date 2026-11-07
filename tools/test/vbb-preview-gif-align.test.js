@@ -208,14 +208,15 @@ t("预裁切不再对 keep span 二次减半帧", () => {
   assert.ok(fn.includes("禁止再减半帧") || /const dur = Math\.max\(0\.05, Number\(span\)/.test(fn));
 });
 
-t("删中间 materialize 切片/拼接勿 -r cfr", () => {
+t("删中间 materialize 优先预览帧，ffmpeg 兜底勿 -r cfr", () => {
   const fn = vbb.slice(
     vbb.indexOf("async function materializeVbbKeepVideo"),
     vbb.indexOf("async function shouldPrecutVbbWindow")
   );
+  assert.ok(fn.includes("exportKeepByChromeDisplay"), "GIF 须走预览帧导出");
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(fn));
   assert.ok(fn.includes('"vfr"'));
-  assert.ok(fn.includes('["sec", "ss", "frameRaw", "frameGrid"]') || fn.includes("frameGrid"), "兜底须 PTS 优先");
+  assert.ok(fn.includes('["sec", "ss", "frameRaw", "frameGrid"]') || fn.includes("frameGrid"), "ffmpeg 兜底");
 });
 
 t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {
