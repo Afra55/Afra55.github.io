@@ -102,6 +102,7 @@
 ## 勿重复造轮子（易踩坑）
 
 - **视频/黑盒分片**：改 `tools/extra-panels/v2g-suite-src/*` 后执行 `node tools/scripts/build-v2g-suite.cjs`；合入前 `node tools/scripts/verify-arch.cjs`
+- **VBB 预览≡导出**：差帧先查时钟域（`ctsSec` vs Chrome），勿在 chrome/ffmpeg-sec 间拨开关；经验全文 `tools/docs/vbb-preview-export-clock.md`（快切=`frameRaw`+`canFfmpegFirst`，校准中点比 `VideoFrame.timestamp`）
 - **ADB 镜像**：scrcpy-server v3.1，桥 ≥0.9.12；`scrcpy-ctrl.js` 须进 ZIP；勿默认 `i-frame-interval=1`
 - **备忘录滚动**：桌面滚动根是 `main.shell`（非 `window`）
 - **视频拖进度**：串行等 `seeked`（`pumpScrubSeek`），勿密集 `fastSeek`
