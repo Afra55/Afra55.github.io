@@ -88,7 +88,9 @@
         "多选 · 打点仅作用于当前预览视频；切换列表条目会保留各自的点。未打点的条目按整段/编辑范围转 GIF。";
   
       let vbbSourceFile = null;
-      /** @type {{ file: File, duration: number, srcW: number, srcH: number, edit?: object, marks?: {start:number,end:number}[], draftStart?: number|null }[]} */
+      /** 单文件内容指纹（草稿匹配用；重选后 size/mtime 可变） */
+      let vbbSourceContentSig = "";
+      /** @type {{ file: File, duration: number, srcW: number, srcH: number, edit?: object, marks?: {start:number,end:number}[], draftStart?: number|null, contentSig?: string }[]} */
       let vbbBatchFiles = [];
       /** 批量模式当前预览/编辑的下标；单文件模式为 -1 */
       let vbbEditBatchIdx = -1;
@@ -1743,7 +1745,32 @@
             }
             clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
             if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
-            saveVbbEditDraftsSync();
+            // 完成即落盘：先算内容指纹，再写 LS 并回读校验（防刷新后套不上）
+            try {
+              const sig = await ensureVbbItemContentSig(item);
+              if (sig && !isVbbBatchMode()) vbbSourceContentSig = sig;
+            } catch (_) {}
+            const savedN = saveVbbEditDraftsSync();
+            let verified = savedN > 0;
+            if (verified && vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) {
+              try {
+                const payload = readVbbEditDraftPayload();
+                const hit = findVbbEditDraftForItem(
+                  {
+                    file: item.file,
+                    duration: item.duration,
+                    srcW: item.srcW,
+                    srcH: item.srcH,
+                    contentSig: item.contentSig || vbbSourceContentSig || "",
+                  },
+                  payload?.items || [],
+                  new Set()
+                );
+                verified = Boolean(hit?.edit);
+              } catch (_) {
+                verified = false;
+              }
+            }
             // 外预览落点与成片 keep 首帧一致（所见即所得）
             const encodeKeeps = vbbKeepRangesForEncode(item.edit, item.duration);
             const seekTo = Number(encodeKeeps[0]?.start);
@@ -1753,11 +1780,13 @@
             syncVbbEditPreview();
             // 立刻按 keep 校正一次，避免落在删段内
             enforceVbbEditPlaybackWindow();
-            toast(
-              vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)
-                ? "已保存编辑 · 预览为裁切后片段"
-                : "已恢复为原片范围"
-            );
+            if (!vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) {
+              toast("已恢复为原片范围");
+            } else if (verified) {
+              toast("已保存编辑 · 刷新后重选同片会自动套用");
+            } else {
+              toast("编辑已应用，但本机草稿未写入（隐私模式/存储满？可用「备份编辑」）");
+            }
           } else {
             toast("已关闭，未保存本次改动");
           }
@@ -2939,8 +2968,52 @@
         return `${name}|${size}`;
       }
 
+      /** 时长容差：Android 重读 metadata 常差 0.3–1s，过严会导致套不上草稿 */
+      function vbbDraftDurationClose(a, b) {
+        const x = Number(a) || 0;
+        const y = Number(b) || 0;
+        if (!(x > 0) || !(y > 0)) return true;
+        const tol = Math.max(1.25, Math.min(3, Math.max(x, y) * 0.03));
+        return Math.abs(x - y) <= tol;
+      }
+
       /**
-       * 匹配草稿：精确 key → 名+大小（手机）→ 名+大小+时长/分辨率消歧。
+       * 文件内容指纹（前 256KB）：重选后 size/mtime 漂移仍能认回同片。
+       * @param {Blob|File} file
+       */
+      async function vbbFileContentSig(file) {
+        if (!file || typeof file.slice !== "function") return "";
+        const total = Number(file.size) || 0;
+        const n = Math.min(262144, total);
+        if (!(n > 0)) return "";
+        try {
+          const buf = await file.slice(0, n).arrayBuffer();
+          if (globalThis.crypto?.subtle?.digest) {
+            const dig = await crypto.subtle.digest("SHA-256", buf);
+            const u8 = new Uint8Array(dig);
+            let hex = "";
+            for (let i = 0; i < 8; i++) hex += u8[i].toString(16).padStart(2, "0");
+            return `s256:${n}:${total}:${hex}`;
+          }
+          const u8 = new Uint8Array(buf);
+          let h = 5381;
+          for (let i = 0; i < u8.length; i++) h = (h * 33) ^ u8[i];
+          return `djb:${n}:${total}:${(h >>> 0).toString(16)}`;
+        } catch (_) {
+          return "";
+        }
+      }
+
+      async function ensureVbbItemContentSig(item) {
+        if (!item?.file) return "";
+        if (item.contentSig) return String(item.contentSig);
+        const sig = await vbbFileContentSig(item.file);
+        if (sig) item.contentSig = sig;
+        return sig || "";
+      }
+
+      /**
+       * 匹配草稿：精确 key → 内容指纹 → 名+大小 → 名+时长 → 唯一文件名。
        * used 避免同名同大小多文件抢同一份草稿。
        */
       function findVbbEditDraftForItem(item, drafts, used) {
@@ -2953,6 +3026,13 @@
         for (let i = 0; i < drafts.length; i++) {
           if (used.has(i)) continue;
           if (String(drafts[i]?.key || "") === exact) return mark(i);
+        }
+        const sig = String(item.contentSig || "").trim();
+        if (sig) {
+          for (let i = 0; i < drafts.length; i++) {
+            if (used.has(i)) continue;
+            if (String(drafts[i]?.contentSig || "") === sig) return mark(i);
+          }
         }
         const soft = vbbFileDraftSoftKey(item.file);
         const softIdx = [];
@@ -2970,26 +3050,33 @@
             const dd = Number(d?.duration) || 0;
             const dw = Number(d?.srcW) || 0;
             const dh = Number(d?.srcH) || 0;
-            if (dur > 0 && dd > 0 && Math.abs(dur - dd) > 0.35) return false;
+            if (!vbbDraftDurationClose(dur, dd)) return false;
             if (w > 0 && dw > 0 && w !== dw) return false;
             if (h > 0 && dh > 0 && h !== dh) return false;
             return true;
           });
           return mark((ranked.length ? ranked : softIdx)[0]);
         }
-        // 末档：仅文件名 + 时长（重选/拷贝后 size 偶发不一致时仍能找回未完成编辑）
+        // 名 + 时长（size 漂移）
         const name = String(item.file.name || "");
         if (!name) return null;
         const dur = Number(item.duration) || 0;
-        const byName = [];
+        const byNameDur = [];
         for (let i = 0; i < drafts.length; i++) {
           if (used.has(i)) continue;
           if (String(drafts[i]?.name || "") !== name) continue;
           const dd = Number(drafts[i]?.duration) || 0;
-          if (dur > 0 && dd > 0 && Math.abs(dur - dd) > 0.5) continue;
-          byName.push(i);
+          if (!vbbDraftDurationClose(dur, dd)) continue;
+          byNameDur.push(i);
         }
-        if (byName.length === 1) return mark(byName[0]);
+        if (byNameDur.length === 1) return mark(byNameDur[0]);
+        // 末档：草稿里该文件名唯一（手机相册重导出常改 size/时长）
+        const byNameOnly = [];
+        for (let i = 0; i < drafts.length; i++) {
+          if (used.has(i)) continue;
+          if (String(drafts[i]?.name || "") === name) byNameOnly.push(i);
+        }
+        if (byNameOnly.length === 1) return mark(byNameOnly[0]);
         return null;
       }
 
@@ -3091,6 +3178,7 @@
               duration: Number(item.duration) || 0,
               srcW: Number(item.srcW) || 0,
               srcH: Number(item.srcH) || 0,
+              contentSig: String(item.contentSig || "").trim() || undefined,
               edit: serializeVbbEditDraft(item.edit),
               marks,
               draftStart,
@@ -3116,6 +3204,7 @@
             duration,
             srcW,
             srcH,
+            contentSig: String(vbbSourceContentSig || "").trim() || undefined,
             edit: serializeVbbEditDraft(edit),
             marks,
             draftStart,
@@ -3211,7 +3300,7 @@
         return changed;
       }
 
-      /** 重选文件时恢复裁剪/打点（手机允许名+大小软匹配，因 mtime 常变） */
+      /** 重选文件时恢复裁剪/打点（指纹 / 名+大小 / 名+时长 / 唯一文件名） */
       function restoreVbbEditDrafts(probed) {
         const data = readVbbEditDraftPayload();
         if (!data?.items?.length || !probed?.length) return 0;
@@ -3219,7 +3308,10 @@
         let n = 0;
         probed.forEach((item) => {
           const d = findVbbEditDraftForItem(item, data.items, used);
-          if (d && applyVbbEditDraftToItem(item, d)) n += 1;
+          if (d && applyVbbEditDraftToItem(item, d)) {
+            if (d.contentSig && !item.contentSig) item.contentSig = String(d.contentSig);
+            n += 1;
+          }
         });
         return n;
       }
@@ -4445,6 +4537,7 @@
         clearVbbPrecutClipCache();
         vbbNeedReselect = false;
         vbbSourceFile = null;
+        vbbSourceContentSig = "";
         vbbBatchFiles = [];
         vbbEditBatchIdx = -1;
         vbbSingleEdit = null;
@@ -4505,6 +4598,11 @@
           probed.push(item);
         }
         vbbBatchFiles = probed;
+        for (const it of vbbBatchFiles) {
+          try {
+            await ensureVbbItemContentSig(it);
+          } catch (_) {}
+        }
         const restored = restoreVbbEditDrafts(vbbBatchFiles);
         renderVbbBatchList();
         syncVbbBatchMeta();
@@ -4591,11 +4689,16 @@
             edit: vbbSingleEdit,
             marks: [],
           };
+          try {
+            probe.contentSig = await vbbFileContentSig(pinned);
+            if (probe.contentSig) vbbSourceContentSig = probe.contentSig;
+          } catch (_) {}
           restored = restoreVbbEditDrafts([probe]);
           if (restored > 0) {
             vbbSingleEdit = probe.edit;
             if (Array.isArray(probe.marks) && probe.marks.length) vbbMarks = probe.marks.slice();
             if (probe.draftStart != null) vbbDraftStart = probe.draftStart;
+            if (probe.contentSig) vbbSourceContentSig = probe.contentSig;
           }
         }
         if (vbbMeta) {

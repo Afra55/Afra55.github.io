@@ -168,12 +168,15 @@ t("单段黑盒：开跑前+失败/finally 都落盘，刷新可恢复", () => {
   assert.ok(/finally\s*\{[\s\S]*saveVbbEditDraftsSync/.test(body));
 });
 
-t("草稿匹配含文件名+时长末档，防 size 漂移丢恢复", () => {
+t("草稿匹配含指纹/放宽时长/唯一文件名，防 size 漂移丢恢复", () => {
   const start = src.indexOf("function findVbbEditDraftForItem");
   const end = src.indexOf("function serializeVbbEditDraft");
   assert.ok(start > 0 && end > start);
   const body = src.slice(start, end);
-  assert.ok(body.includes("仅文件名 + 时长") || body.includes("byName"));
+  assert.ok(body.includes("contentSig") || body.includes("byNameOnly") || body.includes("唯一文件名"));
+  assert.ok(src.includes("function vbbFileContentSig"));
+  assert.ok(src.includes("function vbbDraftDurationClose"));
+  assert.ok(src.includes("刷新后重选同片会自动套用") || src.includes("回读校验"));
 });
 
 t("强制取消不清空编辑字段，只标任务状态", () => {
@@ -196,7 +199,9 @@ function loadDraftMatchers() {
   const end = src.indexOf("function serializeVbbEditDraft(edit)");
   assert.ok(start > 0 && end > start);
   // eslint-disable-next-line no-new-func
-  return new Function(`${src.slice(start, end)}; return { vbbFileDraftKey, vbbFileDraftSoftKey, findVbbEditDraftForItem };`)();
+  return new Function(
+    `${src.slice(start, end)}; return { vbbFileDraftKey, vbbFileDraftSoftKey, findVbbEditDraftForItem, vbbDraftDurationClose };`
+  )();
 }
 
 t("软匹配：mtime 变了仍能按名+大小找回草稿", () => {
@@ -270,6 +275,39 @@ t("末档：size 变了仍能按名+时长找回唯一草稿", () => {
   assert.ok(hit);
   assert.equal(hit.edit.trimEnd, 16.4);
   assert.equal(hit.edit.cutouts.length, 1);
+});
+
+t("时长差约 1s 仍能按名匹配；内容指纹优先", () => {
+  const { findVbbEditDraftForItem, vbbDraftDurationClose } = loadDraftMatchers();
+  assert.ok(vbbDraftDurationClose(76.2, 75.1));
+  assert.ok(!vbbDraftDurationClose(76.2, 70));
+  const drafts = [
+    {
+      key: "a.mp4|1|1",
+      name: "a.mp4",
+      size: 1,
+      duration: 76.2,
+      contentSig: "s256:1:1:abcd",
+      edit: { trimStart: 2, trimEnd: 10 },
+    },
+  ];
+  const bySig = findVbbEditDraftForItem(
+    {
+      file: { name: "other.mp4", size: 9, lastModified: 1 },
+      duration: 10,
+      contentSig: "s256:1:1:abcd",
+    },
+    drafts,
+    new Set()
+  );
+  assert.ok(bySig);
+  assert.equal(bySig.edit.trimStart, 2);
+  const byDur = findVbbEditDraftForItem(
+    { file: { name: "a.mp4", size: 999, lastModified: 2 }, duration: 75.2 },
+    drafts,
+    new Set()
+  );
+  assert.ok(byDur);
 });
 
 t("任务世代：begin/finish/forceAbort 协同存在且 busy 只在 begin 置 true", () => {
