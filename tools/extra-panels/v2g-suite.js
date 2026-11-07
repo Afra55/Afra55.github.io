@@ -2838,10 +2838,27 @@
               v.play().catch(() => { clearTimeout(to); resolve(); });
             });
             if (times.length >= 3) {
-              const spanT = times[times.length - 1] - times[0];
-              if (spanT > 0.15) {
-                const est = (times.length - 1) / spanT;
-                if (Number.isFinite(est) && est >= 5 && est <= 240) fps = Math.round(est);
+              // 中位帧间隔估 fps，避免 (n-1)/span 把 24fps 实拍估成 30
+              const deltas = [];
+              for (let i = 1; i < times.length; i++) {
+                const d = times[i] - times[i - 1];
+                if (d > 0.008 && d < 0.28) deltas.push(d);
+              }
+              let est = 0;
+              if (deltas.length >= 2) {
+                deltas.sort((a, b) => a - b);
+                const med = deltas[Math.floor(deltas.length / 2)];
+                if (med > 0) est = 1 / med;
+              } else {
+                const spanT = times[times.length - 1] - times[0];
+                if (spanT > 0.15) est = (times.length - 1) / spanT;
+              }
+              if (Number.isFinite(est) && est >= 5 && est <= 240) {
+                if (est >= 23.5 && est < 24.5) fps = 24;
+                else if (est >= 24.5 && est <= 25.8) fps = 25;
+                else if (est >= 29.2 && est <= 30.8) fps = 30;
+                else if (est >= 59 && est <= 61) fps = 60;
+                else fps = Math.round(est);
               }
             }
           }

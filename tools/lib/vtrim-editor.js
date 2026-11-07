@@ -44,6 +44,27 @@
     return Math.round(f * 1000) / 1000;
   }
 
+  /** 用相邻 mediaTime 中位数估 fps，避免 (n-1)/span 把 24 估成 30 */
+  function estimateFpsFromMediaTimes(times) {
+    const arr = Array.isArray(times) ? times.map((t) => Number(t) || 0).filter((t) => t >= 0) : [];
+    if (arr.length < 3) return 0;
+    const deltas = [];
+    for (let i = 1; i < arr.length; i++) {
+      const d = arr[i] - arr[i - 1];
+      if (d > 0.008 && d < 0.28) deltas.push(d);
+    }
+    let est = 0;
+    if (deltas.length >= 2) {
+      deltas.sort((a, b) => a - b);
+      const med = deltas[Math.floor(deltas.length / 2)];
+      if (med > 0) est = 1 / med;
+    } else {
+      const spanT = arr[arr.length - 1] - arr[0];
+      if (spanT > 0.15) est = (arr.length - 1) / spanT;
+    }
+    return normalizeSourceFps(est) || (est >= 5 && est <= 120 ? Math.round(est) : 0);
+  }
+
   /** @param {number} fps @returns {number} 单帧秒数 */
   function frameSnapSecFromFps(fps) {
     const f = normalizeSourceFps(fps) || DEFAULT_FRAME_FPS;
@@ -1391,11 +1412,7 @@
           } catch (_) {}
           video.muted = wasMuted;
           if (times.length >= 3) {
-            const spanT = times[times.length - 1] - times[0];
-            if (spanT > 0.12) {
-              const est = (times.length - 1) / spanT;
-              if (Number.isFinite(est) && est >= 5 && est <= 120) fps = est;
-            }
+            fps = estimateFpsFromMediaTimes(times) || 0;
           }
           try {
             await seekPlayheadExact(startSec);
@@ -2001,33 +2018,58 @@
       setExportProgress(true, 0.04, "正在导出编辑后的视频…", { busy: true });
       toast("正在导出编辑后的视频…");
       try {
-        const out = await exportKeepVideo(file, edit, duration, {
-          srcW: video.videoWidth || 0,
-          srcH: video.videoHeight || 0,
-          applyCrop: Boolean(edit.cropOn),
-          keeps: previewKeeps,
-          onProgress: (r, text) => {
-            const ratio = Number(r);
-            const label = String(text || "正在导出…");
-            setExportProgress(true, Number.isFinite(ratio) ? ratio : 0.12, label, { busy: true });
-            if (downloadBtn) downloadBtn.textContent = "正在导出…";
-          },
-        });
+        const onProgress = (r, text) => {
+          const ratio = Number(r);
+          const label = String(text || "正在导出…");
+          setExportProgress(true, Number.isFinite(ratio) ? ratio : 0.12, label, { busy: true });
+          if (downloadBtn) downloadBtn.textContent = "正在导出…";
+        };
+        const filenameBase = String(file.name || "video").replace(/\.[^.]+$/, "");
+        // 优先录预览画面（所见即所得）；裁剪/不支持时回退 ffmpeg
+        let out = null;
+        let exportMethod = "ffmpeg";
+        try {
+          onProgress(0.05, "录制预览画面…");
+          out = await exportKeepByCapture(video, previewKeeps, {
+            keepFps: sourceFps || resolveKeepFps(edit),
+            applyCrop: Boolean(edit.cropOn),
+            filenameBase,
+            onProgress,
+          });
+          if (out?.blob?.size) exportMethod = "captureStream";
+          else out = null;
+        } catch (_) {
+          out = null;
+        }
+        if (!out) {
+          onProgress(0.08, "编码器切片…");
+          out = await exportKeepVideo(file, edit, duration, {
+            srcW: video.videoWidth || 0,
+            srcH: video.videoHeight || 0,
+            applyCrop: Boolean(edit.cropOn),
+            keeps: previewKeeps,
+            onProgress,
+          });
+          exportMethod = "ffmpeg";
+        }
         const blob = out?.blob || (out?.file ? new Blob([out.file], { type: "video/mp4" }) : null);
         if (!blob || !blob.size) throw new Error("未产出视频");
         const name =
           out?.filename ||
-          String(file.name || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
-        const diagName = String(name).replace(/\.mp4$/i, "") + "-export-diag.json";
+          filenameBase + "-edit.mp4";
+        const diagName = String(name).replace(/\.(mp4|webm)$/i, "") + "-export-diag.json";
         const build =
           (typeof window !== "undefined" && (window.TOOLS_BUILD || window.TOOLS_VERSION)) || "";
         const diag = {
           kind: "vbb-export-diag",
-          ver: 2,
+          ver: 3,
           build: String(build || ""),
           at: new Date().toISOString(),
           ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
-          note: "导出片已拼接删段，时长=各 keep 之和；请按段对照，勿用源时间轴秒数去对导出片进度条",
+          note:
+            exportMethod === "captureStream"
+              ? "本片用预览画面录制（captureStream），应对齐编辑器所见；时长=各 keep 之和"
+              : "导出片已拼接删段，时长=各 keep 之和；请按段对照，勿用源时间轴秒数去对导出片进度条",
           file: {
             name: String(file?.name || ""),
             size: Number(file?.size) || 0,
@@ -2050,6 +2092,8 @@
           edit,
           previewKeeps,
           export: {
+            exportMethod,
+            mime: out?.mime || blob.type || "",
             keepFps: out?.keepFps,
             segmentSpans: out?.segmentSpans,
             keeps: out?.keeps,
@@ -2059,7 +2103,7 @@
             outH: out?.srcH,
             filename: name,
             bytes: blob.size,
-            ptsResetBeforeTrim: true,
+            ptsResetBeforeTrim: exportMethod === "ffmpeg",
             keepStyle: "handle-sec-half-open",
           },
         };
@@ -2653,7 +2697,7 @@
         const srcW = video.videoWidth || 1;
         const srcH = video.videoHeight || 1;
         const initial = opts.initial || {};
-        // 优先用调用方传入的片源 fps；否则后台探测，拿不到保持 30
+        // 优先用调用方/方案缓存的片源 fps；有缓存就不再探测覆盖（防 24 被误估成 30）
         const knownFps = Number(opts.srcFps) || Number(initial.srcFps) || 0;
         if (!applySourceFps(knownFps)) {
           detectAndApplySourceFps(file).catch(() => {});
@@ -2834,6 +2878,247 @@
     const w = evenDim(Math.max(2, Number(edit.crop.w) || 2));
     const h = evenDim(Math.max(2, Number(edit.crop.h) || 2));
     return `crop=${w}:${h}:${x}:${y}`;
+  }
+
+  /**
+   * 所见即所得：用预览 video.captureStream + MediaRecorder 录 keep 段。
+   * 绕开 ffmpeg trim/PTS 与 Chrome 显示帧不一致；失败返回 null 由调用方回退。
+   * @returns {Promise<null|{ blob: Blob, file: File, filename: string, duration: number, srcW: number, srcH: number, segmentSpans: number[], keeps: any[], sliceLog: any[], exportMethod: string, mime: string, keepFps: number }>}
+   */
+  async function exportKeepByCapture(videoEl, keeps, opts = {}) {
+    const onProgress = typeof opts.onProgress === "function" ? opts.onProgress : () => {};
+    if (!videoEl || typeof videoEl.captureStream !== "function") return null;
+    if (typeof MediaRecorder === "undefined") return null;
+    if (!Array.isArray(keeps) || !keeps.length) return null;
+    // 裁剪需额外 canvas；有 crop 时交给 ffmpeg
+    if (opts.applyCrop) return null;
+
+    const mimeCandidates = [
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+      "video/mp4;codecs=avc1",
+      "video/mp4",
+    ];
+    const mime =
+      mimeCandidates.find((t) => {
+        try {
+          return MediaRecorder.isTypeSupported(t);
+        } catch (_) {
+          return false;
+        }
+      }) || "";
+    if (!mime) return null;
+
+    let stream;
+    try {
+      stream = videoEl.captureStream();
+    } catch (_) {
+      return null;
+    }
+    const vtracks = stream.getVideoTracks?.() || [];
+    if (!vtracks.length) return null;
+    const recStream = new MediaStream(vtracks);
+    const chunks = [];
+    let rec;
+    try {
+      rec = new MediaRecorder(recStream, {
+        mimeType: mime,
+        videoBitsPerSecond: Math.max(2_500_000, Math.min(12_000_000, (videoEl.videoWidth || 1280) * (videoEl.videoHeight || 720) * 4)),
+      });
+    } catch (_) {
+      try {
+        rec = new MediaRecorder(recStream);
+      } catch (_) {
+        return null;
+      }
+    }
+    rec.ondataavailable = (e) => {
+      if (e?.data && e.data.size > 0) chunks.push(e.data);
+    };
+
+    const keepFps = Math.max(5, Number(opts.keepFps) || 30);
+    const endKeep = 1 / keepFps;
+    const wasMuted = videoEl.muted;
+    const wasPaused = videoEl.paused;
+    const resumeAt = Number(videoEl.currentTime) || 0;
+    videoEl.muted = true;
+
+    const waitPlayUntil = (endT) =>
+      new Promise((resolve) => {
+        const limit = Math.max(0, Number(endT) || 0);
+        const budget = Math.max(4000, (limit - (Number(videoEl.currentTime) || 0)) * 1000 + 8000);
+        const to = setTimeout(() => resolve("timeout"), budget);
+        let alive = true;
+        const finish = (why) => {
+          if (!alive) return;
+          alive = false;
+          clearTimeout(to);
+          resolve(why);
+        };
+        const check = (t) => {
+          if (!alive) return;
+          if (t >= limit - 0.005 || videoEl.ended) finish("ok");
+        };
+        if (typeof videoEl.requestVideoFrameCallback === "function") {
+          const tick = (_n, meta) => {
+            if (!alive) return;
+            const mt = Number(meta?.mediaTime);
+            const t = Number.isFinite(mt) ? mt : Number(videoEl.currentTime) || 0;
+            check(t);
+            if (alive) {
+              try {
+                videoEl.requestVideoFrameCallback(tick);
+              } catch (_) {
+                finish("ok");
+              }
+            }
+          };
+          try {
+            videoEl.requestVideoFrameCallback(tick);
+          } catch (_) {
+            finish("ok");
+          }
+        } else {
+          const iv = setInterval(() => {
+            check(Number(videoEl.currentTime) || 0);
+            if (!alive) clearInterval(iv);
+          }, 16);
+        }
+      });
+
+    const pauseRec = () => {
+      try {
+        if (typeof rec.pause === "function" && rec.state === "recording") rec.pause();
+      } catch (_) {}
+    };
+    const resumeRec = () => {
+      try {
+        if (typeof rec.resume === "function" && rec.state === "paused") rec.resume();
+      } catch (_) {}
+    };
+
+    const segmentSpans = [];
+    const sliceLog = [];
+    try {
+      // 先定位首段再开录，避免片头黑帧
+      const k0 = keeps[0];
+      const a0 = Math.max(0, Number(k0.start) || 0);
+      try {
+        videoEl.pause();
+      } catch (_) {}
+      videoEl.currentTime = a0;
+      await waitSeek(videoEl);
+
+      await new Promise((resolve, reject) => {
+        const fail = () => reject(new Error("录制启动失败"));
+        rec.addEventListener("error", fail, { once: true });
+        try {
+          rec.start(250);
+        } catch (e) {
+          reject(e);
+          return;
+        }
+        // 部分机型无 onstart，短延时也算就绪
+        const to = setTimeout(resolve, 80);
+        rec.addEventListener(
+          "start",
+          () => {
+            clearTimeout(to);
+            resolve();
+          },
+          { once: true }
+        );
+      });
+
+      for (let i = 0; i < keeps.length; i++) {
+        if (opts.isAborted?.()) throw new Error("已取消");
+        const k = keeps[i];
+        const a = Math.max(0, Number(k.start) || 0);
+        const b = Math.max(a + 0.05, Number(k.end) || 0);
+        // 半开上界：播到末帧起点（≡预览 endPark），勿越过 exclusive end
+        const stopAt = Math.max(a + 0.02, b - endKeep);
+        onProgress(0.06 + (i / keeps.length) * 0.88, `录制预览 ${i + 1}/${keeps.length}`);
+
+        if (i > 0) {
+          pauseRec();
+          try {
+            videoEl.pause();
+          } catch (_) {}
+          videoEl.currentTime = a;
+          await waitSeek(videoEl);
+          resumeRec();
+        }
+
+        try {
+          await videoEl.play();
+        } catch (_) {}
+        await waitPlayUntil(stopAt);
+        try {
+          videoEl.pause();
+        } catch (_) {}
+        const span = Math.max(0.05, stopAt - a + endKeep * 0.5);
+        segmentSpans.push(Math.max(0.05, b - a));
+        sliceLog.push({
+          i,
+          mode: "captureStream",
+          startF: Number.isFinite(Number(k.startF)) ? Number(k.startF) : -1,
+          endF: Number.isFinite(Number(k.endF)) ? Number(k.endF) : -1,
+          start: a,
+          end: b,
+          stopAt,
+          spanSec: b - a,
+        });
+        void span;
+      }
+
+      const stopped = new Promise((resolve) => {
+        rec.addEventListener("stop", () => resolve(), { once: true });
+        setTimeout(resolve, 1500);
+      });
+      try {
+        if (rec.state !== "inactive") rec.stop();
+      } catch (_) {}
+      await stopped;
+
+      const outMime = (rec.mimeType || mime || "video/webm").split(";")[0];
+      const blob = new Blob(chunks, { type: outMime });
+      if (!blob.size) return null;
+      const ext = /mp4/i.test(outMime) ? "mp4" : "webm";
+      const base = String(opts.filenameBase || "video").replace(/\.[^.]+$/, "");
+      const filename = `${base}-edit.${ext}`;
+      const file = new File([blob], filename, { type: outMime });
+      const durationOut = segmentSpans.reduce((s, x) => s + x, 0);
+      return {
+        blob,
+        file,
+        filename,
+        duration: durationOut,
+        srcW: videoEl.videoWidth || 0,
+        srcH: videoEl.videoHeight || 0,
+        segmentSpans,
+        keeps,
+        sliceLog,
+        exportMethod: "captureStream",
+        mime: outMime,
+        keepFps,
+      };
+    } finally {
+      videoEl.muted = wasMuted;
+      try {
+        videoEl.pause();
+      } catch (_) {}
+      try {
+        videoEl.currentTime = resumeAt;
+        await waitSeek(videoEl);
+      } catch (_) {}
+      if (!wasPaused) {
+        try {
+          videoEl.play().catch(() => {});
+        } catch (_) {}
+      }
+      // 勿 stop captureStream track：会打断预览 video 渲染
+    }
   }
 
   /**
@@ -3075,6 +3360,8 @@
     keepRangesForEncode,
     previewSeekForKeepRanges,
     exportKeepVideo,
+    exportKeepByCapture,
+    estimateFpsFromMediaTimes,
     normalizeSourceFps,
     frameSnapSecFromFps,
     resolveKeepFps,
