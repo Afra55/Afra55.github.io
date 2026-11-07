@@ -38,7 +38,17 @@ t("进度条显示百分比，并缓存 delay 前的回调", () => {
   assert.ok(app.includes("heavyFirstLoad"));
   assert.ok(app.includes("includes(\"%\")"));
   assert.ok(panel.includes("devtools-tool-load-hint"));
-  assert.ok(panel.includes("不是卡住"));
+  assert.ok(panel.includes("发版才更新") || panel.includes("不是卡住"));
+});
+
+t("同版本脚本走 Cache，发版 ?v= 才重下", () => {
+  assert.ok(lazy.includes("devtools-scripts-"));
+  assert.ok(lazy.includes("function matchScriptCache"));
+  assert.ok(lazy.includes("function putScriptCache"));
+  assert.ok(lazy.includes("pruneOldScriptCaches"));
+  assert.ok(lazy.includes("本地缓存"));
+  assert.ok(lazy.includes("首次下载"));
+  assert.ok(lazy.includes('cache: "default"'));
 });
 
 console.log(`tool-load-progress.test.js: ${n} passed`);

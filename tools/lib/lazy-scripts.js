@@ -486,6 +486,56 @@
    */
   /** 同 URL 并发加载时，后到的 onProgress 也能收到字节进度 */
   const scriptProgressListeners = new Map();
+  /** 按 BUILD 分桶；发版 ?v= 与桶名都变，旧桶启动时清掉 */
+  const SCRIPT_CACHE_PREFIX = "devtools-scripts-";
+  let scriptCachePrunePromise = null;
+
+  function scriptCacheName() {
+    return SCRIPT_CACHE_PREFIX + String(BUILD || "dev").replace(/[^\w.-]+/g, "_");
+  }
+
+  function pruneOldScriptCaches() {
+    if (!window.caches?.keys) return Promise.resolve();
+    if (scriptCachePrunePromise) return scriptCachePrunePromise;
+    const keep = scriptCacheName();
+    scriptCachePrunePromise = caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => k.startsWith(SCRIPT_CACHE_PREFIX) && k !== keep)
+            .map((k) => caches.delete(k))
+        )
+      )
+      .catch(() => {})
+      .then(() => {});
+    return scriptCachePrunePromise;
+  }
+
+  async function matchScriptCache(url) {
+    if (!window.caches?.match) return null;
+    try {
+      await pruneOldScriptCaches();
+      const hit = await caches.match(url, { ignoreSearch: false });
+      if (hit && hit.ok) return hit;
+      const named = await caches.open(scriptCacheName());
+      const exact = await named.match(url);
+      return exact && exact.ok ? exact : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function putScriptCache(url, res) {
+    if (!window.caches?.open || !res || !res.ok || res.type === "opaque") return;
+    try {
+      await pruneOldScriptCaches();
+      const cache = await caches.open(scriptCacheName());
+      await cache.put(url, res.clone());
+    } catch (_) {
+      /* private mode / quota */
+    }
+  }
 
   function loadScript(src, { timeoutMs = 60000, onProgress = null, label = "" } = {}) {
     const key = withVersion(src);
@@ -575,15 +625,30 @@
           scriptProgressListeners.get(key)?.size > 0 ||
           scriptSizeHint(src) >= 50000;
         if (useFetchProgress) {
-          reportDl(0.02, `开始下载${displayName}…`);
           const runFetch = async () => {
+            // 同版本优先本地 Cache（URL 含 ?v=BUILD）；发版换 v= 自然 miss 再下
+            const cached = await matchScriptCache(key);
+            if (cached) {
+              reportDl(0.4, `${displayName} · 本地缓存`);
+              const buf = await cached.arrayBuffer();
+              reportDl(0.92, `${displayName}已从缓存加载 ${formatDlBytes(buf.byteLength)}，解析中…`);
+              const blobUrl = URL.createObjectURL(
+                new Blob([buf], { type: "application/javascript" })
+              );
+              await injectFromUrl(blobUrl, { revoke: true });
+              return;
+            }
+
+            reportDl(0.02, `首次下载${displayName}…`);
             let res;
             try {
-              res = await fetch(key, { credentials: "same-origin", cache: "force-cache" });
+              // default：允许 HTTP 磁盘缓存；force-cache 在无条目时部分环境反而怪异
+              res = await fetch(key, { credentials: "same-origin", cache: "default" });
             } catch (err) {
               throw new Error(`脚本下载失败：${src}（${err?.message || err}）`);
             }
             if (!res.ok) throw new Error(`脚本下载失败：${src}（HTTP ${res.status}）`);
+            void putScriptCache(key, res);
             const hinted = scriptSizeHint(src);
             const totalHeader = Number(res.headers.get("content-length")) || 0;
             const total = totalHeader > 0 ? totalHeader : hinted;
@@ -622,7 +687,7 @@
                 );
               }
             }
-            reportDl(0.93, `${displayName}已下载 ${formatDlBytes(received)}，解析中…`);
+            reportDl(0.93, `${displayName}已下载 ${formatDlBytes(received)}，下次走缓存`);
             const blobUrl = URL.createObjectURL(
               new Blob(chunks, { type: "application/javascript" })
             );
