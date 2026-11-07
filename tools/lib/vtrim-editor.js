@@ -1420,6 +1420,16 @@
             await calibrate(sourceTimeline, video);
           } catch (_) {}
         }
+        // 校准后旧柄可能落在帧间：重吸附到成片时钟，避免索引掉上一帧
+        if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
+          try {
+            startSec = snapToEncodeClock(startSec);
+            endSec = Math.max(startSec + MIN_SPAN, snapToEncodeClock(endSec));
+            endParkAtSec = encodeParkSecForEdge("end");
+            paintTimeline();
+            updateLabels();
+          } catch (_) {}
+        }
       } catch (_) {}
     }
 
@@ -2135,6 +2145,7 @@
             chromeOffsetSec: Number(sourceTimeline?.chromeOffsetSec) || 0,
             calibrated: Boolean(sourceTimeline?.calibrated),
             calibrateMethod: sourceTimeline?.calibrateMethod || null,
+            leadEmptySec: Number(sourceTimeline?.leadEmptySec) || 0,
             currentTime: Number(video.currentTime) || 0,
             paused: Boolean(video.paused),
           },
@@ -3468,10 +3479,12 @@
     };
 
     onProgress(0.1, "一次精切…");
-    // 有采样表：先 demux 帧号（≡ keep startF/endF），再 CTS 秒；2547 上 sec 常切偏
-    const onePassModes = preferSampleFrames || preferFrame
-      ? ["frameRaw", "sec"]
-      : ["sec", "frameRaw"];
+    // 有采样表：只走 demux 帧号。ctsSec 可能已校准到 Chrome 域，sec 切会偏（2547 失败 diag）
+    const onePassModes = preferSampleFrames
+      ? ["frameRaw"]
+      : preferFrame
+        ? ["frameRaw", "sec"]
+        : ["sec", "frameRaw"];
     let hit = null;
     for (const mode of onePassModes) {
       hit = await tryOnePass(mode);
@@ -3523,9 +3536,11 @@
       };
       for (let i = 0; i < keeps.length; i++) {
         onProgress(0.12 + (i / keeps.length) * 0.5, `切片 ${i + 1}/${keeps.length}`);
-        const modes = preferFrame
-          ? ["frameRaw", "sec", "ss", "frameGrid"]
-          : ["sec", "ss", "frameRaw", "frameGrid"];
+        const modes = preferSampleFrames
+          ? ["frameRaw", "frameGrid"]
+          : preferFrame
+            ? ["frameRaw", "sec", "ss", "frameGrid"]
+            : ["sec", "ss", "frameRaw", "frameGrid"];
         let one = null;
         for (const mode of modes) {
           one = await trySlice(keeps[i], i, mode);

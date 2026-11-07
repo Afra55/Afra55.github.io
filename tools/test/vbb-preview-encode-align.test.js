@@ -247,14 +247,13 @@ t("下载优先 chrome 预览帧，ffmpeg 仅兜底", () => {
   assert.ok(dl.indexOf("exportKeepByChromeDisplay") < dl.indexOf("exportKeepVideo"));
 });
 
-t("ffmpeg onepass 优先 frameRaw（2547 sec 易偏）", () => {
-  assert.ok(vtrim.includes('["frameRaw", "sec"]'));
+t("ffmpeg onepass：有采样表只用 frameRaw（校准后禁止 sec）", () => {
   const block = vtrim.slice(
     vtrim.indexOf("一次精切…"),
     vtrim.indexOf("let hit = null")
   );
-  assert.ok(block.includes("frameRaw"));
-  assert.ok(block.indexOf("frameRaw") < block.indexOf('"sec"') || block.includes('["frameRaw", "sec"]'));
+  assert.ok(block.includes('preferSampleFrames') && block.includes('["frameRaw"]'), "有 stts 仅 frameRaw");
+  assert.ok(block.includes("ctsSec 可能已校准") || block.includes("sec 切会偏"));
 });
 
 t("有 srcFps：keep.end=黄柄秒值半开", () => {
