@@ -72,11 +72,19 @@ t("snapToFrameGrid 走可变 frameSnapSec；snapToEncodeClock 优先 CTS", () =>
   assert.ok(vtrim.includes("snapToEncodeClock(t)") || /snapEdgeOnly\(snapToEncodeClock/.test(vtrim));
 });
 
-t("底部微调按相邻 CTS 步进（nudgeEncodeSec）", () => {
+t("底部微调按 keep 采样 ±1（片尾 exclusive 点一下必变帧）", () => {
   assert.ok(vtrim.includes("function nudgeEncodeSec"));
-  assert.ok(vtrim.includes("nudgeEncodeSec(startSec"));
-  assert.ok(vtrim.includes("nudgeEncodeSec(endSec"));
+  assert.ok(vtrim.includes("function nudgeTrimEdgeSec"));
+  assert.ok(vtrim.includes('nudgeTrimEdgeSec("start"') || vtrim.includes("nudgeTrimEdgeSec(\"start\""));
+  assert.ok(vtrim.includes('nudgeTrimEdgeSec("end"') || vtrim.includes("nudgeTrimEdgeSec(\"end\""));
+  assert.ok(vtrim.includes("sampleRangeForKeep"));
   assert.ok(vtrim.includes('nudgeSelectedCutout("start", -1)') || vtrim.includes("nudgeSelectedCutout(\"start\", -1)"));
+  const minus = vtrim.slice(
+    vtrim.indexOf("function nudgeEncodeSec"),
+    vtrim.indexOf("function nudgeTrimEdgeSec")
+  );
+  assert.ok(minus.includes("idx - 1") || minus.includes("idx = Math.max(0, idx - 1)"));
+  assert.ok(!minus.includes("落在两帧之间 → 回到 floor"));
 });
 
 console.log(`vbb-snap-src-fps.test.js: ${n} passed`);

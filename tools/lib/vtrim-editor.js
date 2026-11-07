@@ -565,6 +565,7 @@
 
     /**
      * 微调落到相邻成片采样 CTS（有 stts 时）；否则 ±1/fps。
+     * 点一下必须换一帧：夹在两采样之间时 − 也至少退一格，避免「点没反应、长按才动」。
      * @param {number} cur
      * @param {number} dir  +1 / -1
      */
@@ -574,18 +575,54 @@
       const tl = sourceTimeline;
       const api = window.DevToolsMp4Timeline;
       if (tl?.ctsSec?.length && typeof api?.sampleIndexAtSec === "function") {
+        const n = tl.ctsSec.length;
         let idx = api.sampleIndexAtSec(tl, raw);
-        const cts = Number(tl.ctsSec[idx]);
         if (sign > 0) {
-          if (raw >= cts - 1e-6) idx = Math.min(tl.ctsSec.length - 1, idx + 1);
-        } else if (Math.abs(raw - cts) <= 1e-6) {
+          idx = Math.min(n - 1, idx + 1);
+        } else {
+          // 在采样点上 / 两帧之间：都退到上一采样，保证画面必变
           idx = Math.max(0, idx - 1);
         }
-        // else：落在两帧之间 → 回到 floor CTS（idx 已是 last<=raw）
         const t = Number(tl.ctsSec[idx]);
-        if (Number.isFinite(t)) return clamp(t, 0, duration);
+        if (Number.isFinite(t) && Math.abs(t - raw) > 1e-7) return clamp(t, 0, duration);
+        // 已顶到边界仍同值时再尝试一格
+        const j = Math.max(0, Math.min(n - 1, idx + sign));
+        const t2 = Number(tl.ctsSec[j]);
+        if (Number.isFinite(t2)) return clamp(t2, 0, duration);
       }
       return clamp(raw + sign * nudgeStepSec(), 0, duration);
+    }
+
+    /**
+     * 片头/片尾按 keep 半开窗 ±1 采样（根因：片尾是 exclusive，只挪黄柄可能末帧不变）。
+     * @param {"start"|"end"} edge
+     * @param {number} dir +1 / -1
+     */
+    function nudgeTrimEdgeSec(edge, dir) {
+      const sign = dir < 0 ? -1 : 1;
+      const tl = sourceTimeline;
+      const api = window.DevToolsMp4Timeline;
+      if (tl?.ctsSec?.length && typeof api?.sampleRangeForKeep === "function") {
+        const n = tl.ctsSec.length;
+        const fr = api.sampleRangeForKeep(tl, startSec, endSec);
+        if (fr) {
+          if (edge === "end") {
+            let endF = Math.round(Number(fr.endF) || 0);
+            const minF = Math.round(Number(fr.startF) || 0) + 1;
+            endF = Math.max(minF, Math.min(n, endF + sign));
+            if (endF >= n) return duration;
+            const t = Number(tl.ctsSec[endF]);
+            if (Number.isFinite(t)) return clamp(t, startSec + MIN_SPAN, duration);
+          } else {
+            let startF = Math.round(Number(fr.startF) || 0);
+            const maxF = Math.max(0, Math.round(Number(fr.endF) || 1) - 1);
+            startF = Math.max(0, Math.min(maxF, startF + sign));
+            const t = Number(tl.ctsSec[startF]);
+            if (Number.isFinite(t)) return clamp(t, 0, endSec - MIN_SPAN);
+          }
+        }
+      }
+      return nudgeEncodeSec(edge === "end" ? endSec : startSec, sign);
     }
 
     /** 同一排按钮：修剪=片头/片尾；删中间=红段起点/终点 */
@@ -2300,17 +2337,12 @@
         clearTimeout(dragSeekTimer);
         dragSeekTimer = 0;
       }
+      // 按钮已按 keep 采样落点；松手只停预览，勿再 snapToEncodeClock 把片尾 exclusive 拧回去
       if (kind === "start") {
-        startSec = quantizeTrimSec(
-          clamp(snapToEncodeClock(startSec), 0, endSec - MIN_SPAN)
-        );
         if (gen !== nudgeSnapGen || closed) return;
         clipCutoutsToWindow();
         await seekStartPreviewExact();
       } else {
-        endSec = quantizeTrimSec(
-          clamp(snapToEncodeClock(endSec), startSec + MIN_SPAN, duration)
-        );
         endParkAtSec = endKeepSec();
         if (gen !== nudgeSnapGen || closed) return;
         clipCutoutsToWindow();
@@ -2323,6 +2355,8 @@
       if (!btn) return;
       let holdTimer = 0;
       let holdRepeat = 0;
+      let armed = false;
+      let pointerId = null;
       const resolveKind = typeof kindOrFn === "function" ? kindOrFn : () => kindOrFn;
       const stopRepeat = () => {
         if (holdTimer) {
@@ -2338,8 +2372,14 @@
         nudgeSnapKind = resolveKind();
         stepFn();
       };
-      const onRelease = () => {
+      const onRelease = (e) => {
+        if (!armed) return;
+        if (e && pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
+        armed = false;
+        pointerId = null;
         stopRepeat();
+        window.removeEventListener("pointerup", onRelease, true);
+        window.removeEventListener("pointercancel", onRelease, true);
         if (nudgeSnapKind) {
           const k = nudgeSnapKind;
           nudgeSnapKind = null;
@@ -2350,19 +2390,22 @@
         if (e.button != null && e.button !== 0) return;
         if (btn.disabled) return;
         e.preventDefault();
-        try {
-          btn.setPointerCapture?.(e.pointerId);
-        } catch (_) {}
+        // 不用 setPointerCapture：部分安卓会立刻 lostpointercapture，短按像没点到
+        armed = true;
+        pointerId = e.pointerId;
         stopRepeat();
         fire();
+        window.addEventListener("pointerup", onRelease, true);
+        window.addEventListener("pointercancel", onRelease, true);
         holdTimer = window.setTimeout(() => {
           holdTimer = 0;
-          holdRepeat = window.setInterval(fire, 70);
+          if (!armed) return;
+          holdRepeat = window.setInterval(() => {
+            if (!armed) return;
+            fire();
+          }, 70);
         }, 280);
       });
-      btn.addEventListener("pointerup", onRelease);
-      btn.addEventListener("pointercancel", onRelease);
-      btn.addEventListener("lostpointercapture", onRelease);
       // 避免 click 再触发一次
       btn.addEventListener("click", (e) => e.preventDefault());
     }
@@ -2370,7 +2413,7 @@
       nudgeStartM,
       () => {
         if (editMode === "cut") nudgeSelectedCutout("start", -1);
-        else setStart(nudgeEncodeSec(startSec, -1), { immediateSeek: true });
+        else setStart(nudgeTrimEdgeSec("start", -1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-start" : "start")
     );
@@ -2378,7 +2421,7 @@
       nudgeStartP,
       () => {
         if (editMode === "cut") nudgeSelectedCutout("start", 1);
-        else setStart(nudgeEncodeSec(startSec, 1), { immediateSeek: true });
+        else setStart(nudgeTrimEdgeSec("start", 1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-start" : "start")
     );
@@ -2386,7 +2429,7 @@
       nudgeEndM,
       () => {
         if (editMode === "cut") nudgeSelectedCutout("end", -1);
-        else setEnd(nudgeEncodeSec(endSec, -1), { immediateSeek: true });
+        else setEnd(nudgeTrimEdgeSec("end", -1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-end" : "end")
     );
@@ -2394,7 +2437,7 @@
       nudgeEndP,
       () => {
         if (editMode === "cut") nudgeSelectedCutout("end", 1);
-        else setEnd(nudgeEncodeSec(endSec, 1), { immediateSeek: true });
+        else setEnd(nudgeTrimEdgeSec("end", 1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-end" : "end")
     );
