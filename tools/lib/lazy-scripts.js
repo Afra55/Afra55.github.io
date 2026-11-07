@@ -215,13 +215,14 @@
     lanboard: ["qrcode", "mqtt"],
     sharecard: ["html2canvas"],
     gifmaker: ["gif", "omggif"],
-    v2g: ["gif", "omggif"],
+    // v2g / vbb / vsplit：进面板先可点「选视频」；gif.js 延后到真正编码再拉（见 ensureGifEncodeLibs）
+    v2g: [],
     gifx: ["gif", "omggif"],
     gifc: ["gif", "omggif"],
     gife: ["gif", "omggif"],
     gifm: ["gif", "omggif"],
-    vsplit: ["gif", "omggif"],
-    vbb: ["gif", "omggif"],
+    vsplit: [],
+    vbb: [],
     gifbb: ["gif", "omggif"],
     giftest: ["omggif"],
     dateremind: ["solarlunar"],
@@ -574,6 +575,12 @@
     if (!spec.probe()) throw new Error(`依赖未就绪：${id}`);
   }
 
+  /** 黑盒/切分等面板延后加载的 gif.js + omggif；编码前调用 */
+  async function ensureGifEncodeLibs() {
+    await loadVendor("gif");
+    await loadVendor("omggif");
+  }
+
   async function loadToolScript(toolId) {
     const src = TOOL_FILES[toolId];
     if (!src) return;
@@ -797,6 +804,7 @@
     loadExtraBundle,
     loadExtraCore,
     loadVendor,
+    ensureGifEncodeLibs,
     loadToolScript,
     loadScript,
     loadPwa,

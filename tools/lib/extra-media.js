@@ -982,8 +982,10 @@
       text = ffmpegWarmError || "引擎预热失败，转换时会重试";
     } else if (ffmpegSkipAutoPrewarm) {
       text = "编码器缓存已清理，开始转换时会重新下载";
+    } else if (!ffmpegAutoPrewarmArmed) {
+      text = "先选择视频；选好后才会准备本地编码器（约 30MB，仅下载一次，不上传视频）";
     } else {
-      text = "进入本页将预热本地编码器（不上传视频）";
+      text = "正在/将要准备本地编码器（不上传视频）";
     }
     const showBar = ffmpegWarmState === "warming";
     const pct = Math.max(0, Math.min(100, Math.round((ffmpegWarmDetail.ratio || 0) * 100)));
@@ -1055,6 +1057,8 @@
   }
 
   function prewarmFfmpegEngine() {
+    // 显式预热（编码前）也视为已授权自动预热
+    ffmpegAutoPrewarmArmed = true;
     if (ffmpegInstance?.loaded) {
       ffmpegWarmState = "ready";
       paintFfmpegWarmHint();
@@ -1085,20 +1089,49 @@
   }
 
   let ffmpegPrewarmTimer = 0;
+  /** 未选视频前不自动拉 30MB 编码器，否则与面板脚本/选文件抢带宽，表现为点「选择视频」无反应 */
+  let ffmpegAutoPrewarmArmed = false;
+  let ffmpegPickerQuietUntil = 0;
+
+  /** 用户点选文件时：立刻停掉自动预热倒计时，把主线程/带宽留给系统选框 */
+  function pauseFfmpegAutoPrewarmForPicker(ms = 15000) {
+    const quietMs = Math.max(1000, Number(ms) || 15000);
+    ffmpegPickerQuietUntil = Date.now() + quietMs;
+    window.clearTimeout(ffmpegPrewarmTimer);
+    ffmpegPrewarmTimer = 0;
+  }
+
+  /** 已选出文件后再允许预热（仍可被 pause 打断） */
+  function armFfmpegPrewarmAfterPick() {
+    ffmpegAutoPrewarmArmed = true;
+    ffmpegPickerQuietUntil = 0;
+    scheduleFfmpegPrewarm();
+  }
+
   function scheduleFfmpegPrewarm() {
     if (window.DevToolsTemp?.isUnloading) return;
     if (ffmpegSkipAutoPrewarm) return;
+    if (!ffmpegAutoPrewarmArmed) return;
     if (!isGifmakerActive()) return;
-    // 进面板后先让「选择视频」抢主线程：安卓上预热 WASM 会把系统选文件框拖到数秒后才弹出
     window.clearTimeout(ffmpegPrewarmTimer);
-    const delayMs = (() => {
+    const now = Date.now();
+    const quietLeft = Math.max(0, ffmpegPickerQuietUntil - now);
+    // 选出文件后再短延迟：安卓上立刻预热仍可能拖慢下一次选框
+    const baseDelay = (() => {
       try {
         const ua = navigator.userAgent || "";
-        if (/Android|HarmonyOS|HuaweiBrowser|MiuiBrowser|UCBrowser|QQBrowser/i.test(ua)) return 4500;
+        if (/Android|HarmonyOS|HuaweiBrowser|MiuiBrowser|UCBrowser|QQBrowser/i.test(ua)) return 1800;
       } catch (_) {}
-      return 1200;
+      return 600;
     })();
+    const delayMs = quietLeft + baseDelay;
     ffmpegPrewarmTimer = window.setTimeout(() => {
+      if (!ffmpegAutoPrewarmArmed || ffmpegSkipAutoPrewarm) return;
+      if (Date.now() < ffmpegPickerQuietUntil) {
+        scheduleFfmpegPrewarm();
+        return;
+      }
+      if (!isGifmakerActive()) return;
       const run = () => {
         prewarmFfmpegEngine().catch(() => {});
         // gifsicle 再晚一点，别和引擎预热抢同一拍空闲
@@ -1945,7 +1978,8 @@
     ensureFfmpegAssets, getFfmpegInstance, createFfmpegInstance, destroyFfmpegInstance,
     terminateFfmpegInstance, paintFfmpegWarmHint,
     setFfmpegWarmProgress, injectFfmpegPreloadLinks, isGifmakerActive, prewarmFfmpegEngine,
-    scheduleFfmpegPrewarm, bindFfmpegPrewarmTriggers, encodeAnimatedWebpFromStillFrames,
+    scheduleFfmpegPrewarm, pauseFfmpegAutoPrewarmForPicker, armFfmpegPrewarmAfterPick,
+    bindFfmpegPrewarmTriggers, encodeAnimatedWebpFromStillFrames,
     paintToolsVersion, resolveToolsVendorFile, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions,
     drawGifTextWatermark, compressGifBlob, mergeGifBlobs, TOOLS_VERSION, GIF_TOOL_VERSION,

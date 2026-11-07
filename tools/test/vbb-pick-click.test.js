@@ -52,4 +52,27 @@ t("vbb 仍接 early pending-files", () => {
   assert.ok(vbb.includes('DevToolsPendingFiles?.take?.("vbb")'));
 });
 
+t("进页不自动拉编码器：点选暂停、选完再武装", () => {
+  const media = fs.readFileSync(path.join(__dirname, "..", "lib", "extra-media.js"), "utf8");
+  assert.ok(media.includes("ffmpegAutoPrewarmArmed"));
+  assert.ok(media.includes("function pauseFfmpegAutoPrewarmForPicker"));
+  assert.ok(media.includes("function armFfmpegPrewarmAfterPick"));
+  assert.ok(media.includes("if (!ffmpegAutoPrewarmArmed) return"));
+  assert.ok(app.includes("pauseFfmpegAutoPrewarmForPicker"));
+  assert.ok(app.includes("armFfmpegPrewarmAfterPick"));
+  const panel = fs.readFileSync(path.join(__dirname, "..", "panels", "vbb.html"), "utf8");
+  assert.ok(panel.includes("选好后才会准备本地编码器"));
+});
+
+t("vbb 进面板不预拉 gif.js，编码前 ensureGifEncodeLibs", () => {
+  const lazy = fs.readFileSync(path.join(__dirname, "..", "lib", "lazy-scripts.js"), "utf8");
+  assert.ok(lazy.includes("function ensureGifEncodeLibs"));
+  assert.ok(/vbb:\s*\[\s*\]/.test(lazy) || /vbb:\s*\[\],/.test(lazy));
+  const shared = fs.readFileSync(
+    path.join(__dirname, "..", "extra-panels", "v2g-suite-src", "10-shared-encode.js"),
+    "utf8"
+  );
+  assert.ok(shared.includes("ensureGifEncodeLibs"));
+});
+
 console.log(`vbb-pick-click.test.js: ${n} passed`);
