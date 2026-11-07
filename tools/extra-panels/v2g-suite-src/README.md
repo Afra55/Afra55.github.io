@@ -22,4 +22,5 @@ node tools/scripts/verify-arch.cjs
 
 若曾直接热修了 `v2g-suite.js`：`node tools/scripts/build-v2g-suite.cjs --split` 再核对 diff。
 
-黑盒 10MB 策略与优化历程见 [`tools/docs/vbb-blackbox-optimization.md`](../../docs/vbb-blackbox-optimization.md)。
+黑盒 10MB 策略与优化历程见 [`tools/docs/vbb-blackbox-optimization.md`](../../docs/vbb-blackbox-optimization.md)。  
+编辑预览≡导出（时钟域 / 快切 / 草稿）见 [`tools/docs/vbb-preview-export-clock.md`](../../docs/vbb-preview-export-clock.md)。
