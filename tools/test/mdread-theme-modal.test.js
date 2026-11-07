@@ -39,6 +39,24 @@ t("弹框支持预置网格与自定义色", () => {
   assert.ok(js.includes("buildCustomTheme"));
 });
 
+t("点预置/自定义只换色不关弹框，便于对比", () => {
+  const selectBlock = js.slice(
+    js.indexOf("// 点预置只换色不关弹框"),
+    js.indexOf('document.getElementById("mr-custom-apply")')
+  );
+  assert.ok(selectBlock.includes("applyReadTheme(chip.getAttribute"));
+  assert.ok(selectBlock.includes("paintThemeModalGrid"));
+  assert.ok(!selectBlock.includes("closeThemeModal()"));
+  const customHandler = js.slice(
+    js.indexOf('document.getElementById("mr-custom-apply")'),
+    js.indexOf('window.addEventListener("keydown"')
+  );
+  assert.ok(customHandler.includes('applyReadTheme("custom")'));
+  assert.ok(customHandler.includes("paintThemeModalGrid"));
+  assert.ok(!customHandler.includes("closeThemeModal()"));
+  assert.ok(html.includes("不会自动关闭"));
+});
+
 t("预置不少于 12 套护眼方案", () => {
   const keys = [
     "paper",

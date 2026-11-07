@@ -57,7 +57,7 @@ t("空态可打开 / 粘贴", () => {
 });
 
 t("SW 壳缓存已升版", () => {
-  assert.ok(/mdread-shell-v1[8-9]|mdread-shell-v[2-9]\d/.test(sw));
+  assert.ok(/mdread-shell-v1[9]|mdread-shell-v[2-9]\d/.test(sw));
 });
 
 t("大纲列表可滚，条目不被 flex 压扁", () => {
