@@ -29,8 +29,9 @@ function loadKeepFns() {
   const resolveKeep = vtrim.match(/function resolveKeepFps\(editOrFps\) \{[\s\S]*?\n  \}/);
   const secToFrame = vtrim.match(/function secToFrame\(sec, fps\) \{[\s\S]*?\n  \}/);
   const frameToSec = vtrim.match(/function frameToSec\(frame, fps\) \{[\s\S]*?\n  \}/);
+  const displayFrame = vtrim.match(/function displayFrameAtSec\(sec, fps\) \{[\s\S]*?\n  \}/);
   const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
-  assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && normalizeFps);
+  assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && displayFrame && normalizeFps);
   const box = {};
   vm.runInNewContext(
     `
@@ -43,6 +44,7 @@ function loadKeepFns() {
     ${resolveKeep[0]}
     ${secToFrame[0]}
     ${frameToSec[0]}
+    ${displayFrame[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
     ${norm[0]}
@@ -50,6 +52,7 @@ function loadKeepFns() {
     ${forEnc[0]}
     this.keepRangesFromEdit = keepRangesFromEdit;
     this.keepRangesForEncode = keepRangesForEncode;
+    this.displayFrameAtSec = displayFrameAtSec;
     `,
     box
   );
@@ -83,8 +86,8 @@ t("外预览播放/落点走 vbbKeepRangesForEncode", () => {
   assert.ok(enforce.includes("pastSlop"), "越过片尾停帧必须拉回");
 });
 
-t("多段删中间：预览≡成片；红柄闭区间；黄柄为半开上界", () => {
-  const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
+t("多段删中间：预览≡成片；红柄闭区间；片尾=停帧半开", () => {
+  const { keepRangesFromEdit, keepRangesForEncode, displayFrameAtSec } = loadKeepFns();
   const edit = {
     trimStart: 5,
     trimEnd: 95,
@@ -99,34 +102,36 @@ t("多段删中间：预览≡成片；红柄闭区间；黄柄为半开上界",
   const enc = keepRangesForEncode(edit, 100);
   assert.ok(preview.length >= 3 && enc.length === preview.length);
   const f = 1 / 25;
+  const endEx = (displayFrameAtSec(95 - f, 25) + 1) / 25;
   assert.ok(Math.abs(preview[0].start - 5) < 1e-9);
   assert.ok(Math.abs(preview[0].end - 20) < 1e-9);
   assert.ok(Math.abs(preview[1].start - (30 + f)) < 1e-9);
-  assert.ok(Math.abs(preview[preview.length - 1].end - 95) < 1e-9, "末段 end=黄柄");
+  assert.ok(Math.abs(preview[preview.length - 1].end - endEx) < 1e-9, "末段 end=停帧+1");
   for (let i = 0; i < enc.length; i++) {
     assert.ok(Math.abs(enc[i].start - preview[i].start) < 1e-9);
     assert.ok(Math.abs(enc[i].end - preview[i].end) < 1e-9);
   }
 });
 
-t("仅裁片头片尾：成片起点=黄柄，终点=黄柄半开上界", () => {
-  const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
+t("仅裁片头片尾：起点=黄柄所见；终点=停帧半开上界", () => {
+  const { keepRangesFromEdit, keepRangesForEncode, displayFrameAtSec } = loadKeepFns();
   const edit = { trimStart: 10, trimEnd: 40, cutouts: [], srcFps: 30 };
   const preview = keepRangesFromEdit(edit, 60);
   const enc = keepRangesForEncode(edit, 60);
+  const endEx = (displayFrameAtSec(40 - 1 / 30, 30) + 1) / 30;
   assert.strictEqual(enc.length, 1);
   assert.ok(Math.abs(enc[0].start - preview[0].start) < 1e-9);
   assert.ok(Math.abs(enc[0].end - preview[0].end) < 1e-9);
   assert.ok(Math.abs(enc[0].start - 10) < 1e-9);
-  assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
+  assert.ok(Math.abs(enc[0].end - endEx) < 1e-9);
 });
 
 t("exportKeepVideo：trim 前 fps=round=up；sec 优先；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes('["sec", "ss", "frame"]'), "须 sec→ss→frame");
-  assert.ok(!exp.includes("hasRealFps"), "禁止按 srcFps 改走 frame 优先");
+  assert.ok(exp.includes('["frame", "sec", "ss"]'), "抽格后须 frame→sec→ss");
+  assert.ok(exp.includes("displayFrameAtSec"), "keep/切片须用 Chrome 显示帧");
   assert.ok(exp.includes("segmentSpans"), "回传各段时长");
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(/fps=\$\{keepFps\}:round=up/.test(exp), "须先抽格再 trim（≡预览 k/F）");
@@ -146,6 +151,19 @@ t("getEditState：未探测 fps 勿填默认 30（避免误判帧切）", () => 
   );
   assert.ok(block.includes("...(sourceFps >= 5 ? { srcFps: sourceFps } : {})"));
   assert.ok(!/srcFps:\s*sourceFps\s*>=\s*5\s*\?\s*sourceFps\s*:\s*DEFAULT_FRAME_FPS/.test(block));
+});
+
+t("displayFrameAtSec：毫秒量化手柄跟 Chrome 所见帧", () => {
+  const m = vtrim.match(/function displayFrameAtSec\(sec, fps\) \{[\s\S]*?\n  \}/);
+  assert.ok(m, "须有 displayFrameAtSec");
+  const box = {};
+  vm.runInNewContext(`${m[0]}; this.displayFrameAtSec = displayFrameAtSec;`, box);
+  assert.strictEqual(box.displayFrameAtSec(1.033, 30), 30, "1.033s@30 → 帧30（非 round→31）");
+  assert.strictEqual(box.displayFrameAtSec(31 / 30, 30), 31, "精确 31/30 → 帧31（round(pts µs)）");
+  assert.strictEqual(box.displayFrameAtSec(31 / 30 + 1e-4, 30), 31, "+0.1ms 仍为帧31");
+  assert.strictEqual(box.displayFrameAtSec(3.2, 30), 96, "3.2s@30 → 帧96");
+  const keepM = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
+  assert.ok(keepM && keepM[0].includes("displayFrameAtSec"), "keep 须走显示帧");
 });
 
 t("materialize：有编辑就导出；带回 segmentSpans；切片先 fps=round=up", () => {
@@ -182,7 +200,7 @@ t("片尾抬手只用 min(want,…) 收紧，禁止推过拖点", () => {
   assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(vtrim));
 });
 
-t("有 srcFps：停帧=黄柄-1/fps；keep.end=黄柄（半开上界）", () => {
+t("有 srcFps：停帧=黄柄-1/fps；keep.end=停帧显示帧+1", () => {
   const box = loadKeepFns();
   for (const fps of [24, 30, 60]) {
     const trimEnd = 10;
@@ -190,10 +208,10 @@ t("有 srcFps：停帧=黄柄-1/fps；keep.end=黄柄（半开上界）", () => 
     const preview = box.keepRangesFromEdit(edit, 12);
     const enc = box.keepRangesForEncode(edit, 12);
     const park = trimEnd - 1 / fps;
+    const endEx = (box.displayFrameAtSec(park, fps) + 1) / fps;
     assert.strictEqual(preview.length, 1);
-    assert.ok(Math.abs(preview[0].end - trimEnd) < 1e-9, `${fps}fps keep.end=黄柄`);
-    assert.ok(Math.abs(enc[0].end - trimEnd) < 1e-9, `${fps}fps 成片 end=黄柄`);
-    assert.ok(Math.abs(park - (trimEnd - 1 / fps)) < 1e-9);
+    assert.ok(Math.abs(preview[0].end - endEx) < 1e-9, `${fps}fps keep.end=停帧半开`);
+    assert.ok(Math.abs(enc[0].end - endEx) < 1e-9, `${fps}fps 成片 end=停帧半开`);
   }
 });
 

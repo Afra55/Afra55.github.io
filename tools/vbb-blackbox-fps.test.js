@@ -148,9 +148,10 @@ assert(
     const resolveKeep = vtrimEd.match(/function resolveKeepFps\(editOrFps\) \{[\s\S]*?\n  \}/);
     const secToFrame = vtrimEd.match(/function secToFrame\(sec, fps\) \{[\s\S]*?\n  \}/);
     const frameToSec = vtrimEd.match(/function frameToSec\(frame, fps\) \{[\s\S]*?\n  \}/);
+    const displayFrame = vtrimEd.match(/function displayFrameAtSec\(sec, fps\) \{[\s\S]*?\n  \}/);
     const normalizeFps = vtrimEd.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
     assert(
-      n && k && ke && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && normalizeFps,
+      n && k && ke && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && displayFrame && normalizeFps,
       "须能抽出 keepRangesFromEdit / keepRangesForEncode"
     );
     const fns = new Function(`
@@ -160,6 +161,7 @@ assert(
       ${resolveKeep[0]}
       ${secToFrame[0]}
       ${frameToSec[0]}
+      ${displayFrame[0]}
       ${resolveEnd[0]}
       ${resolveStart[0]}
       ${n[0]}
