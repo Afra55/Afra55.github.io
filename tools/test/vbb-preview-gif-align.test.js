@@ -208,14 +208,14 @@ t("预裁切不再对 keep span 二次减半帧", () => {
   assert.ok(fn.includes("禁止再减半帧") || /const dur = Math\.max\(0\.05, Number\(span\)/.test(fn));
 });
 
-t("删中间 materialize 优先 ffmpeg，chrome 兜底勿 -r cfr", () => {
+t("删中间 materialize 优先 chrome，ffmpeg 兜底勿 -r cfr", () => {
   const fn = vbb.slice(
     vbb.indexOf("async function materializeVbbKeepVideo"),
     vbb.indexOf("async function shouldPrecutVbbWindow")
   );
-  assert.ok(fn.includes("exportKeepVideo"), "优先 ffmpeg");
-  assert.ok(fn.includes("exportKeepByChromeDisplay"), "chrome 兜底");
-  assert.ok(fn.indexOf("exportKeepVideo") < fn.indexOf("exportKeepByChromeDisplay"));
+  assert.ok(fn.includes("exportKeepByChromeDisplay"), "优先 chrome");
+  assert.ok(fn.includes("exportKeepVideo"), "ffmpeg 兜底");
+  assert.ok(fn.indexOf("exportKeepByChromeDisplay") < fn.indexOf("exportKeepVideo"));
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(fn));
   assert.ok(fn.includes('"vfr"'));
   assert.ok(fn.includes('["sec", "ss", "frameRaw", "frameGrid"]') || fn.includes("frameGrid"), "ffmpeg 兜底");

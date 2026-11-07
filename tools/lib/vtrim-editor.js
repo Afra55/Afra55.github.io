@@ -2040,23 +2040,9 @@
           if (downloadBtn) downloadBtn.textContent = "正在导出…";
         };
         const filenameBase = String(file.name || "video").replace(/\.[^.]+$/, "");
-        // 成片时钟：预览停 CTS、导出优先 ffmpeg（快）。chrome 仅兜底。
+        // 2547 手机：ffmpeg-onepass-sec 仍偏；优先按编辑器预览显示帧导出（已验证对上）。
         let out = null;
         try {
-          onProgress(0.08, "编码器切片…");
-          out = await exportKeepVideo(file, edit, duration, {
-            srcW: video.videoWidth || 0,
-            srcH: video.videoHeight || 0,
-            applyCrop: Boolean(edit.cropOn),
-            keeps: previewKeeps,
-            timeline: sourceTimeline || undefined,
-            onProgress,
-          });
-          if (!(out?.blob?.size > 0)) out = null;
-        } catch (_) {
-          out = null;
-        }
-        if (!out) {
           onProgress(0.05, "按预览帧导出…");
           out = await exportKeepByChromeDisplay(video, previewKeeps, {
             keepFps: sourceFps || resolveKeepFps(edit),
@@ -2065,6 +2051,20 @@
             filenameBase,
             srcW: video.videoWidth || 0,
             srcH: video.videoHeight || 0,
+            onProgress,
+          });
+          if (!(out?.blob?.size > 0)) out = null;
+        } catch (_) {
+          out = null;
+        }
+        if (!out) {
+          onProgress(0.08, "编码器切片…");
+          out = await exportKeepVideo(file, edit, duration, {
+            srcW: video.videoWidth || 0,
+            srcH: video.videoHeight || 0,
+            applyCrop: Boolean(edit.cropOn),
+            keeps: previewKeeps,
+            timeline: sourceTimeline || undefined,
             onProgress,
           });
         }
@@ -2082,8 +2082,8 @@
           at: new Date().toISOString(),
           ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
           note: isChromeFrames
-            ? "预览帧兜底导出（VideoFrame）；时长=各 keep 之和"
-            : "成片时钟：预览停 CTS、ffmpeg 精切；拖柄不吸附，底部 ±1 精调；时长=各 keep 之和",
+            ? "按编辑器预览显示帧导出（VideoFrame）；应对齐所见；时长=各 keep 之和"
+            : "ffmpeg 精切兜底（优先 frameRaw）；手机上可能与预览差帧；时长=各 keep 之和",
           file: {
             name: String(file?.name || ""),
             size: Number(file?.size) || 0,
@@ -3417,12 +3417,10 @@
     };
 
     onProgress(0.1, "一次精切…");
-    // 有采样表：先 CTS 秒（≡预览 currentTime），再 demux 帧号；避免 stts 下标当 start_frame 切偏
-    const onePassModes = preferSampleFrames
-      ? ["sec", "frameRaw"]
-      : preferFrame
-        ? ["frameRaw", "sec"]
-        : ["sec", "frameRaw"];
+    // 有采样表：先 demux 帧号（≡ keep startF/endF），再 CTS 秒；2547 上 sec 常切偏
+    const onePassModes = preferSampleFrames || preferFrame
+      ? ["frameRaw", "sec"]
+      : ["sec", "frameRaw"];
     let hit = null;
     for (const mode of onePassModes) {
       hit = await tryOnePass(mode);

@@ -174,16 +174,16 @@ t("displayFrameAtSec：毫秒量化手柄跟 Chrome 所见帧", () => {
   assert.ok(keepM[0].includes("sampleIndexAtSec") || keepM[0].includes("nextStartAfterCutEnd"), "有采样表时按下一样本");
 });
 
-t("materialize：优先 ffmpeg 成片时钟；chrome 仅兜底；带回 segmentSpans", () => {
+t("materialize：优先 chrome 预览帧；ffmpeg 兜底；带回 segmentSpans", () => {
   const start = vbb.indexOf("async function materializeVbbKeepVideo");
   const end = vbb.indexOf("function shouldPrecutVbbWindow", start);
   const body = vbb.slice(start, end > start ? end : undefined);
   assert.ok(body.includes("segmentSpans"), "导出片带回各段时长供按段 fps");
-  assert.ok(body.includes("exportKeepVideo"), "优先 ffmpeg");
-  assert.ok(body.includes("exportKeepByChromeDisplay"), "chrome 兜底");
+  assert.ok(body.includes("exportKeepByChromeDisplay"), "优先 chrome");
+  assert.ok(body.includes("exportKeepVideo"), "ffmpeg 兜底");
   assert.ok(
-    body.indexOf("exportKeepVideo") < body.indexOf("exportKeepByChromeDisplay"),
-    "ffmpeg 须先于 chrome"
+    body.indexOf("exportKeepByChromeDisplay") < body.indexOf("exportKeepVideo"),
+    "chrome 须先于 ffmpeg（2547）"
   );
   assert.ok(!/keeps\.length\s*<=\s*1/.test(body) || body.includes("单段 keep 也会导出"), "单段也要能导出");
   assert.ok(body.includes("out.segmentSpans") || body.includes("segmentSpans = out"), "优先用导出实测段长");
@@ -220,14 +220,24 @@ t("片尾抬手成片时钟吸附；不按 Chrome shown 改写黄柄", () => {
   assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(finish));
 });
 
-t("下载优先 ffmpeg 成片时钟，chrome 仅兜底", () => {
+t("下载优先 chrome 预览帧，ffmpeg 仅兜底", () => {
   const dl = vtrim.slice(
-    vtrim.indexOf("成片时钟：预览停 CTS"),
+    vtrim.indexOf("按预览帧导出…"),
     vtrim.indexOf("const blob = out?.blob")
   );
-  assert.ok(dl.includes("exportKeepVideo"));
   assert.ok(dl.includes("exportKeepByChromeDisplay"));
-  assert.ok(dl.indexOf("exportKeepVideo") < dl.indexOf("exportKeepByChromeDisplay"));
+  assert.ok(dl.includes("exportKeepVideo"));
+  assert.ok(dl.indexOf("exportKeepByChromeDisplay") < dl.indexOf("exportKeepVideo"));
+});
+
+t("ffmpeg onepass 优先 frameRaw（2547 sec 易偏）", () => {
+  assert.ok(vtrim.includes('["frameRaw", "sec"]'));
+  const block = vtrim.slice(
+    vtrim.indexOf("一次精切…"),
+    vtrim.indexOf("let hit = null")
+  );
+  assert.ok(block.includes("frameRaw"));
+  assert.ok(block.indexOf("frameRaw") < block.indexOf('"sec"') || block.includes('["frameRaw", "sec"]'));
 });
 
 t("有 srcFps：keep.end=黄柄秒值半开", () => {
