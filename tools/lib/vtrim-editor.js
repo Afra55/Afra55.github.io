@@ -2811,6 +2811,7 @@
           ? ["-i", inName, "-ss", fmtSec(start), "-t", fmtSec(dur), "-an", "-vf", vfCore]
           : ["-i", inName, "-an", "-vf", vfCore];
       // 勿 -r/-vsync cfr：强制 CFR 会按输出时钟重采，段首再丢几帧
+      // 全 I 帧：避免段尾 B 帧在 concat 后解不出 → 中间段首尾各丢几帧
       args.push(
         "-c:v",
         "libx264",
@@ -2818,6 +2819,14 @@
         "ultrafast",
         "-crf",
         "18",
+        "-bf",
+        "0",
+        "-g",
+        "1",
+        "-keyint_min",
+        "1",
+        "-sc_threshold",
+        "0",
         "-pix_fmt",
         "yuv420p",
         "-vsync",
@@ -2840,10 +2849,13 @@
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 秒级优先（对齐预览 PTS）；空片再帧号/-ss
-      let out = await trySlice(keeps[i], i, "sec");
-      if (!out) out = await trySlice(keeps[i], i, "frame");
-      if (!out) out = await trySlice(keeps[i], i, "ss");
+      // 多段：帧号优先（keep 按源帧半开窗算）；单段：秒级优先（PTS≡预览）
+      const modes = keeps.length > 1 ? ["frame", "sec", "ss"] : ["sec", "frame", "ss"];
+      let out = null;
+      for (const mode of modes) {
+        out = await trySlice(keeps[i], i, mode);
+        if (out) break;
+      }
       if (!out) throw new Error(`切片失败（段 ${i + 1}/${keeps.length}）`);
       parts.push(out);
     }
@@ -2872,6 +2884,14 @@
           "ultrafast",
           "-crf",
           "18",
+          "-bf",
+          "0",
+          "-g",
+          "1",
+          "-keyint_min",
+          "1",
+          "-sc_threshold",
+          "0",
           "-pix_fmt",
           "yuv420p",
           "-vsync",

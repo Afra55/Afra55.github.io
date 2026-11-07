@@ -121,28 +121,26 @@ t("仅裁片头片尾：成片起点=黄柄，终点=黄柄半开上界", () => 
   assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("exportKeepVideo：秒级 PTS 优先；滤镜链禁止 fps=；禁止两端 bias", () => {
+t("exportKeepVideo：多段帧号优先 + 全 I 帧；滤镜链禁止 fps=；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  const frameAt = exp.indexOf('trySlice(keeps[i], i, "frame")');
-  const secAt = exp.indexOf('trySlice(keeps[i], i, "sec")');
-  const ssAt = exp.indexOf('trySlice(keeps[i], i, "ss")');
-  assert.ok(secAt > 0 && frameAt > secAt && ssAt > frameAt, "须 sec→frame→ss（PTS≡预览）");
+  assert.ok(exp.includes('keeps.length > 1 ? ["frame", "sec", "ss"]'), "多段须 frame→sec→ss");
+  assert.ok(exp.includes('["sec", "frame", "ss"]'), "单段仍 sec→frame→ss");
+  assert.ok(exp.includes('"-bf"') && exp.includes('"0"'), "切片全 I 帧防中间段首尾丢帧");
+  assert.ok(exp.includes('"-g"') && exp.includes('"1"'));
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(!/`fps=\$\{keepFps\}`/.test(exp) && !/fps=\$\{keepFps\},format/.test(exp), "切片/拼接滤镜勿 fps=");
   assert.ok(exp.includes("format=yuv420p,setsar=1"));
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
 });
 
-t("materialize 回退路径同样 sec→frame→ss 且无滤镜 fps=", () => {
+t("materialize 回退路径同样多段帧号优先 + 全 I 帧且无滤镜 fps=", () => {
   const start = vbb.indexOf("async function materializeVbbKeepVideo");
   const end = vbb.indexOf("function shouldPrecutVbbWindow", start);
   const body = vbb.slice(start, end > start ? end : undefined);
-  const frameAt = body.indexOf('tryPart(start0, end0, out, "frame")');
-  const secAt = body.indexOf('tryPart(start0, end0, out, "sec")');
-  const ssAt = body.indexOf('tryPart(start0, end0, out, "ss")');
-  assert.ok(secAt > 0 && frameAt > secAt && ssAt > frameAt, "回退切片须 sec→frame→ss");
+  assert.ok(body.includes('keeps.length > 1 ? ["frame", "sec", "ss"]'), "回退多段须 frame→sec→ss");
+  assert.ok(body.includes('"-bf"') && body.includes('"0"'));
   assert.ok(!/setsar=1,fps=\$\{keepFps\}/.test(body), "scalePad 勿带 fps=");
   assert.ok(!/\[\$\{i\}:v\]fps=\$\{keepFps\}/.test(body), "concat 勿再 fps=");
 });

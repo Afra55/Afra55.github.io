@@ -18,7 +18,7 @@ function t(name, fn) {
 }
 
 t("registry 带 launchUrl", () => {
-  assert.equal(reg.meta.mdread.launchUrl, "./mdread/");
+  assert.equal(reg.meta.mdread.launchUrl, "./mdread/?fresh=1");
 });
 
 t("navigateTo 对 launchUrl 提前返回", () => {

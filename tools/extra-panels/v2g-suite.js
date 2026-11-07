@@ -8831,6 +8831,7 @@
             mode === "ss"
               ? ["-i", inName, "-ss", fmtSec(start0), "-t", fmtSec(dur), "-an", "-vf", scalePad]
               : ["-i", inName, "-an", "-vf", `${trimVf}${scalePad}`];
+          // 全 I 帧：中间段 concat 后不因 B 帧丢首尾
           args.push(
             "-c:v",
             "libx264",
@@ -8838,6 +8839,14 @@
             "ultrafast",
             "-crf",
             "18",
+            "-bf",
+            "0",
+            "-g",
+            "1",
+            "-keyint_min",
+            "1",
+            "-sc_threshold",
+            "0",
             "-pix_fmt",
             "yuv420p",
             "-vsync",
@@ -8865,10 +8874,13 @@
           const start0 = Math.max(0, Number(k.start) || 0);
           const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // 秒级优先（PTS≡预览）；空片再帧号/-ss；勿两端 bias；勿滤镜内 fps=
-          let ok = await tryPart(start0, end0, out, "sec");
-          if (!ok) ok = await tryPart(start0, end0, out, "frame");
-          if (!ok) ok = await tryPart(start0, end0, out, "ss");
+          // 多段：帧号优先（半开窗≡预览）；空片再秒级/-ss；勿两端 bias；勿滤镜内 fps=
+          const modes = keeps.length > 1 ? ["frame", "sec", "ss"] : ["sec", "frame", "ss"];
+          let ok = false;
+          for (const mode of modes) {
+            ok = await tryPart(start0, end0, out, mode);
+            if (ok) break;
+          }
           if (!ok) throw new Error(`删中间切片失败（段 ${i + 1}/${keeps.length}）`);
           parts.push(out);
         }
@@ -8893,6 +8905,14 @@
             "ultrafast",
             "-crf",
             "18",
+            "-bf",
+            "0",
+            "-g",
+            "1",
+            "-keyint_min",
+            "1",
+            "-sc_threshold",
+            "0",
             "-pix_fmt",
             "yuv420p",
             "-vsync",
