@@ -71,6 +71,8 @@ function buildFile() {
   const r = api.sampleRangeForKeep(tl, 0, 5 / 24);
   assert.strictEqual(r.startF, 0);
   assert.strictEqual(r.endF, 5);
+  assert.strictEqual(tl.firstPresentIdx, 0);
+  assert.strictEqual(api.toDemuxFrameIndex(tl, 5), 5);
 
   // cut end at frame 2 CTS → next start frame 3
   const idx = api.sampleIndexAtSec(tl, 2 / 24);

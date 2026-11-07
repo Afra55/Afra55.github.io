@@ -268,6 +268,11 @@
         }
       }
     }
+    // ffmpeg demux 后 frame 0 ≡ 第一条 CTS≥0 的采样（editlist 之后）
+    let firstPresentIdx = 0;
+    while (firstPresentIdx < ctsSec.length && ctsSec[firstPresentIdx] < -1e-6) {
+      firstPresentIdx += 1;
+    }
     return {
       ok: true,
       fps,
@@ -278,7 +283,17 @@
       ctsSec,
       hasCtts: ctts.length > 0,
       elstMediaTime: mediaTime0,
+      firstPresentIdx,
     };
+  }
+
+  /** 采样下标 → ffmpeg trim start_frame（相对 demux 后第 0 帧） */
+  function toDemuxFrameIndex(timeline, sampleIdx) {
+    const base = Math.max(0, Number(timeline?.firstPresentIdx) || 0);
+    const n = timeline?.ctsSec?.length || 0;
+    const i = Math.max(0, Math.round(Number(sampleIdx) || 0));
+    const capped = n > 0 ? Math.min(i, n) : i;
+    return Math.max(0, capped - base);
   }
 
   function extractVideoTrack(moovBuf) {
@@ -399,6 +414,7 @@
     probeMp4VideoTimeline,
     sampleIndexAtSec,
     sampleRangeForKeep,
+    toDemuxFrameIndex,
     normalizeFps,
   };
 })();

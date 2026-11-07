@@ -2982,8 +2982,8 @@
       return (Math.round(n * 1e6) / 1e6).toFixed(6);
     };
     const resolveBounds = (k) => {
-      const start = Math.max(0, Number(k.start) || 0);
-      const end = Math.max(start + 0.05, Number(k.end) || 0);
+      let start = Math.max(0, Number(k.start) || 0);
+      let end = Math.max(start + 0.05, Number(k.end) || 0);
       let startF = Number.isFinite(Number(k.startF))
         ? Math.round(Number(k.startF))
         : displayFrameAtSec(start, keepFps);
@@ -2996,9 +2996,38 @@
           startF = fr.startF;
           endF = fr.endF;
         }
+        // 用采样 CTS 作半开秒窗 ≡ 预览停帧，避免手柄毫秒落在帧中部
+        const cts = timeline.ctsSec;
+        if (cts && cts.length) {
+          const t0 = Number(cts[Math.min(startF, cts.length - 1)]);
+          const t1 =
+            endF < cts.length
+              ? Number(cts[endF])
+              : Number(cts[cts.length - 1]) + 1 / keepFps;
+          if (Number.isFinite(t0) && Number.isFinite(t1) && t1 > t0 + 1e-4) {
+            start = Math.max(0, t0);
+            end = Math.max(start + 0.05, t1);
+          }
+        }
       }
       if (endF <= startF) endF = startF + 1;
-      return { start, end, startF, endF, dur: Math.max(0.05, end - start) };
+      // ffmpeg start_frame 从 demux 后第 0 帧计（editlist 后），不是裸 stts 下标
+      let demuxStartF = startF;
+      let demuxEndF = endF;
+      if (preferSampleFrames && window.DevToolsMp4Timeline?.toDemuxFrameIndex) {
+        demuxStartF = window.DevToolsMp4Timeline.toDemuxFrameIndex(timeline, startF);
+        demuxEndF = window.DevToolsMp4Timeline.toDemuxFrameIndex(timeline, endF);
+        if (demuxEndF <= demuxStartF) demuxEndF = demuxStartF + 1;
+      }
+      return {
+        start,
+        end,
+        startF,
+        endF,
+        demuxStartF,
+        demuxEndF,
+        dur: Math.max(0.05, end - start),
+      };
     };
 
     const x264 = [
@@ -3043,20 +3072,25 @@
       const spans = [];
       for (let i = 0; i < keeps.length; i++) {
         const b = resolveBounds(keeps[i]);
-        // 勿在 trim 前 setpts：保留 demux/editlist 后与 Chrome currentTime 一致的时间轴
+        // 勿在 trim 前 setpts：PTS ≡ Chrome currentTime（editlist 后）
+        // sec：用采样 CTS 半开秒；frameRaw：demux 相对帧号
         const trim = useFrame
-          ? `trim=start_frame=${b.startF}:end_frame=${b.endF},setpts=PTS-STARTPTS`
+          ? `trim=start_frame=${b.demuxStartF}:end_frame=${b.demuxEndF},setpts=PTS-STARTPTS`
           : `trim=start=${fmtSec(b.start)}:end=${fmtSec(b.end)},setpts=PTS-STARTPTS`;
         const vf = [trim, tailVf].filter(Boolean).join(",");
         chains.push(`[0:v]${vf}[k${i}]`);
         labels.push(`[k${i}]`);
-        const spanSec = useFrame ? (b.endF - b.startF) / keepFps : b.dur;
+        const spanSec = useFrame
+          ? (b.demuxEndF - b.demuxStartF) / keepFps
+          : b.dur;
         spans.push(Math.max(0.05, spanSec));
         log.push({
           i,
           mode: `onepass-${mode}`,
           startF: b.startF,
           endF: b.endF,
+          demuxStartF: b.demuxStartF,
+          demuxEndF: b.demuxEndF,
           start: b.start,
           end: b.end,
           spanSec: spans[i],
@@ -3081,7 +3115,12 @@
     };
 
     onProgress(0.1, "一次精切…");
-    const onePassModes = preferFrame ? ["frameRaw", "sec"] : ["sec", "frameRaw"];
+    // 有采样表：先 CTS 秒（≡预览 currentTime），再 demux 帧号；避免 stts 下标当 start_frame 切偏
+    const onePassModes = preferSampleFrames
+      ? ["sec", "frameRaw"]
+      : preferFrame
+        ? ["frameRaw", "sec"]
+        : ["sec", "frameRaw"];
     let hit = null;
     for (const mode of onePassModes) {
       hit = await tryOnePass(mode);
@@ -3103,7 +3142,7 @@
         const useGrid = mode === "frameGrid";
         const useFrame = mode === "frameRaw" || mode === "frameGrid" || mode === "frame";
         const trimVf = useFrame
-          ? `trim=start_frame=${b.startF}:end_frame=${b.endF},setpts=PTS-STARTPTS`
+          ? `trim=start_frame=${b.demuxStartF}:end_frame=${b.demuxEndF},setpts=PTS-STARTPTS`
           : mode === "sec"
             ? `trim=start=${fmtSec(b.start)}:end=${fmtSec(b.end)},setpts=PTS-STARTPTS`
             : "";
@@ -3221,6 +3260,8 @@
             fpsRaw: timeline.fpsRaw,
             sampleCount: timeline.sampleCount,
             hasCtts: Boolean(timeline.hasCtts),
+            elstMediaTime: timeline.elstMediaTime || 0,
+            firstPresentIdx: timeline.firstPresentIdx || 0,
           }
         : null,
     };

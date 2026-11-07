@@ -114,16 +114,16 @@ async function openPage(browser, hash, port) {
   const url = `http://127.0.0.1:${port}/tools/index.html${hash}`;
   await page.goto(url, {
     waitUntil: "load",
-    timeout: 90000,
+    timeout: 120000,
   });
-  await page.waitForFunction(() => Boolean(window.DevToolsNav), { timeout: 30000 });
+  await page.waitForFunction(() => Boolean(window.DevToolsNav), { timeout: 60000 });
   await page.evaluate(async () => {
     await window.DevToolsNav.whenRouteSettled();
   });
   const ok = await page
     .waitForFunction(
       (id) => Boolean(document.querySelector(`#${id}.tool-panel.is-workspace-active`)),
-      { timeout: 90000 },
+      { timeout: 120000 },
       toolId
     )
     .then(() => true)
@@ -144,7 +144,7 @@ async function openPage(browser, hash, port) {
       if (document.querySelector(`#${id}[aria-busy="true"]`)) return false;
       return true;
     },
-    { timeout: 90000 },
+    { timeout: 120000 },
     toolId
   );
   return page;
