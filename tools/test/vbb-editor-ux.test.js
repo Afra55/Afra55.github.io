@@ -21,13 +21,10 @@ t("对齐修复仍在：keepRangesLocal / 外预览用 encode keep", () => {
   assert.ok(vtrim.includes("ENCODE_BOUND_PAD_SEC"));
 });
 
-t("副标题提示预览与成片同帧 / 松手吸附", () => {
-  assert.ok(
-    vtrim.includes("预览/GIF 同帧") ||
-      vtrim.includes("预览与成片对齐") ||
-      vtrim.includes("松手吸附")
-  );
-  assert.ok(/subEl\.hidden\s*=\s*false/.test(vtrim));
+t("编辑器头副标题已去掉（省纵向空间）", () => {
+  assert.ok(!/vtrim-editor-sub/.test(vtrim) || /subEl\.hidden\s*=\s*true/.test(vtrim));
+  assert.ok(!vtrim.includes("拖黄柄裁片头片尾"));
+  assert.ok(!vtrim.includes("预览/GIF 同帧"));
 });
 
 t("松手吸附有视觉反馈（pulse/tip 短留）", () => {
@@ -49,7 +46,7 @@ t("快捷键：空格播放、Delete 删段、方向键微调进度", () => {
 
 t("删中间可跳到接点再手动播放", () => {
   assert.ok(vtrim.includes("跳到接点") || vtrim.includes("seekCutJoinPreview"));
-  assert.ok(vtrim.includes("点底部播放") || vtrim.includes("预览/GIF 同帧") || vtrim.includes("松手吸附"));
+  assert.ok(vtrim.includes("flashSnapFeedback") || vtrim.includes("snapNearCutouts"));
 });
 
 console.log(`vbb-editor-ux.test.js: ${n} passed`);

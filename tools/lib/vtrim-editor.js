@@ -232,7 +232,6 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
-      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">拖到哪一帧，松手吸附对齐 · 预览/GIF 同帧 · 底部播放</p>
     </header>
     <div class="vtrim-editor-body">
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
@@ -512,10 +511,8 @@
     const fileName = String(opts.title || file.name || "视频");
     if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
     if (subEl) {
-      subEl.textContent = coarseUi()
-        ? "拖到哪一帧，松手吸附对齐 · 预览/GIF 同帧 · 点底部播放"
-        : "拖到哪一帧成片就哪一帧 · 松手吸附 · 底部/空格播放 · ←/→ 微调 · Delete 删选中段";
-      subEl.hidden = false;
+      subEl.textContent = "";
+      subEl.hidden = true;
     }
 
     function syncActiveHandleUi() {
@@ -538,18 +535,18 @@
       syncSharedNudgeLabels();
       if (modeHint) {
         const phone = coarseUi();
+        // 修剪模式不再占位说明；裁切/删中间仍给一句操作提示
         modeHint.textContent =
           editMode === "crop"
             ? phone
-              ? "拖绿框裁切 · 双击重置 · 点底部播放"
-              : "拖绿框 · 双击重置 · 底部/空格播放"
+              ? "拖绿框裁切 · 双击重置"
+              : "拖绿框 · 双击重置 · 空格播放"
             : editMode === "cut"
               ? phone
-                ? "拖红柄看该帧 · 起点/终点 ±1 帧 · 播完停原端 · 接点用「跳到接点」"
-                : "拖红柄停在该端画面 · 起点/终点 ±1 帧 · 播放从该端附近开 · 「跳到接点」核对接切"
-              : phone
-                ? "拖黄柄裁片头片尾 · 点底部播放 · 下方可微调"
-                : "拖黄柄裁片头片尾 · 底部/空格播放 · ←/→ 微调进度";
+                ? "拖红柄看该帧 · 起点/终点 ±1 帧 · 「跳到接点」"
+                : "拖红柄 · 起点/终点 ±1 帧 · 「跳到接点」核对"
+              : "";
+        modeHint.hidden = !modeHint.textContent;
       }
       syncCropBoxVisibility();
       stage?.classList.toggle("is-mode-crop", editMode === "crop");
