@@ -8970,7 +8970,45 @@
         if (!keeps.length) {
           return { file, duration, srcW, srcH, materialized: false, segmentSpans: [] };
         }
-        // 手机上 ffmpeg 精切常与预览差帧（2547 diag）；优先 chrome 显示帧，ffmpeg 兜底
+        // 成片时钟：优先 ffmpeg（与下载同路、快）；chrome 仅兜底
+        const exp = window.DevToolsVtrimEditor?.exportKeepVideo;
+        if (typeof exp === "function") {
+          try {
+            const out = await exp(file, edit, duration, {
+              srcW,
+              srcH,
+              applyCrop: false,
+              onProgress,
+              ffmpeg: ffmpegLease || null,
+            });
+            if (out?.file) {
+              let outFile = out.file;
+              try {
+                if (
+                  typeof pinLocalMediaFile === "function" &&
+                  outFile &&
+                  !isPinnedLocalMediaFile?.(outFile)
+                ) {
+                  outFile = await pinLocalMediaFile(outFile, () => {});
+                }
+              } catch (_) {}
+              if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === keeps.length) {
+                segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
+              }
+              return {
+                file: outFile,
+                duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
+                srcW: out.srcW || srcW,
+                srcH: out.srcH || srcH,
+                materialized: true,
+                segmentSpans,
+                exportMethod: out.exportMethod || "ffmpeg",
+              };
+            }
+          } catch (_) {
+            // 回退 chrome
+          }
+        }
         try {
           if (!window.DevToolsVtrimEditor?.exportKeepByChromeDisplay) {
             await ensureVbbVtrimEditor().catch(() => null);
@@ -9046,45 +9084,7 @@
             }
           }
         } catch (_) {
-          // 回退 ffmpeg
-        }
-        const exp = window.DevToolsVtrimEditor?.exportKeepVideo;
-        if (typeof exp === "function") {
-          try {
-            const out = await exp(file, edit, duration, {
-              srcW,
-              srcH,
-              applyCrop: false,
-              onProgress,
-              ffmpeg: ffmpegLease || null,
-            });
-            if (out?.file) {
-              let outFile = out.file;
-              try {
-                if (
-                  typeof pinLocalMediaFile === "function" &&
-                  outFile &&
-                  !isPinnedLocalMediaFile?.(outFile)
-                ) {
-                  outFile = await pinLocalMediaFile(outFile, () => {});
-                }
-              } catch (_) {}
-              if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === keeps.length) {
-                segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
-              }
-              return {
-                file: outFile,
-                duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
-                srcW: out.srcW || srcW,
-                srcH: out.srcH || srcH,
-                materialized: true,
-                segmentSpans,
-                exportMethod: out.exportMethod || "ffmpeg",
-              };
-            }
-          } catch (_) {
-            // 继续走本地拼接兜底
-          }
+          // 继续走本地拼接兜底
         }
         const ffmpeg =
           ffmpegLease ||

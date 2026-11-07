@@ -19,11 +19,14 @@ function t(name, fn) {
 }
 
 function loadSeek() {
-  const p = vtrim.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start;\s*\}/);
+  const p = vtrim.match(
+    /function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start \+ DISPLAY_SEEK_EPS;\s*\}/
+  );
   assert.ok(p);
   const box = {};
   vm.runInNewContext(
     `
+    const DISPLAY_SEEK_EPS = 1e-4;
     function resolveEndKeepSec() { return 1 / 30; }
     ${p[0]}
     this.fn = previewSeekForKeepRanges;
@@ -41,11 +44,11 @@ t("停帧与播放截断同一点 end-1/fps", () => {
   assert.strictEqual(seek(keeps, lastStart, { paused: true, endKeepSec: ek }), null);
   // 播放到达停帧即循环（playEndPad = endKeep）
   const atPark = seek(keeps, lastStart, { paused: false, endKeepSec: ek });
-  assert.ok(atPark != null && Math.abs(atPark - 1) < 1e-9);
+  assert.ok(atPark != null && Math.abs(atPark - (1 + 1e-4)) < 1e-9);
   // 停帧前仍可播
   assert.strictEqual(seek(keeps, lastStart - ek * 0.5, { paused: false, endKeepSec: ek }), null);
   const park = seek(keeps, 5, { paused: true, endKeepSec: ek });
-  assert.ok(park != null && Math.abs(park - lastStart) < 1e-9);
+  assert.ok(park != null && Math.abs(park - (lastStart + 1e-4)) < 1e-9);
 });
 
 t("clipPlayWindow 硬闸钉 endParkAtSec，不提前减帧", () => {
@@ -61,7 +64,7 @@ t("clipPlayWindow 硬闸钉 endParkAtSec，不提前减帧", () => {
 
 t("停帧记录 endParkAtSec；临近预约切断（不改 park）", () => {
   assert.ok(vtrim.includes("let endParkAtSec"));
-  assert.ok(vtrim.includes("endParkAtSec = shown"));
+  assert.ok(/endParkAtSec = (shown|Number\.isFinite)/.test(vtrim) || vtrim.includes("endParkAtSec ="));
   assert.ok(vtrim.includes("parkCutTimer"));
   assert.ok(vtrim.includes("remain <= step * 2"));
 });
@@ -77,16 +80,16 @@ t("playEndPad 为 1×endKeep（与停帧对齐，不盲目减帧）", () => {
   assert.ok(!fallback.includes("endKeep * 2"));
 });
 
-t("seekEndPreviewExact 按最终 shown 提交 end + endParkAtSec", () => {
+t("seekEndPreviewExact 停成片 CTS，不改写 endSec（片尾+ 不被顶死）", () => {
+  assert.ok(vtrim.includes("function encodeParkSecForEdge"));
   const fn = vtrim.slice(
     vtrim.indexOf("async function seekEndPreviewExact"),
     vtrim.indexOf("async function seekStartPreviewExact")
   );
-  assert.ok(fn.includes("endParkAtSec = shown"));
-  assert.ok(fn.includes("shown + step"));
-  assert.ok(fn.includes("HTML5 seek") || fn.includes("理论 park"));
-  // 最终不得再 currentTime = endKeepSec() 后直接 return（那是根因）
-  assert.ok(!/target = endKeepSec\(\);\s*try \{\s*video\.currentTime = target/.test(fn));
+  assert.ok(fn.includes("encodeParkSecForEdge(\"end\")") || fn.includes('encodeParkSecForEdge("end")'));
+  assert.ok(fn.includes("endParkAtSec"));
+  assert.ok(!fn.includes("endSec = quantizeTrimSec"));
+  assert.ok(!fn.includes("shown + step"));
 });
 
 t("外预览播放态 pastSlop=0，不吞片尾越过", () => {

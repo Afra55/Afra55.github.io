@@ -994,16 +994,35 @@
     }
 
     /**
-     * 片尾所见即所得：
-     * - 黄柄 end = 半开上界（该帧起不进 GIF）
-     * - 停帧 = 实际 seek 后 shown（播放硬闸钉此点）
-     * 根因：HTML5 seek 非帧精确；理论 park=end-1/fps 与 shown 可差到约 0.1s（时钟一格）。
-     * 修法：shown 提交 end + 记录 endParkAtSec；禁止靠播放提前减帧对冲。
+     * 成片时钟停帧：有 MP4 stts 时用采样 CTS（≡ ffmpeg 会留下的那一帧）。
+     * 只算时间，不改写黄柄——片尾±才不会被 Chrome 偏早 seek 顶死。
+     */
+    function encodeParkSecForEdge(edge) {
+      const tl = sourceTimeline;
+      const api = window.DevToolsMp4Timeline;
+      if (tl?.ctsSec?.length && api?.sampleRangeForKeep) {
+        const fr = api.sampleRangeForKeep(tl, startSec, endSec);
+        if (fr) {
+          if (edge === "end") {
+            const idx = Math.max(0, Math.min(tl.ctsSec.length - 1, Number(fr.endF) - 1));
+            const t = Number(tl.ctsSec[idx]);
+            if (Number.isFinite(t)) return clamp(t, startSec, Math.max(startSec, endSec));
+          } else {
+            const idx = Math.max(0, Math.min(tl.ctsSec.length - 1, Number(fr.startF) || 0));
+            const t = Number(tl.ctsSec[idx]);
+            if (Number.isFinite(t)) return clamp(t, 0, endSec);
+          }
+        }
+      }
+      return edge === "end" ? endKeepSec() : startSec;
+    }
+
+    /**
+     * 片尾停预览：seek 到成片末帧 CTS，只记 endParkAtSec，不改写 endSec。
      */
     async function seekEndPreviewExact() {
       const gen = ++endParkGen;
-      const step = Math.max(1 / 240, endKeepStepSec());
-      const want = quantizeTrimSec(endSec);
+      const target = encodeParkSecForEdge("end");
       scrubSeekWanted = null;
       if (dragSeekTimer) {
         clearTimeout(dragSeekTimer);
@@ -1014,51 +1033,22 @@
       try {
         video.pause();
       } catch (_) {}
-
-      let target = Math.max(startSec, displaySeekSec(want, sourceFps) - step);
       try {
-        video.currentTime = target;
+        video.currentTime = displaySeekSec(target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
       if (gen !== endParkGen || closed) return target;
-      let shown = Number(video.currentTime);
-      if (!Number.isFinite(shown)) shown = target;
-
-      if (shown >= want - step * 0.5) {
-        // 贴柄/越界：再往前一帧
-        const earlier = Math.max(startSec, displaySeekSec(want, sourceFps) - step * 2);
-        if (earlier < target - 1e-4) {
-          try {
-            video.currentTime = earlier;
-          } catch (_) {}
-          await waitSeek(video);
-          if (gen !== endParkGen || closed) return earlier;
-          shown = Number(video.currentTime);
-          if (!Number.isFinite(shown)) shown = earlier;
-        }
-      }
-
-      // 以实际停帧提交：硬闸钉 shown；黄柄 = shown+step（≤ want）
-      endParkAtSec = shown;
-      endSec = quantizeTrimSec(
-        clamp(Math.min(want, shown + step), startSec + MIN_SPAN, duration)
-      );
-      // 量化若把理论 park 抬高过 shown，再压回（否则播放会比所见多出一截）
-      if (endKeepSec() > shown + 1e-4) {
-        endSec = clamp(Math.min(want, shown + step), startSec + MIN_SPAN, duration);
-      }
+      const shown = Number(video.currentTime);
+      endParkAtSec = Number.isFinite(shown) ? shown : target;
       paintTimeline();
       updateLabels();
-      return shown;
+      return endParkAtSec;
     }
 
     /**
-     * 片头所见即所得：黄柄 = GIF 首帧。
-     * 解码偏后 → 黄柄推到 shown；偏早则略向前再试，避免关键帧停在柄前。
+     * 片头停预览：seek 到成片首帧 CTS，不改写 startSec。
      */
     async function seekStartPreviewExact() {
-      const step = Math.max(1 / 240, endKeepStepSec());
-      let target = startSec;
       scrubSeekWanted = null;
       if (dragSeekTimer) {
         clearTimeout(dragSeekTimer);
@@ -1068,32 +1058,14 @@
       try {
         video.pause();
       } catch (_) {}
-      for (let i = 0; i < 3; i++) {
-        try {
-          video.currentTime = displaySeekSec(target, sourceFps);
-        } catch (_) {}
-        await waitSeek(video);
-        if (closed) return target;
-        const shown = Number(video.currentTime);
-        if (!Number.isFinite(shown)) break;
-        if (shown >= startSec - step * 0.25) {
-          if (shown > startSec + step * 0.35) {
-            startSec = quantizeTrimSec(clamp(shown, 0, endSec - MIN_SPAN));
-          }
-          break;
-        }
-        // 仍偏早：往后再试半开一步，逼近可 seek 到的首帧
-        const next = Math.min(endSec - MIN_SPAN, target + step);
-        if (next <= target + 1e-4) break;
-        target = next;
-      }
+      const target = encodeParkSecForEdge("start");
       try {
-        video.currentTime = displaySeekSec(startSec, sourceFps);
+        video.currentTime = displaySeekSec(target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
       paintTimeline();
       updateLabels();
-      return Number(video.currentTime) || startSec;
+      return Number(video.currentTime) || target;
     }
 
     function previewSeek(t, { throttle = false } = {}) {
@@ -1997,10 +1969,23 @@
           if (downloadBtn) downloadBtn.textContent = "正在导出…";
         };
         const filenameBase = String(file.name || "video").replace(/\.[^.]+$/, "");
-        // 手机 Chrome 显示帧 ≠ ffmpeg PTS 精切（2547 上 ffmpeg 偏、chrome 对）。
-        // 拖柄可不吸附；导出仍优先按预览显示帧，失败再 ffmpeg。
+        // 成片时钟：预览停 CTS、导出优先 ffmpeg（快）。chrome 仅兜底。
         let out = null;
         try {
+          onProgress(0.08, "编码器切片…");
+          out = await exportKeepVideo(file, edit, duration, {
+            srcW: video.videoWidth || 0,
+            srcH: video.videoHeight || 0,
+            applyCrop: Boolean(edit.cropOn),
+            keeps: previewKeeps,
+            timeline: sourceTimeline || undefined,
+            onProgress,
+          });
+          if (!(out?.blob?.size > 0)) out = null;
+        } catch (_) {
+          out = null;
+        }
+        if (!out) {
           onProgress(0.05, "按预览帧导出…");
           out = await exportKeepByChromeDisplay(video, previewKeeps, {
             keepFps: sourceFps || resolveKeepFps(edit),
@@ -2009,20 +1994,6 @@
             filenameBase,
             srcW: video.videoWidth || 0,
             srcH: video.videoHeight || 0,
-            onProgress,
-          });
-          if (!(out?.blob?.size > 0)) out = null;
-        } catch (_) {
-          out = null;
-        }
-        if (!out) {
-          onProgress(0.08, "编码器切片…");
-          out = await exportKeepVideo(file, edit, duration, {
-            srcW: video.videoWidth || 0,
-            srcH: video.videoHeight || 0,
-            applyCrop: Boolean(edit.cropOn),
-            keeps: previewKeeps,
-            timeline: sourceTimeline || undefined,
             onProgress,
           });
         }
@@ -2040,8 +2011,8 @@
           at: new Date().toISOString(),
           ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
           note: isChromeFrames
-            ? "按编辑器预览显示帧导出（VideoFrame）；拖柄可不吸附；应对齐所见；时长=各 keep 之和"
-            : "ffmpeg 精切兜底；手机上可能与预览差帧；时长=各 keep 之和",
+            ? "预览帧兜底导出（VideoFrame）；时长=各 keep 之和"
+            : "成片时钟：预览停 CTS、ffmpeg 精切；拖柄不吸附，底部 ±1 精调；时长=各 keep 之和",
           file: {
             name: String(file?.name || ""),
             size: Number(file?.size) || 0,
@@ -2456,20 +2427,8 @@
         return;
       }
       const raw = ratioFromClientX(e.clientX) * duration;
-      // 拖拽中即按源帧格对齐（与片头±/片尾± 同一步长），并保留边/红段磁吸
-      let t = raw;
-      if (drag.kind === "start") t = snapTrimHandle(raw, "start");
-      else if (drag.kind === "end") t = snapTrimHandle(raw, "end");
-      else if (drag.kind === "cut-start") t = snapTrimHandle(raw, "start");
-      else if (drag.kind === "cut-end") t = snapTrimHandle(raw, "end");
-      if (Math.abs(t - raw) > 0.0005 && Math.abs(t - raw) <= SNAP_EDGE_SEC) {
-        if (!drag._magnetAt || Math.abs(drag._magnetAt - t) > 0.001) {
-          drag._magnetAt = t;
-          hapticLight();
-        }
-      } else {
-        drag._magnetAt = null;
-      }
+      // 拖拽跟手、不帧格吸附；精调留给底部 ±1 源帧
+      const t = raw;
       pushDragSample(t);
       if (drag.kind === "start") setStart(t);
       else if (drag.kind === "end") setEnd(t);
