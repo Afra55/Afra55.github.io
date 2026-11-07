@@ -800,9 +800,8 @@
     }
 
     /**
-     * 微调松手：对齐解码器实际帧到红柄，并停在该端点画面。
-     * 点起点停起点、点终点停终点（勿再跳回接点/片头，否则终点预览会「回到起点」）。
-     * 接点播放请用「跳到接点」。
+     * 红段微调松手：吸到成片帧格，停在该端点画面。
+     * 点起点停起点、点终点停终点（勿再跳回接点/片头）。
      */
     async function snapCutNudgeToShown(edge) {
       const idx = selectedCutout;
@@ -810,6 +809,7 @@
       const kindEdge = edge === "end" ? "end" : "start";
       const live = kindEdge === "end" ? cutouts[idx].end : cutouts[idx].start;
       const want = quantizeTrimSec(snapToFrameGrid(live));
+      setCutoutEdge(idx, kindEdge, want);
       try {
         video.pause();
       } catch (_) {}
@@ -818,19 +818,6 @@
         clearTimeout(dragSeekTimer);
         dragSeekTimer = 0;
       }
-      try {
-        video.currentTime = displaySeekSec(want, sourceFps);
-      } catch (_) {}
-      await waitSeek(video);
-      if (closed) return;
-      const shown = Number(video.currentTime);
-      const snapped = Number.isFinite(shown)
-        ? kindEdge === "end"
-          ? Math.max(want, shown)
-          : Math.min(want, shown)
-        : want;
-      setCutoutEdge(idx, kindEdge, quantizeTrimSec(snapped));
-      // setCutoutEdge 里的 previewSeek 可能被 0.03 近邻短路；强制停在端点所见帧
       await seekRawExact(kindEdge === "end" ? cutouts[idx].end : cutouts[idx].start);
       syncCutoutUi();
       paintTimeline();
@@ -1570,11 +1557,11 @@
       if (!drag) return;
       const kind = drag.kind;
       const cutIndex = drag.cutIndex;
-      // 抬手：去送手抖动 → 帧格/边磁吸 → 对齐浏览器实际显示帧
+      // 抬手：只去送手抖动，不帧格吸附；拖到哪停哪，精调用底部 ±1 源帧
       if (kind === "start") {
-        const preLift = dragSecBeforeLift(startSec);
-        const before = startSec;
-        const want = quantizeTrimSec(snapTrimHandle(preLift, "start"));
+        const want = quantizeTrimSec(
+          clamp(dragSecBeforeLift(startSec), 0, endSec - MIN_SPAN)
+        );
         startSec = want;
         try {
           video.pause();
@@ -1584,24 +1571,15 @@
           clearTimeout(dragSeekTimer);
           dragSeekTimer = 0;
         }
-        try {
-          video.currentTime = want;
-        } catch (_) {}
-        await waitSeek(video);
-        // 解码器常落到稍后关键帧；以「用户实际看到的画面」为准，避免成片多吸前面几帧
-        const shown = Number(video.currentTime) || want;
-        startSec = quantizeTrimSec(clamp(Math.max(want, shown), 0, endSec - MIN_SPAN));
         clipCutoutsToWindow();
-        // 抬手停在黄柄所见帧（= GIF 首帧），所见即所得
         await seekStartPreviewExact();
         paintTimeline();
         updateLabels();
-        flashSnapFeedback("start", Math.abs(before - startSec) > frameSnapSec * 0.35);
+        flashSnapFeedback("start", false);
       } else if (kind === "end") {
-        const preLift = dragSecBeforeLift(endSec);
-        const before = endSec;
-        const want = quantizeTrimSec(snapTrimHandle(preLift, "end"));
-        const step = endKeepStepSec();
+        const want = quantizeTrimSec(
+          clamp(dragSecBeforeLift(endSec), startSec + MIN_SPAN, duration)
+        );
         setEnd(want, {
           preview: false,
           immediateSeek: false,
@@ -1614,44 +1592,29 @@
           clearTimeout(dragSeekTimer);
           dragSeekTimer = 0;
         }
-        const keep = Math.max(startSec, want - step);
-        try {
-          video.currentTime = keep;
-        } catch (_) {}
-        await waitSeek(video);
-        const shown = Number(video.currentTime) || keep;
-        // 解码偏早 → 收紧 end；解码偏后（关键帧）→ 绝不能把 end 推过用户拖到的 want（否则预览多几帧）
-        const fromShown = shown + step;
-        endSec = quantizeTrimSec(
-          clamp(Math.min(want, Math.max(fromShown, startSec + MIN_SPAN)), startSec + MIN_SPAN, duration)
-        );
         clipCutoutsToWindow();
         await seekEndPreviewExact();
         paintTimeline();
         updateLabels();
-        flashSnapFeedback("end", Math.abs(before - endSec) > frameSnapSec * 0.35);
+        flashSnapFeedback("end", false);
       } else if (kind === "window") {
-        const beforeStart = startSec;
         const span = Math.max(MIN_SPAN, endSec - startSec);
         const liftStart = dragSecBeforeLift(startSec);
-        startSec = quantizeTrimSec(snapTrimHandle(liftStart, "start"));
+        startSec = quantizeTrimSec(clamp(liftStart, 0, duration - span));
         endSec = clamp(startSec + span, startSec + MIN_SPAN, duration);
-        endSec = quantizeTrimSec(snapTrimHandle(endSec, "end"));
         if (endSec - startSec < MIN_SPAN) endSec = Math.min(duration, startSec + MIN_SPAN);
+        endParkAtSec = endKeepSec();
         clipCutoutsToWindow();
         await seekPlayheadExact(startSec);
         paintTimeline();
         updateLabels();
-        flashSnapFeedback("window", Math.abs(beforeStart - startSec) > frameSnapSec * 0.35);
+        flashSnapFeedback("window", false);
       } else if (kind === "cut-start" || kind === "cut-end") {
         const idx = Number(cutIndex);
         if (idx >= 0 && idx < cutouts.length) {
           const c = cutouts[idx];
           const live = kind === "cut-end" ? c.end : c.start;
-          const preLift = snapTrimHandle(
-            dragSecBeforeLift(live),
-            kind === "cut-end" ? "end" : "start"
-          );
+          const preLift = quantizeTrimSec(dragSecBeforeLift(live));
           setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", preLift);
           try {
             video.pause();
@@ -1661,27 +1624,14 @@
             clearTimeout(dragSeekTimer);
             dragSeekTimer = 0;
           }
-          try {
-            video.currentTime = preLift;
-          } catch (_) {}
-          await waitSeek(video);
-          const shown = Number(video.currentTime);
-          const want = kind === "cut-end" ? cutouts[idx].end : cutouts[idx].start;
-          const snapped = Number.isFinite(shown)
-            ? kind === "cut-end"
-              ? Math.max(want, shown)
-              : Math.min(want, shown)
-            : want;
-          setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", snapped);
           // 红柄抬手：停在刚调的那一端（起点→起点画面，终点→终点画面）
-          // 勿 seek 到接点：终点抬手会跳回起点侧，播放也就从前面开
           selectedCutout = idx;
           const parkT =
             kind === "cut-end"
-              ? Number(cutouts[idx]?.end) || snapped
-              : Number(cutouts[idx]?.start) || snapped;
+              ? Number(cutouts[idx]?.end) || preLift
+              : Number(cutouts[idx]?.start) || preLift;
           await seekRawExact(parkT);
-          flashSnapFeedback(kind === "cut-end" ? "end" : "start", Math.abs(snapped - live) > frameSnapSec * 0.35);
+          flashSnapFeedback(kind === "cut-end" ? "end" : "start", false);
         } else {
           clipCutoutsToWindow();
           paintCutouts();
@@ -2047,9 +1997,23 @@
           if (downloadBtn) downloadBtn.textContent = "正在导出…";
         };
         const filenameBase = String(file.name || "video").replace(/\.[^.]+$/, "");
-        // 优先：按预览 video 实际显示帧抽帧再编码（≡所见）；失败再 ffmpeg 精切
+        // 成片时钟锚点：优先 ffmpeg 精切（快）；失败再逐帧预览导出兜底
         let out = null;
         try {
+          onProgress(0.08, "编码器切片…");
+          out = await exportKeepVideo(file, edit, duration, {
+            srcW: video.videoWidth || 0,
+            srcH: video.videoHeight || 0,
+            applyCrop: Boolean(edit.cropOn),
+            keeps: previewKeeps,
+            timeline: sourceTimeline || undefined,
+            onProgress,
+          });
+          if (!(out?.blob?.size > 0)) out = null;
+        } catch (_) {
+          out = null;
+        }
+        if (!out) {
           onProgress(0.05, "按预览帧导出…");
           out = await exportKeepByChromeDisplay(video, previewKeeps, {
             keepFps: sourceFps || resolveKeepFps(edit),
@@ -2058,20 +2022,6 @@
             filenameBase,
             srcW: video.videoWidth || 0,
             srcH: video.videoHeight || 0,
-            onProgress,
-          });
-          if (!(out?.blob?.size > 0)) out = null;
-        } catch (_) {
-          out = null;
-        }
-        if (!out) {
-          onProgress(0.08, "编码器切片…");
-          out = await exportKeepVideo(file, edit, duration, {
-            srcW: video.videoWidth || 0,
-            srcH: video.videoHeight || 0,
-            applyCrop: Boolean(edit.cropOn),
-            keeps: previewKeeps,
-            timeline: sourceTimeline || undefined,
             onProgress,
           });
         }
@@ -2089,8 +2039,8 @@
           at: new Date().toISOString(),
           ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
           note: isChromeFrames
-            ? "按编辑器预览显示帧导出（VideoFrame），应对齐所见；时长=各 keep 之和"
-            : "源片 ffmpeg 精切；时长=各 keep 之和；请按段对照，勿用源时间轴秒数去对导出片进度条",
+            ? "预览帧兜底导出（VideoFrame）；时长=各 keep 之和"
+            : "成片时钟锚点：ffmpeg 精切；拖柄不吸附，用底部 ±1 源帧精调；时长=各 keep 之和",
           file: {
             name: String(file?.name || ""),
             size: Number(file?.size) || 0,
@@ -2302,6 +2252,10 @@
     /** 微调松手后对齐解码器实际画面，与拖拽抬手一致，避免 nudge 所见 ≠ 提交/成片 */
     let nudgeSnapKind = null;
     let nudgeSnapGen = 0;
+    /**
+     * 微调松手：吸到成片帧格（源 fps），再停预览。
+     * 不以浏览器「显示偏了一帧」改写黄柄——成片时钟是锚点。
+     */
     async function snapNudgeToShown(kind) {
       const gen = ++nudgeSnapGen;
       if (kind === "cut-start" || kind === "cut-end") {
@@ -2317,33 +2271,19 @@
         dragSeekTimer = 0;
       }
       if (kind === "start") {
-        const want = quantizeTrimSec(startSec);
-        try {
-          video.currentTime = want;
-        } catch (_) {}
-        await waitSeek(video);
+        startSec = quantizeTrimSec(
+          clamp(snapToFrameGrid(startSec), 0, endSec - MIN_SPAN)
+        );
         if (gen !== nudgeSnapGen || closed) return;
-        const shown = Number(video.currentTime) || want;
-        startSec = quantizeTrimSec(clamp(Math.max(want, shown), 0, endSec - MIN_SPAN));
         clipCutoutsToWindow();
         await seekStartPreviewExact();
       } else {
-        const want = quantizeTrimSec(endSec);
-        const step = endKeepStepSec();
-        const keep = Math.max(startSec, want - step);
-        try {
-          video.currentTime = keep;
-        } catch (_) {}
-        await waitSeek(video);
-        if (gen !== nudgeSnapGen || closed) return;
-        const shown = Number(video.currentTime) || keep;
-        // 同抬手：只收紧、不越过 want；解码偏后绝不把 end 推过按钮目标
-        const fromShown = shown + step;
         endSec = quantizeTrimSec(
-          clamp(Math.min(want, Math.max(fromShown, startSec + MIN_SPAN)), startSec + MIN_SPAN, duration)
+          clamp(snapToFrameGrid(endSec), startSec + MIN_SPAN, duration)
         );
+        endParkAtSec = endKeepSec();
+        if (gen !== nudgeSnapGen || closed) return;
         clipCutoutsToWindow();
-        // 停帧与黄柄同步收紧，保证按钮所见 = 播放 = GIF
         await seekEndPreviewExact();
       }
       paintTimeline();

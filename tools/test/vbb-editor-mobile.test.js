@@ -21,7 +21,7 @@ t("粗指针/窄屏用触控文案，不主推键盘", () => {
   assert.ok(vtrim.includes("点底部播放核对") || vtrim.includes("跳到接点"));
 });
 
-t("手机送手防抖：抬手前采样 + 帧格/边磁吸 + 反馈", () => {
+t("手机送手防抖：抬手前采样；拖柄不帧格吸附；精调留给底部按钮", () => {
   assert.ok(vtrim.includes("LIFT_LAG_MS"));
   assert.ok(vtrim.includes("FRAME_SNAP_SEC"));
   assert.ok(vtrim.includes("frameSnapSecFromFps") || vtrim.includes("DEFAULT_FRAME_FPS"));
@@ -35,7 +35,9 @@ t("手机送手防抖：抬手前采样 + 帧格/边磁吸 + 反馈", () => {
     vtrim.indexOf("function ratioFromClientX")
   );
   assert.ok(finish.includes("dragSecBeforeLift"));
-  assert.ok(finish.includes("snapTrimHandle") || finish.includes("snapToFrameGrid"));
+  assert.ok(finish.includes("不帧格吸附") || finish.includes("拖到哪停哪"));
+  assert.ok(!finish.includes("snapTrimHandle("));
+  assert.ok(!finish.includes("snapToFrameGrid("));
   assert.ok(finish.includes("flashSnapFeedback"));
 });
 

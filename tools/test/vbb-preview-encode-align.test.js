@@ -174,12 +174,14 @@ t("displayFrameAtSec：毫秒量化手柄跟 Chrome 所见帧", () => {
   assert.ok(keepM[0].includes("sampleIndexAtSec") || keepM[0].includes("nextStartAfterCutEnd"), "有采样表时按下一样本");
 });
 
-t("materialize：优先 Chrome 显示帧；带回 segmentSpans；ffmpeg 兜底", () => {
+t("materialize：优先 ffmpeg 成片时钟；chrome 仅兜底；带回 segmentSpans", () => {
   const start = vbb.indexOf("async function materializeVbbKeepVideo");
   const end = vbb.indexOf("function shouldPrecutVbbWindow", start);
   const body = vbb.slice(start, end > start ? end : undefined);
   assert.ok(body.includes("segmentSpans"), "导出片带回各段时长供按段 fps");
-  assert.ok(body.includes("exportKeepByChromeDisplay"), "GIF 须与下载同一套预览帧");
+  assert.ok(body.includes("exportKeepVideo"), "优先 ffmpeg");
+  assert.ok(body.includes("exportKeepByChromeDisplay"), "chrome 兜底仍保留");
+  assert.ok(body.indexOf("exportKeepVideo") < body.indexOf("exportKeepByChromeDisplay"), "ffmpeg 须先于 chrome");
   assert.ok(!/keeps\.length\s*<=\s*1/.test(body) || body.includes("单段 keep 也会导出"), "单段也要能导出");
   assert.ok(body.includes("out.segmentSpans") || body.includes("segmentSpans = out"), "优先用导出实测段长");
   assert.ok(body.includes("frameGrid") && body.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "ffmpeg 兜底 PTS");
@@ -204,9 +206,24 @@ t("ENCODE 叠垫已清零（根因用源帧窗）", () => {
   assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*0/.test(vtrim));
 });
 
-t("片尾抬手只用 min(want,…) 收紧，禁止推过拖点", () => {
-  assert.ok(/Math\.min\(\s*want\s*,\s*Math\.max\(\s*fromShown/.test(vtrim));
-  assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(vtrim));
+t("片尾抬手不吸附：拖到哪停哪，精调用底部微调", () => {
+  const finish = vtrim.slice(
+    vtrim.indexOf("async function finishTrimDrag"),
+    vtrim.indexOf("function ratioFromClientX")
+  );
+  assert.ok(finish.includes("拖到哪停哪") || finish.includes("不帧格吸附"));
+  assert.ok(!finish.includes("fromShown"));
+  assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(finish));
+});
+
+t("下载优先 ffmpeg 成片时钟，chrome 仅兜底", () => {
+  const dl = vtrim.slice(
+    vtrim.indexOf("成片时钟锚点：优先 ffmpeg 精切"),
+    vtrim.indexOf("const blob = out?.blob")
+  );
+  assert.ok(dl.includes("exportKeepVideo"));
+  assert.ok(dl.includes("exportKeepByChromeDisplay"));
+  assert.ok(dl.indexOf("exportKeepVideo") < dl.indexOf("exportKeepByChromeDisplay"));
 });
 
 t("有 srcFps：keep.end=黄柄秒值半开", () => {
