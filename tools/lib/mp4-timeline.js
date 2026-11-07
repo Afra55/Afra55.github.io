@@ -460,38 +460,30 @@
         timeline.calibrateMethod = "failed-no-frame";
         return timeline;
       }
-      // 优先用 currentTime 与媒体 CTS 的差（≡ 预览停帧时钟）；VideoFrame 作辅证
-      const ct0 = Number(videoEl.currentTime);
-      let X = Number.isFinite(ct0) ? ct0 - cts0 : ts0 - cts0;
-      // 若 currentTime≈0 而 VideoFrame 明显非零，说明显示时钟相对媒体有偏移
-      if (Math.abs(ct0) < 1e-4 && Math.abs(ts0 - cts0) >= 0.002) {
-        X = ts0 - cts0;
-      }
+      // X ≡ 显示时钟 − 媒体 CTS；勿用 currentTime（seek 后常等于设定值，复核恒过）
+      const X = ts0 - cts0;
       if (!(Math.abs(X) >= 0.002 && Math.abs(X) <= 0.5)) {
         timeline.chromeOffsetSec = X;
         timeline.calibrated = Math.abs(X) < 0.002;
         timeline.calibrateMethod = Math.abs(X) < 0.002 ? "already-aligned" : "out-of-range";
         return timeline;
       }
-      // 中点复核：seek 到媒体 mid + X（帧内点），期望显示靠近平移后的 CTS
+      // 中点复核：比 VideoFrame.timestamp，容差 ¼ 帧
       const mid = Math.floor(timeline.ctsSec.length / 2);
       const midMedia = Number(timeline.mediaCtsSec[mid]);
       const midSeek = frameSeekSec({ ctsSec: timeline.mediaCtsSec, fps: timeline.fps }, mid);
+      const frameTol = 0.25 / Math.max(5, Number(timeline.fps) || 24);
       try {
         videoEl.currentTime = Math.max(0, midSeek + X);
         await waitSeek(videoEl);
         await waitPresented(videoEl);
-        const ctMid = Number(videoEl.currentTime);
+        const tsMid = sampleTsSec(videoEl);
         const expect = midMedia + X;
-        if (Number.isFinite(ctMid) && Math.abs(ctMid - expect) > 0.05) {
-          // currentTime 不可靠时再用 VideoFrame
-          const tsMid = sampleTsSec(videoEl);
-          if (Number.isFinite(tsMid) && Math.abs(tsMid - expect) > 0.05) {
-            timeline.chromeOffsetSec = X;
-            timeline.calibrated = false;
-            timeline.calibrateMethod = "mid-check-fail";
-            return timeline;
-          }
+        if (Number.isFinite(tsMid) && Math.abs(tsMid - expect) > frameTol) {
+          timeline.chromeOffsetSec = X;
+          timeline.calibrated = false;
+          timeline.calibrateMethod = "mid-check-fail";
+          return timeline;
         }
       } catch (_) {}
       applyOffset(X, "videoframe-t0");
@@ -644,6 +636,30 @@
     return { startF, endF };
   }
 
+  /**
+   * 校准可信时可用 ffmpeg frameRaw 快切（不必逐帧 chrome seek）。
+   * mid-check-fail / out-of-range / elst-lead 等仍应走预览帧。
+   */
+  function canFfmpegFirst(timeline) {
+    if (!timeline?.ctsSec?.length) return false;
+    const m = String(timeline.calibrateMethod || "");
+    if (m !== "videoframe-t0" && m !== "already-aligned") return false;
+    // cts 须近似单调（无严重 B 帧乱序）
+    const arr = timeline.mediaCtsSec?.length === timeline.ctsSec.length ? timeline.mediaCtsSec : timeline.ctsSec;
+    let prev = -Infinity;
+    for (let i = 0; i < Math.min(arr.length, 64); i++) {
+      const t = Number(arr[i]);
+      if (!Number.isFinite(t) || t + 1e-6 < prev) return false;
+      prev = t;
+    }
+    if (arr.length > 64) {
+      const last = Number(arr[arr.length - 1]);
+      const mid = Number(arr[Math.floor(arr.length / 2)]);
+      if (!(last >= mid - 1e-6)) return false;
+    }
+    return true;
+  }
+
   window.DevToolsMp4Timeline = {
     probeMp4VideoTimeline,
     sampleIndexAtSec,
@@ -651,6 +667,7 @@
     toDemuxFrameIndex,
     frameSeekSec,
     calibrateToElement,
+    canFfmpegFirst,
     normalizeFps,
   };
 })();

@@ -174,25 +174,23 @@ t("displayFrameAtSec：毫秒量化手柄跟 Chrome 所见帧", () => {
   assert.ok(keepM[0].includes("sampleIndexAtSec") || keepM[0].includes("nextStartAfterCutEnd"), "有采样表时按下一样本");
 });
 
-t("materialize：优先 chrome 预览帧；ffmpeg 兜底；带回 segmentSpans", () => {
+t("materialize：校准可信 ffmpeg 先，否则 chrome；带回 segmentSpans", () => {
   const start = vbb.indexOf("async function materializeVbbKeepVideo");
   const end = vbb.indexOf("function shouldPrecutVbbWindow", start);
   const body = vbb.slice(start, end > start ? end : undefined);
   assert.ok(body.includes("segmentSpans"), "导出片带回各段时长供按段 fps");
-  assert.ok(body.includes("exportKeepByChromeDisplay"), "优先 chrome");
-  assert.ok(body.includes("exportKeepVideo"), "ffmpeg 兜底");
-  assert.ok(
-    body.indexOf("exportKeepByChromeDisplay") < body.indexOf("exportKeepVideo"),
-    "chrome 须先于 ffmpeg（2547）"
-  );
+  assert.ok(body.includes("exportKeepByChromeDisplay"), "chrome 兜底");
+  assert.ok(body.includes("exportKeepVideo"), "ffmpeg 快切");
+  assert.ok(body.includes("canFfmpegFirst"), "校准门槛");
+  assert.ok(body.includes("快速切片") || body.includes("ffFirst"), "快切优先文案/分支");
   assert.ok(!/keeps\.length\s*<=\s*1/.test(body) || body.includes("单段 keep 也会导出"), "单段也要能导出");
-  assert.ok(body.includes("out.segmentSpans") || body.includes("segmentSpans = out"), "优先用导出实测段长");
+  assert.ok(body.includes("out.segmentSpans") || body.includes("segmentSpans = out") || body.includes("finishMat"), "优先用导出实测段长");
   assert.ok(body.includes("frameGrid") && body.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "ffmpeg 兜底 PTS");
   assert.ok(!/setsar=1,fps=\$\{keepFps\}/.test(body), "scalePad 勿再叠 fps=");
   assert.ok(!/\[\$\{i\}:v\]fps=\$\{keepFps\}/.test(body), "concat 勿再 fps=");
   assert.ok(body.includes("calibrateToElement"), "GIF materialize 须校准显示时钟");
-  assert.ok(body.includes("timeline: matTimeline") || body.includes("timeline: matTimeline ||"), "chrome 传 timeline");
-  assert.ok(body.includes("timeline: ffTimeline") || body.includes("timeline: ffTimeline ||"), "ffmpeg 传 timeline");
+  assert.ok(body.includes("matTimeline"), "共用校准 timeline");
+  assert.ok(body.includes("matKeeps"), "ffmpeg/chrome 同 keeps");
 });
 
 t("vtrim：帧内 seek + 校准", () => {
@@ -237,14 +235,16 @@ t("片尾抬手成片时钟吸附；不按 Chrome shown 改写黄柄", () => {
   assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(finish));
 });
 
-t("下载优先 chrome 预览帧，ffmpeg 仅兜底", () => {
+t("下载：校准可信 ffmpeg 先，否则 chrome", () => {
   const dl = vtrim.slice(
-    vtrim.indexOf("按预览帧导出…"),
+    vtrim.indexOf("校准可信 → ffmpeg frameRaw"),
     vtrim.indexOf("const blob = out?.blob")
   );
+  assert.ok(dl.includes("canFfmpegFirst"));
   assert.ok(dl.includes("exportKeepByChromeDisplay"));
   assert.ok(dl.includes("exportKeepVideo"));
-  assert.ok(dl.indexOf("exportKeepByChromeDisplay") < dl.indexOf("exportKeepVideo"));
+  assert.ok(dl.includes("快速切片") || dl.includes("ffFirst"));
+  assert.ok(dl.indexOf("ffFirst") < dl.indexOf("exportKeepByChromeDisplay"));
 });
 
 t("ffmpeg onepass：有采样表只用 frameRaw（校准后禁止 sec）", () => {

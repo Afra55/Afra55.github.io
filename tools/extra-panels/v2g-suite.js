@@ -8970,172 +8970,181 @@
         if (!keeps.length) {
           return { file, duration, srcW, srcH, materialized: false, segmentSpans: [] };
         }
-        // 2547：ffmpeg 精切常与预览差帧；GIF 与下载同优先 chrome 预览帧
-        try {
-          if (!window.DevToolsVtrimEditor?.exportKeepByChromeDisplay) {
-            await ensureVbbVtrimEditor().catch(() => null);
-          }
-          const chromeExp = window.DevToolsVtrimEditor?.exportKeepByChromeDisplay;
-          if (typeof chromeExp === "function" && file) {
-            onProgress?.(0.05, "按预览帧导出编辑片…");
-            const v = document.createElement("video");
-            v.muted = true;
-            v.playsInline = true;
-            v.preload = "auto";
-            const url = URL.createObjectURL(file);
-            v.src = url;
+        // 校准可信 → ffmpeg frameRaw 快切；否则预览帧；再 ffmpeg 兜底
+        if (!window.DevToolsVtrimEditor?.exportKeepByChromeDisplay) {
+          await ensureVbbVtrimEditor().catch(() => null);
+        }
+        const keepFps =
+          typeof window.DevToolsVtrimEditor?.resolveKeepFps === "function"
+            ? window.DevToolsVtrimEditor.resolveKeepFps(edit)
+            : Number(edit?.srcFps) >= 5
+              ? Number(edit.srcFps)
+              : 24;
+        let matTimeline = null;
+        let matKeeps = keeps;
+        let matVideo = null;
+        let matUrl = null;
+        const ensureMatVideo = async () => {
+          if (matVideo) return matVideo;
+          matVideo = document.createElement("video");
+          matVideo.muted = true;
+          matVideo.playsInline = true;
+          matVideo.preload = "auto";
+          matUrl = URL.createObjectURL(file);
+          matVideo.src = matUrl;
+          await new Promise((resolve, reject) => {
+            const to = setTimeout(() => reject(new Error("预览视频加载超时")), 20000);
+            matVideo.onloadeddata = () => {
+              clearTimeout(to);
+              resolve();
+            };
+            matVideo.onerror = () => {
+              clearTimeout(to);
+              reject(new Error("预览视频加载失败"));
+            };
+          });
+          return matVideo;
+        };
+        const cleanupMatVideo = () => {
+          if (matUrl) {
             try {
-              await new Promise((resolve, reject) => {
-                const to = setTimeout(() => reject(new Error("预览视频加载超时")), 20000);
-                v.onloadeddata = () => {
-                  clearTimeout(to);
-                  resolve();
-                };
-                v.onerror = () => {
-                  clearTimeout(to);
-                  reject(new Error("预览视频加载失败"));
-                };
-              });
-              const keepFps =
-                typeof window.DevToolsVtrimEditor?.resolveKeepFps === "function"
-                  ? window.DevToolsVtrimEditor.resolveKeepFps(edit)
-                  : Number(edit?.srcFps) >= 5
-                    ? Number(edit.srcFps)
-                    : 24;
-              // 与编辑器同一套时间轴：探测 + 对临时 video 校准，再帧内 seek
-              let matTimeline = null;
+              URL.revokeObjectURL(matUrl);
+            } catch (_) {}
+            matUrl = null;
+          }
+          if (matVideo) {
+            try {
+              matVideo.removeAttribute("src");
+              matVideo.load();
+            } catch (_) {}
+            matVideo = null;
+          }
+        };
+        try {
+          if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
+            await window.DevToolsLazy.loadScript("./lib/mp4-timeline.js", {
+              timeoutMs: 12000,
+              label: "片源时间轴",
+            }).catch(() => null);
+          }
+          const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
+          if (typeof probe === "function") {
+            matTimeline = await probe(file);
+            if (matTimeline?.ok) {
               try {
-                if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
-                  await window.DevToolsLazy.loadScript("./lib/mp4-timeline.js", {
-                    timeoutMs: 12000,
-                    label: "片源时间轴",
-                  }).catch(() => null);
-                }
-                const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
-                if (typeof probe === "function") {
-                  matTimeline = await probe(file);
-                  const cal = window.DevToolsMp4Timeline?.calibrateToElement;
-                  if (matTimeline?.ok && typeof cal === "function") {
-                    await cal(matTimeline, v);
-                  }
-                }
-              } catch (_) {
-                matTimeline = null;
-              }
-              let matKeeps = keeps;
-              if (
-                matTimeline?.ctsSec?.length &&
-                typeof window.DevToolsVtrimEditor?.keepRangesForEncode === "function"
-              ) {
-                try {
-                  matKeeps = window.DevToolsVtrimEditor.keepRangesForEncode(
-                    edit,
-                    duration,
-                    matTimeline
-                  );
-                } catch (_) {
-                  matKeeps = keeps;
-                }
-              }
-              const out = await chromeExp(v, matKeeps, {
-                keepFps: Number(matTimeline?.fps) >= 5 ? matTimeline.fps : keepFps,
-                srcW,
-                srcH,
-                applyCrop: false,
-                timeline: matTimeline || undefined,
-                filenameBase: String(file.name || "video"),
-                onProgress,
-                ffmpeg: ffmpegLease || null,
-              });
-              if (out?.file && out.blob?.size > 0) {
-                let outFile = out.file;
-                try {
-                  if (
-                    typeof pinLocalMediaFile === "function" &&
-                    outFile &&
-                    !isPinnedLocalMediaFile?.(outFile)
-                  ) {
-                    outFile = await pinLocalMediaFile(outFile, () => {});
-                  }
-                } catch (_) {}
-                if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === keeps.length) {
-                  segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
-                }
-                return {
-                  file: outFile,
-                  duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
-                  srcW: out.srcW || srcW,
-                  srcH: out.srcH || srcH,
-                  materialized: true,
-                  segmentSpans,
-                  exportMethod: out.exportMethod || "chrome-VideoFrame",
-                };
-              }
-            } finally {
-              try {
-                URL.revokeObjectURL(url);
-              } catch (_) {}
-              try {
-                v.removeAttribute("src");
-                v.load();
+                const v = await ensureMatVideo();
+                const cal = window.DevToolsMp4Timeline?.calibrateToElement;
+                if (typeof cal === "function") await cal(matTimeline, v);
               } catch (_) {}
             }
           }
         } catch (_) {
-          // 回退 ffmpeg
+          matTimeline = null;
         }
-        const exp = window.DevToolsVtrimEditor?.exportKeepVideo;
-        if (typeof exp === "function") {
+        if (
+          matTimeline?.ctsSec?.length &&
+          typeof window.DevToolsVtrimEditor?.keepRangesForEncode === "function"
+        ) {
           try {
-            let ffTimeline = null;
-            try {
-              if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
-                await window.DevToolsLazy.loadScript("./lib/mp4-timeline.js", {
-                  timeoutMs: 12000,
-                  label: "片源时间轴",
-                }).catch(() => null);
-              }
-              const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
-              if (typeof probe === "function") ffTimeline = await probe(file);
-            } catch (_) {
-              ffTimeline = null;
+            matKeeps = window.DevToolsVtrimEditor.keepRangesForEncode(edit, duration, matTimeline);
+          } catch (_) {
+            matKeeps = keeps;
+          }
+        }
+        const pinOut = async (outFile) => {
+          try {
+            if (
+              typeof pinLocalMediaFile === "function" &&
+              outFile &&
+              !isPinnedLocalMediaFile?.(outFile)
+            ) {
+              return await pinLocalMediaFile(outFile, () => {});
             }
+          } catch (_) {}
+          return outFile;
+        };
+        const finishMat = async (out, method) => {
+          if (!(out?.file || out?.blob?.size > 0)) return null;
+          let outFile = out.file || new File([out.blob], "edit.mp4", { type: "video/mp4" });
+          outFile = await pinOut(outFile);
+          if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === keeps.length) {
+            segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
+          }
+          return {
+            file: outFile,
+            duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
+            srcW: out.srcW || srcW,
+            srcH: out.srcH || srcH,
+            materialized: true,
+            segmentSpans,
+            exportMethod: out.exportMethod || method,
+          };
+        };
+        const ffFirst = Boolean(window.DevToolsMp4Timeline?.canFfmpegFirst?.(matTimeline));
+        const exp = window.DevToolsVtrimEditor?.exportKeepVideo;
+        if (ffFirst && typeof exp === "function") {
+          try {
+            onProgress?.(0.05, "快速切片编辑片…");
             const out = await exp(file, edit, duration, {
               srcW,
               srcH,
               applyCrop: false,
-              timeline: ffTimeline || undefined,
+              keeps: matKeeps,
+              timeline: matTimeline || undefined,
               onProgress,
               ffmpeg: ffmpegLease || null,
             });
-            if (out?.file) {
-              let outFile = out.file;
-              try {
-                if (
-                  typeof pinLocalMediaFile === "function" &&
-                  outFile &&
-                  !isPinnedLocalMediaFile?.(outFile)
-                ) {
-                  outFile = await pinLocalMediaFile(outFile, () => {});
-                }
-              } catch (_) {}
-              if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === keeps.length) {
-                segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
-              }
-              return {
-                file: outFile,
-                duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
-                srcW: out.srcW || srcW,
-                srcH: out.srcH || srcH,
-                materialized: true,
-                segmentSpans,
-                exportMethod: out.exportMethod || "ffmpeg",
-              };
+            const done = await finishMat(out, "ffmpeg");
+            if (done) {
+              cleanupMatVideo();
+              return done;
+            }
+          } catch (_) {}
+        }
+        try {
+          const chromeExp = window.DevToolsVtrimEditor?.exportKeepByChromeDisplay;
+          if (typeof chromeExp === "function" && file) {
+            onProgress?.(0.08, ffFirst ? "快切未成，按预览帧…" : "按预览帧导出编辑片…");
+            const v = await ensureMatVideo();
+            const out = await chromeExp(v, matKeeps, {
+              keepFps: Number(matTimeline?.fps) >= 5 ? matTimeline.fps : keepFps,
+              srcW,
+              srcH,
+              applyCrop: false,
+              timeline: matTimeline || undefined,
+              filenameBase: String(file.name || "video"),
+              onProgress,
+              ffmpeg: ffmpegLease || null,
+            });
+            const done = await finishMat(out, "chrome-VideoFrame");
+            if (done) {
+              cleanupMatVideo();
+              return done;
+            }
+          }
+        } catch (_) {}
+        if (!ffFirst && typeof exp === "function") {
+          try {
+            onProgress?.(0.1, "编码器切片编辑片…");
+            const out = await exp(file, edit, duration, {
+              srcW,
+              srcH,
+              applyCrop: false,
+              keeps: matKeeps,
+              timeline: matTimeline || undefined,
+              onProgress,
+              ffmpeg: ffmpegLease || null,
+            });
+            const done = await finishMat(out, "ffmpeg");
+            if (done) {
+              cleanupMatVideo();
+              return done;
             }
           } catch (_) {
             // 继续走本地拼接兜底
           }
         }
+        cleanupMatVideo();
         const ffmpeg =
           ffmpegLease ||
           (typeof getFfmpegInstance === "function"
@@ -9146,12 +9155,6 @@
         const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => onProgress?.(0.05, "载入视频…"));
         const W = Math.max(2, Math.round((Number(srcW) || 720) / 2) * 2);
         const H = Math.max(2, Math.round((Number(srcH) || 404) / 2) * 2);
-        const keepFps =
-          typeof window.DevToolsVtrimEditor?.resolveKeepFps === "function"
-            ? window.DevToolsVtrimEditor.resolveKeepFps(edit)
-            : Number(edit?.srcFps) >= 5
-              ? Number(edit.srcFps)
-              : 30;
         const toFrame =
           typeof window.DevToolsVtrimEditor?.displayFrameAtSec === "function"
             ? (t) => window.DevToolsVtrimEditor.displayFrameAtSec(t, keepFps)

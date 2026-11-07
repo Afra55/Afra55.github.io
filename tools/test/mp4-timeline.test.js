@@ -80,6 +80,14 @@ function buildFile() {
 
   assert.ok(typeof api.frameSeekSec === "function", "frameSeekSec");
   assert.ok(typeof api.calibrateToElement === "function", "calibrateToElement");
+  assert.ok(typeof api.canFfmpegFirst === "function", "canFfmpegFirst");
+  assert.strictEqual(api.canFfmpegFirst(tl), false, "未校准不可 ffmpeg-first");
+  tl.calibrateMethod = "already-aligned";
+  tl.calibrated = true;
+  assert.strictEqual(api.canFfmpegFirst(tl), true, "already-aligned 可 ffmpeg-first");
+  tl.calibrateMethod = "mid-check-fail";
+  assert.strictEqual(api.canFfmpegFirst(tl), false, "mid-check-fail 不可");
+  tl.calibrateMethod = "already-aligned";
   assert.ok(tl.mediaCtsSec && tl.mediaCtsSec.length === tl.ctsSec.length, "mediaCtsSec");
   const seek0 = api.frameSeekSec(tl, 0);
   assert.ok(seek0 > tl.ctsSec[0] && seek0 < tl.ctsSec[1], `frameSeek0=${seek0}`);
