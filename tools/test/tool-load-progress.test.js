@@ -51,4 +51,13 @@ t("同版本脚本走 Cache，发版 ?v= 才重下", () => {
   assert.ok(lazy.includes('cache: "default"'));
 });
 
+t("禁止 8% 假死：inflight 进度共享、黑盒不预取、立刻出条", () => {
+  assert.ok(lazy.includes("ensureProgressListeners"));
+  assert.ok(lazy.includes("后台已在加载，接入进度"));
+  assert.ok(lazy.includes('heavy.has(id)'));
+  assert.ok(app.includes("paintOverlay"));
+  assert.ok(app.includes("勿在此写 8%"));
+  assert.ok(!/setToolLoadProgress\(8,\s*`正在加载/.test(app));
+});
+
 console.log(`tool-load-progress.test.js: ${n} passed`);
