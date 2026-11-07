@@ -1899,8 +1899,8 @@
         // 提交黄/红柄所见时间：预览与 GIF 都按此精确对齐（所见即所得）
         trimStart: quantizeTrimSec(startSec),
         trimEnd: quantizeTrimSec(endSec),
-        // 始终带 fps：半开一步与编辑器 endKeepStepSec 一致（未探测时用默认帧格）
-        srcFps: sourceFps >= 5 ? sourceFps : DEFAULT_FRAME_FPS,
+        // 只写入探测到的真实 fps；未探测勿填默认 30（否则导出会误判走帧号切）
+        ...(sourceFps >= 5 ? { srcFps: sourceFps } : {}),
         cutouts: cuts.map((c) => ({
           start: quantizeTrimSec(c.start),
           end: quantizeTrimSec(c.end),
@@ -2777,14 +2777,12 @@
     const W = evenDim(srcW);
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
-    // 切片策略：秒级 trim 优先（PTS ≡ 预览 currentTime）；勿两端 bias。
-    // 禁止 trim 后 fps= / -r -vsync cfr——都会重时钟丢掉段首，多段表现为整体前移。
-    // 帧号 trim 仅作空片回退（帧序号≠PTS 时比秒级更偏）。
+    // 切片必须跟预览同一套钟：浏览器 currentTime = PTS 秒。
+    // 禁止优先 start_frame：解码帧序号在 VFR/非零 start/探测 fps≠真帧率时 ≠ 预览时间，
+    // 「下载编辑后的视频」会整段切偏，黑盒 GIF 再错。
     const keepFps = resolveKeepFps(edit);
-    // 预览 keep 是源帧半开窗；有真实 srcFps 时必须帧号优先，秒级 PTS 会与预览差 0~数帧
-    const hasRealFps = normalizeSourceFps(Number(edit?.srcFps) || 0) >= 5;
     const parts = [];
-    /** @type {number[]} 各段成片时长（秒）= 帧数/fps，供 GIF 按段采样 */
+    /** @type {number[]} 各段时长（秒），供 GIF 按段采样 */
     const segmentSpans = [];
     const MIN_PART_BYTES = 512;
     const fmtSec = (t) => {
@@ -2797,9 +2795,9 @@
       let startF = secToFrame(start, keepFps);
       let endF = secToFrame(end, keepFps);
       if (endF <= startF) endF = startF + 1;
-      const frameCount = Math.max(1, endF - startF);
       const dur = Math.max(0.05, end - start);
       const out = `keep${i}.mp4`;
+      // sec：半开 [start,end) ≡ 预览 currentTime；frame 仅空片回退
       const trimVf =
         mode === "frame"
           ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
@@ -2856,12 +2854,12 @@
       } catch (_) {
         return null;
       }
-      return { out, spanSec: frameCount / keepFps, mode };
+      return { out, spanSec: dur, mode };
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 有探测 fps：帧号优先（≡预览半开窗）；否则秒级 PTS → 帧号 → -ss
-      const modes = hasRealFps ? ["frame", "sec", "ss"] : ["sec", "frame", "ss"];
+      // 预览对齐：sec → ss；frame 最后（帧序号≠PTS）
+      const modes = ["sec", "ss", "frame"];
       let hit = null;
       for (const mode of modes) {
         hit = await trySlice(keeps[i], i, mode);
@@ -2951,7 +2949,7 @@
       filename,
       segmentSpans,
       keepFps,
-      slicedByFrame: hasRealFps,
+      slicedByFrame: false,
     };
   }
 
