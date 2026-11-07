@@ -89,8 +89,7 @@
   }
 
   const themeHint = document.getElementById("mr-theme-hint");
-  const themeFab = document.getElementById("mr-theme-fab");
-  const themePop = document.getElementById("mr-theme-pop");
+  /** 配色只在空页选；打开文档后不再出现入口 */
 
   function applyReadTheme(id) {
     const key = READ_THEMES[id] ? id : "paper";
@@ -105,7 +104,7 @@
     root.style.setProperty("--theme-scheme", conf.scheme);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", conf.vars["--bg-0"]);
-    document.querySelectorAll("[data-read-theme]").forEach((btn) => {
+    document.querySelectorAll("#mr-theme [data-read-theme]").forEach((btn) => {
       const on = btn.getAttribute("data-read-theme") === key;
       btn.classList.toggle("is-active", on);
       btn.setAttribute("aria-checked", on ? "true" : "false");
@@ -118,38 +117,13 @@
     } catch (_) {}
   }
 
-  function bindThemeClicks(root) {
-    root?.addEventListener("click", (e) => {
-      const btn = e.target?.closest?.("[data-read-theme]");
-      if (!btn || (root !== document && !root.contains(btn))) return;
-      e.preventDefault();
-      e.stopPropagation();
-      applyReadTheme(btn.getAttribute("data-read-theme"));
-      if (themePop && !themePop.hidden && root === themePop) {
-        themePop.hidden = true;
-        if (themeFab) themeFab.setAttribute("aria-expanded", "false");
-      }
-    });
-  }
-
   applyReadTheme(getReadThemeId());
-  bindThemeClicks(document.getElementById("mr-theme"));
-  bindThemeClicks(document.getElementById("mr-outline-theme"));
-  bindThemeClicks(themePop);
-
-  themeFab?.addEventListener("click", (e) => {
+  document.getElementById("mr-theme")?.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("[data-read-theme]");
+    if (!btn) return;
     e.preventDefault();
     e.stopPropagation();
-    if (!themePop) return;
-    const open = themePop.hidden;
-    themePop.hidden = !open;
-    themeFab.setAttribute("aria-expanded", open ? "true" : "false");
-  });
-  document.addEventListener("click", (e) => {
-    if (!themePop || themePop.hidden) return;
-    if (e.target?.closest?.("#mr-theme-pop, #mr-theme-fab")) return;
-    themePop.hidden = true;
-    themeFab?.setAttribute("aria-expanded", "false");
+    applyReadTheme(btn.getAttribute("data-read-theme"));
   });
 
   window.addEventListener("storage", (e) => {
@@ -174,15 +148,6 @@
     if (layout) layout.hidden = !on;
     if (empty) empty.hidden = on;
     document.body.classList.toggle("has-doc", on);
-    if (themeFab) {
-      themeFab.hidden = !on;
-      if (!on) {
-        themeFab.setAttribute("aria-expanded", "false");
-        if (themePop) themePop.hidden = true;
-      }
-    } else if (themePop) {
-      themePop.hidden = true;
-    }
   }
 
   function pickFile() {

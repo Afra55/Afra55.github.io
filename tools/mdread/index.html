@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="../icons/icon-180.png" />
   <link rel="icon" href="../icons/icon-192.png" />
   <title>MD 阅读</title>
-  <link rel="stylesheet" href="./app.css?v=15" />
+  <link rel="stylesheet" href="./app.css?v=16" />
 </head>
 <body>
   <!-- 隐藏选文件：空态点击 / 程序化打开用；无顶部按钮 -->
@@ -25,23 +25,6 @@
     <aside class="outline" id="mr-outline" aria-label="标题大纲">
       <p class="outline-label">大纲</p>
       <div class="outline-body" id="mr-outline-body"></div>
-      <div class="outline-theme" id="mr-outline-theme" role="radiogroup" aria-label="阅读配色">
-        <p class="outline-theme-label">配色</p>
-        <div class="outline-theme-row">
-          <button type="button" class="outline-theme-chip" data-read-theme="paper" role="radio" aria-checked="false" title="纸张">
-            <span class="outline-theme-swatch" aria-hidden="true"></span>
-            <span>纸张</span>
-          </button>
-          <button type="button" class="outline-theme-chip" data-read-theme="sepia" role="radio" aria-checked="false" title="羊皮纸">
-            <span class="outline-theme-swatch" aria-hidden="true"></span>
-            <span>羊皮</span>
-          </button>
-          <button type="button" class="outline-theme-chip" data-read-theme="soft" role="radio" aria-checked="false" title="柔和深色">
-            <span class="outline-theme-swatch" aria-hidden="true"></span>
-            <span>深色</span>
-          </button>
-        </div>
-      </div>
     </aside>
     <main class="stage" id="mr-stage">
       <div class="doc-meta">
@@ -106,42 +89,13 @@
 
       <ul class="empty-tips">
         <li>一次只读一篇，再拖新文件即可换文</li>
-        <li>阅读中可在左侧大纲底部改配色（窄屏点右下「配色」）</li>
+        <li>配色只在空页选择，打开文档后专注阅读</li>
         <li>空页时可直接按粘贴快捷键贴入正文</li>
       </ul>
     </div>
   </div>
 
-  <!-- 窄屏无大纲时：阅读中仍可改配色 -->
-  <button type="button" class="read-theme-fab" id="mr-theme-fab" hidden aria-expanded="false" aria-controls="mr-theme-pop">配色</button>
-  <div class="read-theme-pop" id="mr-theme-pop" hidden role="radiogroup" aria-label="阅读配色">
-    <button type="button" class="empty-theme-chip" data-read-theme="paper" role="radio" aria-checked="false">
-      <span class="empty-theme-preview" aria-hidden="true">
-        <span class="empty-theme-swatch"></span>
-        <span class="empty-theme-sample">Aa</span>
-      </span>
-      <span class="empty-theme-name">纸张</span>
-      <span class="empty-theme-mark" aria-hidden="true">已选</span>
-    </button>
-    <button type="button" class="empty-theme-chip" data-read-theme="sepia" role="radio" aria-checked="false">
-      <span class="empty-theme-preview" aria-hidden="true">
-        <span class="empty-theme-swatch"></span>
-        <span class="empty-theme-sample">Aa</span>
-      </span>
-      <span class="empty-theme-name">羊皮纸</span>
-      <span class="empty-theme-mark" aria-hidden="true">已选</span>
-    </button>
-    <button type="button" class="empty-theme-chip" data-read-theme="soft" role="radio" aria-checked="false">
-      <span class="empty-theme-preview" aria-hidden="true">
-        <span class="empty-theme-swatch"></span>
-        <span class="empty-theme-sample">Aa</span>
-      </span>
-      <span class="empty-theme-name">柔和深色</span>
-      <span class="empty-theme-mark" aria-hidden="true">已选</span>
-    </button>
-  </div>
-
-  <script src="./preview.js?v=15" defer></script>
-  <script src="./app.js?v=15" defer></script>
+  <script src="./preview.js?v=16" defer></script>
+  <script src="./app.js?v=16" defer></script>
 </body>
 </html>
