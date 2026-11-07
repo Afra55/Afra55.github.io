@@ -2771,11 +2771,16 @@
     const W = evenDim(srcW);
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
-    // 切片策略：帧号 trim 优先（与 keepRanges 同一帧钟，避免秒级 trim 接点相位偏晚→GIF 相对预览前移）；
-    // wasm 上 start_frame 偶发 exit0+空片 → 体积校验失败后再秒级 / -ss。勿两端 bias。
+    // 切片策略：秒级 trim 优先（PTS ≡ 预览 currentTime）；勿两端 bias。
+    // 禁止在 trim 后再 fps=——会丢掉每段首帧，多段删中间表现为 GIF 相对预览整体前移。
+    // 帧号 trim 仅作空片回退（帧序号≠PTS 时比秒级更偏）。CFR 交给输出 -r。
     const keepFps = resolveKeepFps(edit);
     const parts = [];
     const MIN_PART_BYTES = 512;
+    const fmtSec = (t) => {
+      const n = Math.max(0, Number(t) || 0);
+      return (Math.round(n * 1e6) / 1e6).toFixed(6);
+    };
     const trySlice = async (k, i, mode) => {
       const start = Math.max(0, Number(k.start) || 0);
       const end = Math.max(start + 0.05, Number(k.end) || 0);
@@ -2788,22 +2793,22 @@
         mode === "frame"
           ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
           : mode === "sec"
-            ? `trim=start=${start}:end=${end},setpts=PTS-STARTPTS`
+            ? `trim=start=${fmtSec(start)}:end=${fmtSec(end)},setpts=PTS-STARTPTS`
             : "";
+      // 不在滤镜链里 fps=：保留 trim 后每一源帧，避免段首被重采样丢掉
       const vfCore = [
         cropVf,
         trimVf,
         `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
         `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2`,
         "setsar=1",
-        `fps=${keepFps}`,
         "format=yuv420p",
       ]
         .filter(Boolean)
         .join(",");
       const args =
         mode === "ss"
-          ? ["-i", inName, "-ss", String(start), "-t", String(dur), "-an", "-vf", vfCore]
+          ? ["-i", inName, "-ss", fmtSec(start), "-t", fmtSec(dur), "-an", "-vf", vfCore]
           : ["-i", inName, "-an", "-vf", vfCore];
       args.push(
         "-c:v",
@@ -2816,6 +2821,8 @@
         "yuv420p",
         "-r",
         String(keepFps),
+        "-vsync",
+        "cfr",
         "-movflags",
         "+faststart",
         "-y",
@@ -2834,9 +2841,9 @@
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 帧号优先对齐预览；空片（<MIN_PART_BYTES）再秒级/-ss
-      let out = await trySlice(keeps[i], i, "frame");
-      if (!out) out = await trySlice(keeps[i], i, "sec");
+      // 秒级优先（对齐预览 PTS）；空片再帧号/-ss
+      let out = await trySlice(keeps[i], i, "sec");
+      if (!out) out = await trySlice(keeps[i], i, "frame");
       if (!out) out = await trySlice(keeps[i], i, "ss");
       if (!out) throw new Error(`切片失败（段 ${i + 1}/${keeps.length}）`);
       parts.push(out);
@@ -2846,9 +2853,9 @@
     let merged = parts[0];
     if (parts.length > 1) {
       merged = "keep-merged.mp4";
-      // 先统一 fps/yuv/sar 再 concat，避免多段参数不一致导致「拼接失败」
+      // 统一 yuv/sar 再 concat；勿再 fps=（会再丢各段首帧）
       const norm = parts
-        .map((_, i) => `[${i}:v]fps=${keepFps},format=yuv420p,setsar=1[v${i}]`)
+        .map((_, i) => `[${i}:v]format=yuv420p,setsar=1[v${i}]`)
         .join(";");
       const cat = parts.map((_, i) => `[v${i}]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
       const runConcat = async (filter) => {
@@ -2870,6 +2877,8 @@
           "yuv420p",
           "-r",
           String(keepFps),
+          "-vsync",
+          "cfr",
           "-movflags",
           "+faststart",
           "-y",

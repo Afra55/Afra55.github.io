@@ -124,15 +124,16 @@ t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
   assert.ok(fn.includes("return keepRangesFromEdit(edit, duration)"));
 });
 
-t("exportKeepVideo：帧号优先+体积校验回退；禁止两端 bias", () => {
+t("exportKeepVideo：秒级 PTS 优先且切片勿 fps=；禁止两端 bias", () => {
   const exp = vtrim.slice(
     vtrim.indexOf("async function exportKeepVideo"),
     vtrim.indexOf("window.DevToolsVtrimEditor =")
   );
   const frameAt = exp.indexOf('trySlice(keeps[i], i, "frame")');
   const secAt = exp.indexOf('trySlice(keeps[i], i, "sec")');
-  assert.ok(frameAt > 0 && secAt > frameAt, "须 frame 先于 sec，避免成片相对预览前移");
+  assert.ok(secAt > 0 && frameAt > secAt, "须 sec 先于 frame（PTS≡预览 currentTime）");
   assert.ok(exp.includes("MIN_PART_BYTES"));
+  assert.ok(!/fps=\$\{keepFps\},format/.test(exp), "trim 后 fps= 会丢段首帧导致整体前移");
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp));
   assert.ok(!/endBias\s*=\s*1\s*\/\s*60/.test(exp));
 });

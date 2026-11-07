@@ -8763,8 +8763,13 @@
           typeof window.DevToolsVtrimEditor?.secToFrame === "function"
             ? (t) => window.DevToolsVtrimEditor.secToFrame(t, keepFps)
             : (t) => Math.round(Math.max(0, Number(t) || 0) * keepFps);
-        const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${keepFps},format=yuv420p`;
+        // 切片勿 fps=（会丢段首帧→多段整体前移）；CFR 用输出 -r
+        const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
         const MIN_PART_BYTES = 512;
+        const fmtSec = (t) => {
+          const n = Math.max(0, Number(t) || 0);
+          return (Math.round(n * 1e6) / 1e6).toFixed(6);
+        };
         const tryPart = async (start0, end0, out, mode) => {
           let startF = toFrame(start0);
           let endF = toFrame(end0);
@@ -8774,11 +8779,11 @@
             mode === "frame"
               ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS,`
               : mode === "sec"
-                ? `trim=start=${start0}:end=${end0},setpts=PTS-STARTPTS,`
+                ? `trim=start=${fmtSec(start0)}:end=${fmtSec(end0)},setpts=PTS-STARTPTS,`
                 : "";
           const args =
             mode === "ss"
-              ? ["-i", inName, "-ss", String(start0), "-t", String(dur), "-an", "-vf", scalePad]
+              ? ["-i", inName, "-ss", fmtSec(start0), "-t", fmtSec(dur), "-an", "-vf", scalePad]
               : ["-i", inName, "-an", "-vf", `${trimVf}${scalePad}`];
           args.push(
             "-c:v",
@@ -8791,6 +8796,8 @@
             "yuv420p",
             "-r",
             String(keepFps),
+            "-vsync",
+            "cfr",
             "-movflags",
             "+faststart",
             "-y",
@@ -8814,9 +8821,9 @@
           const start0 = Math.max(0, Number(k.start) || 0);
           const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // 帧号优先（对齐预览帧钟）；空片再秒级/-ss；勿两端 bias（否则接点相对预览前移）
-          let ok = await tryPart(start0, end0, out, "frame");
-          if (!ok) ok = await tryPart(start0, end0, out, "sec");
+          // 秒级优先（PTS≡预览）；空片再帧号/-ss；勿两端 bias；勿滤镜内 fps=
+          let ok = await tryPart(start0, end0, out, "sec");
+          if (!ok) ok = await tryPart(start0, end0, out, "frame");
           if (!ok) ok = await tryPart(start0, end0, out, "ss");
           if (!ok) throw new Error(`删中间切片失败（段 ${i + 1}/${keeps.length}）`);
           parts.push(out);
@@ -8824,7 +8831,7 @@
         onProgress?.(0.65, "拼接保留段…");
         const merged = "keep-merged.mp4";
         const norm = parts
-          .map((_, i) => `[${i}:v]fps=${keepFps},format=yuv420p,setsar=1[v${i}]`)
+          .map((_, i) => `[${i}:v]format=yuv420p,setsar=1[v${i}]`)
           .join(";");
         const cat = parts.map((_, i) => `[v${i}]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
         const runConcat = async (filter) => {
@@ -8846,6 +8853,8 @@
             "yuv420p",
             "-r",
             String(keepFps),
+            "-vsync",
+            "cfr",
             "-movflags",
             "+faststart",
             "-y",
