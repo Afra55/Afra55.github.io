@@ -8979,7 +8979,7 @@
             : mode === "sec"
               ? `trim=start=${fmtSec(start0)}:end=${fmtSec(end0)},setpts=PTS-STARTPTS,`
               : "";
-          const head = useGrid ? `fps=${keepFps}:round=up,` : "";
+          const head = `setpts=PTS-STARTPTS,${useGrid ? `fps=${keepFps}:round=up,` : ""}`;
           const args =
             mode === "ss"
               ? ["-i", inName, "-ss", fmtSec(start0), "-t", fmtSec(dur), "-an", "-vf", `${head}${scalePad}`]

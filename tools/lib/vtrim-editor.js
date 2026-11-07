@@ -2023,10 +2023,11 @@
           (typeof window !== "undefined" && (window.TOOLS_BUILD || window.TOOLS_VERSION)) || "";
         const diag = {
           kind: "vbb-export-diag",
-          ver: 1,
+          ver: 2,
           build: String(build || ""),
           at: new Date().toISOString(),
           ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
+          note: "导出片已拼接删段，时长=各 keep 之和；请按段对照，勿用源时间轴秒数去对导出片进度条",
           file: {
             name: String(file?.name || ""),
             size: Number(file?.size) || 0,
@@ -2058,6 +2059,8 @@
             outH: out?.srcH,
             filename: name,
             bytes: blob.size,
+            ptsResetBeforeTrim: true,
+            keepStyle: "handle-sec-half-open",
           },
         };
         setExportProgress(true, 1, "开始下载…");
@@ -2724,71 +2727,50 @@
   }
 
   /**
-   * 预览/成片共用 keep：源帧半开窗 [startF, endF)。
-   * - 黄柄 trimStart = 首帧（含）；trimEnd = 半开上界（该帧起不进预览/GIF）
-   * - 红柄 cut.start/end = 闭区间删除（两端所见帧都删）→ 上一段止于 cs，下一段从 ce+1 起
-   * 秒值由 frame/fps 还原，预览与编码同一套，禁止再叠「多删 N 帧」垫。
+   * 预览/成片共用 keep：按手柄秒值半开窗（≡预览 currentTime / 导出 PTS trim）。
+   * - 黄柄 trimStart 含、trimEnd 不含
+   * - 红柄闭区间删：上一段止于 cut.start；下一段从 cut.end+1/fps 起
+   * 不再把手柄先打成 CFR 显示帧再还原——Android 实拍 VFR 上会与预览 seek 错位。
    */
   function keepRangesFromEdit(edit, duration) {
     const fps = resolveKeepFps(edit);
+    const step = 1 / fps;
     const d = Math.max(0, Number(duration) || 0);
-    const maxF = Math.max(0, displayFrameAtSec(d, fps));
-    const minSpanF = Math.max(1, Math.ceil(MIN_SPAN * fps));
-    // 手柄→帧：跟 Chrome 显示帧，禁止 round(t*fps)（毫秒量化后系统偏 +1）
-    // 片头：黄柄时刻所见帧起（含）。片尾：停帧=trimEnd-1/fps 所见帧（含）→ exclusive = 该帧+1
-    let startF = displayFrameAtSec(edit?.trimStart, fps);
-    const endParkSec = Math.max(0, Number(edit?.trimEnd) || 0) - 1 / fps;
-    let endF = displayFrameAtSec(endParkSec, fps) + 1;
-    if (endF < startF + minSpanF) endF = startF + minSpanF;
-    if (maxF > 0) {
-      endF = Math.min(endF, maxF);
-      startF = Math.max(0, Math.min(startF, Math.max(0, endF - minSpanF)));
-    }
-    const trimStartSec = frameToSec(startF, fps);
-    const trimEndSec = frameToSec(endF, fps);
-    const cuts = normalizeCutouts(edit?.cutouts, trimStartSec, trimEndSec);
-    const cutFs = [];
-    for (const c of cuts) {
-      let cs = displayFrameAtSec(c.start, fps);
-      let ce = displayFrameAtSec(c.end, fps);
-      cs = Math.max(startF, Math.min(cs, endF - 1));
-      ce = Math.max(cs, Math.min(ce, endF - 1));
-      cutFs.push({ cs, ce });
-    }
-    cutFs.sort((a, b) => a.cs - b.cs);
-    const merged = [];
-    for (const c of cutFs) {
-      const last = merged[merged.length - 1];
-      if (last && c.cs <= last.ce + 1) last.ce = Math.max(last.ce, c.ce);
-      else merged.push({ cs: c.cs, ce: c.ce });
-    }
+    let lo = Math.max(0, Number(edit?.trimStart) || 0);
+    let hi = Math.max(lo + MIN_SPAN, Number(edit?.trimEnd) || 0);
+    if (d > 0) hi = Math.min(hi, d);
+    if (hi < lo + MIN_SPAN) hi = lo + MIN_SPAN;
+    const cuts = normalizeCutouts(edit?.cutouts, lo, hi);
     const keeps = [];
-    let cursor = startF;
-    for (const c of merged) {
-      if (c.cs > cursor) {
+    let cur = lo;
+    for (const c of cuts) {
+      const cs = Math.max(cur, Number(c.start) || 0);
+      const ce = Math.max(cs, Number(c.end) || 0);
+      if (cs > cur + 1e-6) {
         keeps.push({
-          start: frameToSec(cursor, fps),
-          end: frameToSec(c.cs, fps),
-          startF: cursor,
-          endF: c.cs,
+          start: cur,
+          end: cs,
+          startF: displayFrameAtSec(cur, fps),
+          endF: displayFrameAtSec(cs, fps),
         });
       }
-      cursor = Math.max(cursor, c.ce + 1);
+      // 闭区间：删到 end 柄所见帧，下一段从下一源帧起
+      cur = Math.max(cur, ce + step);
     }
-    if (endF > cursor) {
+    if (hi > cur + 1e-6) {
       keeps.push({
-        start: frameToSec(cursor, fps),
-        end: frameToSec(endF, fps),
-        startF: cursor,
-        endF,
+        start: cur,
+        end: hi,
+        startF: displayFrameAtSec(cur, fps),
+        endF: displayFrameAtSec(hi, fps),
       });
     }
     if (!keeps.length) {
       keeps.push({
-        start: frameToSec(startF, fps),
-        end: frameToSec(endF, fps),
-        startF,
-        endF,
+        start: lo,
+        end: hi,
+        startF: displayFrameAtSec(lo, fps),
+        endF: displayFrameAtSec(hi, fps),
       });
     }
     return keeps;
@@ -2908,12 +2890,14 @@
       const out = `keep${i}.mp4`;
       const useGrid = mode === "frameGrid";
       const useFrame = mode === "frameRaw" || mode === "frameGrid" || mode === "frame";
+      // 先 PTS-STARTPTS：容器 start_time/edit list 与 Chrome currentTime 对齐后再 trim
       const trimVf = useFrame
         ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
         : mode === "sec"
           ? `trim=start=${fmtSec(start)}:end=${fmtSec(end)},setpts=PTS-STARTPTS`
           : "";
       const vfCore = [
+        "setpts=PTS-STARTPTS",
         useGrid ? `fps=${keepFps}:round=up` : "",
         cropVf,
         trimVf,

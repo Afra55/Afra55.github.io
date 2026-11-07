@@ -68,19 +68,18 @@ function loadKeepFns() {
   return box;
 }
 
-t("无删段：成片 keep ≡ 预览 keep；end = 停帧半开上界", () => {
+t("无删段：成片 keep ≡ 预览 keep；end = 黄柄半开", () => {
   assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*0/.test(vtrim));
-  const { keepRangesFromEdit, keepRangesForEncode, displayFrameAtSec } = loadKeepFns();
+  const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns();
   const edit = { trimStart: 5, trimEnd: 95, cutouts: [], srcFps: 25 };
   const a = keepRangesFromEdit(edit, 100);
   const b = keepRangesForEncode(edit, 100);
-  const endEx = (displayFrameAtSec(95 - 1 / 25, 25) + 1) / 25;
   assert.strictEqual(a.length, 1);
   assert.strictEqual(b.length, 1);
   assert.ok(Math.abs(a[0].start - b[0].start) < 1e-9);
   assert.ok(Math.abs(a[0].end - b[0].end) < 1e-9);
   assert.ok(Math.abs(a[0].start - 5) < 1e-9);
-  assert.ok(Math.abs(a[0].end - endEx) < 1e-9);
+  assert.ok(Math.abs(a[0].end - 95) < 1e-9);
 });
 
 t("多段删中间：闭区间删红柄帧；预览≡成片；无叠垫", () => {
@@ -111,13 +110,12 @@ t("多段删中间：闭区间删红柄帧；预览≡成片；无叠垫", () =>
   }
 });
 
-t("仅裁片头：起点 = 黄柄 trimStart；终点 = 停帧半开", () => {
-  const { keepRangesForEncode, displayFrameAtSec } = loadKeepFns();
+t("仅裁片头：起点/终点 = 黄柄秒值半开", () => {
+  const { keepRangesForEncode } = loadKeepFns();
   const enc = keepRangesForEncode({ trimStart: 10, trimEnd: 40, cutouts: [], srcFps: 30 }, 60);
-  const endEx = (displayFrameAtSec(40 - 1 / 30, 30) + 1) / 30;
   assert.strictEqual(enc.length, 1);
   assert.ok(Math.abs(enc[0].start - 10) < 1e-9);
-  assert.ok(Math.abs(enc[0].end - endEx) < 1e-9);
+  assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
 t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
