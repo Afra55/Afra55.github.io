@@ -180,27 +180,31 @@ assert(
     assert(Math.abs(enc[1].start - ks[1].start) < 1e-9, "成片≡预览");
     assert(Math.abs(enc[1].end - ks[1].end) < 1e-9, "成片≡预览");
 
-    const p = vtrimEd.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start;\s*\}/);
+    const p = vtrimEd.match(
+      /function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start \+ DISPLAY_SEEK_EPS;\s*\}/
+    );
     assert(p, "须能抽出 previewSeekForKeepRanges");
     const seekFn = new Function(`
       const END_KEEP_SEC = 1 / 25;
+      const DISPLAY_SEEK_EPS = 1e-4;
       function resolveEndKeepSec() { return END_KEEP_SEC; }
       ${p[0]}
       return previewSeekForKeepRanges;
     `)();
     const ek = { endKeepSec: 1 / 25 };
+    const eps = 1e-4;
     assert(seekFn(ks, 1, { paused: false, ...ek }) == null, "keep 内不应跳");
     const skipTo = seekFn(ks, 3, { paused: false, ...ek });
-    assert(Math.abs(skipTo - ks[1].start) < 1e-6, "cutout 内须跳到下一段 keep");
-    assert(Math.abs(seekFn(ks, ks[0].end, { paused: false, ...ek }) - ks[1].start) < 1e-6, "keep 终点须跳下一段");
-    assert(seekFn(ks, 2, { paused: false, ...ek }) === ks[1].start, "红柄起点须已在删段内并跳下一段");
+    assert(Math.abs(skipTo - (ks[1].start + eps)) < 1e-6, "cutout 内须跳到下一段 keep(+eps)");
+    assert(Math.abs(seekFn(ks, ks[0].end, { paused: false, ...ek }) - (ks[1].start + eps)) < 1e-6, "keep 终点须跳下一段");
+    assert(Math.abs(seekFn(ks, 2, { paused: false, ...ek }) - (ks[1].start + eps)) < 1e-9, "红柄起点须已在删段内并跳下一段");
     const early = ks[1].start - 0.015;
-    assert(Math.abs(seekFn(ks, early, { paused: false, ...ek }) - ks[1].start) < 1e-6, "下一段前 15ms 仍须跳，勿少删");
-    assert(Math.abs(seekFn(ks, ks[1].end, { paused: false, ...ek }) - ks[0].start) < 1e-6, "末段后播放须循环到首段");
+    assert(Math.abs(seekFn(ks, early, { paused: false, ...ek }) - (ks[1].start + eps)) < 1e-6, "下一段前 15ms 仍须跳，勿少删");
+    assert(Math.abs(seekFn(ks, ks[1].end, { paused: false, ...ek }) - (ks[0].start + eps)) < 1e-6, "末段后播放须循环到首段");
     const pausedAtEnd = seekFn(ks, ks[1].end, { paused: true, ...ek });
     assert(
-      pausedAtEnd != null && Math.abs(pausedAtEnd - (ks[1].end - 1 / 25)) < 1e-6,
-      "暂停停在 exclusive end 前一源帧"
+      pausedAtEnd != null && Math.abs(pausedAtEnd - (ks[1].end - 1 / 25 + eps)) < 1e-6,
+      "暂停停在 exclusive end 前一源帧(+eps)"
     );
   }
   assert(/previewSeekForKeepRanges/.test(vbbUi) && /is-edit-crop/.test(vbbUi), "外预览须跳 cutouts 并套 crop");
