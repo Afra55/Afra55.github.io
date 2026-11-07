@@ -405,6 +405,10 @@
   /** 用户点关于页「清理缓存」后，不再自动预热，以免马上重新占空间 */
   let ffmpegSkipAutoPrewarm = false;
   let ffmpegEngineEpoch = 0;
+  let ffmpegPrewarmTimer = 0;
+  /** 未选视频前不自动拉 30MB 编码器，否则与面板脚本/选文件抢带宽 */
+  let ffmpegAutoPrewarmArmed = false;
+  let ffmpegPickerQuietUntil = 0;
 
   function loadFfmpegMods() {
     if (!ffmpegModsPromise) {
@@ -1087,11 +1091,6 @@
       });
     return ffmpegWarmPromise;
   }
-
-  let ffmpegPrewarmTimer = 0;
-  /** 未选视频前不自动拉 30MB 编码器，否则与面板脚本/选文件抢带宽，表现为点「选择视频」无反应 */
-  let ffmpegAutoPrewarmArmed = false;
-  let ffmpegPickerQuietUntil = 0;
 
   /** 用户点选文件时：立刻停掉自动预热倒计时，把主线程/带宽留给系统选框 */
   function pauseFfmpegAutoPrewarmForPicker(ms = 15000) {
