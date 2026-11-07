@@ -1997,23 +1997,10 @@
           if (downloadBtn) downloadBtn.textContent = "正在导出…";
         };
         const filenameBase = String(file.name || "video").replace(/\.[^.]+$/, "");
-        // 成片时钟锚点：优先 ffmpeg 精切（快）；失败再逐帧预览导出兜底
+        // 手机 Chrome 显示帧 ≠ ffmpeg PTS 精切（2547 上 ffmpeg 偏、chrome 对）。
+        // 拖柄可不吸附；导出仍优先按预览显示帧，失败再 ffmpeg。
         let out = null;
         try {
-          onProgress(0.08, "编码器切片…");
-          out = await exportKeepVideo(file, edit, duration, {
-            srcW: video.videoWidth || 0,
-            srcH: video.videoHeight || 0,
-            applyCrop: Boolean(edit.cropOn),
-            keeps: previewKeeps,
-            timeline: sourceTimeline || undefined,
-            onProgress,
-          });
-          if (!(out?.blob?.size > 0)) out = null;
-        } catch (_) {
-          out = null;
-        }
-        if (!out) {
           onProgress(0.05, "按预览帧导出…");
           out = await exportKeepByChromeDisplay(video, previewKeeps, {
             keepFps: sourceFps || resolveKeepFps(edit),
@@ -2022,6 +2009,20 @@
             filenameBase,
             srcW: video.videoWidth || 0,
             srcH: video.videoHeight || 0,
+            onProgress,
+          });
+          if (!(out?.blob?.size > 0)) out = null;
+        } catch (_) {
+          out = null;
+        }
+        if (!out) {
+          onProgress(0.08, "编码器切片…");
+          out = await exportKeepVideo(file, edit, duration, {
+            srcW: video.videoWidth || 0,
+            srcH: video.videoHeight || 0,
+            applyCrop: Boolean(edit.cropOn),
+            keeps: previewKeeps,
+            timeline: sourceTimeline || undefined,
             onProgress,
           });
         }
@@ -2039,8 +2040,8 @@
           at: new Date().toISOString(),
           ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
           note: isChromeFrames
-            ? "预览帧兜底导出（VideoFrame）；时长=各 keep 之和"
-            : "成片时钟锚点：ffmpeg 精切；拖柄不吸附，用底部 ±1 源帧精调；时长=各 keep 之和",
+            ? "按编辑器预览显示帧导出（VideoFrame）；拖柄可不吸附；应对齐所见；时长=各 keep 之和"
+            : "ffmpeg 精切兜底；手机上可能与预览差帧；时长=各 keep 之和",
           file: {
             name: String(file?.name || ""),
             size: Number(file?.size) || 0,
