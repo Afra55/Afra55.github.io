@@ -50,7 +50,14 @@ t("空态可打开 / 粘贴", () => {
 });
 
 t("SW 壳缓存已升版", () => {
-  assert.ok(/mdread-shell-v10/.test(sw));
+  assert.ok(/mdread-shell-v1[4-9]|mdread-shell-v[2-9]\d/.test(sw));
+});
+
+t("大纲列表可滚、配色钉在底栏不夹中间", () => {
+  assert.ok(/\.outline\s*\{[\s\S]*?overflow:\s*hidden/.test(css));
+  assert.ok(/\.outline-body\s*\{[\s\S]*?overflow:\s*auto/.test(css));
+  assert.ok(/\.outline-theme\s*\{[\s\S]*?flex:\s*0\s+0\s+auto/.test(css));
+  assert.ok(/\.outline-theme\s*\{[\s\S]*?position:\s*static/.test(css));
 });
 
 t("空页不会被 display:grid 顶出「未命名」", () => {

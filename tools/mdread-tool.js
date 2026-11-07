@@ -2,7 +2,8 @@
   "use strict";
 
   // 仅接线面板按钮；真正「点侧栏开新窗」由 app.js 的 launchUrl 处理，避免选中面板后反复 auto-open
-  const url = new URL("./mdread/", location.href).href;
+  // ?fresh=1：不消费 MDM 残留交接，避免工具入口误开旧文档
+  const url = new URL("./mdread/?fresh=1", location.href).href;
   const openBtn = document.getElementById("mdread-open");
   const linkEl = document.getElementById("mdread-link");
 

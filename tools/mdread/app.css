@@ -353,17 +353,19 @@ body.has-doc .drop-hint {
 }
 .outline {
   border-right: 1px solid var(--line);
-  padding: 0.75rem 0.6rem;
-  overflow: auto;
+  padding: 0.75rem 0.6rem 0.55rem;
+  overflow: hidden;
   max-height: 100dvh;
+  height: 100dvh;
   position: sticky;
   top: 0;
   align-self: start;
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  min-height: 0;
 }
 .outline-label {
+  flex: 0 0 auto;
   margin: 0 0.4rem 0.45rem;
   font-size: 0.75rem;
   color: var(--muted);
@@ -376,6 +378,7 @@ body.has-doc .drop-hint {
   gap: 0.15rem;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: auto;
 }
 .outline-item {
   text-align: left;
@@ -396,12 +399,12 @@ body.has-doc .drop-hint {
 .outline-item.lv3, .outline-item.lv4, .outline-item.lv5, .outline-item.lv6 { padding-left: 1.35rem; font-size: 0.78rem; }
 
 .outline-theme {
-  margin-top: auto;
-  padding: 0.65rem 0.35rem 0.2rem;
+  flex: 0 0 auto;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.35rem 0.15rem;
   border-top: 1px solid var(--line);
-  position: sticky;
-  bottom: 0;
-  background: linear-gradient(180deg, transparent, var(--bg-0) 28%);
+  position: static;
+  background: var(--bg-0);
 }
 .outline-theme-label {
   margin: 0 0.2rem 0.4rem;

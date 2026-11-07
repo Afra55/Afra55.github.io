@@ -727,7 +727,7 @@
         "markdown阅读",
         "读md"
       ],
-      "launchUrl": "./mdread/"
+      "launchUrl": "./mdread/?fresh=1"
     },
     "memo": {
       "name": "备忘录",
