@@ -1284,7 +1284,8 @@
           opts.segmentSpans.length > 1;
         if (useSegmented) {
           frameCount = segmented.frameCount;
-          encodeT = keepSpan;
+          // -t 须盖住各段 ceil 帧之和，勿用 keepSpan（会截掉末帧，最多丢「段数-1」帧）
+          encodeT = (frameCount / fps) * speed;
           effSpan = keepSpan / speed;
         }
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
@@ -2276,7 +2277,7 @@
           const seg0 = vbbEncodeSegmentedFpsFilter(opts.segmentSpans, speed, fps, "");
           if (seg0) {
             frameCount = seg0.frameCount;
-            encodeT = keepSpanSk;
+            encodeT = (frameCount / fps) * speed;
             effSpan = keepSpanSk / speed;
           }
         }
@@ -3519,6 +3520,20 @@
         };
       }
   
+      /** O3 加宽 / 硬闸重编 / 核心编码共用：勿丢 exportedEdit 等 keep 对齐开关 */
+      function vbbKeepFrameEncodeOpts(clipOpts, speed, srcFps) {
+        const o = clipOpts || {};
+        const spd = Math.max(1, Number(speed) || 1);
+        return {
+          forceAccurateCut: Boolean(o.forceAccurateCut) || spd > 1.01,
+          keepAligned: Boolean(o.keepAligned),
+          exportedEdit: Boolean(o.exportedEdit),
+          exactKeepFrames: Boolean(o.exactKeepFrames || o.exportedEdit),
+          segmentSpans: Array.isArray(o.segmentSpans) ? o.segmentSpans : undefined,
+          srcFps: Number(o.srcFps) || Number(srcFps) || 0,
+        };
+      }
+
       /** 黑盒编码对外入口：选优 → gifsicle -O3 → 若 O3 腾出预算再加宽一次 → 硬闸 ≤上限 */
       async function encodeBlackboxClip(clipOpts) {
         let result = await encodeBlackboxClipCore(clipOpts);
@@ -3668,6 +3683,7 @@
               skipWatermark: true,
               skipBright: true,
               brightness: 0,
+              ...vbbKeepFrameEncodeOpts(clipOpts, speed, result.srcFps),
               stageLabel: `O3后·${fps}FPS·宽${w}`,
               onProgress: (local, text) => onProgress(0.985 + Math.min(0.01, (local || 0) * 0.01), text),
             });
@@ -3771,6 +3787,7 @@
               skipWatermark: true,
               skipBright: true,
               brightness: 0,
+              ...vbbKeepFrameEncodeOpts(clipOpts, speed, best.srcFps),
               stageLabel: `硬闸·${step.fps}FPS·宽${w}`,
               onProgress: (local, text) =>
                 onProgress(0.98 + Math.min(0.015, (local || 0) * 0.015), text || `硬闸重编宽${w}`),
@@ -3866,15 +3883,7 @@
           allowWide: true, // 一键黑盒允许超过 720px（预算用不完时换清晰度）
           chunkCount: clipOpts.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
           ffmpeg: clipOpts.ffmpeg || null,
-          // 编辑裁剪 / 压缩时长：强制精确切段，避免 copy 关键帧少切后再加速成短 GIF
-          forceAccurateCut: Boolean(clipOpts.forceAccurateCut) || speed > 1.01,
-          keepAligned: Boolean(clipOpts.keepAligned),
-          // 先导出编辑片后再 GIF：不再叠片尾硬垫；多段按段独立 fps
-          exportedEdit: Boolean(clipOpts.exportedEdit),
-          exactKeepFrames: Boolean(clipOpts.exactKeepFrames || clipOpts.exportedEdit),
-          segmentSpans: Array.isArray(clipOpts.segmentSpans) ? clipOpts.segmentSpans : undefined,
-          // 片尾半开垫用：优先编辑器写入的 srcFps，再探测
-          srcFps: Number(clipOpts.srcFps) || Number(srcFps) || 0,
+          ...vbbKeepFrameEncodeOpts(clipOpts, speed, srcFps),
         };
 
         /**
@@ -8949,7 +8958,8 @@
           typeof window.DevToolsVtrimEditor?.secToFrame === "function"
             ? (t) => window.DevToolsVtrimEditor.secToFrame(t, keepFps)
             : (t) => Math.round(Math.max(0, Number(t) || 0) * keepFps);
-        // 切片勿 fps= / -r cfr（会丢段首→多段整体前移）；保留源帧时序
+        // 先 fps=round=up 抽到 keep 帧格（≡预览），再 trim；勿 -r cfr
+        const gridVf = `fps=${keepFps}:round=up,`;
         const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
         const MIN_PART_BYTES = 512;
         const fmtSec = (t) => {
@@ -8969,8 +8979,8 @@
                 : "";
           const args =
             mode === "ss"
-              ? ["-i", inName, "-ss", fmtSec(start0), "-t", fmtSec(dur), "-an", "-vf", scalePad]
-              : ["-i", inName, "-an", "-vf", `${trimVf}${scalePad}`];
+              ? ["-i", inName, "-ss", fmtSec(start0), "-t", fmtSec(dur), "-an", "-vf", `${gridVf}${scalePad}`]
+              : ["-i", inName, "-an", "-vf", `${gridVf}${trimVf}${scalePad}`];
           // 全 I 帧：中间段 concat 后不因 B 帧丢首尾
           args.push(
             "-c:v",
@@ -13739,7 +13749,7 @@
                   forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05 || speedFac > 1.01,
                   keepAligned: true,
                   exportedEdit: Boolean(prepared.exportedEdit),
-                  exactKeepFrames: Boolean(prepared.exportedEdit),
+                  exactKeepFrames: Boolean(prepared.exportedEdit) || prepared.startSec <= 0.0005,
                   segmentSpans: prepared.segmentSpans,
                   srcFps: Number(item.srcFps) || Number(item.edit?.srcFps) || 0,
                   ffmpeg: ffmpegLease || null,
@@ -14037,7 +14047,7 @@
             forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
             keepAligned: true,
             exportedEdit: Boolean(prepared.exportedEdit),
-            exactKeepFrames: Boolean(prepared.exportedEdit),
+            exactKeepFrames: Boolean(prepared.exportedEdit) || prepared.startSec <= 0.0005,
             segmentSpans: prepared.segmentSpans,
             srcFps: Number(win.edit?.srcFps) || Number(getActiveVbbEditItem()?.srcFps) || 0,
             isAborted: () => abortVbb,

@@ -915,7 +915,8 @@
           typeof window.DevToolsVtrimEditor?.secToFrame === "function"
             ? (t) => window.DevToolsVtrimEditor.secToFrame(t, keepFps)
             : (t) => Math.round(Math.max(0, Number(t) || 0) * keepFps);
-        // 切片勿 fps= / -r cfr（会丢段首→多段整体前移）；保留源帧时序
+        // 先 fps=round=up 抽到 keep 帧格（≡预览），再 trim；勿 -r cfr
+        const gridVf = `fps=${keepFps}:round=up,`;
         const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
         const MIN_PART_BYTES = 512;
         const fmtSec = (t) => {
@@ -935,8 +936,8 @@
                 : "";
           const args =
             mode === "ss"
-              ? ["-i", inName, "-ss", fmtSec(start0), "-t", fmtSec(dur), "-an", "-vf", scalePad]
-              : ["-i", inName, "-an", "-vf", `${trimVf}${scalePad}`];
+              ? ["-i", inName, "-ss", fmtSec(start0), "-t", fmtSec(dur), "-an", "-vf", `${gridVf}${scalePad}`]
+              : ["-i", inName, "-an", "-vf", `${gridVf}${trimVf}${scalePad}`];
           // 全 I 帧：中间段 concat 后不因 B 帧丢首尾
           args.push(
             "-c:v",
@@ -5705,7 +5706,7 @@
                   forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05 || speedFac > 1.01,
                   keepAligned: true,
                   exportedEdit: Boolean(prepared.exportedEdit),
-                  exactKeepFrames: Boolean(prepared.exportedEdit),
+                  exactKeepFrames: Boolean(prepared.exportedEdit) || prepared.startSec <= 0.0005,
                   segmentSpans: prepared.segmentSpans,
                   srcFps: Number(item.srcFps) || Number(item.edit?.srcFps) || 0,
                   ffmpeg: ffmpegLease || null,
@@ -6003,7 +6004,7 @@
             forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
             keepAligned: true,
             exportedEdit: Boolean(prepared.exportedEdit),
-            exactKeepFrames: Boolean(prepared.exportedEdit),
+            exactKeepFrames: Boolean(prepared.exportedEdit) || prepared.startSec <= 0.0005,
             segmentSpans: prepared.segmentSpans,
             srcFps: Number(win.edit?.srcFps) || Number(getActiveVbbEditItem()?.srcFps) || 0,
             isAborted: () => abortVbb,
