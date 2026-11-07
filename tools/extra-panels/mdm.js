@@ -4707,7 +4707,8 @@
 
     async function openInMdRead(item) {
       if (!item) return;
-      const url = new URL("./mdread/", location.href).href;
+      // 阅读页仅在 ?handoff=1 时消费交接；工具站入口不带此参数 → 空页
+      const url = new URL("./mdread/?handoff=1", location.href).href;
       // 尽量同步拿到正文：可先写交接再开窗（阅读页首屏即有内容）
       let raw = null;
       try {

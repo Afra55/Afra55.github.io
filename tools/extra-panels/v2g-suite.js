@@ -1264,12 +1264,29 @@
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
-        // keep 预览半开窗仍原样；编码再收片尾垫（见 vbbEncodeSpanTailPadSec），防 fps= 多吐
+        // 已导出编辑片：不再叠片尾垫；未导出旧路径仍半开垫
         const tailPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
         const keepSpan = Math.max(0.05, span - tailPad);
         let encodeSs = Math.max(0, startSec);
-        let { encodeT, frameCount, effSpan } = vbbEncodeWindowFromKeepSpan(keepSpan, speed, fps);
+        let { encodeT, frameCount, effSpan } = vbbEncodeWindowFromKeepSpan(keepSpan, speed, fps, opts);
         const framesCapped = false;
+        const segmented = vbbEncodeSegmentedFpsFilter(
+          opts.segmentSpans,
+          speed,
+          fps,
+          "" // crop 在后面统一接，避免每段重复；无 crop 时分段采样
+        );
+        // 有裁画面时分段链需带 crop；上面先探测长度，真正 build 时再带 cropFilter
+        const useSegmented =
+          Boolean(segmented) &&
+          encodeSs <= 0.001 &&
+          Array.isArray(opts.segmentSpans) &&
+          opts.segmentSpans.length > 1;
+        if (useSegmented) {
+          frameCount = segmented.frameCount;
+          encodeT = keepSpan;
+          effSpan = keepSpan / speed;
+        }
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
         const crop = normalizeV2gCrop(opts.crop, srcW, srcH);
@@ -1362,16 +1379,36 @@
           }
   
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
-          // fps 前按 PTS 切源窗（防 -ss 落到下一帧→片头前移）；fps 后再按成片时长切 + select 限帧
+          // fps 前按 PTS 切源窗；导出多段则按段独立 fps=round=up，消接点相位
           const ptsStart = encodeSs > 0.001 ? encodeSs : 0;
           const timeFilter = vbbEncodeHardTrimFilters(speed, encodeT, ptsStart);
-          const outTrim = vbbEncodeOutTrimFilters(effSpan, fps);
-          // 噪点：源有颗粒 + 大幅下采样（如 1170→300 是 4 倍）时，bicubic 会混叠、GIF 看着全是噪点。
-          // 先轻度 hqdn3d 降噪、再用 lanczos 缩放。若 wasm 核心未编入 hqdn3d，exec 返回非 0，下面自动回退重跑。
+          const outTrim = vbbEncodeOutTrimFilters(effSpan, fps, opts);
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
           const buildFilterArgs = (denoise) => {
+            const den = denoise ? DENOISE : "";
+            const seg = useSegmented
+              ? vbbEncodeSegmentedFpsFilter(opts.segmentSpans, speed, fps, cropFilter)
+              : null;
+            if (seg) {
+              const tail =
+                `${den}scale=${maxW}:-2:flags=lanczos${brightFilter}`;
+              if (wmBytes && wmBytes.length) {
+                return [
+                  "-filter_complex",
+                  `${seg.fc};[vseg]${tail}[base];` +
+                    `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
+                    `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
+                    `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
+                ];
+              }
+              return [
+                "-filter_complex",
+                `${seg.fc};[vseg]${tail},split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
+                  `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
+              ];
+            }
             const chain =
-              `${cropFilter}${timeFilter}fps=${fps},${outTrim}select='lt(n\\,${frameCount})',${denoise ? DENOISE : ""}` +
+              `${cropFilter}${timeFilter}fps=${fps}:round=up,${outTrim}select='lt(n\\,${frameCount})',${den}` +
               `scale=${maxW}:-2:flags=lanczos${brightFilter}`;
             if (wmBytes && wmBytes.length) {
               return [
@@ -1645,12 +1682,13 @@
         return vbbEncodeKeepEdgePadSec(gifFps, srcFps);
       }
 
-      /** 编辑/精确切：片尾垫；其它走旧半开垫 */
+      /**
+       * 片尾垫：已导出编辑片（exportedEdit）不再叠 4 帧垫——编辑半开窗已在导出时收齐。
+       * 未导出的旧路径仍用半开垫；禁止再用 4 帧硬砍真帧。
+       */
       function vbbEncodeSpanTailPadSec(gifFps, srcFps, opts) {
         const o = opts || {};
-        if (o.forceAccurateCut || o.keepAligned || Number.isFinite(o.startSec)) {
-          return vbbEncodeKeepEdgePadSec(gifFps, srcFps);
-        }
+        if (o.exportedEdit || o.exactKeepFrames) return 0;
         return vbbEncodeHalfOpenPadSec(gifFps, srcFps);
       }
 
@@ -1660,16 +1698,23 @@
       }
 
       /**
-       * 由（已收片尾垫的）keep 窗长推导编码 -t 与输出帧数。
-       * floor 后再减 2：对冲 fps= EOF flush（PTS 仍落在 out-trim 窗内的那几帧）。
+       * 由 keep 窗长推导编码 -t 与输出帧数。
+       * 导出编辑片：ceil 精确帧数，禁止 floor-2 再砍真帧。
+       * 旧路径：仍略收 1 输出帧防 EOF flush 多吐。
        */
-      function vbbEncodeWindowFromKeepSpan(span, speed, gifFps) {
+      function vbbEncodeWindowFromKeepSpan(span, speed, gifFps, opts) {
         const rawSpan = Math.max(0.05, Number(span) || 0.05);
         const spd = Math.max(1, Number(speed) || 1);
         const fpsOut = Math.max(8, Number(gifFps) || 15);
+        const o = opts || {};
+        if (o.exportedEdit || o.exactKeepFrames) {
+          const frameCount = Math.max(2, Math.ceil((rawSpan / spd) * fpsOut - 1e-6));
+          const encodeT = Math.max(0.05, (frameCount / fpsOut) * spd);
+          return { encodeT, frameCount, effSpan: encodeT / spd };
+        }
         const encodeT = Math.max(0.05, rawSpan - 1 / fpsOut);
         const effSpan = encodeT / spd;
-        const frameCount = Math.max(2, Math.floor(effSpan * fpsOut + 1e-9) - 2);
+        const frameCount = Math.max(2, Math.floor(effSpan * fpsOut + 1e-9));
         const encodeT2 = Math.min(rawSpan, (frameCount / fpsOut) * spd);
         return {
           encodeT: Math.max(0.05, encodeT2),
@@ -1680,9 +1725,7 @@
 
       /**
        * 编码滤镜：在 fps= 之前按片源时长硬切。
-       * 仅靠 -t + -frames:v 时，fps= 少吐会为凑帧继续解码，把黄柄后画面带进 GIF
-       * （预览半开停对、成片尾多几帧）。trim 后 fps 根本看不到窗外的包。
-       * startSec>0 时用 PTS trim（≡预览 currentTime），避免 demux -ss 落到下一帧导致片头前移。
+       * 倍速必须写成 (PTS-STARTPTS)/speed，禁止 PTS-STARTPTS/speed（运算符优先级错误）。
        * @returns {string} 以逗号结尾的滤镜前缀（可接 fps=）
        */
       function vbbEncodeHardTrimFilters(speed, sourceDurSec, startSec) {
@@ -1699,20 +1742,61 @@
           // 归零 PTS → 片源时长硬切 → 再倍速（倍速后的时间轴不再用于切尾）
           s = `setpts=PTS-STARTPTS,trim=duration=${dur},setpts=PTS-STARTPTS`;
         }
-        if (spd > 1.01) s += `/${spd}`;
+        if (spd > 1.01) s += `,setpts=(PTS-STARTPTS)/${spd}`;
         return `${s},`;
       }
 
       /**
-       * fps= 之后按成片时间轴再 trim，并再提前收 2 个输出帧。
-       * EOF flush 帧 PTS 往往仍落在原 duration 内，只切 duration=effSpan 不够。
+       * fps= 之后按成片时间轴再 trim。
+       * 导出编辑片：只贴 duration，不再提前收 2 输出帧。
        * @returns {string} 以逗号结尾（可接 denoise/scale）
        */
-      function vbbEncodeOutTrimFilters(outDurSec, gifFps) {
+      function vbbEncodeOutTrimFilters(outDurSec, gifFps, opts) {
         const fpsOut = Math.max(8, Number(gifFps) || 15);
         const dur0 = Math.max(0.05, Number(outDurSec) || 0.05);
-        const dur = Math.max(0.05, dur0 - 2 / fpsOut);
+        const o = opts || {};
+        const dur =
+          o.exportedEdit || o.exactKeepFrames
+            ? dur0
+            : Math.max(0.05, dur0 - 2 / fpsOut);
         return `trim=duration=${dur},setpts=PTS-STARTPTS,`;
+      }
+
+      /**
+       * P1：多段 keep 导出片上按段独立 fps=round=up，避免全局网格在接点随机丢帧。
+       * segmentSpans 为导出时间轴上各段时长（秒），总和≈span。
+       * @returns {{ fc: string, frameCount: number } | null} fc 输出标签 [vseg]
+       */
+      function vbbEncodeSegmentedFpsFilter(segmentSpans, speed, gifFps, cropFilter) {
+        const spans = (Array.isArray(segmentSpans) ? segmentSpans : [])
+          .map((s) => Math.max(0.05, Number(s) || 0))
+          .filter((s) => s > 0);
+        if (spans.length < 2) return null;
+        const spd = Math.max(1, Number(speed) || 1);
+        const fps = Math.max(8, Number(gifFps) || 15);
+        const crop = String(cropFilter || "");
+        let t0 = 0;
+        const parts = [];
+        const labels = [];
+        let totalFrames = 0;
+        for (let i = 0; i < spans.length; i++) {
+          const dur = spans[i];
+          const t1 = t0 + dur;
+          const nf = Math.max(1, Math.ceil((dur / spd) * fps - 1e-6));
+          totalFrames += nf;
+          let chain = `${crop}trim=start=${t0.toFixed(6)}:end=${t1.toFixed(6)},setpts=PTS-STARTPTS`;
+          if (spd > 1.01) chain += `,setpts=(PTS-STARTPTS)/${spd}`;
+          chain += `,fps=${fps}:round=up,trim=end_frame=${nf},setpts=PTS-STARTPTS`;
+          parts.push(`[0:v]${chain}[vs${i}]`);
+          labels.push(`[vs${i}]`);
+          t0 = t1;
+        }
+        const fc =
+          parts.join(";") +
+          ";" +
+          labels.join("") +
+          `concat=n=${spans.length}:v=1:a=0[vseg]`;
+        return { fc, frameCount: Math.max(2, totalFrames) };
       }
 
       /**
@@ -2002,7 +2086,8 @@
         const { encodeT: encodeSpan, frameCount, effSpan } = vbbEncodeWindowFromKeepSpan(
           Math.max(0.05, span - tailPad),
           speed,
-          fps
+          fps,
+          opts
         );
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
@@ -2174,13 +2259,22 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(V2G_BLACKBOX_MAX_SPEED, Number(opts.speed) || 1));
         const tailPad = vbbEncodeSpanTailPadSec(fps, opts.srcFps, opts);
+        const keepSpanSk = Math.max(0.05, span - tailPad);
         let encodeSs = Math.max(0, startSec);
-        let { encodeT, frameCount, effSpan } = vbbEncodeWindowFromKeepSpan(
-          Math.max(0.05, span - tailPad),
-          speed,
-          fps
-        );
+        let { encodeT, frameCount, effSpan } = vbbEncodeWindowFromKeepSpan(keepSpanSk, speed, fps, opts);
         const framesCapped = false;
+        const useSegmentedSk =
+          encodeSs <= 0.001 &&
+          Array.isArray(opts.segmentSpans) &&
+          opts.segmentSpans.length > 1;
+        if (useSegmentedSk) {
+          const seg0 = vbbEncodeSegmentedFpsFilter(opts.segmentSpans, speed, fps, "");
+          if (seg0) {
+            frameCount = seg0.frameCount;
+            encodeT = keepSpanSk;
+            effSpan = keepSpanSk / speed;
+          }
+        }
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
         const crop = normalizeV2gCrop(opts.crop, srcW, srcH);
@@ -2316,12 +2410,31 @@
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
           const buildRawArgs = (denoise, sourceDurSec, maxFrames, ptsStart) => {
-            const timeFilter = vbbEncodeHardTrimFilters(speed, sourceDurSec, ptsStart);
             const nMax = Math.max(2, Math.floor(Number(maxFrames) || 2));
-            // 本段成片时长 = nMax/fps；fps 后再 trim + select，丢掉 EOF flush
-            const outTrim = vbbEncodeOutTrimFilters(nMax / Math.max(8, fps), fps);
+            const den = denoise ? DENOISE : "";
+            // 整片导出且多段：仅首块（ptsStart≈0 且 nMax≈总帧）走分段采样；分块路径仍用全局窗
+            const seg =
+              useSegmentedSk && ptsStart <= 0.001 && nMax >= frameCount - 1
+                ? vbbEncodeSegmentedFpsFilter(opts.segmentSpans, speed, fps, cropFilter)
+                : null;
+            if (seg) {
+              const tail =
+                `${den}scale=${outW}:${outH}:flags=lanczos${brightFilter},format=rgba`;
+              if (wmBytes && wmBytes.length) {
+                return [
+                  "-filter_complex",
+                  `${seg.fc};[vseg]${tail}[base];` +
+                    `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto,format=rgba[v]`,
+                  "-map",
+                  "[v]",
+                ];
+              }
+              return ["-filter_complex", `${seg.fc};[vseg]${tail}[v]`, "-map", "[v]"];
+            }
+            const timeFilter = vbbEncodeHardTrimFilters(speed, sourceDurSec, ptsStart);
+            const outTrim = vbbEncodeOutTrimFilters(nMax / Math.max(8, fps), fps, opts);
             const chain =
-              `${cropFilter}${timeFilter}fps=${fps},${outTrim}select='lt(n\\,${nMax})',${denoise ? DENOISE : ""}` +
+              `${cropFilter}${timeFilter}fps=${fps}:round=up,${outTrim}select='lt(n\\,${nMax})',${den}` +
               `scale=${outW}:${outH}:flags=lanczos${brightFilter},format=rgba`;
             if (wmBytes && wmBytes.length) {
               return [
@@ -3750,8 +3863,13 @@
           ffmpeg: clipOpts.ffmpeg || null,
           // 编辑裁剪 / 压缩时长：强制精确切段，避免 copy 关键帧少切后再加速成短 GIF
           forceAccurateCut: Boolean(clipOpts.forceAccurateCut) || speed > 1.01,
-          // 片尾半开垫用：与预览 keep 的源 fps 对齐
-          srcFps: Number(srcFps) || Number(clipOpts.srcFps) || 0,
+          keepAligned: Boolean(clipOpts.keepAligned),
+          // 先导出编辑片后再 GIF：不再叠片尾硬垫；多段按段独立 fps
+          exportedEdit: Boolean(clipOpts.exportedEdit),
+          exactKeepFrames: Boolean(clipOpts.exactKeepFrames || clipOpts.exportedEdit),
+          segmentSpans: Array.isArray(clipOpts.segmentSpans) ? clipOpts.segmentSpans : undefined,
+          // 片尾半开垫用：优先编辑器写入的 srcFps，再探测
+          srcFps: Number(clipOpts.srcFps) || Number(srcFps) || 0,
         };
 
         /**
@@ -8005,6 +8123,8 @@
       let vbbEditBatchIdx = -1;
       /** 单文件可选 trim/crop（整段模式） */
       let vbbSingleEdit = null;
+      /** 单文件探测到的源 fps（getActive 临时对象不会丢掉） */
+      let vbbSingleSrcFps = 0;
       let vbbObjectUrl = "";
       /** 编码因 File 引用失效失败后，允许重选同视频并保留方案/打点 */
       let vbbNeedReselect = false;
@@ -8659,11 +8779,16 @@
             vbbVideo.videoHeight || 0
           );
         }
+        const srcFps =
+          Number(vbbSingleEdit?.srcFps) ||
+          Number(vbbSingleSrcFps) ||
+          0;
         return {
           file: vbbSourceFile,
           duration: Number(vbbVideo.duration) || 0,
           srcW: vbbVideo.videoWidth || 0,
           srcH: vbbVideo.videoHeight || 0,
+          srcFps: srcFps >= 5 ? srcFps : 0,
           edit: vbbSingleEdit,
         };
       }
@@ -8757,14 +8882,18 @@
       }
 
       /**
-       * 有多段 keep（删中间）时，先拼成一条临时片再黑盒，保证仍是一条 GIF。
-       * @returns {Promise<{ file: File, duration: number, srcW: number, srcH: number, materialized: boolean }>}
+       * 先导出编辑后的视频（trim+删中间），再交给黑盒做 GIF——避免对原片叠 start/span。
+       * 单段 keep 也会导出（不再早退原片）。
+       * @returns {Promise<{ file: File, duration: number, srcW: number, srcH: number, materialized: boolean, segmentSpans: number[] }>}
        */
       async function materializeVbbKeepVideo(file, edit, srcW, srcH, duration, onProgress, ffmpegLease) {
         const keeps = vbbKeepRangesForEncode(edit, duration);
         const keepSpan = vbbKeepSpanSec(keeps);
-        if (keeps.length <= 1) {
-          return { file, duration, srcW, srcH, materialized: false };
+        const segmentSpans = keeps.map((k) =>
+          Math.max(0.05, (Number(k.end) || 0) - (Number(k.start) || 0))
+        );
+        if (!keeps.length) {
+          return { file, duration, srcW, srcH, materialized: false, segmentSpans: [] };
         }
         const exp = window.DevToolsVtrimEditor?.exportKeepVideo;
         if (typeof exp === "function") {
@@ -8787,6 +8916,7 @@
             srcW: out.srcW || srcW,
             srcH: out.srcH || srcH,
             materialized: true,
+            segmentSpans,
           };
         }
         const ffmpeg =
@@ -8874,8 +9004,8 @@
           const start0 = Math.max(0, Number(k.start) || 0);
           const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // 多段：帧号优先（半开窗≡预览）；空片再秒级/-ss；勿两端 bias；勿滤镜内 fps=
-          const modes = keeps.length > 1 ? ["frame", "sec", "ss"] : ["sec", "frame", "ss"];
+          // 秒级 PTS 优先；空片再帧号/-ss；勿两端 bias；勿滤镜内 fps=
+          const modes = ["sec", "frame", "ss"];
           let ok = false;
           for (const mode of modes) {
             ok = await tryPart(start0, end0, out, mode);
@@ -8955,7 +9085,23 @@
           srcW: W,
           srcH: H,
           materialized: true,
+          segmentSpans,
         };
+      }
+
+      /** 编辑是否改变时间轴（需先导出再 GIF） */
+      function vbbEditNeedsExport(edit, duration) {
+        if (!edit) return false;
+        const d = Math.max(0, Number(duration) || 0);
+        const keeps = vbbKeepRangesForEncode(edit, d);
+        if (keeps.length > 1) return true;
+        if ((edit.cutouts || []).length) return true;
+        if (keeps.length === 1) {
+          const k = keeps[0];
+          if ((Number(k.start) || 0) > 0.02) return true;
+          if (d > 0 && (Number(k.end) || 0) < d - 0.02) return true;
+        }
+        return false;
       }
 
       /**
@@ -9105,8 +9251,8 @@
       }
 
       /**
-       * 编码前：多段 keep（删中间）先拼成一条；仅明显裁短时预裁短片。
-       * @returns {Promise<{ file: File, startSec: number, span: number, srcW: number, srcH: number, edit: any, cutNote: string }>}
+       * 编码前：有时间编辑则先导出编辑片，GIF 只吃导出片（startSec=0）。
+       * @returns {Promise<{ file: File, startSec: number, span: number, srcW: number, srcH: number, edit: any, cutNote: string, exportedEdit: boolean, segmentSpans: number[] }>}
        */
       async function prepareVbbEncodeSource(file, edit, srcW, srcH, duration, opts = {}) {
         const fromMark = Boolean(opts.fromMark);
@@ -9117,41 +9263,54 @@
         let outH = Math.max(1, Math.round(Number(srcH) || 1));
         let cutNote = "";
         let alreadyMaterialized = false;
+        let exportedEdit = false;
+        let segmentSpans = [];
         const fullDur = Math.max(0, Number(duration) || 0);
-        if (!fromMark && edit) {
+        if (!fromMark && edit && vbbEditNeedsExport(edit, duration)) {
           const keeps = vbbKeepRangesForEncode(edit, duration);
           const keepSpan = vbbKeepSpanSec(keeps);
           const cuts = vbbNormalizeCutouts(edit.cutouts, edit.trimStart, edit.trimEnd);
-          if (keeps.length > 1) {
-            const mat = await materializeVbbKeepVideo(
-              file,
-              edit,
-              srcW,
-              srcH,
-              duration,
-              opts.onProgress,
-              opts.ffmpeg || null
-            );
+          opts.onProgress?.(0.04, keeps.length > 1 ? "先导出编辑片（删中间）…" : "先导出编辑片…");
+          const mat = await materializeVbbKeepVideo(
+            file,
+            edit,
+            srcW,
+            srcH,
+            duration,
+            opts.onProgress,
+            opts.ffmpeg || null
+          );
+          if (mat.materialized) {
             outFile = mat.file;
             startSec = 0;
-            // 片头片尾 + 多段删中间后：span=keep 总和，再交给 speedLimitSec；勿用原片整段
             span = Math.max(
               VBB_MIN_SPAN,
               vbbMaterializedKeepDuration(mat.duration, keepSpan || span, fullDur)
             );
             outW = mat.srcW;
             outH = mat.srcH;
-            cutNote = cuts.length ? `删${cuts.length}段` : "删中间";
+            segmentSpans = Array.isArray(mat.segmentSpans) ? mat.segmentSpans : [];
+            cutNote = cuts.length
+              ? `删${cuts.length}段`
+              : keeps.length > 1
+                ? "删中间"
+                : `裁 ${span.toFixed(1)}s`;
             alreadyMaterialized = true;
+            exportedEdit = true;
           } else if (keeps.length === 1) {
             startSec = Number(keeps[0].start) || startSec;
             span = Math.max(VBB_MIN_SPAN, (Number(keeps[0].end) || 0) - startSec);
+            segmentSpans = [span];
             if (cuts.length) cutNote = `删${cuts.length}段`;
-          } else if (cuts.length) {
-            cutNote = `删${cuts.length}段`;
+          }
+        } else if (!fromMark && edit) {
+          const keeps = vbbKeepRangesForEncode(edit, duration);
+          if (keeps.length === 1) {
+            startSec = Number(keeps[0].start) || startSec;
+            span = Math.max(VBB_MIN_SPAN, (Number(keeps[0].end) || 0) - startSec);
           }
         }
-        // 保守：仅明显裁短才预裁；失败则静默回退旧 start/span（行为与改前一致）
+        // 未走导出时：明显裁短仍预裁成短片，再 GIF
         const requestedSpan = span;
         if (!alreadyMaterialized && shouldPrecutVbbWindow(fullDur, startSec, span)) {
           try {
@@ -9174,13 +9333,26 @@
             );
             outW = mat.srcW;
             outH = mat.srcH;
+            segmentSpans = [span];
+            exportedEdit = true;
             if (!cutNote) cutNote = `裁 ${span.toFixed(1)}s`;
           } catch (err) {
             vbbLog(`[vbb] 预裁切失败，回退整片 seek：${err?.message || err}`);
             opts.onProgress?.(0.08, "预裁切失败 · 回退整片编码…");
           }
         }
-        return { file: outFile, startSec, span, srcW: outW, srcH: outH, edit, cutNote };
+        if (!segmentSpans.length) segmentSpans = [span];
+        return {
+          file: outFile,
+          startSec,
+          span,
+          srcW: outW,
+          srcH: outH,
+          edit,
+          cutNote,
+          exportedEdit,
+          segmentSpans,
+        };
       }
 
       /** 绿框 ∩ 去色边：手动裁保留用户框，仍去掉框内残留 letterbox */
@@ -9344,7 +9516,11 @@
             detectSourceFps(item.file)
               .then((f) => {
                 const n = Number(f) || 0;
-                if (n >= 5) item.srcFps = n;
+                if (n >= 5) {
+                  item.srcFps = n;
+                  if (!isVbbBatchMode()) vbbSingleSrcFps = n;
+                  if (item.edit && !(Number(item.edit.srcFps) >= 5)) item.edit.srcFps = n;
+                }
               })
               .catch(() => {});
           }
@@ -9359,6 +9535,7 @@
           boot.remove();
           const next = await openP;
           if (next) {
+            const nextFps = Number(next.srcFps) || Number(item.srcFps) || Number(vbbSingleSrcFps) || 0;
             item.edit = {
               trimStart: Number(next.trimStart) || 0,
               trimEnd: Number(next.trimEnd) || item.duration,
@@ -9372,7 +9549,12 @@
               crop: next.crop
                 ? { ...next.crop }
                 : { x: 0, y: 0, w: item.srcW, h: item.srcH },
+              ...(nextFps >= 5 ? { srcFps: nextFps } : {}),
             };
+            if (nextFps >= 5) {
+              item.srcFps = nextFps;
+              if (!isVbbBatchMode()) vbbSingleSrcFps = nextFps;
+            }
             clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
             if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
             saveVbbEditDraftsSync();
@@ -12066,6 +12248,7 @@
         vbbBatchFiles = [];
         vbbEditBatchIdx = -1;
         vbbSingleEdit = null;
+        vbbSingleSrcFps = 0;
         vbbAnalysis = null;
         clearVbbResults();
         if (vbbObjectUrl) {
@@ -13471,6 +13654,9 @@
                   crop: vbbCrop,
                   forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05 || speedFac > 1.01,
                   keepAligned: true,
+                  exportedEdit: Boolean(prepared.exportedEdit),
+                  exactKeepFrames: Boolean(prepared.exportedEdit),
+                  segmentSpans: prepared.segmentSpans,
                   srcFps: Number(item.srcFps) || Number(item.edit?.srcFps) || 0,
                   ffmpeg: ffmpegLease || null,
                   isAborted: itemAborted,
@@ -13761,6 +13947,9 @@
             crop: vbbCrop,
             forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
             keepAligned: true,
+            exportedEdit: Boolean(prepared.exportedEdit),
+            exactKeepFrames: Boolean(prepared.exportedEdit),
+            segmentSpans: prepared.segmentSpans,
             srcFps: Number(win.edit?.srcFps) || Number(getActiveVbbEditItem()?.srcFps) || 0,
             isAborted: () => abortVbb,
             onProgress: (local, text) => {
@@ -15395,6 +15584,8 @@
           const item = getActiveVbbEditItem();
           if (!item) return false;
           ensureVbbItemEdit(item);
+          const nextFps =
+            Number(next?.srcFps) || Number(item.srcFps) || Number(vbbSingleSrcFps) || 0;
           item.edit = {
             trimStart: Number(next?.trimStart) || 0,
             trimEnd: Number(next?.trimEnd) || item.duration,
@@ -15408,7 +15599,12 @@
             crop: next?.crop
               ? { ...next.crop }
               : { x: 0, y: 0, w: item.srcW, h: item.srcH },
+            ...(nextFps >= 5 ? { srcFps: nextFps } : {}),
           };
+          if (nextFps >= 5) {
+            item.srcFps = nextFps;
+            if (!isVbbBatchMode()) vbbSingleSrcFps = nextFps;
+          }
           clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
           if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
           const encodeKeeps = vbbKeepRangesForEncode(item.edit, item.duration);

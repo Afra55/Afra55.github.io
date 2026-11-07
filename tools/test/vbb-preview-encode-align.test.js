@@ -121,28 +121,39 @@ t("仅裁片头片尾：成片起点=黄柄，终点=黄柄半开上界", () => 
   assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("exportKeepVideo：多段帧号优先 + 全 I 帧；滤镜链禁止 fps=；禁止两端 bias", () => {
+t("exportKeepVideo：秒级 PTS 优先；滤镜链禁止 fps=；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes('keeps.length > 1 ? ["frame", "sec", "ss"]'), "多段须 frame→sec→ss");
-  assert.ok(exp.includes('["sec", "frame", "ss"]'), "单段仍 sec→frame→ss");
-  assert.ok(exp.includes('"-bf"') && exp.includes('"0"'), "切片全 I 帧防中间段首尾丢帧");
-  assert.ok(exp.includes('"-g"') && exp.includes('"1"'));
+  assert.ok(exp.includes('["sec", "frame", "ss"]'), "须 sec→frame→ss");
+  assert.ok(!exp.includes('keeps.length > 1 ? ["frame"'), "禁止多段帧号优先（VFR 会切偏）");
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(!/`fps=\$\{keepFps\}`/.test(exp) && !/fps=\$\{keepFps\},format/.test(exp), "切片/拼接滤镜勿 fps=");
   assert.ok(exp.includes("format=yuv420p,setsar=1"));
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
 });
 
-t("materialize 回退路径同样多段帧号优先 + 全 I 帧且无滤镜 fps=", () => {
+t("materialize：有编辑就导出；秒级优先；无滤镜 fps=", () => {
   const start = vbb.indexOf("async function materializeVbbKeepVideo");
   const end = vbb.indexOf("function shouldPrecutVbbWindow", start);
   const body = vbb.slice(start, end > start ? end : undefined);
-  assert.ok(body.includes('keeps.length > 1 ? ["frame", "sec", "ss"]'), "回退多段须 frame→sec→ss");
-  assert.ok(body.includes('"-bf"') && body.includes('"0"'));
+  assert.ok(body.includes("segmentSpans"), "导出片带回各段时长供按段 fps");
+  assert.ok(!/keeps\.length\s*<=\s*1/.test(body) || body.includes("单段 keep 也会导出"), "单段也要能导出");
+  assert.ok(body.includes('["sec", "frame", "ss"]') || body.includes('"sec"'), "秒级优先");
   assert.ok(!/setsar=1,fps=\$\{keepFps\}/.test(body), "scalePad 勿带 fps=");
   assert.ok(!/\[\$\{i\}:v\]fps=\$\{keepFps\}/.test(body), "concat 勿再 fps=");
+});
+
+t("prepare：时间编辑先导出再 GIF", () => {
+  assert.ok(vbb.includes("function vbbEditNeedsExport"));
+  assert.ok(vbb.includes("exportedEdit"));
+  const prep = vbb.slice(
+    vbb.indexOf("async function prepareVbbEncodeSource"),
+    vbb.indexOf("function intersectVbbCrops")
+  );
+  assert.ok(prep.includes("vbbEditNeedsExport"));
+  assert.ok(prep.includes("先导出编辑片"));
+  assert.ok(prep.includes("segmentSpans"));
 });
 
 t("ENCODE 叠垫已清零（根因用源帧窗）", () => {

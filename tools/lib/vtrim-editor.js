@@ -2849,8 +2849,8 @@
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 多段：帧号优先（keep 按源帧半开窗算）；单段：秒级优先（PTS≡预览）
-      const modes = keeps.length > 1 ? ["frame", "sec", "ss"] : ["sec", "frame", "ss"];
+      // 秒级 PTS 优先（≡预览 currentTime）；空片再帧号/-ss。帧号在 VFR/起点非 0 会切偏。
+      const modes = ["sec", "frame", "ss"];
       let out = null;
       for (const mode of modes) {
         out = await trySlice(keeps[i], i, mode);
