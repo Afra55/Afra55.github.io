@@ -133,7 +133,7 @@ assert(
   assert(/function resolveKeepFps/.test(vtrimEd) && /function secToFrame/.test(vtrimEd), "须有源帧时钟");
   assert(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*0/.test(vtrimEd), "成片不再叠接点垫");
   assert(/return keepRangesFromEdit\(edit, duration(?:,\s*\w+)?\)/.test(vtrimEd), "成片 keep ≡ 预览 keep");
-  assert(/Math\.min\(\s*want\s*,\s*Math\.max\(\s*fromShown/.test(vtrimEd), "片尾抬手禁止推过拖点");
+  assert(/拖到哪停哪|不帧格吸附/.test(vtrimEd), "片尾抬手不吸附，拖到哪停哪");
   assert(/trimStart:\s*quantizeTrimSec\(startSec\)/.test(vtrimEd), "完成编辑须提交黄柄所见 trimStart，勿预加 START_KEEP");
   assert(/function keepRangesForEncode/.test(vtrimEd), "成片须有 keepRangesForEncode");
   assert(/下载编辑后的视频/.test(vtrimEd) && /function exportKeepVideo/.test(vtrimEd), "编辑层须能下载编辑后 mp4");
