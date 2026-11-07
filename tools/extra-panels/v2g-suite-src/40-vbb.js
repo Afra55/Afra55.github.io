@@ -898,7 +898,7 @@
           typeof window.DevToolsVtrimEditor?.secToFrame === "function"
             ? (t) => window.DevToolsVtrimEditor.secToFrame(t, keepFps)
             : (t) => Math.round(Math.max(0, Number(t) || 0) * keepFps);
-        // 切片勿 fps=（会丢段首帧→多段整体前移）；CFR 用输出 -r
+        // 切片勿 fps= / -r cfr（会丢段首→多段整体前移）；保留源帧时序
         const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
         const MIN_PART_BYTES = 512;
         const fmtSec = (t) => {
@@ -929,10 +929,8 @@
             "18",
             "-pix_fmt",
             "yuv420p",
-            "-r",
-            String(keepFps),
             "-vsync",
-            "cfr",
+            "vfr",
             "-movflags",
             "+faststart",
             "-y",
@@ -986,10 +984,8 @@
             "18",
             "-pix_fmt",
             "yuv420p",
-            "-r",
-            String(keepFps),
             "-vsync",
-            "cfr",
+            "vfr",
             "-movflags",
             "+faststart",
             "-y",
@@ -1103,7 +1099,7 @@
         onProgress?.(0.04, `预裁切 ${dur.toFixed(1)}s…`);
         const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => onProgress?.(0.06, "载入视频…"));
         const out = `trim-${Date.now().toString(36)}.mp4`;
-        // 精确半开窗；trim 滤镜失败再 -ss/-t 重编码
+        // 精确半开窗（PTS≡预览）；勿 -r cfr。trim 失败再 -ss/-t 重编码
         let args = [
           "-i",
           inName,
@@ -1118,6 +1114,8 @@
           "18",
           "-pix_fmt",
           "yuv420p",
+          "-vsync",
+          "vfr",
           "-movflags",
           "+faststart",
           "-y",
