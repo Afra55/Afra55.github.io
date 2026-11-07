@@ -121,17 +121,26 @@ t("仅裁片头片尾：成片起点=黄柄，终点=黄柄半开上界", () => 
   assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("exportKeepVideo：有真实 fps 则帧号优先（≡预览）；滤镜禁止 fps=；禁止两端 bias", () => {
+t("exportKeepVideo：秒级 PTS 优先（≡预览 currentTime）；滤镜禁止 fps=；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes('hasRealFps ? ["frame", "sec", "ss"]'), "有 srcFps 须 frame→sec→ss");
-  assert.ok(exp.includes('["sec", "frame", "ss"]'), "无 fps 仍 sec→frame→ss");
+  assert.ok(exp.includes('["sec", "ss", "frame"]'), "须 sec→ss→frame（帧序号≠PTS）");
+  assert.ok(!exp.includes("hasRealFps"), "禁止按 srcFps 改走 frame 优先");
   assert.ok(exp.includes("segmentSpans"), "回传各段时长");
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(!/`fps=\$\{keepFps\}`/.test(exp) && !/fps=\$\{keepFps\},format/.test(exp), "切片/拼接滤镜勿 fps=");
   assert.ok(exp.includes("format=yuv420p,setsar=1"));
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
+});
+
+t("getEditState：未探测 fps 勿填默认 30（避免误判帧切）", () => {
+  const block = vtrim.slice(
+    vtrim.indexOf("function getEditState()"),
+    vtrim.indexOf("async function downloadEditedVideo")
+  );
+  assert.ok(block.includes("...(sourceFps >= 5 ? { srcFps: sourceFps } : {})"));
+  assert.ok(!/srcFps:\s*sourceFps\s*>=\s*5\s*\?\s*sourceFps\s*:\s*DEFAULT_FRAME_FPS/.test(block));
 });
 
 t("materialize：有编辑就导出；带回 segmentSpans；无滤镜 fps=", () => {

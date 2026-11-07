@@ -9014,9 +9014,8 @@
           const start0 = Math.max(0, Number(k.start) || 0);
           const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // 有真实 srcFps：帧号优先（≡预览）；否则秒级 PTS
-          const hasRealFps = Number(edit?.srcFps) >= 5;
-          const modes = hasRealFps ? ["frame", "sec", "ss"] : ["sec", "frame", "ss"];
+          // 与预览 currentTime 对齐：秒级 PTS 优先；帧号最后（序号≠PTS 会切偏）
+          const modes = ["sec", "ss", "frame"];
           let ok = false;
           for (const mode of modes) {
             ok = await tryPart(start0, end0, out, mode);
