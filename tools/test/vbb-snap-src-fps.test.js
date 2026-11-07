@@ -60,13 +60,16 @@ t("打开编辑器用 opts.srcFps，并可后台探测", () => {
   assert.ok(vbb.includes("detectSourceFps(item.file)"));
 });
 
-t("snapToFrameGrid 走可变 frameSnapSec", () => {
+t("snapToFrameGrid 走可变 frameSnapSec；snapToEncodeClock 优先 CTS", () => {
   const fn = vtrim.slice(
     vtrim.indexOf("function snapToFrameGrid"),
     vtrim.indexOf("function snapNearCutouts")
   );
   assert.ok(fn.includes("frameSnapSec"));
   assert.ok(!/FRAME_SNAP_SEC\s*\)/.test(fn) || fn.includes("frameSnapSec > 0 ? frameSnapSec"));
+  assert.ok(fn.includes("function snapToEncodeClock"));
+  assert.ok(fn.includes("sampleIndexAtSec"));
+  assert.ok(vtrim.includes("snapToEncodeClock(t)") || /snapEdgeOnly\(snapToEncodeClock/.test(vtrim));
 });
 
 console.log(`vbb-snap-src-fps.test.js: ${n} passed`);

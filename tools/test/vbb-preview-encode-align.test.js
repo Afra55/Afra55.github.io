@@ -209,12 +209,13 @@ t("ENCODE 叠垫已清零（根因用源帧窗）", () => {
   assert.ok(/ENCODE_CUT_JUNCTION_PAD_FRAMES\s*=\s*0/.test(vtrim));
 });
 
-t("片尾抬手不吸附：拖到哪停哪，精调用底部微调", () => {
+t("片尾抬手成片时钟吸附；不按 Chrome shown 改写黄柄", () => {
   const finish = vtrim.slice(
     vtrim.indexOf("async function finishTrimDrag"),
     vtrim.indexOf("function ratioFromClientX")
   );
-  assert.ok(finish.includes("拖到哪停哪") || finish.includes("不帧格吸附"));
+  assert.ok(finish.includes("snapTrimHandle") || finish.includes("snapToEncodeClock"));
+  assert.ok(finish.includes("成片时钟吸附") || finish.includes("seekEndPreviewExact"));
   assert.ok(!finish.includes("fromShown"));
   assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(finish));
 });

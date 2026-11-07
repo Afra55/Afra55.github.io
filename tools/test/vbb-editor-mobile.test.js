@@ -21,12 +21,13 @@ t("粗指针/窄屏用触控文案，不主推键盘", () => {
   assert.ok(vtrim.includes("点底部播放核对") || vtrim.includes("跳到接点"));
 });
 
-t("手机送手防抖：抬手前采样；拖柄不帧格吸附；精调留给底部按钮", () => {
+t("手机送手防抖：抬手前采样 + 成片时钟吸附 + 反馈", () => {
   assert.ok(vtrim.includes("LIFT_LAG_MS"));
   assert.ok(vtrim.includes("FRAME_SNAP_SEC"));
   assert.ok(vtrim.includes("frameSnapSecFromFps") || vtrim.includes("DEFAULT_FRAME_FPS"));
   assert.ok(vtrim.includes("function dragSecBeforeLift"));
   assert.ok(vtrim.includes("function snapToFrameGrid"));
+  assert.ok(vtrim.includes("function snapToEncodeClock"));
   assert.ok(vtrim.includes("function snapNearCutouts"));
   assert.ok(vtrim.includes("function flashSnapFeedback"));
   assert.ok(vtrim.includes("pushDragSample"));
@@ -35,9 +36,8 @@ t("手机送手防抖：抬手前采样；拖柄不帧格吸附；精调留给�
     vtrim.indexOf("function ratioFromClientX")
   );
   assert.ok(finish.includes("dragSecBeforeLift"));
-  assert.ok(finish.includes("不帧格吸附") || finish.includes("拖到哪停哪"));
-  assert.ok(!finish.includes("snapTrimHandle("));
-  assert.ok(!finish.includes("snapToFrameGrid("));
+  assert.ok(finish.includes("snapTrimHandle") || finish.includes("snapToEncodeClock"));
+  assert.ok(finish.includes("成片时钟吸附") || finish.includes("flashSnapFeedback"));
   assert.ok(finish.includes("flashSnapFeedback"));
 });
 

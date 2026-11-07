@@ -808,7 +808,7 @@
       if (idx < 0 || idx >= cutouts.length) return;
       const kindEdge = edge === "end" ? "end" : "start";
       const live = kindEdge === "end" ? cutouts[idx].end : cutouts[idx].start;
-      const want = quantizeTrimSec(snapToFrameGrid(live));
+      const want = quantizeTrimSec(snapToEncodeClock(live));
       setCutoutEdge(idx, kindEdge, want);
       try {
         video.pause();
@@ -1313,6 +1313,22 @@
     }
 
     /**
+     * 成片时钟吸附：优先吸到 MP4 采样 CTS（≡ ffmpeg 切点）；无时间轴再回退 fps 格。
+     * 不用 ffmpeg 实时预览（太慢），吸到同一时间点即可。
+     */
+    function snapToEncodeClock(t) {
+      const raw = clamp(t, 0, duration);
+      const tl = sourceTimeline;
+      const api = window.DevToolsMp4Timeline;
+      if (tl?.ctsSec?.length && typeof api?.sampleIndexAtSec === "function") {
+        const idx = api.sampleIndexAtSec(tl, raw);
+        const cts = Number(tl.ctsSec[Math.max(0, Math.min(tl.ctsSec.length - 1, idx))]);
+        if (Number.isFinite(cts)) return clamp(cts, 0, duration);
+      }
+      return snapToFrameGrid(raw);
+    }
+
+    /**
      * 后台探测片源 fps（优先共用 detectSourceFps；否则本页 rVFC 轻量估）。
      * 不阻塞打开；探测到后更新 frameSnapSec，后续松手即用真实格。
      */
@@ -1423,7 +1439,7 @@
     }
 
     function snapTrimHandle(t, which) {
-      return snapNearCutouts(snapEdgeOnly(snapToFrameGrid(t), which));
+      return snapNearCutouts(snapEdgeOnly(snapToEncodeClock(t), which));
     }
 
     /** 记录拖拽采样，供送手时回看抬手前稳定位置 */
@@ -1529,10 +1545,11 @@
       if (!drag) return;
       const kind = drag.kind;
       const cutIndex = drag.cutIndex;
-      // 抬手：只去送手抖动，不帧格吸附；拖到哪停哪，精调用底部 ±1 源帧
+      // 抬手：去送手抖动 → 成片时钟吸附 → 预览停 CTS（不按 Chrome 停帧改写黄柄）
       if (kind === "start") {
+        const before = startSec;
         const want = quantizeTrimSec(
-          clamp(dragSecBeforeLift(startSec), 0, endSec - MIN_SPAN)
+          clamp(snapTrimHandle(dragSecBeforeLift(startSec), "start"), 0, endSec - MIN_SPAN)
         );
         startSec = want;
         try {
@@ -1547,10 +1564,11 @@
         await seekStartPreviewExact();
         paintTimeline();
         updateLabels();
-        flashSnapFeedback("start", false);
+        flashSnapFeedback("start", Math.abs(before - startSec) > frameSnapSec * 0.35);
       } else if (kind === "end") {
+        const before = endSec;
         const want = quantizeTrimSec(
-          clamp(dragSecBeforeLift(endSec), startSec + MIN_SPAN, duration)
+          clamp(snapTrimHandle(dragSecBeforeLift(endSec), "end"), startSec + MIN_SPAN, duration)
         );
         setEnd(want, {
           preview: false,
@@ -1568,25 +1586,33 @@
         await seekEndPreviewExact();
         paintTimeline();
         updateLabels();
-        flashSnapFeedback("end", false);
+        flashSnapFeedback("end", Math.abs(before - endSec) > frameSnapSec * 0.35);
       } else if (kind === "window") {
+        const beforeStart = startSec;
         const span = Math.max(MIN_SPAN, endSec - startSec);
         const liftStart = dragSecBeforeLift(startSec);
-        startSec = quantizeTrimSec(clamp(liftStart, 0, duration - span));
+        startSec = quantizeTrimSec(
+          clamp(snapTrimHandle(liftStart, "start"), 0, duration - span)
+        );
         endSec = clamp(startSec + span, startSec + MIN_SPAN, duration);
+        endSec = quantizeTrimSec(
+          clamp(snapTrimHandle(endSec, "end"), startSec + MIN_SPAN, duration)
+        );
         if (endSec - startSec < MIN_SPAN) endSec = Math.min(duration, startSec + MIN_SPAN);
         endParkAtSec = endKeepSec();
         clipCutoutsToWindow();
-        await seekPlayheadExact(startSec);
+        await seekPlayheadExact(encodeParkSecForEdge("start"));
         paintTimeline();
         updateLabels();
-        flashSnapFeedback("window", false);
+        flashSnapFeedback("window", Math.abs(beforeStart - startSec) > frameSnapSec * 0.35);
       } else if (kind === "cut-start" || kind === "cut-end") {
         const idx = Number(cutIndex);
         if (idx >= 0 && idx < cutouts.length) {
           const c = cutouts[idx];
           const live = kind === "cut-end" ? c.end : c.start;
-          const preLift = quantizeTrimSec(dragSecBeforeLift(live));
+          const preLift = quantizeTrimSec(
+            snapTrimHandle(dragSecBeforeLift(live), kind === "cut-end" ? "end" : "start")
+          );
           setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", preLift);
           try {
             video.pause();
@@ -1596,14 +1622,16 @@
             clearTimeout(dragSeekTimer);
             dragSeekTimer = 0;
           }
-          // 红柄抬手：停在刚调的那一端（起点→起点画面，终点→终点画面）
           selectedCutout = idx;
           const parkT =
             kind === "cut-end"
               ? Number(cutouts[idx]?.end) || preLift
               : Number(cutouts[idx]?.start) || preLift;
-          await seekRawExact(parkT);
-          flashSnapFeedback(kind === "cut-end" ? "end" : "start", false);
+          await seekRawExact(snapToEncodeClock(parkT));
+          flashSnapFeedback(
+            kind === "cut-end" ? "end" : "start",
+            Math.abs(preLift - live) > frameSnapSec * 0.35
+          );
         } else {
           clipCutoutsToWindow();
           paintCutouts();
@@ -2244,14 +2272,14 @@
       }
       if (kind === "start") {
         startSec = quantizeTrimSec(
-          clamp(snapToFrameGrid(startSec), 0, endSec - MIN_SPAN)
+          clamp(snapToEncodeClock(startSec), 0, endSec - MIN_SPAN)
         );
         if (gen !== nudgeSnapGen || closed) return;
         clipCutoutsToWindow();
         await seekStartPreviewExact();
       } else {
         endSec = quantizeTrimSec(
-          clamp(snapToFrameGrid(endSec), startSec + MIN_SPAN, duration)
+          clamp(snapToEncodeClock(endSec), startSec + MIN_SPAN, duration)
         );
         endParkAtSec = endKeepSec();
         if (gen !== nudgeSnapGen || closed) return;
@@ -2427,8 +2455,20 @@
         return;
       }
       const raw = ratioFromClientX(e.clientX) * duration;
-      // 拖拽跟手、不帧格吸附；精调留给底部 ±1 源帧
-      const t = raw;
+      // 拖拽按成片时钟吸附（CTS/帧格），预览与 ffmpeg 切点同锚
+      let t = raw;
+      if (drag.kind === "start") t = snapTrimHandle(raw, "start");
+      else if (drag.kind === "end") t = snapTrimHandle(raw, "end");
+      else if (drag.kind === "cut-start") t = snapTrimHandle(raw, "start");
+      else if (drag.kind === "cut-end") t = snapTrimHandle(raw, "end");
+      if (Math.abs(t - raw) > 0.0005 && Math.abs(t - raw) <= SNAP_EDGE_SEC) {
+        if (!drag._magnetAt || Math.abs(drag._magnetAt - t) > 0.001) {
+          drag._magnetAt = t;
+          hapticLight();
+        }
+      } else {
+        drag._magnetAt = null;
+      }
       pushDragSample(t);
       if (drag.kind === "start") setStart(t);
       else if (drag.kind === "end") setEnd(t);
