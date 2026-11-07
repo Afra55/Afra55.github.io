@@ -8651,35 +8651,34 @@
         const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => onProgress?.(0.05, "载入视频…"));
         const W = Math.max(2, Math.round((Number(srcW) || 720) / 2) * 2);
         const H = Math.max(2, Math.round((Number(srcH) || 404) / 2) * 2);
-        const parts = [];
-        for (let i = 0; i < keeps.length; i++) {
-          if (abortVbb || abortV2g) throw new Error("已取消");
-          onProgress?.(0.08 + (i / keeps.length) * 0.5, `应用删中间 ${i + 1}/${keeps.length}`);
-          const k = keeps[i];
-          const start0 = Math.max(0, Number(k.start) || 0);
-          const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
-          const out = `keep${i}.mp4`;
-          // 与 keep 同一源帧钟：优先 start_frame/end_frame；秒级 trim；最后 -i 后 -ss（勿两端 bias）
-          const keepFps =
-            typeof window.DevToolsVtrimEditor?.resolveKeepFps === "function"
-              ? window.DevToolsVtrimEditor.resolveKeepFps(edit)
-              : Number(edit?.srcFps) >= 5
-                ? Number(edit.srcFps)
-                : 30;
-          const toFrame =
-            typeof window.DevToolsVtrimEditor?.secToFrame === "function"
-              ? (t) => window.DevToolsVtrimEditor.secToFrame(t, keepFps)
-              : (t) => Math.round(Math.max(0, Number(t) || 0) * keepFps);
+        const keepFps =
+          typeof window.DevToolsVtrimEditor?.resolveKeepFps === "function"
+            ? window.DevToolsVtrimEditor.resolveKeepFps(edit)
+            : Number(edit?.srcFps) >= 5
+              ? Number(edit.srcFps)
+              : 30;
+        const toFrame =
+          typeof window.DevToolsVtrimEditor?.secToFrame === "function"
+            ? (t) => window.DevToolsVtrimEditor.secToFrame(t, keepFps)
+            : (t) => Math.round(Math.max(0, Number(t) || 0) * keepFps);
+        const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${keepFps},format=yuv420p`;
+        const MIN_PART_BYTES = 512;
+        const tryPart = async (start0, end0, out, mode) => {
           let startF = toFrame(start0);
           let endF = toFrame(end0);
           if (endF <= startF) endF = startF + 1;
-          const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
-          let args = [
-            "-i",
-            inName,
-            "-an",
-            "-vf",
-            `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS,${scalePad}`,
+          const dur = Math.max(0.05, end0 - start0);
+          const trimVf =
+            mode === "frame"
+              ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS,`
+              : mode === "sec"
+                ? `trim=start=${start0}:end=${end0},setpts=PTS-STARTPTS,`
+                : "";
+          const args =
+            mode === "ss"
+              ? ["-i", inName, "-ss", String(start0), "-t", String(dur), "-an", "-vf", scalePad]
+              : ["-i", inName, "-an", "-vf", `${trimVf}${scalePad}`];
+          args.push(
             "-c:v",
             "libx264",
             "-preset",
@@ -8688,90 +8687,75 @@
             "18",
             "-pix_fmt",
             "yuv420p",
+            "-r",
+            String(keepFps),
             "-movflags",
             "+faststart",
             "-y",
-            out,
-          ];
-          let code = await ffmpeg.exec(args).catch(() => 1);
-          if (code !== 0) {
-            args = [
-              "-i",
-              inName,
-              "-an",
-              "-vf",
-              `trim=start=${start0}:end=${end0},setpts=PTS-STARTPTS,${scalePad}`,
-              "-c:v",
-              "libx264",
-              "-preset",
-              "ultrafast",
-              "-crf",
-              "18",
-              "-pix_fmt",
-              "yuv420p",
-              "-movflags",
-              "+faststart",
-              "-y",
-              out,
-            ];
-            code = await ffmpeg.exec(args).catch(() => 1);
+            out
+          );
+          const code = await ffmpeg.exec(args).catch(() => 1);
+          if (code !== 0) return false;
+          try {
+            const data = await ffmpeg.readFile(out);
+            const n = data instanceof Uint8Array ? data.byteLength : Number(data?.length) || 0;
+            return n >= MIN_PART_BYTES;
+          } catch (_) {
+            return false;
           }
-          if (code !== 0) {
-            const dur = Math.max(0.05, end0 - start0);
-            args = [
-              "-i",
-              inName,
-              "-ss",
-              String(start0),
-              "-t",
-              String(dur),
-              "-an",
-              "-vf",
-              scalePad,
-              "-c:v",
-              "libx264",
-              "-preset",
-              "ultrafast",
-              "-crf",
-              "18",
-              "-pix_fmt",
-              "yuv420p",
-              "-movflags",
-              "+faststart",
-              "-y",
-              out,
-            ];
-            code = await ffmpeg.exec(args).catch(() => 1);
-          }
-          if (code !== 0) throw new Error(`删中间切片失败（段 ${i + 1}）`);
+        };
+        const parts = [];
+        for (let i = 0; i < keeps.length; i++) {
+          if (abortVbb || abortV2g) throw new Error("已取消");
+          onProgress?.(0.08 + (i / keeps.length) * 0.5, `应用删中间 ${i + 1}/${keeps.length}`);
+          const k = keeps[i];
+          const start0 = Math.max(0, Number(k.start) || 0);
+          const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
+          const out = `keep${i}.mp4`;
+          // 秒级优先（防 start_frame 空片）；帧号/-ss 回退；勿两端 bias
+          let ok = await tryPart(start0, end0, out, "sec");
+          if (!ok) ok = await tryPart(start0, end0, out, "frame");
+          if (!ok) ok = await tryPart(start0, end0, out, "ss");
+          if (!ok) throw new Error(`删中间切片失败（段 ${i + 1}/${keeps.length}）`);
           parts.push(out);
         }
         onProgress?.(0.65, "拼接保留段…");
         const merged = "keep-merged.mp4";
-        const filter = parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
-        const concatArgs = [];
-        parts.forEach((p) => concatArgs.push("-i", p));
-        concatArgs.push(
-          "-filter_complex",
-          filter,
-          "-map",
-          "[v]",
-          "-an",
-          "-c:v",
-          "libx264",
-          "-preset",
-          "ultrafast",
-          "-crf",
-          "18",
-          "-pix_fmt",
-          "yuv420p",
-          "-movflags",
-          "+faststart",
-          "-y",
-          merged
-        );
-        const code = await ffmpeg.exec(concatArgs).catch(() => 1);
-        if (code !== 0) throw new Error("删中间拼接失败");
+        const norm = parts
+          .map((_, i) => `[${i}:v]fps=${keepFps},format=yuv420p,setsar=1[v${i}]`)
+          .join(";");
+        const cat = parts.map((_, i) => `[v${i}]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
+        const runConcat = async (filter) => {
+          const concatArgs = [];
+          parts.forEach((p) => concatArgs.push("-i", p));
+          concatArgs.push(
+            "-filter_complex",
+            filter,
+            "-map",
+            "[v]",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-r",
+            String(keepFps),
+            "-movflags",
+            "+faststart",
+            "-y",
+            merged
+          );
+          return ffmpeg.exec(concatArgs).catch(() => 1);
+        };
+        let code = await runConcat(`${norm};${cat}`);
+        if (code !== 0) {
+          code = await runConcat(parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`);
+        }
+        if (code !== 0) throw new Error(`删中间拼接失败（${parts.length} 段）`);
         const data = await ffmpeg.readFile(merged);
         const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
         const bytes = new Uint8Array(raw.byteLength);
