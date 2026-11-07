@@ -124,13 +124,12 @@ t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
   assert.ok(fn.includes("return keepRangesFromEdit(edit, duration)"));
 });
 
-t("exportKeepVideo：多段帧号优先 + 全 I 帧；切片勿 fps=/-r cfr；禁止两端 bias", () => {
+t("exportKeepVideo：秒级优先；切片勿 fps=/-r cfr；禁止两端 bias", () => {
   const exp = vtrim.slice(
     vtrim.indexOf("async function exportKeepVideo"),
     vtrim.indexOf("window.DevToolsVtrimEditor =")
   );
-  assert.ok(exp.includes('keeps.length > 1 ? ["frame", "sec", "ss"]'), "多段 frame→sec→ss");
-  assert.ok(exp.includes('"-bf"') && exp.includes('"-g"'), "全 I 帧防中间段缩首尾");
+  assert.ok(exp.includes('["sec", "frame", "ss"]'), "sec→frame→ss");
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(!/fps=\$\{keepFps\},format/.test(exp), "trim 后 fps= 会丢段首帧导致整体前移");
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(exp), "切片勿 -r keepFps（强制 CFR 丢段首）");
@@ -161,36 +160,35 @@ t("编辑后仍 forceAccurateCut", () => {
   assert.ok(vbb.includes("forceAccurateCut: Boolean(prepared.cutNote)"));
 });
 
-t("编码：keep 对齐路径片尾垫>0；窗函数 encodeT 严小于半开上界", () => {
+t("编码：导出编辑片片尾垫=0；倍速括号正确；按段 fps；round=up", () => {
   assert.ok(shared.includes("function vbbEncodeWindowFromKeepSpan"));
   assert.ok(shared.includes("function vbbEncodeSpanTailPadSec"));
-  assert.ok(shared.includes("function vbbEncodeKeepEdgePadSec"));
-  const mEdge = shared.match(/function vbbEncodeKeepEdgePadSec\([\s\S]*?\n      \}/);
+  assert.ok(shared.includes("function vbbEncodeSegmentedFpsFilter"));
+  assert.ok(shared.includes("setpts=(PTS-STARTPTS)/${spd}") || shared.includes("setpts=(PTS-STARTPTS)/"));
+  assert.ok(shared.includes("fps=${fps}:round=up") || shared.includes("fps=${fps}:round=up"));
   const m = shared.match(/function vbbEncodeSpanTailPadSec\([\s\S]*?\n      \}/);
   const mWin = shared.match(/function vbbEncodeWindowFromKeepSpan\([\s\S]*?\n      \}/);
-  assert.ok(mEdge && m && mWin);
+  const mHard = shared.match(/function vbbEncodeHardTrimFilters\([\s\S]*?\n      \}/);
+  assert.ok(m && mWin && mHard);
   const box = {};
   vm.runInNewContext(
-    `${mEdge[0]}\n${m[0]}\n${mWin[0]}
+    `${m[0]}\n${mWin[0]}\n${mHard[0]}
      function vbbEncodeHalfOpenPadSec(gifFps, srcFps) {
        return Math.max(0.5 / Math.max(8, gifFps || 15), 1 / 120);
      }
-     this.edge = vbbEncodeKeepEdgePadSec;
      this.tail = vbbEncodeSpanTailPadSec;
-     this.win = vbbEncodeWindowFromKeepSpan;`,
+     this.win = vbbEncodeWindowFromKeepSpan;
+     this.hard = vbbEncodeHardTrimFilters;`,
     box
   );
-  // 编辑路径收 4 帧垫；窗函数再 floor-2
-  const pad = box.tail(15, 30, { startSec: 1.2 });
-  assert.ok(pad + 1e-9 >= box.edge(15, 30));
-  assert.ok(pad + 1e-9 >= 4 / 30);
+  assert.strictEqual(box.tail(15, 30, { exportedEdit: true }), 0);
+  assert.strictEqual(box.tail(15, 30, { exactKeepFrames: true }), 0);
   assert.ok(box.tail(15, 30, {}) + 1e-9 >= 0.5 / 15);
-  const w = box.win(10, 1, 15);
-  assert.ok(w.encodeT < 10 - 1e-9, `encodeT=${w.encodeT} 须 < 10`);
-  assert.ok(w.frameCount <= Math.floor((10 - 1 / 15) * 15 + 1e-9) - 2);
-  assert.ok((w.frameCount - 1) / 15 < 10 - 1e-9);
-  assert.ok(w.encodeT + 1e-9 >= w.frameCount / 15);
-  assert.ok(shared.includes("function vbbEncodeOutTrimFilters"));
+  const w = box.win(10, 1, 15, { exportedEdit: true });
+  assert.ok(w.frameCount >= Math.ceil(10 * 15 - 1e-6) - 1);
+  const h = box.hard(2, 8, 0);
+  assert.ok(h.includes("(PTS-STARTPTS)/2"), `倍速须带括号：${h}`);
+  assert.ok(!/PTS-STARTPTS\/2/.test(h.replace(/\(PTS-STARTPTS\)\/2/g, "")), "禁止无括号写法");
 });
 
 t("预裁切不再对 keep span 二次减半帧", () => {

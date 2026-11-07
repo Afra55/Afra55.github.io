@@ -321,15 +321,14 @@
   });
 
   /**
-   * MDM 右键交接：优先 localStorage（noopener 新标签也能读），再 sessionStorage。
-   * 读一次即删，避免刷新重复打开旧文。
-   * 工具站入口带 ?fresh=1：只清旧交接、不自动开文。
-   * 交接超过 60s 视为过期（避免侧栏点「MD 阅读」误开上次文档）。
+   * MDM 交接：仅当 URL 带 ?handoff=1（或 from=mdm）才消费。
+   * 工具站 / 桌面图标默认空页，绝不自动打开残留 localStorage 文档。
    */
   const HANDOFF_MAX_AGE_MS = 60 * 1000;
-  const wantFresh = (() => {
+  const allowHandoff = (() => {
     try {
-      return new URLSearchParams(location.search).has("fresh");
+      const q = new URLSearchParams(location.search);
+      return q.has("handoff") || q.get("from") === "mdm";
     } catch (_) {
       return false;
     }
@@ -345,7 +344,7 @@
   }
 
   function takeHandoff() {
-    if (wantFresh) {
+    if (!allowHandoff) {
       clearHandoffStores();
       return null;
     }
@@ -380,12 +379,10 @@
     return true;
   }
 
-  if (wantFresh) {
+  if (!allowHandoff) {
     clearHandoffStores();
   } else {
     consumeHandoff();
-
-    // MDM 慢路径：先开本窗再写 localStorage → 用 storage 事件灌入（同页写入不触发，故另轮询）
     window.addEventListener("storage", (e) => {
       if (e.key === HANDOFF_KEY && e.newValue) consumeHandoff();
     });

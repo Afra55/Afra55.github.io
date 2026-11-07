@@ -279,7 +279,7 @@ function buildVideoFilter(opts) {
   }
   if (speed > 1.01) parts.push(`setpts=(PTS-STARTPTS)/${speed}`);
   else parts.push("setpts=PTS-STARTPTS");
-  parts.push(`fps=${fps}`);
+  parts.push(`fps=${fps}:round=up`);
   if (opts.denoise !== false) parts.push("hqdn3d=1.5:1.5:6:6");
   parts.push(`scale=${width}:-2:flags=lanczos`);
   if (Math.abs(brightness) >= 0.01) {
@@ -300,8 +300,10 @@ function buildFfmpegInputArgs(inputPath, opts) {
   if (opts.span > 0.05) {
     // 面板约定：span=片源窗长（秒），speed=倍速。-t 限制读取的片源时长，禁止再 ×speed
     // （否则 60s×2 去读 → 再 setpts/2，若文件不够长会少读，成片短于「压缩时长到」目标）
-    // 再收半个输出帧，避免 fps 滤镜在半开边界多吐一帧（预览无、GIF 却有）
-    const pad = 0.5 / Math.max(8, Number(opts.fps) || 15);
+    // 已导出编辑片：不再叠半帧垫；其它路径仍收半帧防多吐
+    const pad = opts.exportedEdit || opts.exactKeepFrames
+      ? 0
+      : 0.5 / Math.max(8, Number(opts.fps) || 15);
     args.push("-t", String(Math.max(0.05, opts.span - pad)));
   }
   return args;
