@@ -121,12 +121,13 @@ t("仅裁片头片尾：成片起点=黄柄，终点=黄柄半开上界", () => 
   assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("exportKeepVideo 用源帧 trim；-ss 回退禁止两端 bias", () => {
+t("exportKeepVideo：秒级 trim 优先+体积校验；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes("trim=start_frame="));
-  assert.ok(exp.includes('mode === "frame"') || exp.includes('"frame"'));
+  assert.ok(exp.includes('trySlice(keeps[i], i, "sec")'));
+  assert.ok(exp.includes("MIN_PART_BYTES"));
+  assert.ok(exp.includes("fps=${keepFps},format=yuv420p,setsar=1"));
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
 });
 

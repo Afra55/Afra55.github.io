@@ -2771,10 +2771,11 @@
     const W = evenDim(srcW);
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
-    // 与 keepRangesFromEdit 同一源帧钟：用 start_frame/end_frame，避免秒级 trim PTS 边界抖
-    // 导致中间段片头片尾相对预览各往前挪约 1 帧
+    // 切片策略：秒级 trim 优先（wasm 上 start_frame 易「成功」但空片 → 拼接失败）；
+    // 帧号 trim 次之；最后 -i 后 -ss（勿两端 bias）。每段校验体积再进下一档。
     const keepFps = resolveKeepFps(edit);
     const parts = [];
+    const MIN_PART_BYTES = 512;
     const trySlice = async (k, i, mode) => {
       const start = Math.max(0, Number(k.start) || 0);
       const end = Math.max(start + 0.05, Number(k.end) || 0);
@@ -2783,7 +2784,6 @@
       if (endF <= startF) endF = startF + 1;
       const dur = Math.max(0.05, end - start);
       const out = `keep${i}.mp4`;
-      // frame：半开 [startF,endF) ≡ keep；sec：秒级 trim 回退；ss：-i 后精确 -ss（勿再两端 bias）
       const trimVf =
         mode === "frame"
           ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
@@ -2796,6 +2796,7 @@
         `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
         `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2`,
         "setsar=1",
+        `fps=${keepFps}`,
         "format=yuv420p",
       ]
         .filter(Boolean)
@@ -2813,21 +2814,31 @@
         "18",
         "-pix_fmt",
         "yuv420p",
+        "-r",
+        String(keepFps),
         "-movflags",
         "+faststart",
         "-y",
         out
       );
       const code = await ffmpeg.exec(args).catch(() => 1);
-      return { code, out };
+      if (code !== 0) return null;
+      try {
+        const data = await ffmpeg.readFile(out);
+        const n = data instanceof Uint8Array ? data.byteLength : Number(data?.length) || 0;
+        if (n < MIN_PART_BYTES) return null;
+      } catch (_) {
+        return null;
+      }
+      return out;
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      let { code, out } = await trySlice(keeps[i], i, "frame");
-      if (code !== 0) ({ code, out } = await trySlice(keeps[i], i, "sec"));
-      // -i 后再 -ss 已是解码级精确；禁止再 ±1/30 bias（会把中间段首尾相对预览往前挪）
-      if (code !== 0) ({ code, out } = await trySlice(keeps[i], i, "ss"));
-      if (code !== 0) throw new Error(`切片失败（段 ${i + 1}）`);
+      // 秒级优先：时间轴与预览一致且不依赖帧计数；帧号/ss 仅作空片回退
+      let out = await trySlice(keeps[i], i, "sec");
+      if (!out) out = await trySlice(keeps[i], i, "frame");
+      if (!out) out = await trySlice(keeps[i], i, "ss");
+      if (!out) throw new Error(`切片失败（段 ${i + 1}/${keeps.length}）`);
       parts.push(out);
     }
     onProgress(0.7, "拼接…");
@@ -2835,31 +2846,45 @@
     let merged = parts[0];
     if (parts.length > 1) {
       merged = "keep-merged.mp4";
-      // 多段一律重编码拼接：copy 易在接点吐出删段边界帧（成片偏后少删）
-      const filter = parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
-      const args = [];
-      parts.forEach((p) => args.push("-i", p));
-      args.push(
-        "-filter_complex",
-        filter,
-        "-map",
-        "[v]",
-        "-an",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "ultrafast",
-        "-crf",
-        "18",
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        "-y",
-        merged
-      );
-      const code = await ffmpeg.exec(args).catch(() => 1);
-      if (code !== 0) throw new Error("拼接失败");
+      // 先统一 fps/yuv/sar 再 concat，避免多段参数不一致导致「拼接失败」
+      const norm = parts
+        .map((_, i) => `[${i}:v]fps=${keepFps},format=yuv420p,setsar=1[v${i}]`)
+        .join(";");
+      const cat = parts.map((_, i) => `[v${i}]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
+      const runConcat = async (filter) => {
+        const args = [];
+        parts.forEach((p) => args.push("-i", p));
+        args.push(
+          "-filter_complex",
+          filter,
+          "-map",
+          "[v]",
+          "-an",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-crf",
+          "18",
+          "-pix_fmt",
+          "yuv420p",
+          "-r",
+          String(keepFps),
+          "-movflags",
+          "+faststart",
+          "-y",
+          merged
+        );
+        return ffmpeg.exec(args).catch(() => 1);
+      };
+      let code = await runConcat(`${norm};${cat}`);
+      if (code !== 0) {
+        // 回退：不预规范化（旧路径）
+        code = await runConcat(parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`);
+      }
+      if (code !== 0) {
+        throw new Error(`拼接失败（${parts.length} 段 keep）`);
+      }
     }
     const data = await ffmpeg.readFile(merged);
     const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
