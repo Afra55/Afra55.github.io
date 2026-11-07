@@ -17,8 +17,10 @@ function t(name, fn) {
 t("粗指针/窄屏用触控文案，不主推键盘", () => {
   assert.ok(vtrim.includes("pointer: coarse"));
   assert.ok(vtrim.includes("const coarseUi") || vtrim.includes("coarseUi ="));
-  // 头副标题/修剪说明已去掉省空间；接点 toast 仍可提醒底部播放
-  assert.ok(vtrim.includes("点底部播放核对") || vtrim.includes("跳到接点"));
+  // 头副标题/删中间说明行已去掉省空间；按钮「跳到接点」仍保留
+  assert.ok(vtrim.includes("跳到接点"));
+  assert.ok(!vtrim.includes("拖红柄看该帧"));
+  assert.ok(!vtrim.includes("点选红段后，用上方"));
 });
 
 t("手机送手防抖：抬手前采样 + 成片时钟吸附 + 反馈", () => {

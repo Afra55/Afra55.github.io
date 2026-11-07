@@ -286,7 +286,6 @@
             <button type="button" class="ghost-btn" id="${p("nudge-end-m")}" data-nudge-role="end-m" title="片尾 −1 源帧，可长按">片尾−</button>
             <button type="button" class="ghost-btn" id="${p("nudge-end-p")}" data-nudge-role="end-p" title="片尾 +1 源帧，可长按">片尾+</button>
           </div>
-          <p class="hint tight vtrim-cut-nudge-label" id="${p("cut-nudge-label")}" hidden>点选红段后，用上方片头/片尾按钮按源帧 ±1 精调</p>
           <div class="vtrim-cut-panel" id="${p("cut-panel")}" hidden>
             <div class="btn-row tool-actions vtrim-cut-tools" id="${p("cut-tools")}" aria-label="删中间">
               <button type="button" class="secondary-btn" id="${p("cut-add")}" title="从进度条当前位置起添加删除区（当前帧=删除起点；红柄两端所见帧都会删）">添加删除段</button>
@@ -426,7 +425,6 @@
     const trimNudge = $("trim-nudge");
     const cutPanel = $("cut-panel");
     const cutTools = $("cut-tools");
-    const cutNudgeLabel = $("cut-nudge-label");
     const cutAddBtn = $("cut-add");
     const cutPlayJoinBtn = $("cut-play-join");
     const cutDelBtn = $("cut-del");
@@ -531,21 +529,16 @@
       if (trimNudge) trimNudge.hidden = !(editMode === "trim" || editMode === "cut");
       if (cutPanel) cutPanel.hidden = editMode !== "cut";
       if (cutTools) cutTools.hidden = editMode !== "cut";
-      if (cutNudgeLabel) cutNudgeLabel.hidden = editMode !== "cut";
       syncSharedNudgeLabels();
       if (modeHint) {
         const phone = coarseUi();
-        // 修剪模式不再占位说明；裁切/删中间仍给一句操作提示
+        // 修剪/删中间不占说明行（省手机纵向空间）；仅裁切保留一句
         modeHint.textContent =
           editMode === "crop"
             ? phone
               ? "拖绿框裁切 · 双击重置"
               : "拖绿框 · 双击重置 · 空格播放"
-            : editMode === "cut"
-              ? phone
-                ? "拖红柄看该帧 · 起点/终点 ±1 帧 · 「跳到接点」"
-                : "拖红柄 · 起点/终点 ±1 帧 · 「跳到接点」核对"
-              : "";
+            : "";
         modeHint.hidden = !modeHint.textContent;
       }
       syncCropBoxVisibility();
@@ -706,23 +699,6 @@
         for (const btn of sharedNudgeBtns) btn.disabled = !hasSel;
       } else if (editMode === "trim") {
         for (const btn of sharedNudgeBtns) btn.disabled = false;
-      }
-      if (cutNudgeLabel) {
-        if (!inCut) {
-          cutNudgeLabel.hidden = true;
-        } else if (!hasSel) {
-          cutNudgeLabel.hidden = false;
-          cutNudgeLabel.textContent =
-            cutouts.length > 0
-              ? `已有 ${cutouts.length} 段 · 点选红段后，用上方起点/终点 ±1 帧`
-              : "点选红段后，用上方起点/终点 ±1 帧精调";
-        } else {
-          cutNudgeLabel.hidden = false;
-          const c = cutouts[selectedCutout];
-          cutNudgeLabel.textContent = `第 ${selectedCutout + 1}/${cutouts.length} 段 · 起点 ${formatClock(
-            Number(c?.start) || 0
-          )} · 终点 ${formatClock(Number(c?.end) || 0)}`;
-        }
       }
       paintCutouts();
     }

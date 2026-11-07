@@ -25,6 +25,9 @@ t("编辑器头副标题已去掉（省纵向空间）", () => {
   assert.ok(!/vtrim-editor-sub/.test(vtrim) || /subEl\.hidden\s*=\s*true/.test(vtrim));
   assert.ok(!vtrim.includes("拖黄柄裁片头片尾"));
   assert.ok(!vtrim.includes("预览/GIF 同帧"));
+  assert.ok(!vtrim.includes("拖红柄看该帧"));
+  assert.ok(!vtrim.includes("点选红段后，用上方"));
+  assert.ok(!vtrim.includes("cut-nudge-label"));
 });
 
 t("松手吸附有视觉反馈（pulse/tip 短留）", () => {
