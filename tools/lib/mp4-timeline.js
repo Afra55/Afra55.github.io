@@ -69,7 +69,32 @@
     return file.slice(a, b).arrayBuffer();
   }
 
-  /** 定位 moov：优先文件头，其次尾部（非 faststart） */
+  /** 在缓冲里扫 'moov' 四字符（尾部扫描不能假定从 box 边界开始） */
+  function findMoovInBuffer(buf, fileOffset) {
+    const u8 = new Uint8Array(buf);
+    const dv = new DataView(buf);
+    for (let i = 0; i + 8 <= u8.length; i++) {
+      if (u8[i + 4] !== 0x6d || u8[i + 5] !== 0x6f || u8[i + 6] !== 0x6f || u8[i + 7] !== 0x76) {
+        continue; // m-o-o-v
+      }
+      let boxSize = dv.getUint32(i);
+      let hdr = 8;
+      if (boxSize === 1) {
+        if (i + 16 > u8.length) continue;
+        const hi = dv.getUint32(i + 8);
+        const lo = dv.getUint32(i + 12);
+        boxSize = hi * 0x100000000 + lo;
+        hdr = 16;
+      } else if (boxSize === 0) {
+        continue;
+      }
+      if (!(boxSize >= hdr + 8) || boxSize > 64 * 1024 * 1024) continue;
+      return { offset: fileOffset + i, size: boxSize, local: i, hdr };
+    }
+    return null;
+  }
+
+  /** 定位 moov：优先文件头顺序走 box；失败再在尾部字节扫描（非 faststart） */
   async function locateMoov(file) {
     const size = Number(file?.size) || 0;
     if (size < 16) return null;
@@ -84,6 +109,11 @@
       }
       return false;
     });
+    if (!found) {
+      // 头里可能被截断的 moov：四字符兜底
+      const hit = findMoovInBuffer(headBuf, 0);
+      if (hit) found = { offset: hit.offset, size: hit.size };
+    }
     if (found) {
       if (found.offset + found.size <= headBuf.byteLength) {
         return {
@@ -95,28 +125,24 @@
       const buf = await readSlice(file, found.offset, found.size);
       return { offset: found.offset, size: found.size, buf };
     }
-    const tailLen = Math.min(size, 8 * 1024 * 1024);
-    const tailStart = size - tailLen;
-    const tailBuf = await readSlice(file, tailStart, tailLen);
-    const tailDv = new DataView(tailBuf);
-    found = null;
-    walkBoxes(tailDv, 0, tailBuf.byteLength, (type, off, boxSize) => {
-      if (type === "moov") {
-        found = { offset: tailStart + off, size: boxSize, local: off };
-        return true;
+    // 尾部：从文件末往前扩大窗口扫（手机录像常把 moov 放最后）
+    for (const tailLen of [2 * 1024 * 1024, 8 * 1024 * 1024, 24 * 1024 * 1024]) {
+      const win = Math.min(size, tailLen);
+      const tailStart = size - win;
+      const tailBuf = await readSlice(file, tailStart, win);
+      const hit = findMoovInBuffer(tailBuf, tailStart);
+      if (!hit) continue;
+      if (hit.local + hit.size <= tailBuf.byteLength) {
+        return {
+          offset: hit.offset,
+          size: hit.size,
+          buf: tailBuf.slice(hit.local, hit.local + hit.size),
+        };
       }
-      return false;
-    });
-    if (!found) return null;
-    if (found.local + found.size <= tailBuf.byteLength) {
-      return {
-        offset: found.offset,
-        size: found.size,
-        buf: tailBuf.slice(found.local, found.local + found.size),
-      };
+      const buf = await readSlice(file, hit.offset, hit.size);
+      return { offset: hit.offset, size: hit.size, buf };
     }
-    const buf = await readSlice(file, found.offset, found.size);
-    return { offset: found.offset, size: found.size, buf };
+    return null;
   }
 
   function parseMdhd(dv, off, size, hdr) {

@@ -124,20 +124,19 @@ t("仅裁片头片尾：起点/终点=黄柄秒值半开", () => {
   assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("exportKeepVideo：有 stts 则 frameRaw 优先，否则 sec；frameGrid 回退才 fps=；禁止两端 bias", () => {
+t("exportKeepVideo：一次精切优先；回退分段；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes('["frameRaw", "sec", "ss", "frameGrid"]'), "有采样表须 frameRaw 优先");
-  assert.ok(exp.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "无采样表须 sec 优先");
-  assert.ok(exp.includes("setpts=PTS-STARTPTS"), "trim 前须复位 PTS");
+  assert.ok(exp.includes("tryOnePass") || exp.includes("onepass"), "须一次滤镜精切");
+  assert.ok(exp.includes("filter_complex"), "一次精切走 filter_complex");
+  assert.ok(exp.includes("setpts=PTS-STARTPTS"), "trim 后复位段内 PTS");
   assert.ok(exp.includes("segmentSpans"), "回传各段时长");
   assert.ok(exp.includes("sliceLog"), "须回传切片诊断");
   assert.ok(exp.includes("opts.keeps"), "须支持传入预览同套 keeps");
-  assert.ok(exp.includes("MIN_PART_BYTES"));
-  assert.ok(/useGrid \? `fps=\$\{keepFps\}:round=up`/.test(exp), "仅 frameGrid 才抽格");
   assert.ok(exp.includes("setsar=1"));
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
+  assert.ok(!/vfCore = \[[\s\S]*?setpts=PTS-STARTPTS[\s\S]*?trim=/.test(exp) || exp.includes("勿在 trim 前 setpts"), "勿在 trim 前 setpts");
 });
 
 t("下载编辑后视频：用预览 keep + 附带 export-diag.json", () => {

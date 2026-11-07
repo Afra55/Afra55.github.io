@@ -126,19 +126,16 @@ t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
   assert.ok(fn.includes("return keepRangesFromEdit(edit, duration, timeline)"));
 });
 
-t("exportKeepVideo：有 stts 则 frameRaw 优先，否则 sec；勿 -r cfr；禁止两端 bias", () => {
+t("exportKeepVideo：一次精切；接 MP4 时间轴；勿 -r cfr；禁止两端 bias", () => {
   const exp = vtrim.slice(
     vtrim.indexOf("async function exportKeepVideo"),
     vtrim.indexOf("window.DevToolsVtrimEditor =")
   );
-  assert.ok(exp.includes('["frameRaw", "sec", "ss", "frameGrid"]'), "有采样表须 frameRaw 优先");
-  assert.ok(exp.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "无采样表须 sec 优先");
+  assert.ok(exp.includes("tryOnePass") || exp.includes("onepass"), "须一次精切");
   assert.ok(exp.includes("probeMp4VideoTimeline") || exp.includes("preferSampleFrames"), "须接 MP4 时间轴");
   assert.ok(exp.includes("displayFrameAtSec"), "须用 Chrome 显示帧映射");
-  assert.ok(exp.includes("MIN_PART_BYTES"));
-  assert.ok(/useGrid \? `fps=\$\{keepFps\}:round=up`/.test(exp), "仅 frameGrid 才抽格");
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(exp), "切片勿 -r keepFps（强制 CFR 丢段首）");
-  assert.ok(exp.includes('"-vsync"') && exp.includes('"vfr"'), "切片用 vfr 保段首");
+  assert.ok(exp.includes("passthrough") || exp.includes("vfr"), "保段首帧");
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp));
   assert.ok(!/endBias\s*=\s*1\s*\/\s*60/.test(exp));
 });

@@ -2101,17 +2101,12 @@
             outH: out?.srcH,
             filename: name,
             bytes: blob.size,
-            ptsResetBeforeTrim: true,
-            keepStyle: sourceTimeline?.ctsSec ? "mp4-sample-half-open" : "handle-sec-half-open",
-            mp4Timeline: sourceTimeline
-              ? {
-                  fps: sourceTimeline.fps,
-                  fpsRaw: sourceTimeline.fpsRaw,
-                  sampleCount: sourceTimeline.sampleCount,
-                  hasCtts: Boolean(sourceTimeline.hasCtts),
-                  elstMediaTime: sourceTimeline.elstMediaTime || 0,
-                }
-              : null,
+            ptsResetBeforeTrim: false,
+            keepStyle: out?.mp4Timeline?.sampleCount
+              ? "mp4-sample-half-open"
+              : "handle-sec-half-open",
+            timelineErr: out?.timelineErr || null,
+            mp4Timeline: out?.mp4Timeline || null,
           },
         };
         setExportProgress(true, 1, "开始下载…");
@@ -2926,18 +2921,32 @@
     if (typeof getFf !== "function" || typeof writeIn !== "function") {
       throw new Error("编码器未就绪，请稍等本机 FFmpeg 加载后再试");
     }
-    // 批处理可传入租赁实例，避免与单例并行互踢导致第二路僵死
     const ffmpeg =
       opts.ffmpeg || (await getFf((r, t) => onProgress(r, t || "准备编码器…")));
     if (!ffmpeg) throw new Error("无法加载编码器");
-    // MP4 stts 时间轴：真实采样下标 / fps（根因）；调用方可传入已探好的 timeline
+
     let timeline = opts.timeline || null;
-    if (!timeline?.ctsSec && window.DevToolsMp4Timeline?.probeMp4VideoTimeline) {
+    let timelineErr = "";
+    if (!timeline?.ctsSec) {
       try {
-        onProgress(0.03, "读取片源时间轴…");
-        timeline = await window.DevToolsMp4Timeline.probeMp4VideoTimeline(file);
-      } catch (_) {
+        if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
+          await window.DevToolsLazy
+            .loadScript("./lib/mp4-timeline.js", { timeoutMs: 12000, label: "片源时间轴" })
+            .catch((e) => {
+              timelineErr = String(e?.message || e || "load failed");
+            });
+        }
+        const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
+        if (typeof probe === "function") {
+          onProgress(0.03, "读取片源时间轴…");
+          timeline = await probe(file);
+          if (!timeline?.ok) timelineErr = timelineErr || "probe-null";
+        } else if (!timelineErr) {
+          timelineErr = "api-missing";
+        }
+      } catch (e) {
         timeline = null;
+        timelineErr = String(e?.message || e || "probe-throw");
       }
     }
     if (timeline?.fps >= 5 && !(Number(edit?.srcFps) >= 5)) {
@@ -2945,7 +2954,7 @@
         edit = { ...edit, srcFps: timeline.fps };
       } catch (_) {}
     }
-    // 编辑器下载可传入与预览完全同一套 keeps，避免 getEditState 毫秒量化漂移
+
     const keeps =
       Array.isArray(opts.keeps) && opts.keeps.length
         ? opts.keeps
@@ -2957,27 +2966,30 @@
     const W = evenDim(srcW);
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
-    // 有 stts 采样表 → 优先按源帧号 trim（对齐预览且保源画质）；否则 PTS sec
     const keepFps =
       Number(timeline?.fps) >= 5 ? Number(timeline.fps) : resolveKeepFps(edit);
     const preferSampleFrames = Boolean(timeline?.ctsSec && timeline.ctsSec.length);
-    const parts = [];
-    /** @type {number[]} 各段时长（秒），供 GIF 按段采样 */
-    const segmentSpans = [];
-    /** @type {{i:number,mode:string,startF:number,endF:number,start:number,end:number}[]} */
-    const sliceLog = [];
-    const MIN_PART_BYTES = 512;
+    // 已知 fps 时也可用 displayFrame 帧号（Chrome 规则）；有 stts 则更准
+    const preferFrame =
+      preferSampleFrames ||
+      (keepFps >= 5 &&
+        keeps.every(
+          (k) => Number.isFinite(Number(k.startF)) && Number.isFinite(Number(k.endF))
+        ));
+    const needScale = Boolean(cropVf) || srcW !== W || srcH !== H;
     const fmtSec = (t) => {
       const n = Math.max(0, Number(t) || 0);
       return (Math.round(n * 1e6) / 1e6).toFixed(6);
     };
-    const needScale = Boolean(cropVf) || srcW !== W || srcH !== H;
-    const trySlice = async (k, i, mode) => {
-      // keep.start/end ≡ 预览 seek 的 PTS；有 stts 时用采样下标（根因）
+    const resolveBounds = (k) => {
       const start = Math.max(0, Number(k.start) || 0);
       const end = Math.max(start + 0.05, Number(k.end) || 0);
-      let startF = Number.isFinite(Number(k.startF)) ? Math.round(Number(k.startF)) : displayFrameAtSec(start, keepFps);
-      let endF = Number.isFinite(Number(k.endF)) ? Math.round(Number(k.endF)) : displayFrameAtSec(end, keepFps);
+      let startF = Number.isFinite(Number(k.startF))
+        ? Math.round(Number(k.startF))
+        : displayFrameAtSec(start, keepFps);
+      let endF = Number.isFinite(Number(k.endF))
+        ? Math.round(Number(k.endF))
+        : displayFrameAtSec(end, keepFps);
       if (preferSampleFrames && window.DevToolsMp4Timeline?.sampleRangeForKeep) {
         const fr = window.DevToolsMp4Timeline.sampleRangeForKeep(timeline, start, end);
         if (fr) {
@@ -2986,164 +2998,186 @@
         }
       }
       if (endF <= startF) endF = startF + 1;
-      const frameCount = Math.max(1, endF - startF);
-      const dur = Math.max(0.05, end - start);
-      const out = `keep${i}.mp4`;
-      const useGrid = mode === "frameGrid";
-      const useFrame = mode === "frameRaw" || mode === "frameGrid" || mode === "frame";
-      // 先 PTS-STARTPTS：容器 start_time/edit list 与 Chrome currentTime 对齐后再 trim
-      const trimVf = useFrame
-        ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS`
-        : mode === "sec"
-          ? `trim=start=${fmtSec(start)}:end=${fmtSec(end)},setpts=PTS-STARTPTS`
-          : "";
-      const vfCore = [
-        "setpts=PTS-STARTPTS",
-        useGrid ? `fps=${keepFps}:round=up` : "",
-        cropVf,
-        trimVf,
-        needScale ? `scale=${W}:${H}:force_original_aspect_ratio=decrease` : "",
-        needScale ? `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2` : "",
-        "setsar=1",
-        "format=yuv420p",
-      ]
-        .filter(Boolean)
-        .join(",");
-      const args =
-        mode === "ss"
-          ? ["-i", inName, "-ss", fmtSec(start), "-t", fmtSec(dur), "-an", "-vf", vfCore]
-          : ["-i", inName, "-an", "-vf", vfCore];
-      // 全 I 帧：避免段尾 B 帧在 concat 后解不出 → 中间段首尾各丢几帧
-      args.push(
-        "-c:v",
-        "libx264",
-        "-preset",
-        "ultrafast",
-        "-crf",
-        "18",
-        "-bf",
-        "0",
-        "-g",
-        "1",
-        "-keyint_min",
-        "1",
-        "-sc_threshold",
-        "0",
-        "-pix_fmt",
-        "yuv420p",
-        "-vsync",
-        "vfr",
-        "-movflags",
-        "+faststart",
-        "-y",
-        out
-      );
+      return { start, end, startF, endF, dur: Math.max(0.05, end - start) };
+    };
+
+    const x264 = [
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-crf",
+      "18",
+      "-bf",
+      "0",
+      "-g",
+      "1",
+      "-keyint_min",
+      "1",
+      "-sc_threshold",
+      "0",
+      "-pix_fmt",
+      "yuv420p",
+      "-vsync",
+      "passthrough",
+      "-movflags",
+      "+faststart",
+    ];
+
+    const tailVf = [
+      cropVf,
+      needScale ? `scale=${W}:${H}:force_original_aspect_ratio=decrease` : "",
+      needScale ? `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2` : "",
+      "setsar=1",
+      "format=yuv420p",
+    ]
+      .filter(Boolean)
+      .join(",");
+
+    /** 单次滤镜：各 keep trim 后 concat，避免分段再编码在接点丢帧 */
+    const tryOnePass = async (mode) => {
+      const useFrame = mode === "frameRaw";
+      const chains = [];
+      const labels = [];
+      const log = [];
+      const spans = [];
+      for (let i = 0; i < keeps.length; i++) {
+        const b = resolveBounds(keeps[i]);
+        // 勿在 trim 前 setpts：保留 demux/editlist 后与 Chrome currentTime 一致的时间轴
+        const trim = useFrame
+          ? `trim=start_frame=${b.startF}:end_frame=${b.endF},setpts=PTS-STARTPTS`
+          : `trim=start=${fmtSec(b.start)}:end=${fmtSec(b.end)},setpts=PTS-STARTPTS`;
+        const vf = [trim, tailVf].filter(Boolean).join(",");
+        chains.push(`[0:v]${vf}[k${i}]`);
+        labels.push(`[k${i}]`);
+        const spanSec = useFrame ? (b.endF - b.startF) / keepFps : b.dur;
+        spans.push(Math.max(0.05, spanSec));
+        log.push({
+          i,
+          mode: `onepass-${mode}`,
+          startF: b.startF,
+          endF: b.endF,
+          start: b.start,
+          end: b.end,
+          spanSec: spans[i],
+        });
+      }
+      const filter =
+        keeps.length === 1
+          ? `${chains[0].replace("[k0]", "[v]")}`
+          : `${chains.join(";")};${labels.join("")}concat=n=${keeps.length}:v=1:a=0[v]`;
+      const out = "keep-onepass.mp4";
+      const args = ["-i", inName, "-filter_complex", filter, "-map", "[v]", "-an", ...x264, "-y", out];
       const code = await ffmpeg.exec(args).catch(() => 1);
       if (code !== 0) return null;
       try {
         const data = await ffmpeg.readFile(out);
         const n = data instanceof Uint8Array ? data.byteLength : Number(data?.length) || 0;
-        if (n < MIN_PART_BYTES) return null;
+        if (n < 512) return null;
       } catch (_) {
         return null;
       }
-      // 有采样表：帧数/fps；否则 PTS 段长
-      let spanSec = dur;
-      if (useFrame) {
-        if (preferSampleFrames && timeline?.ctsSec && endF > startF) {
-          const t0 = Number(timeline.ctsSec[startF]) || start;
-          const t1 =
-            endF < timeline.ctsSec.length
-              ? Number(timeline.ctsSec[endF])
-              : Number(timeline.ctsSec[timeline.ctsSec.length - 1]) + 1 / keepFps;
-          spanSec = Math.max(0.05, t1 - t0);
-        } else {
-          spanSec = frameCount / keepFps;
-        }
-      }
-      return { out, spanSec, mode };
+      return { out, segmentSpans: spans, sliceLog: log, mode: `onepass-${mode}` };
     };
-    for (let i = 0; i < keeps.length; i++) {
-      onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 有 stts：frameRaw 优先（源帧号≡预览）；否则 sec 优先（防错误 fps 帧号）
-      const modes = preferSampleFrames
-        ? ["frameRaw", "sec", "ss", "frameGrid"]
-        : ["sec", "ss", "frameRaw", "frameGrid"];
-      let hit = null;
-      for (const mode of modes) {
-        hit = await trySlice(keeps[i], i, mode);
-        if (hit) break;
-      }
-      if (!hit) throw new Error(`切片失败（段 ${i + 1}/${keeps.length}）`);
-      parts.push(hit.out);
-      segmentSpans.push(Math.max(0.05, Number(hit.spanSec) || (keeps[i].end - keeps[i].start)));
-      const k0 = keeps[i];
-      let sf = Number.isFinite(Number(k0.startF)) ? Math.round(Number(k0.startF)) : displayFrameAtSec(k0.start, keepFps);
-      let ef = Number.isFinite(Number(k0.endF)) ? Math.round(Number(k0.endF)) : displayFrameAtSec(k0.end, keepFps);
-      if (ef <= sf) ef = sf + 1;
-      sliceLog.push({
-        i,
-        mode: hit.mode,
-        startF: sf,
-        endF: ef,
-        start: Number(k0.start) || 0,
-        end: Number(k0.end) || 0,
-        spanSec: Number(hit.spanSec) || 0,
-      });
+
+    onProgress(0.1, "一次精切…");
+    const onePassModes = preferFrame ? ["frameRaw", "sec"] : ["sec", "frameRaw"];
+    let hit = null;
+    for (const mode of onePassModes) {
+      hit = await tryOnePass(mode);
+      if (hit) break;
     }
-    onProgress(0.7, "拼接…");
-    const filename = String(file?.name || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
-    let merged = parts[0];
-    if (parts.length > 1) {
-      merged = "keep-merged.mp4";
-      // 统一 yuv/sar 再 concat；勿再 fps= / -r cfr（会再丢各段首帧→整体前移）
-      const norm = parts
-        .map((_, i) => `[${i}:v]format=yuv420p,setsar=1[v${i}]`)
-        .join(";");
-      const cat = parts.map((_, i) => `[v${i}]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
-      const runConcat = async (filter) => {
-        const args = [];
-        parts.forEach((p) => args.push("-i", p));
-        args.push(
-          "-filter_complex",
-          filter,
-          "-map",
-          "[v]",
-          "-an",
-          "-c:v",
-          "libx264",
-          "-preset",
-          "ultrafast",
-          "-crf",
-          "18",
-          "-bf",
-          "0",
-          "-g",
-          "1",
-          "-keyint_min",
-          "1",
-          "-sc_threshold",
-          "0",
-          "-pix_fmt",
-          "yuv420p",
-          "-vsync",
-          "vfr",
-          "-movflags",
-          "+faststart",
-          "-y",
-          merged
-        );
-        return ffmpeg.exec(args).catch(() => 1);
+
+    let segmentSpans = hit?.segmentSpans || [];
+    let sliceLog = hit?.sliceLog || [];
+    let merged = hit?.out || "";
+    let exportMethod = hit ? `ffmpeg-${hit.mode}` : "ffmpeg";
+    const parts = [];
+
+    if (!hit) {
+      // 回退：逐段 trim（旧路径）；仍去掉 trim 前的 setpts
+      const MIN_PART_BYTES = 512;
+      const trySlice = async (k, i, mode) => {
+        const b = resolveBounds(k);
+        const out = `keep${i}.mp4`;
+        const useGrid = mode === "frameGrid";
+        const useFrame = mode === "frameRaw" || mode === "frameGrid" || mode === "frame";
+        const trimVf = useFrame
+          ? `trim=start_frame=${b.startF}:end_frame=${b.endF},setpts=PTS-STARTPTS`
+          : mode === "sec"
+            ? `trim=start=${fmtSec(b.start)}:end=${fmtSec(b.end)},setpts=PTS-STARTPTS`
+            : "";
+        const vfCore = [
+          useGrid ? `fps=${keepFps}:round=up` : "",
+          trimVf,
+          tailVf,
+        ]
+          .filter(Boolean)
+          .join(",");
+        const args =
+          mode === "ss"
+            ? ["-i", inName, "-ss", fmtSec(b.start), "-t", fmtSec(b.dur), "-an", "-vf", vfCore]
+            : ["-i", inName, "-an", "-vf", vfCore];
+        args.push(...x264, "-y", out);
+        const code = await ffmpeg.exec(args).catch(() => 1);
+        if (code !== 0) return null;
+        try {
+          const data = await ffmpeg.readFile(out);
+          const n = data instanceof Uint8Array ? data.byteLength : Number(data?.length) || 0;
+          if (n < MIN_PART_BYTES) return null;
+        } catch (_) {
+          return null;
+        }
+        const spanSec = useFrame ? (b.endF - b.startF) / keepFps : b.dur;
+        return { out, spanSec, mode, startF: b.startF, endF: b.endF, start: b.start, end: b.end };
       };
-      let code = await runConcat(`${norm};${cat}`);
-      if (code !== 0) {
-        // 回退：不预规范化（旧路径）
-        code = await runConcat(parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`);
+      for (let i = 0; i < keeps.length; i++) {
+        onProgress(0.12 + (i / keeps.length) * 0.5, `切片 ${i + 1}/${keeps.length}`);
+        const modes = preferFrame
+          ? ["frameRaw", "sec", "ss", "frameGrid"]
+          : ["sec", "ss", "frameRaw", "frameGrid"];
+        let one = null;
+        for (const mode of modes) {
+          one = await trySlice(keeps[i], i, mode);
+          if (one) break;
+        }
+        if (!one) throw new Error(`切片失败（段 ${i + 1}/${keeps.length}）`);
+        parts.push(one.out);
+        segmentSpans.push(Math.max(0.05, Number(one.spanSec) || 0));
+        sliceLog.push({
+          i,
+          mode: one.mode,
+          startF: one.startF,
+          endF: one.endF,
+          start: one.start,
+          end: one.end,
+          spanSec: Number(one.spanSec) || 0,
+        });
       }
-      if (code !== 0) {
-        throw new Error(`拼接失败（${parts.length} 段 keep）`);
+      onProgress(0.7, "拼接…");
+      merged = parts[0];
+      if (parts.length > 1) {
+        merged = "keep-merged.mp4";
+        const norm = parts.map((_, i) => `[${i}:v]format=yuv420p,setsar=1[v${i}]`).join(";");
+        const cat = parts.map((_, i) => `[v${i}]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`;
+        const runConcat = async (filter) => {
+          const args = [];
+          parts.forEach((p) => args.push("-i", p));
+          args.push("-filter_complex", filter, "-map", "[v]", "-an", ...x264, "-y", merged);
+          return ffmpeg.exec(args).catch(() => 1);
+        };
+        let code = await runConcat(`${norm};${cat}`);
+        if (code !== 0) {
+          code = await runConcat(
+            parts.map((_, i) => `[${i}:v]`).join("") + `concat=n=${parts.length}:v=1:a=0[v]`
+          );
+        }
+        if (code !== 0) throw new Error(`拼接失败（${parts.length} 段 keep）`);
       }
+      exportMethod = "ffmpeg-segmented";
     }
+
+    const filename = String(file?.name || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
     const data = await ffmpeg.readFile(merged);
     const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
     const bytes = new Uint8Array(raw.byteLength);
@@ -3155,7 +3189,7 @@
         await ffmpeg.deleteFile(p);
       } catch (_) {}
     }
-    if (merged !== parts[0]) {
+    if (merged && merged !== parts[0]) {
       try {
         await ffmpeg.deleteFile(merged);
       } catch (_) {}
@@ -3171,8 +3205,8 @@
       filename,
       segmentSpans,
       keepFps,
-      slicedByFrame: preferSampleFrames,
-      exportMethod: preferSampleFrames ? "ffmpeg-mp4-samples" : "ffmpeg",
+      slicedByFrame: /frame/i.test(String(sliceLog[0]?.mode || "")),
+      exportMethod,
       keeps: keeps.map((k) => ({
         start: Number(k.start) || 0,
         end: Number(k.end) || 0,
@@ -3180,6 +3214,7 @@
         endF: Number.isFinite(Number(k.endF)) ? Number(k.endF) : null,
       })),
       sliceLog,
+      timelineErr: timelineErr || null,
       mp4Timeline: timeline
         ? {
             fps: timeline.fps,
