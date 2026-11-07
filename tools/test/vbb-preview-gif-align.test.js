@@ -26,8 +26,8 @@ function t(name, fn) {
 }
 
 function loadKeepFns() {
-  const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
-  const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
+  const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration,? ?\w*\) \{[\s\S]*?\n  \}/);
+  const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration,? ?\w*\) \{[\s\S]*?\n  \}/);
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
   const resolveEnd = vtrim.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
   const resolveStart = vtrim.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
@@ -123,15 +123,17 @@ t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
     vtrim.indexOf("function keepRangesForEncode"),
     vtrim.indexOf("function previewSeekForKeepRanges")
   );
-  assert.ok(fn.includes("return keepRangesFromEdit(edit, duration)"));
+  assert.ok(fn.includes("return keepRangesFromEdit(edit, duration, timeline)"));
 });
 
-t("exportKeepVideo：PTS sec 优先；勿 -r cfr；禁止两端 bias", () => {
+t("exportKeepVideo：有 stts 则 frameRaw 优先，否则 sec；勿 -r cfr；禁止两端 bias", () => {
   const exp = vtrim.slice(
     vtrim.indexOf("async function exportKeepVideo"),
     vtrim.indexOf("window.DevToolsVtrimEditor =")
   );
-  assert.ok(exp.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "须 sec 优先");
+  assert.ok(exp.includes('["frameRaw", "sec", "ss", "frameGrid"]'), "有采样表须 frameRaw 优先");
+  assert.ok(exp.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "无采样表须 sec 优先");
+  assert.ok(exp.includes("probeMp4VideoTimeline") || exp.includes("preferSampleFrames"), "须接 MP4 时间轴");
   assert.ok(exp.includes("displayFrameAtSec"), "须用 Chrome 显示帧映射");
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(/useGrid \? `fps=\$\{keepFps\}:round=up`/.test(exp), "仅 frameGrid 才抽格");

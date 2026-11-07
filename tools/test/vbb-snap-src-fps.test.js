@@ -54,7 +54,8 @@ t("常见档规整：24/25/30/60，异常回 0", () => {
 t("打开编辑器用 opts.srcFps，并可后台探测", () => {
   assert.ok(vtrim.includes("opts.srcFps"));
   assert.ok(vtrim.includes("applySourceFps(knownFps)"));
-  assert.ok(vtrim.includes("detectAndApplySourceFps(file)"));
+  assert.ok(/detectAndApplySourceFps\(file/.test(vtrim));
+  assert.ok(vtrim.includes("probeMp4VideoTimeline") || vtrim.includes("detectAndApplySourceTimeline"));
   assert.ok(vbb.includes("srcFps: openSrcFps"));
   assert.ok(vbb.includes("detectSourceFps(item.file)"));
 });

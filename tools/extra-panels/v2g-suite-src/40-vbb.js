@@ -1428,6 +1428,7 @@
         const load = window.DevToolsLazy?.loadScript;
         if (typeof load !== "function") throw new Error("脚本加载器不可用");
         const loadP = Promise.resolve()
+          .then(() => load("./lib/mp4-timeline.js", { timeoutMs: 12000, label: "片源时间轴" }))
           .then(() => load("./lib/vtrim-editor.js", { timeoutMs: 20000, label: "视频编辑器" }))
           .then(() => {
             if (!window.DevToolsVtrimEditor?.open) throw new Error("视频编辑器加载失败");

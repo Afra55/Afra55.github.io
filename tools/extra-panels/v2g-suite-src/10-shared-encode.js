@@ -2759,6 +2759,48 @@
         const key = `${srcFile.name || ""}|${srcFile.size || 0}|${srcFile.lastModified || 0}`;
         if (cache.has(key)) return cache.get(key);
         let fps = 0;
+        // 1) 撞档方案按 fileBytes 回填 srcFps（同文件 2547 曾被 rVFC 估成 30）
+        try {
+          const bytes = Number(srcFile.size) || 0;
+          if (bytes > 0) {
+            const map = typeof loadVbbFeatureSchemes === "function" ? loadVbbFeatureSchemes() : null;
+            let bestAt = 0;
+            let bestFps = 0;
+            if (map && typeof map === "object") {
+              for (const hit of Object.values(map)) {
+                if (Number(hit?.fileBytes) === bytes && Number(hit?.srcFps) >= 5) {
+                  const at = Number(hit.at) || 0;
+                  if (at >= bestAt) {
+                    bestAt = at;
+                    bestFps = Number(hit.srcFps) || 0;
+                  }
+                }
+              }
+            }
+            if (bestFps >= 5) {
+              fps = bestFps;
+              cache.set(key, fps);
+              return fps;
+            }
+          }
+        } catch (_) {}
+        // 2) MP4 stts 容器帧率
+        try {
+          if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
+            await window.DevToolsLazy
+              .loadScript("./lib/mp4-timeline.js", { timeoutMs: 12000, label: "片源时间轴" })
+              .catch(() => {});
+          }
+          const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
+          if (typeof probe === "function") {
+            const tl = await probe(srcFile);
+            if (tl?.ok && Number(tl.fps) >= 5) {
+              fps = Number(tl.fps);
+              cache.set(key, fps);
+              return fps;
+            }
+          }
+        } catch (_) {}
         const url = URL.createObjectURL(srcFile);
         const v = document.createElement("video");
         v.muted = true;

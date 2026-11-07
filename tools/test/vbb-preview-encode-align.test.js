@@ -21,8 +21,8 @@ function t(name, fn) {
 }
 
 function loadKeepFns() {
-  const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
-  const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
+  const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration,? ?\w*\) \{[\s\S]*?\n  \}/);
+  const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration,? ?\w*\) \{[\s\S]*?\n  \}/);
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
   const resolveEnd = vtrim.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
   const resolveStart = vtrim.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
@@ -124,11 +124,12 @@ t("仅裁片头片尾：起点/终点=黄柄秒值半开", () => {
   assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("exportKeepVideo：PTS sec 优先（≡预览）；frameGrid 回退才 fps=；禁止两端 bias", () => {
+t("exportKeepVideo：有 stts 则 frameRaw 优先，否则 sec；frameGrid 回退才 fps=；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "须 sec→ss→frameRaw→frameGrid");
+  assert.ok(exp.includes('["frameRaw", "sec", "ss", "frameGrid"]'), "有采样表须 frameRaw 优先");
+  assert.ok(exp.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "无采样表须 sec 优先");
   assert.ok(exp.includes("setpts=PTS-STARTPTS"), "trim 前须复位 PTS");
   assert.ok(exp.includes("segmentSpans"), "回传各段时长");
   assert.ok(exp.includes("sliceLog"), "须回传切片诊断");
@@ -169,8 +170,9 @@ t("displayFrameAtSec：毫秒量化手柄跟 Chrome 所见帧", () => {
   assert.strictEqual(box.displayFrameAtSec(31 / 30, 30), 31, "精确 31/30 → 帧31（round(pts µs)）");
   assert.strictEqual(box.displayFrameAtSec(31 / 30 + 1e-4, 30), 31, "+0.1ms 仍为帧31");
   assert.strictEqual(box.displayFrameAtSec(3.2, 30), 96, "3.2s@30 → 帧96");
-  const keepM = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
-  assert.ok(keepM && keepM[0].includes("ce + step"), "keep 须按手柄秒+1/fps");
+  const keepM = vtrim.match(/function keepRangesFromEdit\(edit, duration,? ?\w*\) \{[\s\S]*?\n  \}/);
+  assert.ok(keepM && keepM[0].includes("ce + step"), "无采样表时 keep 须按手柄秒+1/fps");
+  assert.ok(keepM[0].includes("sampleIndexAtSec") || keepM[0].includes("nextStartAfterCutEnd"), "有采样表时按下一样本");
 });
 
 t("materialize：有编辑就导出；带回 segmentSpans；切片先 fps=round=up", () => {
