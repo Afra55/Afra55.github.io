@@ -4339,6 +4339,9 @@
           ...vbbPendingJobFields(),
         }));
         renderVbbResults();
+        if (vbbClips.length) {
+          setVbbClipJob(0, { status: "running", progress: 0.01, text: "①准备编码器…" });
+        }
         try {
           await prewarmFfmpegEngine().catch(() => {});
           const fileBytes = vbbSourceFile?.size || 0;
@@ -5377,6 +5380,11 @@
         const finishedIdx = new Set(skipOk);
         const pool = [];
         let conc = 1;
+        // 队首立刻标准备中，勿在 FFmpeg 预热阶段整表「排队」
+        const firstLive = jobs.findIndex((_, i) => !skipOk.has(i));
+        if (firstLive >= 0) {
+          setVbbClipJob(firstLive, { status: "running", progress: 0.01, text: "①准备编码器…" });
+        }
         try {
           await prewarmFfmpegEngine().catch(() => {});
           conc = resolveBatchConcurrency(total);
@@ -5777,6 +5785,8 @@
           },
         ];
         renderVbbResults();
+        // 预热前就标 running：避免空队列却显示「排队 1 分+」
+        setVbbClipJob(0, { status: "running", progress: 0.01, text: "①准备编码器…" });
         let durationLabel = `${win.span.toFixed(1)}s`;
         try {
           await prewarmFfmpegEngine().catch(() => {});

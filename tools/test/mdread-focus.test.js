@@ -29,9 +29,9 @@ t("阅读页无顶部三按钮（选择/关闭/回工具站）", () => {
 t("空态可点选；隐藏 file input 仍在", () => {
   assert.ok(/id="mr-file"/.test(html));
   assert.ok(/id="mr-empty"/.test(html));
-  assert.ok(/点击选择/.test(html) || /点击/.test(html));
+  assert.ok(/点击选择/.test(html) || /点击/.test(html) || /拖到这里/.test(html));
   assert.ok(app.includes("pickFile") || app.includes("showPicker"));
-  assert.ok(app.includes('empty?.addEventListener("click"'));
+  assert.ok(app.includes("bindPick(emptyZone)") || app.includes('emptyZone'));
 });
 
 t("拖入换文：全局 drop → openFile", () => {

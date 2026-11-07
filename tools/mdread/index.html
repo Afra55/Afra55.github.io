@@ -38,7 +38,26 @@
   <div class="drop-hint" id="mr-empty" tabindex="-1" aria-label="MD 阅读空状态">
     <div class="empty-shell">
       <p class="empty-brand">MD 阅读</p>
-      <p class="empty-lead">专注预览一篇 Markdown，本地打开，不上传</p>
+      <p class="empty-lead">先选舒适配色，再打开文件；进入后专注阅读</p>
+
+      <div class="empty-theme" id="mr-theme" role="radiogroup" aria-label="阅读配色">
+        <p class="empty-theme-label">阅读配色</p>
+        <div class="empty-theme-row">
+          <button type="button" class="empty-theme-chip" data-read-theme="paper" role="radio" aria-checked="false">
+            <span class="empty-theme-swatch" aria-hidden="true"></span>
+            纸张
+          </button>
+          <button type="button" class="empty-theme-chip" data-read-theme="sepia" role="radio" aria-checked="false">
+            <span class="empty-theme-swatch" aria-hidden="true"></span>
+            羊皮纸
+          </button>
+          <button type="button" class="empty-theme-chip" data-read-theme="soft" role="radio" aria-checked="false">
+            <span class="empty-theme-swatch" aria-hidden="true"></span>
+            柔和深色
+          </button>
+        </div>
+        <p class="empty-theme-hint hint tight">选好后打开 Markdown，本机记住，下次沿用</p>
+      </div>
 
       <div
         class="empty-zone"

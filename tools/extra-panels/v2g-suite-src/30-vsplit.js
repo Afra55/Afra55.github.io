@@ -185,8 +185,36 @@
         }
         if (status !== "pending") return "";
         const origin = Number(job.jobQueuedAt) || 0;
-        if (!(origin > 0)) return "排队中";
-        return `排队 ${formatWaitClockSec(Date.now() - origin)}`;
+        const label = String(job?.jobText || "");
+        // 真排队：前面还有未完成项，或文案写明重跑/补跑
+        let ahead = /等待重跑|串行补跑|排队/.test(label);
+        if (!ahead) {
+          const clips =
+            typeof vbbClips !== "undefined" && Array.isArray(vbbClips)
+              ? vbbClips
+              : typeof vsplitClips !== "undefined" && Array.isArray(vsplitClips)
+                ? vsplitClips
+                : null;
+          if (clips) {
+            const myIdx = clips.indexOf(job);
+            if (myIdx > 0) {
+              for (let i = 0; i < myIdx; i++) {
+                const s = clips[i]?.jobStatus;
+                if (s === "pending" || s === "running") {
+                  ahead = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (ahead) {
+          if (!(origin > 0)) return "排队中";
+          return `排队 ${formatWaitClockSec(Date.now() - origin)}`;
+        }
+        // 单条 / 队首：其实在准备编码器，勿显示「排队」吓人
+        if (!(origin > 0)) return "准备中…";
+        return `准备中 ${formatWaitClockSec(Date.now() - origin)}`;
       }
 
       /**

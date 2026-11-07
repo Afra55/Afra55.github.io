@@ -5370,8 +5370,36 @@
         }
         if (status !== "pending") return "";
         const origin = Number(job.jobQueuedAt) || 0;
-        if (!(origin > 0)) return "排队中";
-        return `排队 ${formatWaitClockSec(Date.now() - origin)}`;
+        const label = String(job?.jobText || "");
+        // 真排队：前面还有未完成项，或文案写明重跑/补跑
+        let ahead = /等待重跑|串行补跑|排队/.test(label);
+        if (!ahead) {
+          const clips =
+            typeof vbbClips !== "undefined" && Array.isArray(vbbClips)
+              ? vbbClips
+              : typeof vsplitClips !== "undefined" && Array.isArray(vsplitClips)
+                ? vsplitClips
+                : null;
+          if (clips) {
+            const myIdx = clips.indexOf(job);
+            if (myIdx > 0) {
+              for (let i = 0; i < myIdx; i++) {
+                const s = clips[i]?.jobStatus;
+                if (s === "pending" || s === "running") {
+                  ahead = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (ahead) {
+          if (!(origin > 0)) return "排队中";
+          return `排队 ${formatWaitClockSec(Date.now() - origin)}`;
+        }
+        // 单条 / 队首：其实在准备编码器，勿显示「排队」吓人
+        if (!(origin > 0)) return "准备中…";
+        return `准备中 ${formatWaitClockSec(Date.now() - origin)}`;
       }
 
       /**
@@ -12222,6 +12250,9 @@
           ...vbbPendingJobFields(),
         }));
         renderVbbResults();
+        if (vbbClips.length) {
+          setVbbClipJob(0, { status: "running", progress: 0.01, text: "①准备编码器…" });
+        }
         try {
           await prewarmFfmpegEngine().catch(() => {});
           const fileBytes = vbbSourceFile?.size || 0;
@@ -13260,6 +13291,11 @@
         const finishedIdx = new Set(skipOk);
         const pool = [];
         let conc = 1;
+        // 队首立刻标准备中，勿在 FFmpeg 预热阶段整表「排队」
+        const firstLive = jobs.findIndex((_, i) => !skipOk.has(i));
+        if (firstLive >= 0) {
+          setVbbClipJob(firstLive, { status: "running", progress: 0.01, text: "①准备编码器…" });
+        }
         try {
           await prewarmFfmpegEngine().catch(() => {});
           conc = resolveBatchConcurrency(total);
@@ -13660,6 +13696,8 @@
           },
         ];
         renderVbbResults();
+        // 预热前就标 running：避免空队列却显示「排队 1 分+」
+        setVbbClipJob(0, { status: "running", progress: 0.01, text: "①准备编码器…" });
         let durationLabel = `${win.span.toFixed(1)}s`;
         try {
           await prewarmFfmpegEngine().catch(() => {});
