@@ -88,6 +88,10 @@
     return "paper";
   }
 
+  const themeHint = document.getElementById("mr-theme-hint");
+  const themeFab = document.getElementById("mr-theme-fab");
+  const themePop = document.getElementById("mr-theme-pop");
+
   function applyReadTheme(id) {
     const key = READ_THEMES[id] ? id : "paper";
     const conf = READ_THEMES[key];
@@ -106,19 +110,48 @@
       btn.classList.toggle("is-active", on);
       btn.setAttribute("aria-checked", on ? "true" : "false");
     });
+    if (themeHint) {
+      themeHint.textContent = `当前：${conf.label} · 点另一档立刻换色并记住`;
+    }
     try {
       localStorage.setItem(READ_THEME_KEY, key);
     } catch (_) {}
   }
 
+  function bindThemeClicks(root) {
+    root?.addEventListener("click", (e) => {
+      const btn = e.target?.closest?.("[data-read-theme]");
+      if (!btn || (root !== document && !root.contains(btn))) return;
+      e.preventDefault();
+      e.stopPropagation();
+      applyReadTheme(btn.getAttribute("data-read-theme"));
+      if (themePop && !themePop.hidden && root === themePop) {
+        themePop.hidden = true;
+        if (themeFab) themeFab.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
   applyReadTheme(getReadThemeId());
-  document.getElementById("mr-theme")?.addEventListener("click", (e) => {
-    const btn = e.target?.closest?.("[data-read-theme]");
-    if (!btn) return;
+  bindThemeClicks(document.getElementById("mr-theme"));
+  bindThemeClicks(document.getElementById("mr-outline-theme"));
+  bindThemeClicks(themePop);
+
+  themeFab?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    applyReadTheme(btn.getAttribute("data-read-theme"));
+    if (!themePop) return;
+    const open = themePop.hidden;
+    themePop.hidden = !open;
+    themeFab.setAttribute("aria-expanded", open ? "true" : "false");
   });
+  document.addEventListener("click", (e) => {
+    if (!themePop || themePop.hidden) return;
+    if (e.target?.closest?.("#mr-theme-pop, #mr-theme-fab")) return;
+    themePop.hidden = true;
+    themeFab?.setAttribute("aria-expanded", "false");
+  });
+
   window.addEventListener("storage", (e) => {
     if (e.key === READ_THEME_KEY && e.newValue && READ_THEMES[e.newValue]) {
       applyReadTheme(e.newValue);
@@ -141,6 +174,15 @@
     if (layout) layout.hidden = !on;
     if (empty) empty.hidden = on;
     document.body.classList.toggle("has-doc", on);
+    if (themeFab) {
+      themeFab.hidden = !on;
+      if (!on) {
+        themeFab.setAttribute("aria-expanded", "false");
+        if (themePop) themePop.hidden = true;
+      }
+    } else if (themePop) {
+      themePop.hidden = true;
+    }
   }
 
   function pickFile() {
