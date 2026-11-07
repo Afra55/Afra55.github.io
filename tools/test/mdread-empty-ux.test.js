@@ -57,12 +57,14 @@ t("空态可打开 / 粘贴", () => {
 });
 
 t("SW 壳缓存已升版", () => {
-  assert.ok(/mdread-shell-v1[5-9]|mdread-shell-v[2-9]\d/.test(sw));
+  assert.ok(/mdread-shell-v1[7-9]|mdread-shell-v[2-9]\d/.test(sw));
 });
 
-t("大纲列表可滚，无底栏配色夹在中间", () => {
+t("大纲列表可滚，条目不被 flex 压扁", () => {
   assert.ok(/\.outline\s*\{[\s\S]*?overflow:\s*hidden/.test(css));
-  assert.ok(/\.outline-body\s*\{[\s\S]*?overflow:\s*auto/.test(css));
+  assert.ok(/\.outline-body\s*\{[\s\S]*?overflow-y:\s*auto/.test(css));
+  assert.ok(/\.outline-body\s*\{[\s\S]*?flex:\s*1\s+1\s+0/.test(css));
+  assert.ok(/\.outline-item\s*\{[\s\S]*?flex:\s*0\s+0\s+auto/.test(css));
   assert.ok(!html.includes("outline-theme"));
 });
 
