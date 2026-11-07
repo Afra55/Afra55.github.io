@@ -148,6 +148,35 @@
     const f = normalizeSourceFps(fps) || DEFAULT_FRAME_FPS;
     return frameToSec(displayFrameAtSec(sec, f), f) + DISPLAY_SEEK_EPS;
   }
+
+  /**
+   * 停到采样 k 的「帧内点」（优先）；无时间轴再回退 displaySeekSec。
+   * 精确 CTS seek 在 Android Chrome 常显示成 k−1。
+   */
+  function seekSecForSample(timeline, sampleIdx, fps) {
+    const api = window.DevToolsMp4Timeline;
+    if (timeline?.ctsSec?.length && typeof api?.frameSeekSec === "function") {
+      const t = api.frameSeekSec(timeline, sampleIdx);
+      if (Number.isFinite(t)) return Math.max(0, t);
+    }
+    if (timeline?.ctsSec?.length) {
+      const n = timeline.ctsSec.length;
+      const k = Math.max(0, Math.min(n - 1, Math.round(Number(sampleIdx) || 0)));
+      const t0 = Number(timeline.ctsSec[k]);
+      if (Number.isFinite(t0)) return Math.max(0, t0 + DISPLAY_SEEK_EPS);
+    }
+    return displaySeekSec(0, fps);
+  }
+
+  /** 手柄/时刻 → Chrome seek 点（帧内） */
+  function seekSecForTime(timeline, sec, fps) {
+    const api = window.DevToolsMp4Timeline;
+    if (timeline?.ctsSec?.length && typeof api?.sampleIndexAtSec === "function") {
+      const idx = api.sampleIndexAtSec(timeline, sec);
+      return seekSecForSample(timeline, idx, fps);
+    }
+    return displaySeekSec(sec, fps);
+  }
   let uidSeq = 0;
 
   function toast(msg) {
@@ -1061,7 +1090,7 @@
     }
 
     /**
-     * 片尾停预览：seek 到成片末帧 CTS，只记 endParkAtSec，不改写 endSec。
+     * 片尾停预览：seek 到成片末帧「帧内点」，只记 endParkAtSec，不改写 endSec。
      */
     async function seekEndPreviewExact() {
       const gen = ++endParkGen;
@@ -1077,19 +1106,19 @@
         video.pause();
       } catch (_) {}
       try {
-        video.currentTime = displaySeekSec(target, sourceFps);
+        video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
       if (gen !== endParkGen || closed) return target;
-      const shown = Number(video.currentTime);
-      endParkAtSec = Number.isFinite(shown) ? shown : target;
+      // 钉停帧记「成片时钟」CTS，不记 Chrome 帧内偏置点，避免播放截断漂半帧
+      endParkAtSec = target;
       paintTimeline();
       updateLabels();
       return endParkAtSec;
     }
 
     /**
-     * 片头停预览：seek 到成片首帧 CTS，不改写 startSec。
+     * 片头停预览：seek 到成片首帧「帧内点」，不改写 startSec。
      */
     async function seekStartPreviewExact() {
       scrubSeekWanted = null;
@@ -1103,12 +1132,12 @@
       } catch (_) {}
       const target = encodeParkSecForEdge("start");
       try {
-        video.currentTime = displaySeekSec(target, sourceFps);
+        video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
       paintTimeline();
       updateLabels();
-      return Number(video.currentTime) || target;
+      return target;
     }
 
     function previewSeek(t, { throttle = false } = {}) {
@@ -1384,6 +1413,13 @@
         if (closed || !tl?.ok || !(tl.fps >= 5)) return;
         sourceTimeline = tl;
         applySourceFps(tl.fps);
+        // 把 ctsSec 校准到 ≡ 编辑器 video.currentTime / 显示时钟
+        const calibrate = window.DevToolsMp4Timeline?.calibrateToElement;
+        if (typeof calibrate === "function" && video) {
+          try {
+            await calibrate(sourceTimeline, video);
+          } catch (_) {}
+        }
       } catch (_) {}
     }
 
@@ -1733,12 +1769,12 @@
         video.pause();
       } catch (_) {}
       try {
-        video.currentTime = target;
+        video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
       paintTimeline();
       updateLabels();
-      return Number(video.currentTime) || target;
+      return target;
     }
 
     async function seekPlayheadExact(t) {
@@ -1760,12 +1796,12 @@
         video.pause();
       } catch (_) {}
       try {
-        video.currentTime = target;
+        video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
       if ((Number(video.currentTime) || 0) < startSec - 0.001) {
         try {
-          video.currentTime = startSec;
+          video.currentTime = seekSecForTime(sourceTimeline, startSec, sourceFps);
         } catch (_) {}
         await waitSeek(video);
       }
@@ -2077,13 +2113,13 @@
         const isChromeFrames = String(out?.exportMethod || "").includes("chrome");
         const diag = {
           kind: "vbb-export-diag",
-          ver: 5,
+          ver: 6,
           build: String(build || ""),
           at: new Date().toISOString(),
           ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
           note: isChromeFrames
-            ? "按编辑器预览显示帧导出（VideoFrame）；应对齐所见；时长=各 keep 之和"
-            : "ffmpeg 精切兜底（优先 frameRaw）；手机上可能与预览差帧；时长=各 keep 之和",
+            ? "按编辑器预览显示帧导出（VideoFrame+帧内seek）；应对齐所见；时长=各 keep 之和"
+            : "ffmpeg 精切兜底（优先 frameRaw；sec 用媒体时钟）；手机上可能与预览差帧；时长=各 keep 之和",
           file: {
             name: String(file?.name || ""),
             size: Number(file?.size) || 0,
@@ -2096,6 +2132,9 @@
             sourceFps,
             mp4Fps: sourceTimeline?.fps || null,
             mp4SampleCount: sourceTimeline?.sampleCount || null,
+            chromeOffsetSec: Number(sourceTimeline?.chromeOffsetSec) || 0,
+            calibrated: Boolean(sourceTimeline?.calibrated),
+            calibrateMethod: sourceTimeline?.calibrateMethod || null,
             currentTime: Number(video.currentTime) || 0,
             paused: Boolean(video.paused),
           },
@@ -3038,8 +3077,8 @@
         const segStartTs = outTs;
         for (let fi = startF; fi < endF; fi++) {
           if (encoderError) throw encoderError;
-          const seekT = timeline?.ctsSec?.[fi]
-            ? Number(timeline.ctsSec[fi]) + DISPLAY_SEEK_EPS
+          const seekT = timeline?.ctsSec?.length
+            ? seekSecForSample(timeline, fi, keepFps)
             : frameToSec(fi, keepFps) + DISPLAY_SEEK_EPS;
           videoEl.currentTime = Math.max(0, seekT);
           await waitSeek(videoEl);
@@ -3185,6 +3224,9 @@
               hasCtts: Boolean(timeline.hasCtts),
               elstMediaTime: timeline.elstMediaTime || 0,
               firstPresentIdx: timeline.firstPresentIdx || 0,
+              chromeOffsetSec: Number(timeline.chromeOffsetSec) || 0,
+              calibrated: Boolean(timeline.calibrated),
+              calibrateMethod: timeline.calibrateMethod || null,
             }
           : null,
       };
@@ -3298,14 +3340,23 @@
           startF = fr.startF;
           endF = fr.endF;
         }
-        // 用采样 CTS 作半开秒窗 ≡ 预览停帧，避免手柄毫秒落在帧中部
-        const cts = timeline.ctsSec;
-        if (cts && cts.length) {
-          const t0 = Number(cts[Math.min(startF, cts.length - 1)]);
-          const t1 =
-            endF < cts.length
-              ? Number(cts[endF])
-              : Number(cts[cts.length - 1]) + 1 / keepFps;
+        // ffmpeg sec 必须用媒体时钟（校准前）；ctsSec 可能已平移到 Chrome
+        const media =
+          timeline.mediaCtsSec && timeline.mediaCtsSec.length === timeline.ctsSec.length
+            ? timeline.mediaCtsSec
+            : timeline.ctsSec;
+        const off = Number(timeline.chromeOffsetSec) || 0;
+        if (media && media.length) {
+          let t0 = Number(media[Math.min(startF, media.length - 1)]);
+          let t1 =
+            endF < media.length
+              ? Number(media[endF])
+              : Number(media[media.length - 1]) + 1 / keepFps;
+          // 若误用了已平移数组且无 mediaCtsSec，回退减 offset
+          if (!(timeline.mediaCtsSec && timeline.mediaCtsSec.length) && Math.abs(off) >= 0.002) {
+            t0 -= off;
+            t1 -= off;
+          }
           if (Number.isFinite(t0) && Number.isFinite(t1) && t1 > t0 + 1e-4) {
             start = Math.max(0, t0);
             end = Math.max(start + 0.05, t1);
@@ -3562,6 +3613,9 @@
             hasCtts: Boolean(timeline.hasCtts),
             elstMediaTime: timeline.elstMediaTime || 0,
             firstPresentIdx: timeline.firstPresentIdx || 0,
+            chromeOffsetSec: Number(timeline.chromeOffsetSec) || 0,
+            calibrated: Boolean(timeline.calibrated),
+            calibrateMethod: timeline.calibrateMethod || null,
           }
         : null,
     };
@@ -3584,6 +3638,8 @@
     frameToSec,
     displayFrameAtSec,
     displaySeekSec,
+    seekSecForSample,
+    seekSecForTime,
     resolveEndKeepSec,
     resolveStartKeepSec,
     DEFAULT_FRAME_FPS,

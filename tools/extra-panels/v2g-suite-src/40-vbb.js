@@ -900,11 +900,47 @@
                   : Number(edit?.srcFps) >= 5
                     ? Number(edit.srcFps)
                     : 24;
-              const out = await chromeExp(v, keeps, {
-                keepFps,
+              // 与编辑器同一套时间轴：探测 + 对临时 video 校准，再帧内 seek
+              let matTimeline = null;
+              try {
+                if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
+                  await window.DevToolsLazy.loadScript("./lib/mp4-timeline.js", {
+                    timeoutMs: 12000,
+                    label: "片源时间轴",
+                  }).catch(() => null);
+                }
+                const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
+                if (typeof probe === "function") {
+                  matTimeline = await probe(file);
+                  const cal = window.DevToolsMp4Timeline?.calibrateToElement;
+                  if (matTimeline?.ok && typeof cal === "function") {
+                    await cal(matTimeline, v);
+                  }
+                }
+              } catch (_) {
+                matTimeline = null;
+              }
+              let matKeeps = keeps;
+              if (
+                matTimeline?.ctsSec?.length &&
+                typeof window.DevToolsVtrimEditor?.keepRangesForEncode === "function"
+              ) {
+                try {
+                  matKeeps = window.DevToolsVtrimEditor.keepRangesForEncode(
+                    edit,
+                    duration,
+                    matTimeline
+                  );
+                } catch (_) {
+                  matKeeps = keeps;
+                }
+              }
+              const out = await chromeExp(v, matKeeps, {
+                keepFps: Number(matTimeline?.fps) >= 5 ? matTimeline.fps : keepFps,
                 srcW,
                 srcH,
                 applyCrop: false,
+                timeline: matTimeline || undefined,
                 filenameBase: String(file.name || "video"),
                 onProgress,
                 ffmpeg: ffmpegLease || null,
@@ -949,10 +985,24 @@
         const exp = window.DevToolsVtrimEditor?.exportKeepVideo;
         if (typeof exp === "function") {
           try {
+            let ffTimeline = null;
+            try {
+              if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
+                await window.DevToolsLazy.loadScript("./lib/mp4-timeline.js", {
+                  timeoutMs: 12000,
+                  label: "片源时间轴",
+                }).catch(() => null);
+              }
+              const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
+              if (typeof probe === "function") ffTimeline = await probe(file);
+            } catch (_) {
+              ffTimeline = null;
+            }
             const out = await exp(file, edit, duration, {
               srcW,
               srcH,
               applyCrop: false,
+              timeline: ffTimeline || undefined,
               onProgress,
               ffmpeg: ffmpegLease || null,
             });

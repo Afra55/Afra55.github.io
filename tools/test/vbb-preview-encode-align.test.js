@@ -190,6 +190,23 @@ t("materialize：优先 chrome 预览帧；ffmpeg 兜底；带回 segmentSpans",
   assert.ok(body.includes("frameGrid") && body.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "ffmpeg 兜底 PTS");
   assert.ok(!/setsar=1,fps=\$\{keepFps\}/.test(body), "scalePad 勿再叠 fps=");
   assert.ok(!/\[\$\{i\}:v\]fps=\$\{keepFps\}/.test(body), "concat 勿再 fps=");
+  assert.ok(body.includes("calibrateToElement"), "GIF materialize 须校准显示时钟");
+  assert.ok(body.includes("timeline: matTimeline") || body.includes("timeline: matTimeline ||"), "chrome 传 timeline");
+  assert.ok(body.includes("timeline: ffTimeline") || body.includes("timeline: ffTimeline ||"), "ffmpeg 传 timeline");
+});
+
+t("vtrim：帧内 seek + 校准", () => {
+  assert.ok(vtrim.includes("function seekSecForSample"));
+  assert.ok(vtrim.includes("function seekSecForTime"));
+  assert.ok(vtrim.includes("calibrateToElement"));
+  assert.ok(vtrim.includes("frameSeekSec") || vtrim.includes("seekSecForTime(sourceTimeline"));
+  assert.ok(vtrim.includes("mediaCtsSec"), "ffmpeg sec 用媒体时钟");
+  assert.ok(vtrim.includes("chromeOffsetSec"));
+  const park = vtrim.slice(
+    vtrim.indexOf("async function seekEndPreviewExact"),
+    vtrim.indexOf("async function seekStartPreviewExact")
+  );
+  assert.ok(park.includes("seekSecForTime"), "片尾停帧走帧内点");
 });
 
 t("prepare：时间编辑先导出再 GIF", () => {
