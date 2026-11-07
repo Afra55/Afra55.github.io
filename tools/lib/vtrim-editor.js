@@ -163,9 +163,15 @@
     const link = document.createElement("link");
     link.rel = "stylesheet";
     const build = window.TOOLS_BUILD || window.DevToolsLazy?.BUILD || "";
-    const url = new URL("./styles/panels/vtrim.css", document.baseURI || window.location.href);
+    // 相对 tools/ 根解析，避免 pathname 丢失站点前缀或错误 base
+    const base = new URL(".", document.baseURI || window.location.href);
+    // 若当前页在 /tools/mdread/ 等子路径，退回到 /tools/
+    const toolsBase = /\/tools\//.test(base.pathname)
+      ? new URL(base.pathname.replace(/\/tools\/.*$/, "/tools/"), base.origin)
+      : base;
+    const url = new URL("styles/panels/vtrim.css", toolsBase);
     if (build) url.searchParams.set("v", build);
-    link.href = url.pathname + url.search;
+    link.href = url.href;
     link.dataset.panelCss = "vtrim";
     document.head.appendChild(link);
   }

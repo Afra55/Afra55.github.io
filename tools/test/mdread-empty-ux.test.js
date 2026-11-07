@@ -25,22 +25,22 @@ t("空态有品牌与主 CTA", () => {
   assert.ok(html.includes('id="mr-empty-zone"'));
 });
 
-t("空态可选阅读三档配色，打开文档后不出现配色入口", () => {
+t("空态三档 + 更多；阅读中大纲底栏可开配色弹框", () => {
   assert.ok(html.includes('id="mr-theme"'));
   assert.ok(html.includes('data-read-theme="paper"'));
   assert.ok(html.includes('data-read-theme="sepia"'));
   assert.ok(html.includes('data-read-theme="soft"'));
-  assert.ok(!html.includes("mr-outline-theme"));
+  assert.ok(html.includes("mr-theme-more"));
+  assert.ok(html.includes("mr-outline-theme-btn"));
+  assert.ok(html.includes("mr-theme-modal"));
   assert.ok(!html.includes("mr-theme-fab"));
-  assert.ok(!html.includes("mr-theme-pop"));
-  assert.ok(html.includes("配色只在空页选择"));
   assert.ok(js.includes("READ_THEMES"));
   assert.ok(js.includes("applyReadTheme"));
+  assert.ok(js.includes("openThemeModal"));
   assert.ok(js.includes("devtools-mdread-theme-v1"));
   assert.ok(js.includes('return "paper"'));
-  assert.ok(js.includes("配色只在空页选"));
   assert.ok(css.includes(".empty-theme-chip"));
-  assert.ok(!css.includes(".outline-theme"));
+  assert.ok(css.includes(".outline-theme-btn"));
   assert.ok(!css.includes(".read-theme-fab"));
 });
 
@@ -57,7 +57,7 @@ t("空态可打开 / 粘贴", () => {
 });
 
 t("SW 壳缓存已升版", () => {
-  assert.ok(/mdread-shell-v1[7-9]|mdread-shell-v[2-9]\d/.test(sw));
+  assert.ok(/mdread-shell-v1[8-9]|mdread-shell-v[2-9]\d/.test(sw));
 });
 
 t("大纲列表可滚，条目不被 flex 压扁", () => {
@@ -65,7 +65,7 @@ t("大纲列表可滚，条目不被 flex 压扁", () => {
   assert.ok(/\.outline-body\s*\{[\s\S]*?overflow-y:\s*auto/.test(css));
   assert.ok(/\.outline-body\s*\{[\s\S]*?flex:\s*1\s+1\s+0/.test(css));
   assert.ok(/\.outline-item\s*\{[\s\S]*?flex:\s*0\s+0\s+auto/.test(css));
-  assert.ok(!html.includes("outline-theme"));
+  assert.ok(html.includes("outline-foot"));
 });
 
 t("空页不会被 display:grid 顶出「未命名」", () => {

@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="../icons/icon-180.png" />
   <link rel="icon" href="../icons/icon-192.png" />
   <title>MD 阅读</title>
-  <link rel="stylesheet" href="./app.css?v=17" />
+  <link rel="stylesheet" href="./app.css?v=18" />
 </head>
 <body>
   <!-- 隐藏选文件：空态点击 / 程序化打开用；无顶部按钮 -->
@@ -25,6 +25,9 @@
     <aside class="outline" id="mr-outline" aria-label="标题大纲">
       <p class="outline-label">大纲</p>
       <div class="outline-body" id="mr-outline-body"></div>
+      <div class="outline-foot">
+        <button type="button" class="outline-theme-btn" id="mr-outline-theme-btn">配色</button>
+      </div>
     </aside>
     <main class="stage" id="mr-stage">
       <div class="doc-meta">
@@ -40,7 +43,7 @@
       <p class="empty-lead">先选护眼配色，再打开 Markdown</p>
 
       <div class="empty-theme is-hero" id="mr-theme" role="radiogroup" aria-label="阅读配色">
-        <p class="empty-theme-label">阅读配色</p>
+        <p class="empty-theme-label">常用配色</p>
         <div class="empty-theme-row">
           <button type="button" class="empty-theme-chip" data-read-theme="paper" role="radio" aria-checked="false">
             <span class="empty-theme-preview" aria-hidden="true">
@@ -67,6 +70,7 @@
             <span class="empty-theme-mark" aria-hidden="true">已选</span>
           </button>
         </div>
+        <button type="button" class="empty-theme-more" id="mr-theme-more">更多配色…</button>
         <p class="empty-theme-hint hint tight" id="mr-theme-hint">当前：纸张 · 点另一档立刻换色并记住</p>
       </div>
 
@@ -89,13 +93,46 @@
 
       <ul class="empty-tips">
         <li>一次只读一篇，再拖新文件即可换文</li>
-        <li>配色只在空页选择，打开文档后专注阅读</li>
+        <li>阅读中可在左侧大纲底部改配色</li>
         <li>空页时可直接按粘贴快捷键贴入正文</li>
       </ul>
     </div>
   </div>
 
-  <script src="./preview.js?v=17" defer></script>
-  <script src="./app.js?v=17" defer></script>
+  <div class="theme-modal" id="mr-theme-modal" hidden>
+    <div class="theme-modal-backdrop" data-theme-modal-close tabindex="-1"></div>
+    <div class="theme-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="mr-theme-modal-title">
+      <header class="theme-modal-head">
+        <h2 id="mr-theme-modal-title">阅读配色</h2>
+        <button type="button" class="theme-modal-close" data-theme-modal-close aria-label="关闭">×</button>
+      </header>
+      <p class="theme-modal-lead hint tight">预置偏低对比、暖/中性纸感，长时间阅读更舒服；也可自定义底色与字色。</p>
+      <div class="theme-modal-grid" id="mr-theme-modal-grid" role="listbox" aria-label="预置配色"></div>
+      <div class="theme-modal-custom">
+        <p class="theme-modal-custom-label">自定义</p>
+        <div class="theme-modal-custom-row">
+          <label class="theme-modal-field">
+            <span>背景</span>
+            <input type="color" id="mr-custom-bg" value="#FAF7F2" />
+          </label>
+          <label class="theme-modal-field">
+            <span>文字</span>
+            <input type="color" id="mr-custom-ink" value="#292524" />
+          </label>
+          <label class="theme-modal-field theme-modal-scheme">
+            <span>模式</span>
+            <select id="mr-custom-scheme">
+              <option value="light">浅色</option>
+              <option value="dark">深色</option>
+            </select>
+          </label>
+          <button type="button" class="theme-modal-apply" id="mr-custom-apply">应用自定义</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./preview.js?v=18" defer></script>
+  <script src="./app.js?v=18" defer></script>
 </body>
 </html>
