@@ -220,8 +220,9 @@
     const chip = e.target?.closest?.("[data-read-theme]");
     if (chip && themeModalGrid?.contains(chip)) {
       e.preventDefault();
+      // 点预置只换色不关弹框，方便连续对比；关窗外或点 × 再关
       applyReadTheme(chip.getAttribute("data-read-theme"));
-      closeThemeModal();
+      paintThemeModalGrid();
     }
   });
 
@@ -233,7 +234,6 @@
     saveCustomTheme(bg, ink, scheme);
     applyReadTheme("custom");
     paintThemeModalGrid();
-    closeThemeModal();
   });
 
   window.addEventListener("keydown", (e) => {
