@@ -646,7 +646,16 @@ html[data-theme-scheme="light"] .hljs-deletion { color: #b31d28; }
   border-radius: 10px;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   touch-action: none;
+  cursor: grab;
 }
+.lb-stage:active { cursor: grabbing; }
+.lb-stage.is-svg-mode { cursor: grab; }
+.lb-stage.is-svg-mode:active { cursor: grab; }
+.lb-stage.is-svg-mode.is-dragging,
+.lb-stage.is-svg-mode.is-dragging:active { cursor: grabbing; }
+.lb-stage.is-svg-mode.is-over-text,
+.lb-stage.is-svg-mode.is-over-text:active { cursor: text; }
+.lb-stage.is-dragging { cursor: grabbing; }
 .lb-host {
   position: absolute;
   left: 50%;
@@ -655,11 +664,26 @@ html[data-theme-scheme="light"] .hljs-deletion { color: #b31d28; }
   transform-origin: center center;
   max-width: none;
 }
+/* 活 SVG：可划词；空白/图形处拖动画布 */
+.lb-host.is-svg {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.lb-host.is-svg svg {
+  display: block;
+  max-width: none;
+  height: auto;
+  overflow: visible;
+}
 /* 代码放大：与预览 pre / hljs 同色，铺满舞台勿浮层卡片 */
+.lb-stage.is-code-mode,
 .lb-stage:has(.lb-host.is-code) {
   background: rgba(0, 0, 0, 0.3);
   overflow: auto;
+  cursor: text;
+  touch-action: pan-x pan-y;
 }
+html[data-theme-scheme="light"] .lb-stage.is-code-mode,
 html[data-theme-scheme="light"] .lb-stage:has(.lb-host.is-code) {
   background: rgba(0, 0, 0, 0.06);
 }
@@ -670,6 +694,8 @@ html[data-theme-scheme="light"] .lb-stage:has(.lb-host.is-code) {
   transform-origin: top left;
   min-width: 100%;
   min-height: 100%;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .lb-host.is-code pre {
   margin: 0;
@@ -693,6 +719,10 @@ html[data-theme-scheme="light"] .lb-host.is-code pre {
 .lb-host.is-code code {
   background: none !important;
   padding: 0;
+}
+.lb-host.is-table {
+  user-select: text;
+  -webkit-user-select: text;
 }
 .lb-host.is-table table {
   border-collapse: collapse;

@@ -336,6 +336,29 @@
     }
   }
 
+  function isSvgTextTarget(stage, el) {
+    let n = el;
+    while (n && n !== stage) {
+      if (n.nodeType === 1) {
+        const tag = String(n.tagName || "").toLowerCase();
+        const insideFo = Boolean(
+          typeof n.closest === "function" && n.closest("foreignObject, foreignobject")
+        );
+        if (
+          tag === "text" ||
+          tag === "tspan" ||
+          tag === "textpath" ||
+          tag === "foreignobject" ||
+          insideFo
+        ) {
+          return true;
+        }
+      }
+      n = n.parentNode;
+    }
+    return false;
+  }
+
   function createLightbox(toast) {
     let dlg = document.getElementById("mdread-lightbox");
     if (!dlg) {
@@ -370,10 +393,19 @@
     const pct = dlg.querySelector("#mdread-lb-pct");
     const dlWrap = dlg.querySelector("#mdread-lb-dl");
     const dlSrcBtn = dlg.querySelector("#mdread-lb-dl-src");
-    const view = { scale: 1, x: 0, y: 0 };
+    const view = { scale: 1, x: 0, y: 0, dragging: false, lastX: 0, lastY: 0 };
     let mode = "svg";
     let payload = null;
     let exporting = false;
+
+    const syncStageCursor = (overText) => {
+      if (!stage) return;
+      stage.classList.toggle("is-svg-mode", mode === "svg");
+      stage.classList.toggle("is-code-mode", mode === "code");
+      stage.classList.toggle("is-table-mode", mode === "table");
+      stage.classList.toggle("is-dragging", Boolean(view.dragging));
+      stage.classList.toggle("is-over-text", mode === "svg" && Boolean(overText));
+    };
 
     const sync = () => {
       if (mode === "code") {
@@ -383,10 +415,32 @@
       }
       if (pct) pct.textContent = `${Math.round(view.scale * 100)}%`;
     };
+
+    const clampScale = (next) => Math.min(6, Math.max(0.25, next));
+
+    const zoomAt = (clientX, clientY, nextScale) => {
+      const rect = stage.getBoundingClientRect();
+      const ratio = nextScale / (view.scale || 1);
+      if (mode === "code") {
+        const cx = clientX - rect.left;
+        const cy = clientY - rect.top;
+        view.x = cx - (cx - view.x) * ratio;
+        view.y = cy - (cy - view.y) * ratio;
+      } else {
+        const cx = clientX - rect.left - rect.width / 2;
+        const cy = clientY - rect.top - rect.height / 2;
+        view.x = cx - (cx - view.x) * ratio;
+        view.y = cy - (cy - view.y) * ratio;
+      }
+      view.scale = nextScale;
+      sync();
+    };
+
     const fit = () => {
       view.scale = mode === "table" ? 0.95 : 1;
       view.x = 0;
       view.y = 0;
+      view.dragging = false;
       try {
         if (mode === "code" && stage) {
           stage.scrollTop = 0;
@@ -394,8 +448,10 @@
         }
       } catch (_) {}
       sync();
+      syncStageCursor(false);
     };
     const close = () => {
+      view.dragging = false;
       try {
         dlg.close();
       } catch (_) {
@@ -404,6 +460,7 @@
       host.innerHTML = "";
       payload = null;
       if (dlWrap) dlWrap.open = false;
+      syncStageCursor(false);
     };
 
     function syncDlMenu() {
@@ -418,12 +475,12 @@
       if (e.target === dlg) close();
     });
     dlg.querySelector("#mdread-lb-in")?.addEventListener("click", () => {
-      view.scale = Math.min(6, view.scale * 1.2);
-      sync();
+      const rect = stage.getBoundingClientRect();
+      zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, clampScale(view.scale * 1.2));
     });
     dlg.querySelector("#mdread-lb-out")?.addEventListener("click", () => {
-      view.scale = Math.max(0.25, view.scale / 1.2);
-      sync();
+      const rect = stage.getBoundingClientRect();
+      zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, clampScale(view.scale / 1.2));
     });
     dlg.querySelector("#mdread-lb-reset")?.addEventListener("click", fit);
     stage?.addEventListener(
@@ -431,11 +488,61 @@
       (e) => {
         if (!dlg.open) return;
         e.preventDefault();
-        view.scale = Math.min(6, Math.max(0.25, view.scale * Math.exp(-e.deltaY * 0.0015)));
-        sync();
+        zoomAt(e.clientX, e.clientY, clampScale(view.scale * Math.exp(-e.deltaY * 0.0015)));
       },
       { passive: false }
     );
+
+    // 与 MDM 一致：空白/图形拖动画布；文字/单元格留给划词（表格/代码需 Shift 才拖）
+    stage?.addEventListener("pointerdown", (e) => {
+      if (!dlg.open || e.button !== 0) return;
+      if (mode === "svg" && isSvgTextTarget(stage, e.target)) {
+        view.dragging = false;
+        syncStageCursor(true);
+        return;
+      }
+      if (
+        (mode === "code" && e.target.closest?.("code, pre")) ||
+        (mode === "table" && e.target.closest?.("table, th, td"))
+      ) {
+        if (!e.shiftKey) {
+          view.dragging = false;
+          return;
+        }
+      }
+      view.dragging = true;
+      view.lastX = e.clientX;
+      view.lastY = e.clientY;
+      syncStageCursor(false);
+      stage.setPointerCapture?.(e.pointerId);
+      if (mode === "svg") e.preventDefault();
+    });
+    stage?.addEventListener("pointermove", (e) => {
+      if (view.dragging) {
+        view.x += e.clientX - view.lastX;
+        view.y += e.clientY - view.lastY;
+        view.lastX = e.clientX;
+        view.lastY = e.clientY;
+        sync();
+        return;
+      }
+      if (mode === "svg" && dlg.open) {
+        syncStageCursor(isSvgTextTarget(stage, e.target));
+      }
+    });
+    const endDrag = () => {
+      view.dragging = false;
+      syncStageCursor(false);
+    };
+    stage?.addEventListener("pointerup", endDrag);
+    stage?.addEventListener("pointercancel", endDrag);
+    stage?.addEventListener("dblclick", (e) => {
+      if (mode === "svg" && isSvgTextTarget(stage, e.target)) return;
+      if (mode === "code" || mode === "table") return;
+      e.preventDefault();
+      if (view.scale > 1.05) fit();
+      else zoomAt(e.clientX, e.clientY, clampScale(Math.max(view.scale * 1.8, 1.5)));
+    });
 
     async function exportFmt(fmt) {
       if (!payload || exporting) return;
@@ -492,6 +599,7 @@
     function open(kind, data, caption) {
       mode = kind;
       payload = data;
+      view.dragging = false;
       host.innerHTML = "";
       host.className = `lb-host is-${kind}`;
       if (kind === "svg") host.innerHTML = data.html || data.svg || "";
@@ -509,6 +617,7 @@
       }
       if (cap) cap.textContent = caption || "";
       syncDlMenu();
+      syncStageCursor(false);
       if (dlWrap) dlWrap.open = false;
       try {
         dlg.showModal();
@@ -530,7 +639,11 @@
         const svg = div?.querySelector("svg");
         if (!svg) return toast?.("图表尚未渲染");
         const markup = svgForExport(svg);
-        lb.open("svg", { svg: markup, html: markup }, "图表 · 滚轮缩放 · 可下载 SVG/图片");
+        lb.open(
+          "svg",
+          { svg: markup, html: markup },
+          "图表 · 滚轮缩放 · 空白处拖动 · 可划词 · 可下载 SVG/图片"
+        );
         return;
       }
       const dlM = e.target.closest?.(".mdm-mermaid-dl");
@@ -569,7 +682,7 @@
           lb.open(
             "code",
             { text, html: code?.innerHTML || "", className: code?.className || "", name: "code.txt" },
-            "代码 · 滚轮缩放 · 可下载源码/图片"
+            "代码 · 滚轮缩放 · 拖动平移（文字上 Shift+拖）· 可下载源码/图片"
           );
         }
         return;
@@ -594,7 +707,11 @@
         }
         if (act === "zoom") {
           const clone = table.cloneNode(true);
-          lb.open("table", { node: clone, csv: tableToCsv(table) }, "表格 · 滚轮缩放 · 可下载 CSV/图片");
+          lb.open(
+            "table",
+            { node: clone, csv: tableToCsv(table) },
+            "表格 · 滚轮缩放 · 空白处拖动（单元格上 Shift+拖）· 可下载 CSV/图片"
+          );
         }
       }
     });
