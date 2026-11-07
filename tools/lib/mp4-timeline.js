@@ -164,6 +164,17 @@
     return { timescale, duration };
   }
 
+  /** mvhd：电影时标（elst segment_duration 用此尺度） */
+  function parseMvhd(dv, off, size, hdr) {
+    const v = dv.getUint8(off + hdr);
+    if (v === 1) {
+      if (hdr + 28 > size) return null;
+      return { timescale: u32(dv, off + hdr + 20) };
+    }
+    if (hdr + 20 > size) return null;
+    return { timescale: u32(dv, off + hdr + 12) };
+  }
+
   function parseHdlr(dv, off, size, hdr) {
     if (hdr + 12 > size) return "";
     return fourcc(dv, off + hdr + 8);
@@ -307,9 +318,10 @@
     while (firstPresentIdx < ctsSec.length && ctsSec[firstPresentIdx] < -1e-6) {
       firstPresentIdx += 1;
     }
+    const movieTs = Number(track.movieTimescale) > 0 ? Number(track.movieTimescale) : timescale;
     const leadEmptySec =
-      Number(track.elstLeadEmptyTicks) > 0 && timescale > 0
-        ? Number(track.elstLeadEmptyTicks) / timescale
+      Number(track.elstLeadEmptyTicks) > 0 && movieTs > 0
+        ? Number(track.elstLeadEmptyTicks) / movieTs
         : 0;
     // mediaCtsSec：容器媒体时钟（给 ffmpeg sec）；ctsSec 可经校准平移到 ≡ Chrome currentTime
     const mediaCtsSec = Float64Array.from(ctsSec);
@@ -505,6 +517,7 @@
     const dv = new DataView(moovBuf);
     /** @type {any} */
     let best = null;
+    let movieTimescale = 0;
     const visitTrak = (trakOff, trakSize) => {
       let mdhd = null;
       let handler = "";
@@ -545,21 +558,31 @@
         ctts,
         elstMediaTime,
         elstLeadEmptyTicks,
+        movieTimescale,
       };
       const sampleCount = stts.reduce((s, e) => s + (Number(e.count) || 0), 0);
       if (!best || sampleCount > best._n) {
         best = { ...track, _n: sampleCount };
       }
     };
+    const visitMoovKids = (moovOff, moovSize, moovHdr) => {
+      walkBoxes(dv, moovOff + moovHdr, moovOff + moovSize, (t2, o2, s2, h2) => {
+        if (t2 === "mvhd") {
+          const mv = parseMvhd(dv, o2, s2, h2);
+          if (mv?.timescale > 0) movieTimescale = mv.timescale;
+        } else if (t2 === "trak") visitTrak(o2, s2);
+      });
+    };
     walkBoxes(dv, 0, moovBuf.byteLength, (type, off, size, hdr) => {
       if (type === "trak") visitTrak(off, size);
-      else if (type === "moov") {
-        walkBoxes(dv, off + hdr, off + size, (t2, o2, s2) => {
-          if (t2 === "trak") visitTrak(o2, s2);
-        });
+      else if (type === "moov") visitMoovKids(off, size, hdr);
+      else if (type === "mvhd") {
+        const mv = parseMvhd(dv, off, size, hdr);
+        if (mv?.timescale > 0) movieTimescale = mv.timescale;
       }
     });
     if (!best) return null;
+    best.movieTimescale = movieTimescale || best.movieTimescale || 0;
     delete best._n;
     return best;
   }
