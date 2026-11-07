@@ -2771,8 +2771,8 @@
     const W = evenDim(srcW);
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
-    // 切片策略：秒级 trim 优先（wasm 上 start_frame 易「成功」但空片 → 拼接失败）；
-    // 帧号 trim 次之；最后 -i 后 -ss（勿两端 bias）。每段校验体积再进下一档。
+    // 切片策略：帧号 trim 优先（与 keepRanges 同一帧钟，避免秒级 trim 接点相位偏晚→GIF 相对预览前移）；
+    // wasm 上 start_frame 偶发 exit0+空片 → 体积校验失败后再秒级 / -ss。勿两端 bias。
     const keepFps = resolveKeepFps(edit);
     const parts = [];
     const MIN_PART_BYTES = 512;
@@ -2834,9 +2834,9 @@
     };
     for (let i = 0; i < keeps.length; i++) {
       onProgress(0.08 + (i / keeps.length) * 0.55, `切片 ${i + 1}/${keeps.length}`);
-      // 秒级优先：时间轴与预览一致且不依赖帧计数；帧号/ss 仅作空片回退
-      let out = await trySlice(keeps[i], i, "sec");
-      if (!out) out = await trySlice(keeps[i], i, "frame");
+      // 帧号优先对齐预览；空片（<MIN_PART_BYTES）再秒级/-ss
+      let out = await trySlice(keeps[i], i, "frame");
+      if (!out) out = await trySlice(keeps[i], i, "sec");
       if (!out) out = await trySlice(keeps[i], i, "ss");
       if (!out) throw new Error(`切片失败（段 ${i + 1}/${keeps.length}）`);
       parts.push(out);

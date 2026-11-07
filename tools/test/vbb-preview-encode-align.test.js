@@ -121,14 +121,27 @@ t("仅裁片头片尾：成片起点=黄柄，终点=黄柄半开上界", () => 
   assert.ok(Math.abs(enc[0].end - 40) < 1e-9);
 });
 
-t("exportKeepVideo：秒级 trim 优先+体积校验；禁止两端 bias", () => {
+t("exportKeepVideo：帧号 trim 优先+体积校验回退秒级；禁止两端 bias", () => {
   const start = vtrim.indexOf("async function exportKeepVideo");
   const end = vtrim.indexOf("window.DevToolsVtrimEditor =", start);
   const exp = vtrim.slice(start, end > start ? end : undefined);
-  assert.ok(exp.includes('trySlice(keeps[i], i, "sec")'));
+  const frameAt = exp.indexOf('trySlice(keeps[i], i, "frame")');
+  const secAt = exp.indexOf('trySlice(keeps[i], i, "sec")');
+  const ssAt = exp.indexOf('trySlice(keeps[i], i, "ss")');
+  assert.ok(frameAt > 0 && secAt > frameAt && ssAt > secAt, "须 frame→sec→ss");
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(exp.includes("fps=${keepFps},format=yuv420p,setsar=1"));
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
+});
+
+t("materialize 回退路径同样 frame→sec→ss", () => {
+  const start = vbb.indexOf("async function materializeVbbKeepVideo");
+  const end = vbb.indexOf("function shouldPrecutVbbWindow", start);
+  const body = vbb.slice(start, end > start ? end : undefined);
+  const frameAt = body.indexOf('tryPart(start0, end0, out, "frame")');
+  const secAt = body.indexOf('tryPart(start0, end0, out, "sec")');
+  const ssAt = body.indexOf('tryPart(start0, end0, out, "ss")');
+  assert.ok(frameAt > 0 && secAt > frameAt && ssAt > secAt, "回退切片须 frame→sec→ss");
 });
 
 t("ENCODE 叠垫已清零（根因用源帧窗）", () => {

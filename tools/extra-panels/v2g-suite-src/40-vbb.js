@@ -949,9 +949,9 @@
           const start0 = Math.max(0, Number(k.start) || 0);
           const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // 秒级优先（防 start_frame 空片）；帧号/-ss 回退；勿两端 bias
-          let ok = await tryPart(start0, end0, out, "sec");
-          if (!ok) ok = await tryPart(start0, end0, out, "frame");
+          // 帧号优先（对齐预览帧钟）；空片再秒级/-ss；勿两端 bias（否则接点相对预览前移）
+          let ok = await tryPart(start0, end0, out, "frame");
+          if (!ok) ok = await tryPart(start0, end0, out, "sec");
           if (!ok) ok = await tryPart(start0, end0, out, "ss");
           if (!ok) throw new Error(`删中间切片失败（段 ${i + 1}/${keeps.length}）`);
           parts.push(out);
