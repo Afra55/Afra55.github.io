@@ -1362,8 +1362,9 @@
           }
   
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
-          // fps 前切源窗（防凑帧读过黄柄）；fps 后再按成片时长切 + select 限帧（防 EOF flush）
-          const timeFilter = vbbEncodeHardTrimFilters(speed, encodeT);
+          // fps 前按 PTS 切源窗（防 -ss 落到下一帧→片头前移）；fps 后再按成片时长切 + select 限帧
+          const ptsStart = encodeSs > 0.001 ? encodeSs : 0;
+          const timeFilter = vbbEncodeHardTrimFilters(speed, encodeT, ptsStart);
           const outTrim = vbbEncodeOutTrimFilters(effSpan, fps);
           // 噪点：源有颗粒 + 大幅下采样（如 1170→300 是 4 倍）时，bicubic 会混叠、GIF 看着全是噪点。
           // 先轻度 hqdn3d 降噪、再用 lanczos 缩放。若 wasm 核心未编入 hqdn3d，exec 返回非 0，下面自动回退重跑。
@@ -1395,9 +1396,8 @@
           ticker.setPhase(`${stageLabel}双通道调色板编码`);
           ticker.setProgress(0.05);
           const baseArgs = ["-i", encodeInput];
-          if (encodeSs > 0.001) baseArgs.push("-ss", String(encodeSs));
-          // -t 仍作 demux 上限；真正片尾以 trim=duration 为准（见 timeFilter）
-          baseArgs.push("-t", String(encodeT));
+          // PTS 起点已进 timeFilter；demux -t 须盖住窗尾，勿再 -ss
+          baseArgs.push("-t", String(ptsStart > 0.001 ? ptsStart + encodeT + 0.05 : encodeT));
           if (usedWm) baseArgs.push("-i", wmName);
           // -frames:v 仅作上限；trim 耗尽后不会再为凑帧读窗外
           const outArgs = ["-frames:v", String(frameCount), "-loop", "0", "-y", outName];
@@ -1682,15 +1682,23 @@
        * 编码滤镜：在 fps= 之前按片源时长硬切。
        * 仅靠 -t + -frames:v 时，fps= 少吐会为凑帧继续解码，把黄柄后画面带进 GIF
        * （预览半开停对、成片尾多几帧）。trim 后 fps 根本看不到窗外的包。
+       * startSec>0 时用 PTS trim（≡预览 currentTime），避免 demux -ss 落到下一帧导致片头前移。
        * @returns {string} 以逗号结尾的滤镜前缀（可接 fps=）
        */
-      function vbbEncodeHardTrimFilters(speed, sourceDurSec) {
+      function vbbEncodeHardTrimFilters(speed, sourceDurSec, startSec) {
+        const start = Math.max(0, Number(startSec) || 0);
         const dur0 = Math.max(0.05, Number(sourceDurSec) || 0.05);
         // 开区间：贴 duration 上界的那一帧不进滤镜
         const dur = Math.max(0.05, dur0 - 1e-3);
         const spd = Math.max(1, Number(speed) || 1);
-        // 归零 PTS → 片源时长硬切 → 再倍速（倍速后的时间轴不再用于切尾）
-        let s = `setpts=PTS-STARTPTS,trim=duration=${dur},setpts=PTS-STARTPTS`;
+        let s;
+        if (start > 0.0005) {
+          const end = start + dur;
+          s = `trim=start=${start}:end=${end},setpts=PTS-STARTPTS`;
+        } else {
+          // 归零 PTS → 片源时长硬切 → 再倍速（倍速后的时间轴不再用于切尾）
+          s = `setpts=PTS-STARTPTS,trim=duration=${dur},setpts=PTS-STARTPTS`;
+        }
         if (spd > 1.01) s += `/${spd}`;
         return `${s},`;
       }
@@ -1715,14 +1723,14 @@
         const ss = Math.max(0, Number(startSec) || 0);
         const dur = Math.max(0.05, Number(cutDur) || 0.05);
         if (accurate || ss > 0.05) {
+          // PTS trim ≡ 预览；勿用 demux -ss（易落到下一帧→片头前移几帧）
+          const end = ss + dur;
           return [
             "-i",
             inName,
-            "-ss",
-            String(ss),
-            "-t",
-            String(dur),
             "-an",
+            "-vf",
+            `trim=start=${ss}:end=${end},setpts=PTS-STARTPTS,format=yuv420p`,
             "-c:v",
             "libx264",
             "-preset",
@@ -1731,6 +1739,8 @@
             "18",
             "-pix_fmt",
             "yuv420p",
+            "-vsync",
+            "vfr",
             "-movflags",
             "+faststart",
             "-y",
@@ -2305,8 +2315,8 @@
 
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
-          const buildRawArgs = (denoise, sourceDurSec, maxFrames) => {
-            const timeFilter = vbbEncodeHardTrimFilters(speed, sourceDurSec);
+          const buildRawArgs = (denoise, sourceDurSec, maxFrames, ptsStart) => {
+            const timeFilter = vbbEncodeHardTrimFilters(speed, sourceDurSec, ptsStart);
             const nMax = Math.max(2, Math.floor(Number(maxFrames) || 2));
             // 本段成片时长 = nMax/fps；fps 后再 trim + select，丢掉 EOF flush
             const outTrim = vbbEncodeOutTrimFilters(nMax / Math.max(8, fps), fps);
@@ -2348,10 +2358,10 @@
             // 钳到片尾，不再 +半帧，避免末段把编辑黄柄后的画面带进 GIF
             const need = (chunkFrames / fps) * speed;
             const dur = Math.max(1 / Math.max(8, fps), Math.min(need, Math.max(0, absEnd - ss)));
-            // -ss 在 -i 后：与编辑器片头对齐，避免关键帧往前多取
+            // PTS trim 对齐预览；demux -t 盖住窗尾，勿 -ss（防片头前移）
+            const ptsStart = ss > 0.001 ? ss : 0;
             const baseArgs = ["-i", encodeInput];
-            if (ss > 0.001) baseArgs.push("-ss", String(ss));
-            baseArgs.push("-t", String(dur));
+            baseArgs.push("-t", String(ptsStart > 0.001 ? ptsStart + dur + 0.05 : dur));
             if (usedWm) baseArgs.push("-i", wmName);
             const outArgs = ["-frames:v", String(chunkFrames), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
             const useDenoise = needDenoise(effW, outW);
@@ -2379,9 +2389,17 @@
               try {
                 ffmpeg.on("log", onChunkFfmpegLog);
               } catch (_) {}
-              code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(useDenoise, dur, chunkFrames), ...outArgs]);
+              code = await ffmpeg.exec([
+                ...baseArgs,
+                ...buildRawArgs(useDenoise, dur, chunkFrames, ptsStart),
+                ...outArgs,
+              ]);
               if (code !== 0 && useDenoise) {
-                code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(false, dur, chunkFrames), ...outArgs]);
+                code = await ffmpeg.exec([
+                  ...baseArgs,
+                  ...buildRawArgs(false, dur, chunkFrames, ptsStart),
+                  ...outArgs,
+                ]);
               }
             } finally {
               window.clearInterval(chunkHb);
@@ -8763,7 +8781,7 @@
           typeof window.DevToolsVtrimEditor?.secToFrame === "function"
             ? (t) => window.DevToolsVtrimEditor.secToFrame(t, keepFps)
             : (t) => Math.round(Math.max(0, Number(t) || 0) * keepFps);
-        // 切片勿 fps=（会丢段首帧→多段整体前移）；CFR 用输出 -r
+        // 切片勿 fps= / -r cfr（会丢段首→多段整体前移）；保留源帧时序
         const scalePad = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
         const MIN_PART_BYTES = 512;
         const fmtSec = (t) => {
@@ -8794,10 +8812,8 @@
             "18",
             "-pix_fmt",
             "yuv420p",
-            "-r",
-            String(keepFps),
             "-vsync",
-            "cfr",
+            "vfr",
             "-movflags",
             "+faststart",
             "-y",
@@ -8851,10 +8867,8 @@
             "18",
             "-pix_fmt",
             "yuv420p",
-            "-r",
-            String(keepFps),
             "-vsync",
-            "cfr",
+            "vfr",
             "-movflags",
             "+faststart",
             "-y",
@@ -8968,7 +8982,7 @@
         onProgress?.(0.04, `预裁切 ${dur.toFixed(1)}s…`);
         const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => onProgress?.(0.06, "载入视频…"));
         const out = `trim-${Date.now().toString(36)}.mp4`;
-        // 精确半开窗；trim 滤镜失败再 -ss/-t 重编码
+        // 精确半开窗（PTS≡预览）；勿 -r cfr。trim 失败再 -ss/-t 重编码
         let args = [
           "-i",
           inName,
@@ -8983,6 +8997,8 @@
           "18",
           "-pix_fmt",
           "yuv420p",
+          "-vsync",
+          "vfr",
           "-movflags",
           "+faststart",
           "-y",

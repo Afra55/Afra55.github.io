@@ -38,23 +38,22 @@ function loadFn(src, name) {
 
 t("编辑非片头：预切段即使未开倍速也精确重编码（禁 copy 关键帧多片头）", () => {
   const fn = loadFn(shared, "buildVbbSegmentCutArgs");
-  // startSec=10 模拟裁掉片头；accurate=false 也应因 ss>0.05 走 libx264
+  // startSec=10 模拟裁掉片头；accurate=false 也应因 ss>0.05 走 PTS trim + libx264
   const args = fn("in.mp4", "seg.mp4", 10, 30, { accurate: false });
   assert.ok(args.includes("libx264"), "非片头须精确切");
   assert.ok(!args.includes("copy"));
-  const ssIdx = args.indexOf("-ss");
-  assert.ok(ssIdx >= 0);
-  assert.strictEqual(args[ssIdx + 1], "10");
-  const tIdx = args.indexOf("-t");
-  assert.strictEqual(args[tIdx + 1], "30");
+  assert.ok(!args.includes("-ss"), "精确切用滤镜 trim，勿 demux -ss");
+  const vf = args[args.indexOf("-vf") + 1];
+  assert.ok(/trim=start=10:end=40/.test(vf), vf);
+  assert.ok(args.includes("vfr"));
 });
 
-t("编辑窗+倍速：预切段强制精确，-t 为编辑 span（片源时长）", () => {
+t("编辑窗+倍速：预切段强制精确，PTS 半开窗为编辑 span", () => {
   const fn = loadFn(shared, "buildVbbSegmentCutArgs");
   const args = fn("in.mp4", "seg.mp4", 12.5, 48, { accurate: true });
   assert.ok(args.includes("libx264"));
-  assert.strictEqual(args[args.indexOf("-ss") + 1], "12.5");
-  assert.strictEqual(args[args.indexOf("-t") + 1], "48");
+  const vf = args[args.indexOf("-vf") + 1];
+  assert.ok(/trim=start=12\.5:end=60\.5/.test(vf), vf);
 });
 
 t("分块 seek：源时间 = 编辑起点 + 成片进度×倍速，且钳在编辑终点", () => {
@@ -110,10 +109,12 @@ t("原生桥：编辑起点 -ss + 片源 span（半开收尾），倍速只走 s
   assert.ok(gifskiCore.includes("setpts=(PTS-STARTPTS)/${speed}") || gifskiCore.includes("setpts=(PTS-STARTPTS)/"));
 });
 
-t("-ss 在 -i 之后（解码时钟对齐编辑器，避免关键帧往前多取）", () => {
-  assert.ok(shared.includes('-ss 在 -i 后：与编辑器片头对齐'));
-  // baseArgs 先 -i 再条件 -ss
-  assert.ok(/baseArgs = \["-i", encodeInput\];\s*if \(ss > 0\.001\) baseArgs\.push\("-ss"/.test(shared));
+t("编码片头用 PTS trim（勿 demux -ss 落到下一帧）", () => {
+  assert.ok(shared.includes("PTS trim 对齐预览") || shared.includes("PTS 起点已进 timeFilter"));
+  assert.ok(shared.includes("trim=start=${start}:end=${end}"));
+  assert.ok(shared.includes("ptsStart"));
+  // 精确抽段不再依赖 demux -ss
+  assert.ok(!/if \(ss > 0\.001\) baseArgs\.push\("-ss"/.test(shared));
 });
 
 console.log(`vbb-edit-speed-align.test.js: ${n} passed`);

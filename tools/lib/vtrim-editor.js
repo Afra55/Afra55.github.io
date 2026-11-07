@@ -2772,8 +2772,8 @@
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
     // 切片策略：秒级 trim 优先（PTS ≡ 预览 currentTime）；勿两端 bias。
-    // 禁止在 trim 后再 fps=——会丢掉每段首帧，多段删中间表现为 GIF 相对预览整体前移。
-    // 帧号 trim 仅作空片回退（帧序号≠PTS 时比秒级更偏）。CFR 交给输出 -r。
+    // 禁止 trim 后 fps= / -r -vsync cfr——都会重时钟丢掉段首，多段表现为整体前移。
+    // 帧号 trim 仅作空片回退（帧序号≠PTS 时比秒级更偏）。
     const keepFps = resolveKeepFps(edit);
     const parts = [];
     const MIN_PART_BYTES = 512;
@@ -2810,6 +2810,7 @@
         mode === "ss"
           ? ["-i", inName, "-ss", fmtSec(start), "-t", fmtSec(dur), "-an", "-vf", vfCore]
           : ["-i", inName, "-an", "-vf", vfCore];
+      // 勿 -r/-vsync cfr：强制 CFR 会按输出时钟重采，段首再丢几帧
       args.push(
         "-c:v",
         "libx264",
@@ -2819,10 +2820,8 @@
         "18",
         "-pix_fmt",
         "yuv420p",
-        "-r",
-        String(keepFps),
         "-vsync",
-        "cfr",
+        "vfr",
         "-movflags",
         "+faststart",
         "-y",
@@ -2853,7 +2852,7 @@
     let merged = parts[0];
     if (parts.length > 1) {
       merged = "keep-merged.mp4";
-      // 统一 yuv/sar 再 concat；勿再 fps=（会再丢各段首帧）
+      // 统一 yuv/sar 再 concat；勿再 fps= / -r cfr（会再丢各段首帧→整体前移）
       const norm = parts
         .map((_, i) => `[${i}:v]format=yuv420p,setsar=1[v${i}]`)
         .join(";");
@@ -2875,10 +2874,8 @@
           "18",
           "-pix_fmt",
           "yuv420p",
-          "-r",
-          String(keepFps),
           "-vsync",
-          "cfr",
+          "vfr",
           "-movflags",
           "+faststart",
           "-y",

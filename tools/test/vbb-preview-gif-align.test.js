@@ -124,7 +124,7 @@ t("keepRangesForEncode 直接 return keepRangesFromEdit", () => {
   assert.ok(fn.includes("return keepRangesFromEdit(edit, duration)"));
 });
 
-t("exportKeepVideo：秒级 PTS 优先且切片勿 fps=；禁止两端 bias", () => {
+t("exportKeepVideo：秒级 PTS 优先且切片勿 fps=/-r cfr；禁止两端 bias", () => {
   const exp = vtrim.slice(
     vtrim.indexOf("async function exportKeepVideo"),
     vtrim.indexOf("window.DevToolsVtrimEditor =")
@@ -134,8 +134,27 @@ t("exportKeepVideo：秒级 PTS 优先且切片勿 fps=；禁止两端 bias", ()
   assert.ok(secAt > 0 && frameAt > secAt, "须 sec 先于 frame（PTS≡预览 currentTime）");
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(!/fps=\$\{keepFps\},format/.test(exp), "trim 后 fps= 会丢段首帧导致整体前移");
+  assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(exp), "切片勿 -r keepFps（强制 CFR 丢段首）");
+  assert.ok(exp.includes('"-vsync"') && exp.includes('"vfr"'), "切片用 vfr 保段首");
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp));
   assert.ok(!/endBias\s*=\s*1\s*\/\s*60/.test(exp));
+});
+
+t("编码抽段/硬切用 PTS trim，避免 demux -ss 片头前移", () => {
+  const cut = shared.slice(
+    shared.indexOf("function buildVbbSegmentCutArgs"),
+    shared.indexOf("function buildVbbSegmentCutArgs") + 900
+  );
+  assert.ok(cut.includes("trim=start=${ss}:end=${end}"));
+  assert.ok(cut.includes('"vfr"'));
+  const hard = shared.slice(
+    shared.indexOf("function vbbEncodeHardTrimFilters"),
+    shared.indexOf("function vbbEncodeOutTrimFilters")
+  );
+  assert.ok(hard.includes("startSec"));
+  assert.ok(hard.includes("trim=start=${start}:end=${end}"));
+  assert.ok(shared.includes("ptsStart"));
+  assert.ok(shared.includes("PTS 起点已进 timeFilter") || shared.includes("勿再 -ss"));
 });
 
 t("编辑后仍 forceAccurateCut", () => {
@@ -182,6 +201,16 @@ t("预裁切不再对 keep span 二次减半帧", () => {
   );
   assert.ok(!/1\s*\/\s*60/.test(fn) || fn.includes("禁止再减半帧"), "预裁勿再 span-1/60");
   assert.ok(fn.includes("禁止再减半帧") || /const dur = Math\.max\(0\.05, Number\(span\)/.test(fn));
+});
+
+t("删中间 materialize 切片/拼接勿 -r cfr", () => {
+  const fn = vbb.slice(
+    vbb.indexOf("async function materializeVbbKeepVideo"),
+    vbb.indexOf("async function shouldPrecutVbbWindow")
+  );
+  assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(fn));
+  assert.ok(fn.includes('"vfr"'));
+  assert.ok(fn.includes("勿 fps=") || fn.includes("整体前移"));
 });
 
 t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {
