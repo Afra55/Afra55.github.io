@@ -78,6 +78,22 @@ function buildFile() {
   const idx = api.sampleIndexAtSec(tl, 2 / 24);
   assert.strictEqual(idx, 2);
 
+  assert.ok(typeof api.frameSeekSec === "function", "frameSeekSec");
+  assert.ok(typeof api.calibrateToElement === "function", "calibrateToElement");
+  assert.ok(tl.mediaCtsSec && tl.mediaCtsSec.length === tl.ctsSec.length, "mediaCtsSec");
+  const seek0 = api.frameSeekSec(tl, 0);
+  assert.ok(seek0 > tl.ctsSec[0] && seek0 < tl.ctsSec[1], `frameSeek0=${seek0}`);
+  const seekLast = api.frameSeekSec(tl, 9);
+  assert.ok(seekLast > tl.ctsSec[9], `frameSeekLast=${seekLast}`);
+
+  // 手动平移模拟校准：media 不变，cts 对齐显示时钟
+  const X = 0.02;
+  for (let i = 0; i < tl.ctsSec.length; i++) tl.ctsSec[i] = tl.mediaCtsSec[i] + X;
+  tl.chromeOffsetSec = X;
+  tl.calibrated = true;
+  assert.ok(Math.abs(tl.ctsSec[0] - X) < 1e-9);
+  assert.ok(Math.abs(tl.mediaCtsSec[0]) < 1e-9);
+
   console.log("mp4-timeline.test.js: ok");
 })().catch((e) => {
   console.error(e);

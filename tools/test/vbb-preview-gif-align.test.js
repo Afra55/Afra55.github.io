@@ -219,6 +219,7 @@ t("删中间 materialize 优先 chrome，ffmpeg 兜底勿 -r cfr", () => {
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(fn));
   assert.ok(fn.includes('"vfr"'));
   assert.ok(fn.includes('["sec", "ss", "frameRaw", "frameGrid"]') || fn.includes("frameGrid"), "ffmpeg 兜底");
+  assert.ok(fn.includes("calibrateToElement") && fn.includes("matTimeline"), "GIF 同编辑器时钟");
 });
 
 t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {

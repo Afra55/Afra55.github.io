@@ -198,24 +198,58 @@
     return entries;
   }
 
-  /** 取第一条有效 elst 的 media_time（媒体时间尺度） */
-  function parseElstMediaTime(dv, off, size, hdr) {
-    if (hdr + 8 > size) return 0;
+  /**
+   * 解析 elst：返回 { mediaTime, leadEmptyTicks }。
+   * media_time=-1 的前导空编辑累加进 leadEmptyTicks（movie timescale 侧由调用方换算）；
+   * 第一条 media_time≥0 作为编辑起点。
+   */
+  function parseElstInfo(dv, off, size, hdr) {
+    const out = { mediaTime: 0, leadEmptyTicks: 0 };
+    if (hdr + 8 > size) return out;
     const version = dv.getUint8(off + hdr);
     const entryCount = u32(dv, off + hdr + 4);
-    if (!(entryCount > 0)) return 0;
+    if (!(entryCount > 0)) return out;
     let p = off + hdr + 8;
-    if (version === 1) {
-      if (p + 20 > off + size) return 0;
-      // segment_duration u64, media_time i64
-      const mtHi = i32(dv, p + 8);
-      const mtLo = u32(dv, p + 12);
-      if (mtHi < 0) return 0;
-      return mtHi * 0x100000000 + mtLo;
+    let foundMedia = false;
+    for (let i = 0; i < entryCount; i++) {
+      if (version === 1) {
+        if (p + 20 > off + size) break;
+        const durHi = u32(dv, p);
+        const durLo = u32(dv, p + 4);
+        const mtHi = i32(dv, p + 8);
+        const mtLo = u32(dv, p + 12);
+        const segDur = durHi * 0x100000000 + durLo;
+        const mediaTime = mtHi < 0 ? -1 : mtHi * 0x100000000 + mtLo;
+        p += 20;
+        if (!foundMedia && mediaTime < 0) {
+          out.leadEmptyTicks += segDur;
+          continue;
+        }
+        if (!foundMedia && mediaTime >= 0) {
+          out.mediaTime = mediaTime;
+          foundMedia = true;
+        }
+      } else {
+        if (p + 12 > off + size) break;
+        const segDur = u32(dv, p);
+        const mediaTime = i32(dv, p + 4);
+        p += 12;
+        if (!foundMedia && mediaTime < 0) {
+          out.leadEmptyTicks += segDur;
+          continue;
+        }
+        if (!foundMedia && mediaTime >= 0) {
+          out.mediaTime = mediaTime;
+          foundMedia = true;
+        }
+      }
     }
-    if (p + 12 > off + size) return 0;
-    const mediaTime = i32(dv, p + 4);
-    return mediaTime > 0 ? mediaTime : 0;
+    return out;
+  }
+
+  /** 兼容旧调用：取第一条有效 media_time */
+  function parseElstMediaTime(dv, off, size, hdr) {
+    return parseElstInfo(dv, off, size, hdr).mediaTime;
   }
 
   function buildTimelineFromTrack(track) {
@@ -273,6 +307,12 @@
     while (firstPresentIdx < ctsSec.length && ctsSec[firstPresentIdx] < -1e-6) {
       firstPresentIdx += 1;
     }
+    const leadEmptySec =
+      Number(track.elstLeadEmptyTicks) > 0 && timescale > 0
+        ? Number(track.elstLeadEmptyTicks) / timescale
+        : 0;
+    // mediaCtsSec：容器媒体时钟（给 ffmpeg sec）；ctsSec 可经校准平移到 ≡ Chrome currentTime
+    const mediaCtsSec = Float64Array.from(ctsSec);
     return {
       ok: true,
       fps,
@@ -281,10 +321,175 @@
       sampleCount,
       durationSec,
       ctsSec,
+      mediaCtsSec,
       hasCtts: ctts.length > 0,
       elstMediaTime: mediaTime0,
+      leadEmptySec,
+      chromeOffsetSec: 0,
+      calibrated: false,
       firstPresentIdx,
     };
+  }
+
+  /**
+   * 停在第 k 采样「帧内」位置（默认 1/4），避开精确 CTS 的 µs 截断把画面打到前一帧。
+   * @param {{ctsSec:Float64Array,fps?:number}} timeline
+   * @param {number} sampleIdx
+   * @param {number} [frac=0.25]
+   */
+  function frameSeekSec(timeline, sampleIdx, frac = 0.25) {
+    const arr = timeline?.ctsSec;
+    if (!arr || !arr.length) return 0;
+    const n = arr.length;
+    const k = Math.max(0, Math.min(n - 1, Math.round(Number(sampleIdx) || 0)));
+    const t0 = Number(arr[k]);
+    if (!Number.isFinite(t0)) return 0;
+    const f = Math.max(0.05, Math.min(0.45, Number(frac) || 0.25));
+    let span = 0;
+    if (k + 1 < n) {
+      const t1 = Number(arr[k + 1]);
+      if (Number.isFinite(t1) && t1 > t0) span = t1 - t0;
+    }
+    if (!(span > 1e-6)) {
+      const fps = Math.max(5, Number(timeline.fps) || 24);
+      span = 1 / fps;
+    }
+    return t0 + span * f;
+  }
+
+  /**
+   * 用 Chrome 实际显示时钟校准 ctsSec：X = VideoFrame.timestamp − ctsSec[0]。
+   * 校准后 ctsSec 平移到 ≡ video.currentTime / 显示时钟，预览停帧与导出同锚。
+   * @param {object} timeline
+   * @param {HTMLVideoElement} videoEl
+   * @returns {Promise<object>}
+   */
+  async function calibrateToElement(timeline, videoEl) {
+    if (!timeline?.ctsSec?.length || !videoEl) return timeline;
+    if (timeline.calibrated) return timeline;
+    if (!timeline.mediaCtsSec || timeline.mediaCtsSec.length !== timeline.ctsSec.length) {
+      timeline.mediaCtsSec = Float64Array.from(timeline.ctsSec);
+    }
+    const waitPresented = (el) =>
+      new Promise((resolve) => {
+        if (!el) return resolve();
+        if (typeof el.requestVideoFrameCallback === "function") {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            resolve();
+          };
+          try {
+            el.requestVideoFrameCallback(() => finish());
+          } catch (_) {
+            finish();
+            return;
+          }
+          setTimeout(finish, 600);
+          return;
+        }
+        setTimeout(resolve, 40);
+      });
+    const waitSeek = (el) =>
+      new Promise((resolve) => {
+        if (!el) return resolve();
+        const done = () => {
+          el.removeEventListener("seeked", done);
+          resolve();
+        };
+        el.addEventListener("seeked", done);
+        setTimeout(done, 800);
+      });
+    const sampleTsSec = (el) => {
+      try {
+        const vf = new VideoFrame(el);
+        const t = Number(vf.timestamp) / 1e6;
+        vf.close();
+        return t;
+      } catch (_) {
+        return NaN;
+      }
+    };
+    const applyOffset = (X, method) => {
+      const media = timeline.mediaCtsSec;
+      for (let i = 0; i < timeline.ctsSec.length; i++) {
+        timeline.ctsSec[i] = Number(media[i]) + X;
+      }
+      timeline.chromeOffsetSec = X;
+      timeline.calibrated = true;
+      timeline.calibrateMethod = method;
+    };
+
+    // 无 VideoFrame：仅用 elst 前导空编辑作弱校准（movie 时标近似）
+    if (typeof VideoFrame === "undefined") {
+      const lead = Number(timeline.leadEmptySec) || 0;
+      if (lead > 1e-4) applyOffset(lead, "elst-lead");
+      else {
+        timeline.calibrateMethod = "no-videoframe";
+      }
+      return timeline;
+    }
+
+    const wasMuted = videoEl.muted;
+    const resumeAt = Number(videoEl.currentTime) || 0;
+    videoEl.muted = true;
+    try {
+      videoEl.pause();
+    } catch (_) {}
+    try {
+      // 锚在第 0 帧：currentTime=0 再读 VideoFrame.timestamp
+      videoEl.currentTime = 0;
+      await waitSeek(videoEl);
+      await waitPresented(videoEl);
+      const ts0 = sampleTsSec(videoEl);
+      const cts0 = Number(timeline.mediaCtsSec[0]) || 0;
+      if (!Number.isFinite(ts0)) {
+        timeline.calibrateMethod = "failed-no-frame";
+        return timeline;
+      }
+      // 优先用 currentTime 与媒体 CTS 的差（≡ 预览停帧时钟）；VideoFrame 作辅证
+      const ct0 = Number(videoEl.currentTime);
+      let X = Number.isFinite(ct0) ? ct0 - cts0 : ts0 - cts0;
+      // 若 currentTime≈0 而 VideoFrame 明显非零，说明显示时钟相对媒体有偏移
+      if (Math.abs(ct0) < 1e-4 && Math.abs(ts0 - cts0) >= 0.002) {
+        X = ts0 - cts0;
+      }
+      if (!(Math.abs(X) >= 0.002 && Math.abs(X) <= 0.5)) {
+        timeline.chromeOffsetSec = X;
+        timeline.calibrated = Math.abs(X) < 0.002;
+        timeline.calibrateMethod = Math.abs(X) < 0.002 ? "already-aligned" : "out-of-range";
+        return timeline;
+      }
+      // 中点复核：seek 到媒体 mid + X（帧内点），期望显示靠近平移后的 CTS
+      const mid = Math.floor(timeline.ctsSec.length / 2);
+      const midMedia = Number(timeline.mediaCtsSec[mid]);
+      const midSeek = frameSeekSec({ ctsSec: timeline.mediaCtsSec, fps: timeline.fps }, mid);
+      try {
+        videoEl.currentTime = Math.max(0, midSeek + X);
+        await waitSeek(videoEl);
+        await waitPresented(videoEl);
+        const ctMid = Number(videoEl.currentTime);
+        const expect = midMedia + X;
+        if (Number.isFinite(ctMid) && Math.abs(ctMid - expect) > 0.05) {
+          // currentTime 不可靠时再用 VideoFrame
+          const tsMid = sampleTsSec(videoEl);
+          if (Number.isFinite(tsMid) && Math.abs(tsMid - expect) > 0.05) {
+            timeline.chromeOffsetSec = X;
+            timeline.calibrated = false;
+            timeline.calibrateMethod = "mid-check-fail";
+            return timeline;
+          }
+        }
+      } catch (_) {}
+      applyOffset(X, "videoframe-t0");
+      return timeline;
+    } finally {
+      videoEl.muted = wasMuted;
+      try {
+        videoEl.currentTime = resumeAt;
+      } catch (_) {}
+    }
   }
 
   /** 采样下标 → ffmpeg trim start_frame（相对 demux 后第 0 帧） */
@@ -306,10 +511,15 @@
       let stts = [];
       let ctts = [];
       let elstMediaTime = 0;
+      let elstLeadEmptyTicks = 0;
       walkBoxes(dv, trakOff + 8, trakOff + trakSize, (type, off, size, hdr) => {
         if (type === "edts") {
           walkBoxes(dv, off + hdr, off + size, (t2, o2, s2, h2) => {
-            if (t2 === "elst") elstMediaTime = parseElstMediaTime(dv, o2, s2, h2);
+            if (t2 === "elst") {
+              const info = parseElstInfo(dv, o2, s2, h2);
+              elstMediaTime = info.mediaTime;
+              elstLeadEmptyTicks = info.leadEmptyTicks;
+            }
           });
         } else if (type === "mdia") {
           walkBoxes(dv, off + hdr, off + size, (t2, o2, s2, h2) => {
@@ -334,6 +544,7 @@
         stts,
         ctts,
         elstMediaTime,
+        elstLeadEmptyTicks,
       };
       const sampleCount = stts.reduce((s, e) => s + (Number(e.count) || 0), 0);
       if (!best || sampleCount > best._n) {
@@ -415,6 +626,8 @@
     sampleIndexAtSec,
     sampleRangeForKeep,
     toDemuxFrameIndex,
+    frameSeekSec,
+    calibrateToElement,
     normalizeFps,
   };
 })();
