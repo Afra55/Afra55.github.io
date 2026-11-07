@@ -9243,38 +9243,35 @@
           crop: item.edit.crop ? { ...item.edit.crop } : { x: 0, y: 0, w: item.srcW, h: item.srcH },
         };
         vbbEditOpening = true;
-        // 先失焦再锁位：手机点按钮会把焦点控件滚进视口，看起来像「先滚一下再出编辑框」
+        // 编辑只用浏览器播放器，不需要 FFmpeg；先停预热，否则「加载 FFmpeg」会抢主线程把整页卡死
+        try {
+          window.DevToolsExtraMedia?.pauseFfmpegForInteractiveUi?.(90000);
+        } catch (_) {}
         try {
           document.activeElement?.blur?.();
         } catch (_) {}
-        const scrollRoot = typeof vbbScrollRoot === "function" ? vbbScrollRoot() : null;
-        const shell =
-          scrollRoot && scrollRoot !== document.documentElement && scrollRoot !== document.scrollingElement
-            ? scrollRoot
-            : document.querySelector("main.shell, .shell");
-        const lockY = window.scrollY || document.documentElement.scrollTop || 0;
-        const shellY = shell ? shell.scrollTop || 0 : 0;
+        // 仅遮罩提示，不锁 body 滚动——脚本慢时用户仍可滑页/取消；真正锁位交给 editor.open
         const boot = document.createElement("div");
         boot.className = "vtrim-editor-boot";
         boot.setAttribute("aria-busy", "true");
-        // 内联兜底：vtrim.css 可能尚未加载，避免空白间隙里底层页被滚走
         boot.style.cssText =
-          "position:fixed;inset:0;z-index:9195;display:grid;place-items:center;background:rgba(11,18,32,0.72);";
-        boot.innerHTML = `<div class="vtrim-editor-boot-card" style="padding:0.85rem 1.15rem;border-radius:12px;background:#121826;color:#e8eefc;font-size:0.95rem;">正在打开编辑…</div>`;
-        document.body.classList.add("vtrim-editor-open");
-        document.body.style.position = "fixed";
-        document.body.style.top = `-${lockY}px`;
-        document.body.style.left = "0";
-        document.body.style.right = "0";
-        document.body.style.width = "100%";
-        document.body.style.overflow = "hidden";
-        if (shell) shell.style.overflow = "hidden";
+          "position:fixed;inset:0;z-index:9195;display:grid;place-items:center;background:rgba(11,18,32,0.55);";
+        boot.innerHTML = `<div class="vtrim-editor-boot-card" style="padding:0.85rem 1.15rem;border-radius:12px;background:#121826;color:#e8eefc;font-size:0.95rem;text-align:center;line-height:1.45;">正在打开编辑…<br/><button type="button" data-vbb-edit-boot-cancel style="margin-top:0.65rem;padding:0.35rem 0.85rem;border-radius:8px;border:1px solid #3a4660;background:#1a2236;color:#e8eefc;font-size:0.85rem;">取消</button></div>`;
+        let bootCancelled = false;
+        const onBootCancel = () => {
+          bootCancelled = true;
+          try {
+            boot.remove();
+          } catch (_) {}
+        };
+        boot.querySelector("[data-vbb-edit-boot-cancel]")?.addEventListener("click", onBootCancel);
         document.body.appendChild(boot);
         syncVbbEditUi();
         renderVbbBatchList({ keepSelection: true });
         let editorOpened = false;
         try {
           const editor = await ensureVbbVtrimEditor();
+          if (bootCancelled) return;
           pauseVbbPreview();
           // open 同步挂上真正编辑层后再撤 boot，中间不露底层
           // 不阻塞打开：已有 srcFps 立刻用；否则后台探测写入 item，编辑器内也会自探
@@ -9338,7 +9335,6 @@
           try {
             boot.remove();
           } catch (_) {}
-          if (!editorOpened) unlockVbbEditBootScroll(lockY, shell, shellY);
           vbbEditOpening = false;
           syncVbbEditUi();
           // finally 后再同步一次外预览，避免中间状态清掉 crop/keep
@@ -9346,6 +9342,10 @@
           if (!isVbbManualMode()) enforceVbbEditPlaybackWindow();
           renderVbbBatchList({ keepSelection: true });
           syncVbbBatchMeta();
+          // 编辑结束再恢复编码器预热（转换仍需要）
+          try {
+            if (!bootCancelled) window.DevToolsExtraMedia?.armFfmpegPrewarmAfterPick?.();
+          } catch (_) {}
         }
       }
 

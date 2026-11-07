@@ -409,6 +409,8 @@
   /** 未选视频前不自动拉 30MB 编码器，否则与面板脚本/选文件抢带宽 */
   let ffmpegAutoPrewarmArmed = false;
   let ffmpegPickerQuietUntil = 0;
+  /** 编辑等交互优先时中断进行中的引擎下载（wasm compile 前） */
+  let ffmpegLoadAbort = null;
 
   function loadFfmpegMods() {
     if (!ffmpegModsPromise) {
@@ -743,12 +745,13 @@
     return URL.createObjectURL(blob);
   }
 
-  async function fetchArrayBufferProgress(url, onProgress, label, progressFrom, progressTo) {
+  async function fetchArrayBufferProgress(url, onProgress, label, progressFrom, progressTo, signal) {
     onProgress?.(progressFrom, `${label}…`);
     let res;
     try {
-      res = await fetch(url);
+      res = await fetch(url, signal ? { signal } : undefined);
     } catch (err) {
+      if (err?.name === "AbortError" || signal?.aborted) throw new Error("已取消");
       throw new Error(`${label}网络失败：${err?.message || err}（${url}）`);
     }
     if (!res.ok) throw new Error(`${label}下载失败 HTTP ${res.status}（${url}）`);
@@ -762,6 +765,12 @@
     const chunks = [];
     let received = 0;
     while (true) {
+      if (signal?.aborted) {
+        try {
+          await reader.cancel();
+        } catch (_) {}
+        throw new Error("已取消");
+      }
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
@@ -784,7 +793,8 @@
     return merged.buffer;
   }
 
-  async function loadEngineBuffer(key, url, onProgress, label, progressFrom, progressTo) {
+  async function loadEngineBuffer(key, url, onProgress, label, progressFrom, progressTo, signal) {
+    if (signal?.aborted) throw new Error("已取消");
     const cached = await idbGetAsset(key);
     if (cached instanceof ArrayBuffer && cached.byteLength > 0) {
       onProgress?.(progressTo, `${label}（本地已存）`);
@@ -796,12 +806,20 @@
       onProgress?.(progressTo, `${label}（本地已存）`);
       return copy;
     }
-    const buf = await fetchArrayBufferProgress(url, onProgress, label, progressFrom, progressTo);
+    const buf = await fetchArrayBufferProgress(
+      url,
+      onProgress,
+      label,
+      progressFrom,
+      progressTo,
+      signal
+    );
+    if (signal?.aborted) throw new Error("已取消");
     await idbPutAsset(key, buf);
     return buf;
   }
 
-  async function ensureFfmpegAssets(onProgress) {
+  async function ensureFfmpegAssets(onProgress, signal) {
     if (ffmpegAssetBlobs?.coreBlob && ffmpegAssetBlobs?.wasmBlob) return ffmpegAssetBlobs;
     const coreJsURL = new URL("core/ffmpeg-core.js", FFMPEG_VENDOR_BASE).href;
     const wasmURL = new URL("core/ffmpeg-core.wasm", FFMPEG_VENDOR_BASE).href;
@@ -812,7 +830,8 @@
       onProgress,
       "首次准备本地编码器 core.js",
       0.04,
-      0.08
+      0.08,
+      signal
     );
     const wasmBuf = await loadEngineBuffer(
       FFMPEG_ASSET_KEY_WASM,
@@ -820,8 +839,10 @@
       onProgress,
       "首次准备本地编码器 wasm",
       0.08,
-      0.18
+      0.18,
+      signal
     );
+    if (signal?.aborted) throw new Error("已取消");
     ffmpegAssetBlobs = {
       coreBlob: createEngineObjectURL(coreBuf, "text/javascript"),
       wasmBlob: createEngineObjectURL(wasmBuf, "application/wasm"),
@@ -830,49 +851,71 @@
     return ffmpegAssetBlobs;
   }
 
+  function beginFfmpegLoadAbort() {
+    try {
+      ffmpegLoadAbort?.abort();
+    } catch (_) {}
+    const ac = typeof AbortController === "function" ? new AbortController() : null;
+    ffmpegLoadAbort = ac;
+    return ac;
+  }
+
+  function endFfmpegLoadAbort(ac) {
+    if (ffmpegLoadAbort === ac) ffmpegLoadAbort = null;
+  }
+
   async function getFfmpegInstance(onProgress) {
     ffmpegSkipAutoPrewarm = false;
     if (ffmpegInstance?.loaded) return ffmpegInstance;
     const epoch = ffmpegEngineEpoch;
+    const ac = beginFfmpegLoadAbort();
+    const signal = ac?.signal;
     onProgress?.(0.02, "加载 FFmpeg 模块…");
-    const { FFmpeg } = await loadFfmpegMods();
-    const assets = await ensureFfmpegAssets(onProgress);
-
-    onProgress?.(0.19, "初始化 FFmpeg Worker…");
-    const ffmpeg = new FFmpeg();
     try {
-      await ffmpeg.load({
-        classWorkerURL: assets.workerURL,
-        coreURL: assets.coreBlob,
-        wasmURL: assets.wasmBlob,
-      });
-    } catch (err) {
+      const { FFmpeg } = await loadFfmpegMods();
+      if (signal?.aborted || epoch !== ffmpegEngineEpoch) throw new Error("已取消");
+      const assets = await ensureFfmpegAssets(onProgress, signal);
+
+      onProgress?.(0.19, "初始化 FFmpeg Worker…");
+      if (signal?.aborted || epoch !== ffmpegEngineEpoch) throw new Error("已取消");
+      const ffmpeg = new FFmpeg();
       try {
-        ffmpeg.terminate();
-      } catch (_) {
-        /* ignore */
+        await ffmpeg.load({
+          classWorkerURL: assets.workerURL,
+          coreURL: assets.coreBlob,
+          wasmURL: assets.wasmBlob,
+        });
+      } catch (err) {
+        try {
+          ffmpeg.terminate();
+        } catch (_) {
+          /* ignore */
+        }
+        terminateFfmpegInstance({ revokeAssets: false });
+        const msg = err?.message || String(err);
+        if (/已取消|AbortError/i.test(msg)) throw new Error("已取消");
+        throw new Error(
+          /NetworkError|Failed to fetch|Aborted/i.test(msg)
+            ? `FFmpeg 引擎加载失败（多为手机网络中断或内存不足，可换 Wi‑Fi / 缩短片段后重试）：${msg}`
+            : `FFmpeg 引擎加载失败：${msg}`
+        );
       }
-      terminateFfmpegInstance({ revokeAssets: false });
-      const msg = err?.message || String(err);
-      throw new Error(
-        /NetworkError|Failed to fetch|Aborted/i.test(msg)
-          ? `FFmpeg 引擎加载失败（多为手机网络中断或内存不足，可换 Wi‑Fi / 缩短片段后重试）：${msg}`
-          : `FFmpeg 引擎加载失败：${msg}`
-      );
+      ffmpegInstance = ffmpeg;
+      ffmpegWarmState = "ready";
+      ffmpegWarmError = "";
+      if (epoch !== ffmpegEngineEpoch || signal?.aborted) {
+        try {
+          ffmpeg.terminate();
+        } catch (_) {}
+        ffmpegInstance = null;
+        throw new Error("已取消");
+      }
+      onProgress?.(0.22, "FFmpeg 就绪");
+      paintFfmpegWarmHint();
+      return ffmpeg;
+    } finally {
+      endFfmpegLoadAbort(ac);
     }
-    ffmpegInstance = ffmpeg;
-    ffmpegWarmState = "ready";
-    ffmpegWarmError = "";
-    if (epoch !== ffmpegEngineEpoch) {
-      try {
-        ffmpeg.terminate();
-      } catch (_) {}
-      ffmpegInstance = null;
-      throw new Error("已取消");
-    }
-    onProgress?.(0.22, "FFmpeg 就绪");
-    paintFfmpegWarmHint();
-    return ffmpeg;
   }
 
   function terminateFfmpegInstance({ revokeAssets = false } = {}) {
@@ -914,6 +957,7 @@
   async function createFfmpegInstance(onProgress) {
     ffmpegSkipAutoPrewarm = false;
     onProgress?.(0.02, "加载 FFmpeg 模块…");
+    // 并行实例不占用全局 abort（编辑中断只取消单例预热下载）
     const { FFmpeg } = await loadFfmpegMods();
     const assets = await ensureFfmpegAssets(onProgress);
     onProgress?.(0.19, "初始化并行 FFmpeg Worker…");
@@ -986,6 +1030,8 @@
       text = ffmpegWarmError || "引擎预热失败，转换时会重试";
     } else if (ffmpegSkipAutoPrewarm) {
       text = "编码器缓存已清理，开始转换时会重新下载";
+    } else if (Date.now() < ffmpegPickerQuietUntil) {
+      text = "编辑优先：本地编码器稍后再准备（约 30MB，不上传视频）";
     } else if (!ffmpegAutoPrewarmArmed) {
       text = "先选择视频；选好后才会准备本地编码器（约 30MB，仅下载一次，不上传视频）";
     } else {
@@ -1083,9 +1129,16 @@
         return ff;
       })
       .catch((err) => {
-        ffmpegWarmState = "error";
-        ffmpegWarmError = err?.message || String(err);
         ffmpegWarmPromise = null;
+        const msg = err?.message || String(err);
+        // 编辑优先主动中断：不算失败，勿红字吓人
+        if (/已取消/i.test(msg)) {
+          if (ffmpegWarmState === "warming") ffmpegWarmState = "idle";
+          paintFfmpegWarmHint();
+          return null;
+        }
+        ffmpegWarmState = "error";
+        ffmpegWarmError = msg;
         paintFfmpegWarmHint();
         throw err;
       });
@@ -1098,6 +1151,33 @@
     ffmpegPickerQuietUntil = Date.now() + quietMs;
     window.clearTimeout(ffmpegPrewarmTimer);
     ffmpegPrewarmTimer = 0;
+  }
+
+  /**
+   * 打开编辑器等交互：停预热 + 中断进行中的引擎下载，避免「加载 FFmpeg」时整页锁死。
+   * 已就绪的实例保留；真正转换时仍会 getFfmpegInstance。
+   */
+  function pauseFfmpegForInteractiveUi(ms = 90000) {
+    pauseFfmpegAutoPrewarmForPicker(ms);
+    if (ffmpegInstance?.loaded) {
+      paintFfmpegWarmHint();
+      return;
+    }
+    const busy = ffmpegWarmState === "warming" || Boolean(ffmpegWarmPromise);
+    if (!busy) {
+      paintFfmpegWarmHint();
+      return;
+    }
+    ffmpegEngineEpoch += 1;
+    try {
+      ffmpegLoadAbort?.abort();
+    } catch (_) {}
+    ffmpegLoadAbort = null;
+    ffmpegWarmPromise = null;
+    ffmpegWarmState = "idle";
+    ffmpegWarmError = "";
+    ffmpegWarmDetail = { ratio: 0, text: "" };
+    paintFfmpegWarmHint();
   }
 
   /** 已选出文件后再允许预热（仍可被 pause 打断） */
@@ -1115,13 +1195,13 @@
     window.clearTimeout(ffmpegPrewarmTimer);
     const now = Date.now();
     const quietLeft = Math.max(0, ffmpegPickerQuietUntil - now);
-    // 选出文件后再短延迟：安卓上立刻预热仍可能拖慢下一次选框
+    // 选出后多等一会：用户常先点「编辑」，立刻预热会抢主线程导致编辑卡死
     const baseDelay = (() => {
       try {
         const ua = navigator.userAgent || "";
-        if (/Android|HarmonyOS|HuaweiBrowser|MiuiBrowser|UCBrowser|QQBrowser/i.test(ua)) return 1800;
+        if (/Android|HarmonyOS|HuaweiBrowser|MiuiBrowser|UCBrowser|QQBrowser/i.test(ua)) return 8000;
       } catch (_) {}
-      return 600;
+      return 3500;
     })();
     const delayMs = quietLeft + baseDelay;
     ffmpegPrewarmTimer = window.setTimeout(() => {
@@ -1977,7 +2057,8 @@
     ensureFfmpegAssets, getFfmpegInstance, createFfmpegInstance, destroyFfmpegInstance,
     terminateFfmpegInstance, paintFfmpegWarmHint,
     setFfmpegWarmProgress, injectFfmpegPreloadLinks, isGifmakerActive, prewarmFfmpegEngine,
-    scheduleFfmpegPrewarm, pauseFfmpegAutoPrewarmForPicker, armFfmpegPrewarmAfterPick,
+    scheduleFfmpegPrewarm, pauseFfmpegAutoPrewarmForPicker, pauseFfmpegForInteractiveUi,
+    armFfmpegPrewarmAfterPick,
     bindFfmpegPrewarmTriggers, encodeAnimatedWebpFromStillFrames,
     paintToolsVersion, resolveToolsVendorFile, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions,
