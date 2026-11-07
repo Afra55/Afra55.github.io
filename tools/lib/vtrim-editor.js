@@ -2086,25 +2086,46 @@
           if (downloadBtn) downloadBtn.textContent = "正在导出…";
         };
         const filenameBase = String(file.name || "video").replace(/\.[^.]+$/, "");
-        // 2547 手机：ffmpeg-onepass-sec 仍偏；优先按编辑器预览显示帧导出（已验证对上）。
+        // 校准可信 → ffmpeg frameRaw 快切；否则 / 失败再预览帧（准但慢）
+        const ffFirst = Boolean(
+          !edit.cropOn && window.DevToolsMp4Timeline?.canFfmpegFirst?.(sourceTimeline)
+        );
         let out = null;
-        try {
-          onProgress(0.05, "按预览帧导出…");
-          out = await exportKeepByChromeDisplay(video, previewKeeps, {
-            keepFps: sourceFps || resolveKeepFps(edit),
-            applyCrop: Boolean(edit.cropOn),
-            timeline: sourceTimeline || undefined,
-            filenameBase,
-            srcW: video.videoWidth || 0,
-            srcH: video.videoHeight || 0,
-            onProgress,
-          });
-          if (!(out?.blob?.size > 0)) out = null;
-        } catch (_) {
-          out = null;
+        if (ffFirst) {
+          try {
+            onProgress(0.06, "快速切片…");
+            out = await exportKeepVideo(file, edit, duration, {
+              srcW: video.videoWidth || 0,
+              srcH: video.videoHeight || 0,
+              applyCrop: false,
+              keeps: previewKeeps,
+              timeline: sourceTimeline || undefined,
+              onProgress,
+            });
+            if (!(out?.blob?.size > 0)) out = null;
+          } catch (_) {
+            out = null;
+          }
         }
         if (!out) {
-          onProgress(0.08, "编码器切片…");
+          try {
+            onProgress(0.08, ffFirst ? "快切未成，按预览帧…" : "按预览帧导出…");
+            out = await exportKeepByChromeDisplay(video, previewKeeps, {
+              keepFps: sourceFps || resolveKeepFps(edit),
+              applyCrop: Boolean(edit.cropOn),
+              timeline: sourceTimeline || undefined,
+              filenameBase,
+              srcW: video.videoWidth || 0,
+              srcH: video.videoHeight || 0,
+              onProgress,
+            });
+            if (!(out?.blob?.size > 0)) out = null;
+          } catch (_) {
+            out = null;
+          }
+        }
+        if (!out && !ffFirst) {
+          onProgress(0.1, "编码器切片…");
           out = await exportKeepVideo(file, edit, duration, {
             srcW: video.videoWidth || 0,
             srcH: video.videoHeight || 0,
@@ -2128,8 +2149,9 @@
           at: new Date().toISOString(),
           ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
           note: isChromeFrames
-            ? "按编辑器预览显示帧导出（VideoFrame+帧内seek）；应对齐所见；时长=各 keep 之和"
-            : "ffmpeg 精切兜底（优先 frameRaw；sec 用媒体时钟）；手机上可能与预览差帧；时长=各 keep 之和",
+            ? "按编辑器预览显示帧导出（VideoFrame+帧内seek）；准但慢；时长=各 keep 之和"
+            : "ffmpeg frameRaw 快切（校准可信时优先）；时长=各 keep 之和",
+          exportOrder: ffFirst ? "ffmpeg-first" : "chrome-first",
           file: {
             name: String(file?.name || ""),
             size: Number(file?.size) || 0,
