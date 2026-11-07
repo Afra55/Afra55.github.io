@@ -1337,6 +1337,10 @@
       if (!(n >= 5)) return false;
       sourceFps = n;
       frameSnapSec = frameSnapSecFromFps(n);
+      // fps 从默认 30 探成 24 时，重算片尾停帧，避免 endPark 仍按 1/30
+      if (Number.isFinite(endSec) && endSec > 0) {
+        endParkAtSec = Math.max(0, endSec - 1 / n);
+      }
       return true;
     }
 
@@ -2043,29 +2047,50 @@
           if (downloadBtn) downloadBtn.textContent = "正在导出…";
         };
         const filenameBase = String(file.name || "video").replace(/\.[^.]+$/, "");
-        // 根因路径：源片 ffmpeg 精切（保画质）；MP4 stts 时间轴对齐预览帧
-        onProgress(0.06, "编码器切片…");
-        const out = await exportKeepVideo(file, edit, duration, {
-          srcW: video.videoWidth || 0,
-          srcH: video.videoHeight || 0,
-          applyCrop: Boolean(edit.cropOn),
-          keeps: previewKeeps,
-          timeline: sourceTimeline || undefined,
-          onProgress,
-        });
+        // 优先：按预览 video 实际显示帧抽帧再编码（≡所见）；失败再 ffmpeg 精切
+        let out = null;
+        try {
+          onProgress(0.05, "按预览帧导出…");
+          out = await exportKeepByChromeDisplay(video, previewKeeps, {
+            keepFps: sourceFps || resolveKeepFps(edit),
+            applyCrop: Boolean(edit.cropOn),
+            timeline: sourceTimeline || undefined,
+            filenameBase,
+            srcW: video.videoWidth || 0,
+            srcH: video.videoHeight || 0,
+            onProgress,
+          });
+          if (!(out?.blob?.size > 0)) out = null;
+        } catch (_) {
+          out = null;
+        }
+        if (!out) {
+          onProgress(0.08, "编码器切片…");
+          out = await exportKeepVideo(file, edit, duration, {
+            srcW: video.videoWidth || 0,
+            srcH: video.videoHeight || 0,
+            applyCrop: Boolean(edit.cropOn),
+            keeps: previewKeeps,
+            timeline: sourceTimeline || undefined,
+            onProgress,
+          });
+        }
         const blob = out?.blob || (out?.file ? new Blob([out.file], { type: "video/mp4" }) : null);
         if (!blob || !blob.size) throw new Error("未产出视频");
         const name = out?.filename || filenameBase + "-edit.mp4";
         const diagName = String(name).replace(/\.mp4$/i, "") + "-export-diag.json";
         const build =
           (typeof window !== "undefined" && (window.TOOLS_BUILD || window.TOOLS_VERSION)) || "";
+        const isChromeFrames = String(out?.exportMethod || "").includes("chrome");
         const diag = {
           kind: "vbb-export-diag",
-          ver: 4,
+          ver: 5,
           build: String(build || ""),
           at: new Date().toISOString(),
           ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
-          note: "源片 ffmpeg 精切（非录屏）；时长=各 keep 之和；请按段对照，勿用源时间轴秒数去对导出片进度条",
+          note: isChromeFrames
+            ? "按编辑器预览显示帧导出（VideoFrame），应对齐所见；时长=各 keep 之和"
+            : "源片 ffmpeg 精切；时长=各 keep 之和；请按段对照，勿用源时间轴秒数去对导出片进度条",
           file: {
             name: String(file?.name || ""),
             size: Number(file?.size) || 0,
@@ -2909,6 +2934,298 @@
   }
 
   /**
+   * 所见即所得（保画质）：按预览 video 实际显示帧抽 VideoFrame → VideoEncoder → ffmpeg remux。
+   * 与 captureStream 不同：逐帧取 Chrome 解码画面再高码率重编码，不对着屏幕实时录。
+   * @returns {Promise<null|object>}
+   */
+  async function exportKeepByChromeDisplay(videoEl, keeps, opts = {}) {
+    const onProgress = typeof opts.onProgress === "function" ? opts.onProgress : () => {};
+    if (!videoEl || !Array.isArray(keeps) || !keeps.length) return null;
+    if (typeof VideoEncoder === "undefined" || typeof VideoFrame === "undefined") return null;
+    if (opts.applyCrop) return null;
+
+    const getFf =
+      window.DevToolsFfmpeg?.getInstance || window.DevToolsExtraMedia?.getFfmpegInstance;
+    if (typeof getFf !== "function") return null;
+
+    const W = evenDim(videoEl.videoWidth || opts.srcW || 720);
+    const H = evenDim(videoEl.videoHeight || opts.srcH || 404);
+    if (!(W >= 2 && H >= 2)) return null;
+
+    const keepFps = Math.max(5, Number(opts.keepFps) || 24);
+    const timeline = opts.timeline || null;
+    const durUs = Math.round(1e6 / keepFps);
+    const wasMuted = videoEl.muted;
+    const wasPaused = videoEl.paused;
+    const resumeAt = Number(videoEl.currentTime) || 0;
+    videoEl.muted = true;
+    try {
+      videoEl.pause();
+    } catch (_) {}
+
+    const waitPresented = () =>
+      new Promise((resolve) => {
+        if (typeof videoEl.requestVideoFrameCallback !== "function") {
+          setTimeout(resolve, 40);
+          return;
+        }
+        let done = false;
+        const finish = (meta) => {
+          if (done) return;
+          done = true;
+          resolve(meta || null);
+        };
+        try {
+          videoEl.requestVideoFrameCallback((_n, meta) => finish(meta));
+        } catch (_) {
+          finish(null);
+          return;
+        }
+        setTimeout(() => finish(null), 600);
+      });
+
+    const chunks = [];
+    let encoderError = null;
+    let encoder;
+    try {
+      encoder = new VideoEncoder({
+        output: (chunk) => {
+          if (!chunk) return;
+          const buf = new Uint8Array(chunk.byteLength);
+          chunk.copyTo(buf);
+          chunks.push(buf);
+        },
+        error: (e) => {
+          encoderError = e;
+        },
+      });
+      const tryConfigs = [
+        { codec: "avc1.640028", avc: { format: "annexb" }, bitrate: 12_000_000 },
+        { codec: "avc1.42E01E", avc: { format: "annexb" }, bitrate: 8_000_000 },
+        { codec: "avc1.640028", bitrate: 12_000_000 },
+        { codec: "avc1.42E01E", bitrate: 8_000_000 },
+      ];
+      let configured = false;
+      for (const cfg of tryConfigs) {
+        try {
+          const full = {
+            width: W,
+            height: H,
+            framerate: keepFps,
+            hardwareAcceleration: "prefer-hardware",
+            ...cfg,
+          };
+          if (typeof VideoEncoder.isConfigSupported === "function") {
+            const ok = await VideoEncoder.isConfigSupported(full).catch(() => null);
+            if (ok && ok.supported === false) continue;
+          }
+          encoder.configure(full);
+          configured = true;
+          break;
+        } catch (_) {}
+      }
+      if (!configured) return null;
+    } catch (_) {
+      return null;
+    }
+
+    const sliceLog = [];
+    const segmentSpans = [];
+    let outTs = 0;
+    let outFrames = 0;
+    const totalKeepFrames = keeps.reduce((s, k) => {
+      const a = Number.isFinite(Number(k.startF)) ? Number(k.startF) : displayFrameAtSec(k.start, keepFps);
+      const b = Number.isFinite(Number(k.endF)) ? Number(k.endF) : displayFrameAtSec(k.end, keepFps);
+      return s + Math.max(1, b - a);
+    }, 0);
+
+    try {
+      for (let ki = 0; ki < keeps.length; ki++) {
+        if (opts.isAborted?.()) throw new Error("已取消");
+        const k = keeps[ki];
+        let startF = Number.isFinite(Number(k.startF))
+          ? Math.round(Number(k.startF))
+          : displayFrameAtSec(k.start, keepFps);
+        let endF = Number.isFinite(Number(k.endF))
+          ? Math.round(Number(k.endF))
+          : displayFrameAtSec(k.end, keepFps);
+        if (endF <= startF) endF = startF + 1;
+        const segStartTs = outTs;
+        for (let fi = startF; fi < endF; fi++) {
+          if (encoderError) throw encoderError;
+          const seekT = timeline?.ctsSec?.[fi]
+            ? Number(timeline.ctsSec[fi]) + DISPLAY_SEEK_EPS
+            : frameToSec(fi, keepFps) + DISPLAY_SEEK_EPS;
+          videoEl.currentTime = Math.max(0, seekT);
+          await waitSeek(videoEl);
+          await waitPresented();
+          let frame;
+          try {
+            frame = new VideoFrame(videoEl, {
+              timestamp: outTs,
+              duration: durUs,
+            });
+          } catch (_) {
+            // 部分机型需 canvas 中转
+            const c = document.createElement("canvas");
+            c.width = W;
+            c.height = H;
+            const ctx = c.getContext("2d", { alpha: false });
+            if (!ctx) throw new Error("无法读取预览帧");
+            ctx.drawImage(videoEl, 0, 0, W, H);
+            frame = new VideoFrame(c, { timestamp: outTs, duration: durUs });
+          }
+          const keyFrame = outFrames % Math.max(1, Math.round(keepFps)) === 0;
+          try {
+            while (encoder.encodeQueueSize > 4) {
+              await new Promise((r) => setTimeout(r, 8));
+            }
+            encoder.encode(frame, { keyFrame });
+          } finally {
+            try {
+              frame.close();
+            } catch (_) {}
+          }
+          outTs += durUs;
+          outFrames += 1;
+          if (outFrames % 8 === 0 || outFrames === 1) {
+            onProgress(
+              0.08 + (outFrames / Math.max(1, totalKeepFrames)) * 0.75,
+              `对齐预览帧 ${outFrames}/${totalKeepFrames}`
+            );
+          }
+        }
+        const spanSec = Math.max(0.05, (outTs - segStartTs) / 1e6);
+        segmentSpans.push(spanSec);
+        sliceLog.push({
+          i: ki,
+          mode: "chrome-VideoFrame",
+          startF,
+          endF,
+          start: Number(k.start) || 0,
+          end: Number(k.end) || 0,
+          spanSec,
+        });
+      }
+      await encoder.flush();
+      encoder.close();
+      if (encoderError) throw encoderError;
+      if (!chunks.length || !outFrames) return null;
+
+      onProgress(0.88, "封装 MP4…");
+      const ffmpeg = opts.ffmpeg || (await getFf((r, t) => onProgress(0.88 + r * 0.1, t || "封装…")));
+      if (!ffmpeg) return null;
+      let total = 0;
+      for (const c of chunks) total += c.byteLength;
+      const annexb = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) {
+        annexb.set(c, off);
+        off += c.byteLength;
+      }
+      const h264Name = "chrome-keep.h264";
+      const outName = "chrome-keep.mp4";
+      await ffmpeg.writeFile(h264Name, annexb);
+      const code = await ffmpeg
+        .exec([
+          "-f",
+          "h264",
+          "-r",
+          String(keepFps),
+          "-i",
+          h264Name,
+          "-c",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "-y",
+          outName,
+        ])
+        .catch(() => 1);
+      if (code !== 0) {
+        // 非 annexb 时尝试按 raw H264 再包一层
+        const code2 = await ffmpeg
+          .exec([
+            "-framerate",
+            String(keepFps),
+            "-i",
+            h264Name,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-y",
+            outName,
+          ])
+          .catch(() => 1);
+        if (code2 !== 0) return null;
+      }
+      const data = await ffmpeg.readFile(outName);
+      const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+      const bytes = new Uint8Array(raw.byteLength);
+      bytes.set(raw);
+      try {
+        await ffmpeg.deleteFile(h264Name);
+      } catch (_) {}
+      try {
+        await ffmpeg.deleteFile(outName);
+      } catch (_) {}
+      const blob = new Blob([bytes], { type: "video/mp4" });
+      if (!blob.size) return null;
+      const filename =
+        String(opts.filenameBase || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
+      return {
+        blob,
+        file: new File([blob], filename, { type: "video/mp4" }),
+        filename,
+        duration: segmentSpans.reduce((s, x) => s + x, 0),
+        srcW: W,
+        srcH: H,
+        segmentSpans,
+        keeps,
+        sliceLog,
+        keepFps,
+        exportMethod: "chrome-VideoFrame",
+        mp4Timeline: timeline
+          ? {
+              fps: timeline.fps,
+              fpsRaw: timeline.fpsRaw,
+              sampleCount: timeline.sampleCount,
+              hasCtts: Boolean(timeline.hasCtts),
+              elstMediaTime: timeline.elstMediaTime || 0,
+              firstPresentIdx: timeline.firstPresentIdx || 0,
+            }
+          : null,
+      };
+    } catch (_) {
+      try {
+        encoder?.close();
+      } catch (_) {}
+      return null;
+    } finally {
+      videoEl.muted = wasMuted;
+      try {
+        videoEl.pause();
+      } catch (_) {}
+      try {
+        videoEl.currentTime = resumeAt;
+        await waitSeek(videoEl);
+      } catch (_) {}
+      if (!wasPaused) {
+        try {
+          videoEl.play().catch(() => {});
+        } catch (_) {}
+      }
+    }
+  }
+
+  /**
    * 按 keepRangesForEncode 切出 trim+cutouts 后的 mp4（wasm ffmpeg）。
    * @returns {Promise<{ file: File, blob: Blob, duration: number, srcW: number, srcH: number, filename: string }>}
    */
@@ -3275,6 +3592,7 @@
     keepRangesForEncode,
     previewSeekForKeepRanges,
     exportKeepVideo,
+    exportKeepByChromeDisplay,
     estimateFpsFromMediaTimes,
     normalizeSourceFps,
     frameSnapSecFromFps,
