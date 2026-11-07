@@ -4331,6 +4331,21 @@ html[data-boot-loading="1"] body {
   transition: width 0.22s ease;
 }
 
+.workspace-panel-load.is-loading .workspace-panel-load-fill,
+.workspace-panel-load.is-loading .devtools-tool-load-fill {
+  background-size: 200% 100%;
+  animation: workspace-panel-load-shimmer 1.1s linear infinite;
+}
+
+@keyframes workspace-panel-load-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
 .workspace-panel-load-label,
 .devtools-tool-load-label {
   margin: 0.4rem 0 0.15rem;

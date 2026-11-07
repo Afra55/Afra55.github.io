@@ -3446,6 +3446,7 @@
     const fill = shell?.querySelector(".devtools-tool-load-fill");
     const bar = shell?.querySelector(".workspace-panel-load-bar");
     const labelEl = document.getElementById("devtools-tool-load-label");
+    const hintEl = document.getElementById("devtools-tool-load-hint");
     if (!shell || !fill) return;
     const v = Math.min(100, Math.max(0, pct));
     if (toolLoadPanelId) {
@@ -3456,14 +3457,19 @@
     shell.hidden = false;
     shell.setAttribute("aria-hidden", "false");
     shell.setAttribute("aria-busy", v < 99.5 ? "true" : "false");
+    shell.classList.toggle("is-loading", v < 99.5);
     if (bar) bar.setAttribute("aria-valuenow", String(Math.round(v)));
     fill.style.width = `${v}%`;
     if (labelEl) {
-      const text = String(label || "").trim();
-      if (text) {
+      const raw = String(label || "").trim();
+      if (raw) {
         labelEl.hidden = false;
-        labelEl.textContent = text;
+        // 百分比前置，避免大脚本下载时文案不变像卡住
+        labelEl.textContent = raw.includes("%") ? raw : `${Math.round(v)}% · ${raw}`;
       }
+    }
+    if (hintEl) {
+      hintEl.hidden = v >= 99.5;
     }
   }
 
@@ -3475,8 +3481,10 @@
     const fill = shell?.querySelector(".devtools-tool-load-fill");
     const bar = shell?.querySelector(".workspace-panel-load-bar");
     const labelEl = document.getElementById("devtools-tool-load-label");
+    const hintEl = document.getElementById("devtools-tool-load-hint");
     if (!shell) return;
     shell.hidden = true;
+    shell.classList.remove("is-loading");
     shell.setAttribute("aria-hidden", "true");
     shell.setAttribute("aria-busy", "false");
     if (bar) bar.setAttribute("aria-valuenow", "0");
@@ -3485,6 +3493,7 @@
       labelEl.hidden = true;
       labelEl.textContent = "";
     }
+    if (hintEl) hintEl.hidden = true;
   }
 
   function mapLazyLoadProgress(ratio, label, onProgress) {
@@ -3533,28 +3542,34 @@
     }
 
     let overlayShown = false;
+    let lastPct = 8;
+    let lastLabel = `正在加载「${name}」…`;
     // 立刻标 busy（无视觉遮挡），避免冒烟/无障碍在延迟进度条窗口误判已就绪
     if (gen === routeGen) {
       const panel = document.getElementById(toolLoadPanelId);
       if (panel) panel.setAttribute("aria-busy", "true");
     }
-    // 先不遮挡面板；仅当加载超过阈值才显示进度条
+    // 黑盒/切分等大包：更快亮进度，避免用户以为卡住；其它工具仍短延迟
+    const heavyFirstLoad = /^(vbb|v2g|vsplit|mdm|adb)$/.test(String(toolId || ""));
+    const showDelayMs = heavyFirstLoad ? 40 : 220;
     const showDelay = window.setTimeout(() => {
       if (gen !== routeGen) return;
       overlayShown = true;
       setPanelAssetLoading(toolLoadPanelId, true);
-      setToolLoadProgress(12, `正在加载「${name}」…`, loadGen);
-    }, 220);
+      setToolLoadProgress(lastPct, lastLabel, loadGen);
+    }, showDelayMs);
 
     void (async () => {
       try {
         await ensureToolAssets(toolId, (pct, label) => {
           if (gen !== routeGen) return;
+          lastPct = Number(pct) || lastPct;
+          if (label) lastLabel = label;
           if (!overlayShown) {
-            // 仍很快：不提前弹出；只有回调持续到来且已过 delay 才由 timer 负责
+            // 延迟显示前先缓存最新进度，避免一直停在「正在加载」
             return;
           }
-          setToolLoadProgress(pct, label || `正在加载「${name}」…`, loadGen);
+          setToolLoadProgress(lastPct, lastLabel || `正在加载「${name}」…`, loadGen);
         });
       } catch (err) {
         console.error("tool lazy-load failed", toolId, err);

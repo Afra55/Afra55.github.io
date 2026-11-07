@@ -344,6 +344,7 @@
     return [...document.scripts].some((s) => {
       try {
         if (s.dataset.devtoolsLoaded !== "1") return false;
+        if (s.dataset.devtoolsSrcKey && scriptKeysMatch(s.dataset.devtoolsSrcKey, key)) return true;
         const attr = s.getAttribute("src") || s.src || "";
         return scriptKeysMatch(withVersion(attr), key);
       } catch (_) {
@@ -425,72 +426,224 @@
     return url.href;
   }
 
-  function loadScript(src, { timeoutMs = 60000 } = {}) {
+  /** 已知大脚本体积提示（无 Content-Length 时估算进度，避免条卡住） */
+  const SCRIPT_SIZE_HINT = {
+    "./extra-panels/v2g-suite.js": 666000,
+    "./lib/extra-media.js": 74000,
+    "./lib/pure.js": 56000,
+    "./lib/oss-deps.js": 19000,
+    "./temp.js": 10000,
+  };
+
+  function formatDlBytes(n) {
+    const b = Math.max(0, Number(n) || 0);
+    if (b < 1024) return `${Math.round(b)}B`;
+    if (b < 1024 * 1024) {
+      const kb = b / 1024;
+      return `${kb >= 100 ? Math.round(kb) : kb.toFixed(1)}KB`;
+    }
+    return `${(b / (1024 * 1024)).toFixed(2)}MB`;
+  }
+
+  function scriptSizeHint(src) {
+    const bare = String(src || "").replace(/[?#].*$/, "");
+    if (SCRIPT_SIZE_HINT[bare]) return SCRIPT_SIZE_HINT[bare];
+    const hit = Object.keys(SCRIPT_SIZE_HINT).find((k) => bare.endsWith(k.replace(/^\.\//, "")));
+    return hit ? SCRIPT_SIZE_HINT[hit] : 0;
+  }
+
+  function scrubStaleScriptTags(key, src) {
+    [...document.scripts].forEach((s) => {
+      try {
+        const attr = s.getAttribute("src") || s.src || "";
+        const same =
+          scriptKeysMatch(withVersion(attr), key) ||
+          (s.src && s.src.includes(String(src || "").replace(/^\.\//, "")));
+        if (!same) return;
+        if (s.dataset.devtoolsLoaded === "1") return;
+        s.remove();
+      } catch (_) {}
+    });
+  }
+
+  function findLoadedScriptTag(key) {
+    return [...document.scripts].find((s) => {
+      try {
+        if (s.dataset.devtoolsLoaded !== "1") return false;
+        if (s.dataset.devtoolsSrcKey && scriptKeysMatch(s.dataset.devtoolsSrcKey, key)) return true;
+        const attr = s.getAttribute("src") || s.src || "";
+        return scriptKeysMatch(withVersion(attr), key);
+      } catch (_) {
+        return false;
+      }
+    });
+  }
+
+  /**
+   * @param {string} src
+   * @param {{ timeoutMs?: number, onProgress?: (ratio:number,label:string)=>void, label?: string }} [opts]
+   * onProgress 有值时走 fetch 流式下载，便于大脚本显示 KB 进度（否则用户以为卡住）。
+   */
+  /** 同 URL 并发加载时，后到的 onProgress 也能收到字节进度 */
+  const scriptProgressListeners = new Map();
+
+  function loadScript(src, { timeoutMs = 60000, onProgress = null, label = "" } = {}) {
     const key = withVersion(src);
     if (loadedScriptKeys.has(key)) return Promise.resolve();
-    if (scriptPromises.has(key)) return scriptPromises.get(key);
-    const promise = new Promise((resolve, reject) => {
-      let settled = false;
-      const finishOk = () => {
-        if (settled) return;
-        settled = true;
-        loadedScriptKeys.add(key);
-        window.clearTimeout(timer);
-        resolve();
-      };
-      const finishErr = (err) => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timer);
-        scriptPromises.delete(key); // 失败不缓存，允许重试
-        loadedScriptKeys.delete(key);
-        reject(err || new Error(`脚本加载失败：${src}`));
-      };
-      const timer = window.setTimeout(() => finishErr(new Error(`脚本加载超时：${src}`)), timeoutMs);
-      // 能走到这里说明没有 in-flight promise：未成功的旧标签（含已 error）一律拆掉重建，
-      // 否则 addEventListener("error") 等不到重放事件，会一直卡到超时。
-      [...document.scripts].forEach((s) => {
-        try {
-          const attr = s.getAttribute("src") || s.src || "";
-          const same =
-            scriptKeysMatch(withVersion(attr), key) ||
-            (s.src && s.src.includes(String(src || "").replace(/^\.\//, "")));
-          if (!same) return;
-          if (s.dataset.devtoolsLoaded === "1") return;
-          s.remove();
-        } catch (_) {}
-      });
-      const ready = [...document.scripts].find((s) => {
-        try {
-          const attr = s.getAttribute("src") || s.src || "";
-          return s.dataset.devtoolsLoaded === "1" && scriptKeysMatch(withVersion(attr), key);
-        } catch (_) {
-          return false;
+    if (typeof onProgress === "function") {
+      let set = scriptProgressListeners.get(key);
+      if (!set) {
+        set = new Set();
+        scriptProgressListeners.set(key, set);
+      }
+      set.add(onProgress);
+    }
+    if (scriptPromises.has(key)) {
+      const pending = scriptPromises.get(key);
+      return pending.finally(() => {
+        const set = scriptProgressListeners.get(key);
+        if (set && typeof onProgress === "function") {
+          set.delete(onProgress);
+          if (!set.size) scriptProgressListeners.delete(key);
         }
       });
-      if (ready) {
-        finishOk();
+    }
+
+    const displayName = String(label || "").trim() || "脚本";
+    const reportDl = (ratio, text) => {
+      const r = Math.max(0, Math.min(1, Number(ratio) || 0));
+      const msg = text || displayName;
+      const set = scriptProgressListeners.get(key);
+      if (set) {
+        for (const fn of set) {
+          try {
+            fn(r, msg);
+          } catch (_) {}
+        }
+      } else if (typeof onProgress === "function") {
+        onProgress(r, msg);
+      }
+    };
+
+    const injectFromUrl = (url, { revoke = false } = {}) =>
+      new Promise((resolve, reject) => {
+        const node = document.createElement("script");
+        node.src = url;
+        node.async = false;
+        node.onload = () => {
+          node.dataset.devtoolsLoaded = "1";
+          try {
+            node.dataset.devtoolsSrcKey = key;
+          } catch (_) {}
+          if (revoke) {
+            try {
+              URL.revokeObjectURL(url);
+            } catch (_) {}
+          }
+          resolve();
+        };
+        node.onerror = () => {
+          try {
+            node.remove();
+          } catch (_) {}
+          if (revoke) {
+            try {
+              URL.revokeObjectURL(url);
+            } catch (_) {}
+          }
+          reject(new Error(`脚本加载失败：${src}`));
+        };
+        document.head.appendChild(node);
+      });
+
+    const promise = (async () => {
+      scrubStaleScriptTags(key, src);
+      if (findLoadedScriptTag(key) || loadedScriptKeys.has(key)) {
+        loadedScriptKeys.add(key);
         return;
       }
-      const node = document.createElement("script");
-      node.src = key;
-      node.async = false;
-      node.onload = () => {
-        node.dataset.devtoolsLoaded = "1";
-        finishOk();
-      };
-      node.onerror = () => {
-        try {
-          node.remove();
-        } catch (_) {}
-        finishErr(new Error(`脚本加载失败：${src}`));
-      };
-      document.head.appendChild(node);
-    }).catch((err) => {
+
+      let timeoutId = 0;
+      const timed = new Promise((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error(`脚本加载超时：${src}`)), timeoutMs);
+      });
+
+      try {
+        // 大脚本或显式要进度：走 fetch，避免 <script src> 长时间无反馈像卡住
+        const useFetchProgress =
+          typeof onProgress === "function" ||
+          scriptProgressListeners.get(key)?.size > 0 ||
+          scriptSizeHint(src) >= 50000;
+        if (useFetchProgress) {
+          reportDl(0.02, `开始下载${displayName}…`);
+          const runFetch = async () => {
+            let res;
+            try {
+              res = await fetch(key, { credentials: "same-origin", cache: "force-cache" });
+            } catch (err) {
+              throw new Error(`脚本下载失败：${src}（${err?.message || err}）`);
+            }
+            if (!res.ok) throw new Error(`脚本下载失败：${src}（HTTP ${res.status}）`);
+            const hinted = scriptSizeHint(src);
+            const totalHeader = Number(res.headers.get("content-length")) || 0;
+            const total = totalHeader > 0 ? totalHeader : hinted;
+            const reader = res.body?.getReader?.();
+            if (!reader) {
+              const buf = await res.arrayBuffer();
+              reportDl(0.92, `${displayName}已下载 ${formatDlBytes(buf.byteLength)}，解析中…`);
+              const blobUrl = URL.createObjectURL(
+                new Blob([buf], { type: "application/javascript" })
+              );
+              await injectFromUrl(blobUrl, { revoke: true });
+              return;
+            }
+            const chunks = [];
+            let received = 0;
+            let lastReport = 0;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value?.byteLength) {
+                chunks.push(value);
+                received += value.byteLength;
+              }
+              const now = Date.now();
+              if (now - lastReport < 80 && !(total > 0 && received >= total)) continue;
+              lastReport = now;
+              if (total > 0) {
+                reportDl(
+                  Math.min(0.9, received / total),
+                  `下载${displayName} ${formatDlBytes(received)}/${formatDlBytes(total)}`
+                );
+              } else {
+                reportDl(
+                  Math.min(0.85, received / Math.max(received + 1, 256 * 1024)),
+                  `下载${displayName} ${formatDlBytes(received)}…`
+                );
+              }
+            }
+            reportDl(0.93, `${displayName}已下载 ${formatDlBytes(received)}，解析中…`);
+            const blobUrl = URL.createObjectURL(
+              new Blob(chunks, { type: "application/javascript" })
+            );
+            await injectFromUrl(blobUrl, { revoke: true });
+          };
+          await Promise.race([runFetch(), timed]);
+        } else {
+          await Promise.race([injectFromUrl(key), timed]);
+        }
+        loadedScriptKeys.add(key);
+      } finally {
+        window.clearTimeout(timeoutId);
+        scriptProgressListeners.delete(key);
+      }
+    })().catch((err) => {
       scriptPromises.delete(key);
       loadedScriptKeys.delete(key);
+      scriptProgressListeners.delete(key);
       throw err;
     });
+
     scriptPromises.set(key, promise);
     return promise;
   }
@@ -502,16 +655,28 @@
   }
 
   async function loadExtraCore(onProgress, { media = false } = {}) {
+    const dl = (base, span, name) => (ratio, text) => {
+      const r = Math.max(0, Math.min(1, Number(ratio) || 0));
+      onProgress?.(base + r * span, text || name);
+    };
     if (window.__devtoolsExtraCore && (!media || window.DevToolsExtraMedia)) return;
     if (extraCorePromise) {
       return extraCorePromise.then(async () => {
         // 首次以非 media 路径加载后再次需要 media（如 adb / gifmaker 等）：
         // 补齐媒体核心，避免媒体工具因缺 DevToolsExtraMedia 而卡住。
         if (media && !window.DevToolsExtraMedia) {
-          onProgress?.(0.48, "加载媒体编码核心…");
-          if (!window.DevToolsTemp) await loadScript("./temp.js");
-          await loadScript("./lib/oss-deps.js");
-          await loadScript("./lib/extra-media.js");
+          onProgress?.(0.48, "下载媒体编码核心…");
+          if (!window.DevToolsTemp) {
+            await loadScript("./temp.js", { onProgress: dl(0.48, 0.04, "临时存储"), label: "临时存储" });
+          }
+          await loadScript("./lib/oss-deps.js", {
+            onProgress: dl(0.52, 0.04, "依赖清单"),
+            label: "依赖清单",
+          });
+          await loadScript("./lib/extra-media.js", {
+            onProgress: dl(0.56, 0.06, "媒体核心"),
+            label: "媒体核心（约 70KB）",
+          });
           onProgress?.(0.62, "媒体核心已就绪");
         }
       });
@@ -527,11 +692,21 @@
         window.__devtoolsExtraBootstrap = true;
       }
       if (media) {
-        onProgress?.(0.35, "加载临时存储…");
-        if (!window.DevToolsTemp) await loadScript("./temp.js");
-        await loadScript("./lib/oss-deps.js");
-        onProgress?.(0.48, "加载媒体编码核心…");
-        if (!window.DevToolsExtraMedia) await loadScript("./lib/extra-media.js");
+        onProgress?.(0.35, "下载临时存储…");
+        if (!window.DevToolsTemp) {
+          await loadScript("./temp.js", { onProgress: dl(0.35, 0.05, "临时存储"), label: "临时存储" });
+        }
+        await loadScript("./lib/oss-deps.js", {
+          onProgress: dl(0.4, 0.05, "依赖清单"),
+          label: "依赖清单",
+        });
+        onProgress?.(0.48, "下载媒体编码核心…");
+        if (!window.DevToolsExtraMedia) {
+          await loadScript("./lib/extra-media.js", {
+            onProgress: dl(0.48, 0.12, "媒体核心"),
+            label: "媒体核心（约 70KB）",
+          });
+        }
       }
       window.__devtoolsExtraCore = true;
       window.__devtoolsExtraBundle = true;
@@ -581,13 +756,32 @@
     await loadVendor("omggif");
   }
 
-  async function loadToolScript(toolId) {
+  function toolScriptLabel(toolId) {
+    const id = String(toolId || "").trim();
+    if (id === "vbb") return "黑盒 GIF 模块（约 650KB）";
+    if (id === "v2g") return "视频转 GIF 模块（约 650KB）";
+    if (id === "vsplit") return "视频切分模块（约 650KB）";
+    if (/v2g-suite/.test(TOOL_FILES[id] || "")) return "视频套件模块（约 650KB）";
+    return `${id || "工具"}模块`;
+  }
+
+  async function loadToolScript(toolId, onProgress) {
     const src = TOOL_FILES[toolId];
     if (!src) return;
     if (EXTERNAL_SITE_TOOLS.has(toolId)) {
       await loadScript("./lib/open-external-site.js");
     }
-    await loadScript(src);
+    const label = toolScriptLabel(toolId);
+    const track = typeof onProgress === "function";
+    await loadScript(
+      src,
+      track
+        ? {
+            label,
+            onProgress: (ratio, text) => onProgress(Math.max(0, Math.min(1, Number(ratio) || 0)), text || label),
+          }
+        : {}
+    );
   }
 
   async function loadPwa() {
@@ -674,7 +868,7 @@
     }
 
     if (!NO_PURE.has(id)) {
-      report(0.08, "加载计算核心…");
+      report(0.08, "下载计算核心…");
       await ensurePure();
       report(0.16, "计算核心已就绪");
     }
@@ -693,7 +887,7 @@
     for (let i = 0; i < vendors.length; i++) {
       const vendorId = vendors[i];
       const name = VENDOR_LABELS[vendorId] || vendorId;
-      report(0.74 + (i / Math.max(1, vendors.length)) * 0.18, `加载${name}…`);
+      report(0.74 + (i / Math.max(1, vendors.length)) * 0.18, `下载${name}…`);
       await loadVendor(vendorId);
     }
 
@@ -703,7 +897,8 @@
     }
 
     if (TOOL_FILES[id]) {
-      report(0.94, `加载${id} 模块…`);
+      const modLabel = toolScriptLabel(id);
+      report(0.9, `准备下载${modLabel}…`);
       if (id === "qrcode") {
         await loadScript("./lib/qr-series.js");
         await loadScript("./lib/code-scan.js");
@@ -735,20 +930,20 @@
           readyTools.delete("lanboard");
         }
       }
-      await loadToolScript(id);
+      await loadToolScript(id, (ratio, text) => report(0.9 + ratio * 0.09, text || modLabel));
       if (id === "memo" && !window.DevToolsMemo) {
         // 仍未挂上：再强制重载一次（面板已在 DOM）
         bustToolScript(TOOL_FILES.memo);
         readyTools.delete("memo");
-        await loadToolScript(id);
+        await loadToolScript(id, (ratio, text) => report(0.9 + ratio * 0.09, text || modLabel));
       }
       if (id === "lanboard" && !window.DevToolsLanBoard) {
         bustToolScript(TOOL_FILES.lanboard);
         readyTools.delete("lanboard");
-        await loadToolScript(id);
+        await loadToolScript(id, (ratio, text) => report(0.9 + ratio * 0.09, text || modLabel));
       }
     }
-    report(1, "工具已就绪");
+    report(1, "工具已就绪 · 不是卡住");
     // 空跑脚本勿标 ready，否则下次进面板会误判已缓存又立刻 bust 重拉
     if (id === "memo" && !window.DevToolsMemo) return;
     if (id === "lanboard" && !window.DevToolsLanBoard) return;
