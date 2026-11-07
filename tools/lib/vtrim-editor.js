@@ -1971,9 +1971,27 @@
         }
       }
     }
+    function triggerLocalDownload(blob, name) {
+      const dl = window.DevToolsExtraMedia?.triggerBlobDownload;
+      if (typeof dl === "function") {
+        dl(blob, name);
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
     async function downloadEditedVideo() {
       if (closed || exporting) return;
       const edit = getEditState();
+      // 与预览同一套 keep（勿用毫秒量化后的 edit 重算，否则相对预览偏帧）
+      const previewKeeps = keepRangesLocal();
       exporting = true;
       const prev = downloadBtn?.textContent;
       if (downloadBtn) {
@@ -1987,6 +2005,7 @@
           srcW: video.videoWidth || 0,
           srcH: video.videoHeight || 0,
           applyCrop: Boolean(edit.cropOn),
+          keeps: previewKeeps,
           onProgress: (r, text) => {
             const ratio = Number(r);
             const label = String(text || "正在导出…");
@@ -1999,21 +2018,58 @@
         const name =
           out?.filename ||
           String(file.name || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
+        const diagName = String(name).replace(/\.mp4$/i, "") + "-export-diag.json";
+        const build =
+          (typeof window !== "undefined" && (window.TOOLS_BUILD || window.TOOLS_VERSION)) || "";
+        const diag = {
+          kind: "vbb-export-diag",
+          ver: 1,
+          build: String(build || ""),
+          at: new Date().toISOString(),
+          ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "",
+          file: {
+            name: String(file?.name || ""),
+            size: Number(file?.size) || 0,
+            type: String(file?.type || ""),
+          },
+          source: {
+            duration,
+            srcW: video.videoWidth || 0,
+            srcH: video.videoHeight || 0,
+            sourceFps,
+            currentTime: Number(video.currentTime) || 0,
+            paused: Boolean(video.paused),
+          },
+          handles: {
+            startSec,
+            endSec,
+            endParkAtSec: Number.isFinite(endParkAtSec) ? endParkAtSec : null,
+            cutouts: (cutouts || []).map((c) => ({ start: c.start, end: c.end })),
+          },
+          edit,
+          previewKeeps,
+          export: {
+            keepFps: out?.keepFps,
+            segmentSpans: out?.segmentSpans,
+            keeps: out?.keeps,
+            sliceLog: out?.sliceLog,
+            outDuration: out?.duration,
+            outW: out?.srcW,
+            outH: out?.srcH,
+            filename: name,
+            bytes: blob.size,
+          },
+        };
         setExportProgress(true, 1, "开始下载…");
-        const dl = window.DevToolsExtraMedia?.triggerBlobDownload;
-        if (typeof dl === "function") dl(blob, name);
-        else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = name;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 2000);
-        }
-        setExportProgress(true, 1, "已开始下载", { ok: `已下载 ${name}` });
-        toast("已开始下载编辑后的视频");
+        triggerLocalDownload(blob, name);
+        triggerLocalDownload(
+          new Blob([JSON.stringify(diag, null, 2)], { type: "application/json" }),
+          diagName
+        );
+        setExportProgress(true, 1, "已开始下载", {
+          ok: `已下载 ${name} + 诊断 ${diagName}（发给开发即可）`,
+        });
+        toast("已下载视频和诊断 JSON，请把 JSON 发我");
       } catch (err) {
         const msg = err?.message || String(err) || "导出失败";
         setExportProgress(true, 0, "导出失败", { error: msg });
@@ -2815,7 +2871,11 @@
     const ffmpeg =
       opts.ffmpeg || (await getFf((r, t) => onProgress(r, t || "准备编码器…")));
     if (!ffmpeg) throw new Error("无法加载编码器");
-    const keeps = keepRangesForEncode(edit, duration);
+    // 编辑器下载可传入与预览完全同一套 keeps，避免 getEditState 毫秒量化漂移
+    const keeps =
+      Array.isArray(opts.keeps) && opts.keeps.length
+        ? opts.keeps
+        : keepRangesForEncode(edit, duration);
     if (!keeps.length) throw new Error("没有可保留的片段");
     const inName = await writeIn(ffmpeg, file, () => onProgress(0.05, "载入视频…"));
     const srcW = Math.max(2, Number(opts.srcW) || 720);
@@ -2823,13 +2883,13 @@
     const W = evenDim(srcW);
     const H = evenDim(srcH);
     const cropVf = opts.applyCrop ? cropVfFromEdit(edit) : "";
-    // 切片对齐预览：先 fps=round=up 抽到 keep 帧格（≡ Chrome seek 到 k/F 所见），
-    // 再按秒半开 trim。纯 PTS trim 在 VFR/29.97 上会丢预览首帧、段尾多带删段第一帧。
-    // start_frame 仅作空片回退（帧序号在未抽格时 ≠ 预览）。
+    // 切片对齐预览：先 fps=round=up 抽到 keep 帧格，再按帧号半开切。
     const keepFps = resolveKeepFps(edit);
     const parts = [];
     /** @type {number[]} 各段时长（秒），供 GIF 按段采样 */
     const segmentSpans = [];
+    /** @type {{i:number,mode:string,startF:number,endF:number,start:number,end:number}[]} */
+    const sliceLog = [];
     const MIN_PART_BYTES = 512;
     const fmtSec = (t) => {
       const n = Math.max(0, Number(t) || 0);
@@ -2925,6 +2985,19 @@
       if (!hit) throw new Error(`切片失败（段 ${i + 1}/${keeps.length}）`);
       parts.push(hit.out);
       segmentSpans.push(Math.max(0.05, Number(hit.spanSec) || (keeps[i].end - keeps[i].start)));
+      const k0 = keeps[i];
+      let sf = Number.isFinite(Number(k0.startF)) ? Math.round(Number(k0.startF)) : displayFrameAtSec(k0.start, keepFps);
+      let ef = Number.isFinite(Number(k0.endF)) ? Math.round(Number(k0.endF)) : displayFrameAtSec(k0.end, keepFps);
+      if (ef <= sf) ef = sf + 1;
+      sliceLog.push({
+        i,
+        mode: hit.mode,
+        startF: sf,
+        endF: ef,
+        start: Number(k0.start) || 0,
+        end: Number(k0.end) || 0,
+        spanSec: Number(hit.spanSec) || 0,
+      });
     }
     onProgress(0.7, "拼接…");
     const filename = String(file?.name || "video").replace(/\.[^.]+$/, "") + "-edit.mp4";
@@ -3007,6 +3080,13 @@
       segmentSpans,
       keepFps,
       slicedByFrame: false,
+      keeps: keeps.map((k) => ({
+        start: Number(k.start) || 0,
+        end: Number(k.end) || 0,
+        startF: Number.isFinite(Number(k.startF)) ? Number(k.startF) : null,
+        endF: Number.isFinite(Number(k.endF)) ? Number(k.endF) : null,
+      })),
+      sliceLog,
     };
   }
 

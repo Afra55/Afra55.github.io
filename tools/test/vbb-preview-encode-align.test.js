@@ -133,6 +133,8 @@ t("exportKeepVideo：trim 前 fps=round=up；sec 优先；禁止两端 bias", ()
   assert.ok(exp.includes('["frame", "sec", "ss"]'), "抽格后须 frame→sec→ss");
   assert.ok(exp.includes("displayFrameAtSec"), "keep/切片须用 Chrome 显示帧");
   assert.ok(exp.includes("segmentSpans"), "回传各段时长");
+  assert.ok(exp.includes("sliceLog"), "须回传切片诊断");
+  assert.ok(exp.includes("opts.keeps"), "须支持传入预览同套 keeps");
   assert.ok(exp.includes("MIN_PART_BYTES"));
   assert.ok(/fps=\$\{keepFps\}:round=up/.test(exp), "须先抽格再 trim（≡预览 k/F）");
   const vfCore = exp.slice(exp.indexOf("const vfCore"), exp.indexOf("const args"));
@@ -142,6 +144,18 @@ t("exportKeepVideo：trim 前 fps=round=up；sec 优先；禁止两端 bias", ()
   );
   assert.ok(exp.includes("format=yuv420p,setsar=1"));
   assert.ok(!/bias\s*=\s*1\s*\/\s*30/.test(exp), "两端 bias 会把中间段首尾相对预览往前挪");
+});
+
+t("下载编辑后视频：用预览 keep + 附带 export-diag.json", () => {
+  const block = vtrim.slice(
+    vtrim.indexOf("async function downloadEditedVideo"),
+    vtrim.indexOf("function cleanup()")
+  );
+  assert.ok(block.includes("keepRangesLocal()"), "下载须用预览同套 keep");
+  assert.ok(block.includes("keeps: previewKeeps"));
+  assert.ok(block.includes("export-diag.json") || block.includes("-export-diag.json"));
+  assert.ok(block.includes("vbb-export-diag"));
+  assert.ok(block.includes("sliceLog"));
 });
 
 t("getEditState：未探测 fps 勿填默认 30（避免误判帧切）", () => {
