@@ -286,6 +286,10 @@ assert(
       /chunkCount:\s*[\s\S]{0,80}readVbbChunkCount\(\)/.test(src.slice(src.indexOf("async function encodeBlackboxClip"))),
     "encodeBlackboxClip 入口须归一 chunkCount"
   );
+  assert(/widenFailW/.test(src) && /O3后加宽剪枝/.test(src), "O3 加宽须剪枝核心已挂宽度");
+  assert(/sizeForGuess/.test(src) && /beforeO3/.test(src), "O3 后首探须用压前体积估宽");
+  assert(/vbbRgbaTrialCache/.test(src) && /RGBA 缓存命中/.test(src), "同宽换画质须可复用 RGBA");
+  assert(/clearVbbRgbaTrialCache/.test(src), "出片结束须清 RGBA 缓存");
   const v2gUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/20-v2g-ui.js"), "utf8");
   assert(!/manualFpsCap/.test(v2gUi), "非黑盒视频转 GIF 不得套性能档帧率帽");
   assert(/gifskiQuality:\s*manualGifskiQuality/.test(v2gUi), "非黑盒须走 gifski 100 满档");

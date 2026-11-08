@@ -2223,6 +2223,17 @@
         return { count: write, durations, saved: n - write };
       }
 
+      /**
+       * 同宽多画质试档：复用已导出的 RGBA（仅桌面单块；手机不缓存防 OOM）。
+       * key 不含画质；换 q 时只重跑 gifski。
+       * @type {{ key: string, frames: Uint8Array, n: number, stride: number, outW: number, outH: number }|null}
+       */
+      let vbbRgbaTrialCache = null;
+      const VBB_RGBA_CACHE_MAX_BYTES = 160 * 1024 * 1024;
+      function clearVbbRgbaTrialCache() {
+        vbbRgbaTrialCache = null;
+      }
+
       async function encodeV2gGifGifski(opts) {
         const tPhase = performance.now();
         let file = opts.file || v2gSourceFile;
@@ -2462,6 +2473,7 @@
            * 单段：FFmpeg 导 RGBA → gifski wasm。
            * 手机分块时旧逻辑会 stop 外层 ticker，整段 exec 无回调 → 批量误报「1800s 无进度」。
            * 这里自带心跳 + ffmpeg progress，保证 mapProgress 持续有信号。
+           * 桌面单块：同输入换画质时命中 vbbRgbaTrialCache，跳过重复解码。
            */
           const encodeChunk = async (chunkStartFrame, chunkFrames, chunkMap) => {
             const report =
@@ -2479,11 +2491,52 @@
             const dur = Math.max(1 / Math.max(8, fps), Math.min(need, Math.max(0, absEnd - ss)));
             // PTS trim 对齐预览；demux -t 盖住窗尾，勿 -ss（防片头前移）
             const ptsStart = ss > 0.001 ? ss : 0;
+            const useDenoise = needDenoise(effW, outW);
+            const stride = outW * outH * 4;
+            const rgbaKey = [
+              file?.name || "",
+              Number(file?.size) || 0,
+              Number(file?.lastModified) || 0,
+              String(encodeInput || ""),
+              Number(encodeSs).toFixed(4),
+              Number(encodeT).toFixed(4),
+              Number(fps).toFixed(3),
+              outW,
+              outH,
+              crop ? `${crop.x},${crop.y},${crop.w},${crop.h}` : "",
+              Number(speed).toFixed(3),
+              useDenoise ? 1 : 0,
+              chunkStartFrame,
+              chunkFrames,
+              usedWm ? 1 : 0,
+            ].join("|");
+            const canUseRgbaCache =
+              chunkCount <= 1 &&
+              !isCoarsePointer() &&
+              chunkFrames * stride > 0 &&
+              chunkFrames * stride <= VBB_RGBA_CACHE_MAX_BYTES;
+
+            let view;
+            let n;
+            if (
+              canUseRgbaCache &&
+              vbbRgbaTrialCache &&
+              vbbRgbaTrialCache.key === rgbaKey &&
+              vbbRgbaTrialCache.frames?.length >= 2 * stride
+            ) {
+              report(0.62, `${stageLabel}复用 RGBA 帧…`);
+              vbbLog(`[vbb-phase] RGBA 缓存命中 · ${vbbRgbaTrialCache.n}帧 ${outW}×${outH}`);
+              // 拷贝一份再 merge/encode，避免静止帧合并改坏缓存
+              const cached = vbbRgbaTrialCache.frames;
+              const copy = new Uint8Array(cached.byteLength);
+              copy.set(cached);
+              n = vbbRgbaTrialCache.n;
+              view = copy;
+            } else {
             const baseArgs = ["-i", encodeInput];
             baseArgs.push("-t", String(ptsStart > 0.001 ? ptsStart + dur + 0.05 : dur));
             if (usedWm) baseArgs.push("-i", wmName);
             const outArgs = ["-frames:v", String(chunkFrames), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
-            const useDenoise = needDenoise(effW, outW);
             const tChunk = Date.now();
             report(0.08, `${stageLabel}导出 RGBA · ${chunkFrames}帧`);
             const onChunkFfmpegProgress = ({ progress }) => {
@@ -2538,11 +2591,27 @@
             try {
               await ffmpeg.deleteFile(rawName);
             } catch (_) {}
-            const stride = outW * outH * 4;
-            let n = Math.floor(frames.length / stride);
+            n = Math.floor(frames.length / stride);
             if (n < 2) throw new Error("导出的 RGBA 帧不足");
             if (n > chunkFrames) n = chunkFrames;
-            const view = n * stride === frames.length ? frames : frames.subarray(0, n * stride);
+            view = n * stride === frames.length ? frames : frames.subarray(0, n * stride);
+            if (canUseRgbaCache && view && n >= 2) {
+              try {
+                const store = new Uint8Array(n * stride);
+                store.set(view.subarray(0, n * stride));
+                vbbRgbaTrialCache = {
+                  key: rgbaKey,
+                  frames: store,
+                  n,
+                  stride,
+                  outW,
+                  outH,
+                };
+              } catch (_) {
+                vbbRgbaTrialCache = null;
+              }
+            }
+            }
             // 静止帧合并：可变长 delay 在连续动作里易「一顿一顿」。
             // ≥18fps 一律均匀 delay；短片（≤16s）即使 15/12 也不合并，优先跟手不卡。
             let encodedFrames = n;
@@ -3611,12 +3680,15 @@
           chunkCount:
             clipOpts?.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
         };
+        try {
         let result = await encodeBlackboxClipCore(clipOpts);
         if (!result?.blob || !(result.blob.size > 0)) return result;
 
+        let beforeO3 = result.blob.size;
         try {
           const tO3 = performance.now();
           const before = result.blob.size;
+          beforeO3 = before;
           const optimized = await compressGifBlob(result.blob, "standard", null, {
             plan: { label: "优化", args: "-O3", round: 1, lossy: 0 },
           });
@@ -3722,7 +3794,16 @@
           let best = result;
           let lo = curW;
           let hiW = widenMax;
+          // 核心阶段已试挂的宽度：同 fps/画质下勿再从 ≥ 该宽起探
+          const fail = result.widenFail;
+          const failKey = `${fps}|${quality}|${Number.isFinite(Number(gifskiQuality)) ? Number(gifskiQuality) : ""}`;
+          if (fail && String(fail.key || "") === failKey && Number(fail.w) > lo + 2) {
+            hiW = Math.min(hiW, Number(fail.w));
+            vbbLog(`[vbb-phase] O3后加宽剪枝：上界≤${hiW}（核心已挂）`);
+          }
           const capBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.99);
+          // 首探用 O3 前体积估宽，避免 O3 变瘦后首枪过猛注定超限
+          const sizeForGuess = Math.max(1, Number(beforeO3) || best.blob.size || 1);
           const baseProbes = Math.max(1, Number(currentMediaPerf().widenProbes) || 2);
           const coarsePhone = isCoarsePointer();
           // 手机单路：加宽探次压到 ≤2，把时间留给当前这一次编码
@@ -3735,7 +3816,7 @@
             if (clipOpts.isAborted?.()) break;
             const w =
               i === 0
-                ? Math.min(hiW, Math.max(lo + 2, Math.round((lo * Math.sqrt(capBytes / Math.max(1, best.blob.size))) / 2) * 2))
+                ? Math.min(hiW, Math.max(lo + 2, Math.round((lo * Math.sqrt(capBytes / sizeForGuess)) / 2) * 2))
                 : Math.round((lo + hiW) / 2 / 2) * 2;
             if (w <= lo || w >= hiW + 1) break;
             onProgress(0.985, `O3后加宽试探 ${w}px`);
@@ -3782,6 +3863,9 @@
         } catch (_) {}
 
         return await enforceBlackboxMaxBytes(result, clipOpts);
+        } finally {
+          clearVbbRgbaTrialCache();
+        }
       }
 
       /**
@@ -4155,7 +4239,22 @@
               minW: Math.max(64, Number(cur.maxW) || V2G_BLACKBOX_BASE_W),
               maxW: widenMax,
             });
-            if (wider?.blob?.size) cur = wider;
+            if (wider?.blob?.size) {
+              const q = blackboxLadderQuality(wider);
+              const gq = Number(wider.gifskiQuality);
+              const failW = Number(wider.widenFailW) || 0;
+              cur = {
+                ...wider,
+                ...(failW > 0
+                  ? {
+                      widenFail: {
+                        w: failW,
+                        key: `${Number(fpsNow) || 0}|${q}|${Number.isFinite(gq) ? gq : ""}`,
+                      },
+                    }
+                  : {}),
+              };
+            }
           };
           // ≈30s：很松时先抬到 15，再加宽（避免 12@很宽占满预算后抬不动帧）
           if (isLong && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.75 && fpsNow < 15 - 0.01) {
@@ -4437,6 +4536,8 @@
           let guess = Math.round((lo * Math.min(4, Math.sqrt(capBytes / Math.max(1, best.blob.size)))) / 2) * 2;
           guess = Math.max(lo + 2, Math.min(hi, guess));
           let hiW = hi;
+          /** 试挂过的最窄宽度：O3 后再加宽时勿从 ≥ 此宽起探 */
+          let failHi = 0;
           // 探次按性能档：拉满/桌面 4，均衡 3，省电 2（每次试探都是一整次 gifski）
           const maxProbes = Math.max(2, Math.min(6, Number(currentMediaPerf().widenProbes) || 2));
           for (let i = 0; i < maxProbes && hiW - lo > 8; i++) {
@@ -4459,8 +4560,10 @@
               }
             } else {
               hiW = w;
+              failHi = failHi > 0 ? Math.min(failHi, w) : w;
             }
           }
+          if (failHi > 0) best = { ...best, widenFailW: failHi };
           return best;
         };
 
