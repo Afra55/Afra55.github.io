@@ -1302,11 +1302,19 @@
   
           // 大文件、或非片头窗：先按段切出（失败则仍用原片+ss）
           // 倍速时若走到预切，accurate 已强制 libx264；勿因倍速对小文件一律预切（手机易多吃一趟重编码）
+          // 黑盒试档：优先复用 segLease（同窗只切一次）；租约失败再逐次抽
           const wantSeg =
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
             (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
           if (wantSeg) {
+            const leased = await tryApplyBlackboxSegLease(opts, ffmpeg, encodeT);
+            if (aborted()) throw new Error("已取消");
+            if (leased) {
+              encodeInput = leased.encodeInput;
+              encodeSs = leased.encodeSs;
+              vbbLog(`[vbb-phase] 段租约复用（ffmpeg）`);
+            } else {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
@@ -1327,6 +1335,7 @@
                 await ffmpeg.deleteFile(segName);
               } catch (_) {}
               segName = null;
+            }
             }
           }
   
@@ -1763,7 +1772,8 @@
       function buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, { accurate = false } = {}) {
         const ss = Math.max(0, Number(startSec) || 0);
         const dur = Math.max(0.05, Number(cutDur) || 0.05);
-        if (accurate || ss > 0.05) {
+        // ss>0 一律 trim：copy+-ss 遇 B 帧会丢首 GOP / 片头前移；仅真正片头(ss≈0)才 copy
+        if (accurate || ss > 0.001) {
           // PTS trim ≡ 预览；勿用 demux -ss（易落到下一帧→片头前移几帧）
           const end = ss + dur;
           return [
@@ -1788,11 +1798,10 @@
             segName,
           ];
         }
+        // 仅 ss≈0 走到这里；勿传 -ss（B 帧源会丢首个 GOP）。非零起点已在上方走 trim。
         return [
           "-i",
           inName,
-          "-ss",
-          String(ss),
           "-t",
           String(dur),
           "-c",
@@ -1804,6 +1813,128 @@
           "-y",
           segName,
         ];
+      }
+
+      /**
+       * 黑盒试档「段租约」：同一次出片里，大文件/非片头窗只切一次 MEMFS 短片，后续试档复用。
+       * - 不替代「先导出完整编辑片再试 GIF」（exportedEdit/exactKeepFrames 不建租约）
+       * - 切窗用源 span（≥ 各档 encodeT），成片仍按各档 encodeT + 原 trim/select，画质/预览≡导出不变
+       * - 懒切：原生桥成功时根本不走进 wasm，不会白切
+       */
+      function createBlackboxSegLease(baseOpts) {
+        const file = baseOpts?.file || null;
+        const startSec = Math.max(0, Number(baseOpts?.startSec) || 0);
+        const span = Math.max(0.05, Number(baseOpts?.span) || 0.05);
+        const accurate =
+          Boolean(baseOpts?.forceAccurateCut) || (Number(baseOpts?.speed) || 1) > 1.01;
+        /** @type {{ ffmpeg: any, name: string, cutDur: number, inflight: Promise<boolean>|null, failed: boolean, released: boolean }} */
+        const state = {
+          ffmpeg: null,
+          name: "",
+          cutDur: 0,
+          inflight: null,
+          failed: false,
+          released: false,
+        };
+        return {
+          startSec,
+          span,
+          accurate,
+          get name() {
+            return state.name || "";
+          },
+          get ffmpeg() {
+            return state.ffmpeg;
+          },
+          get cutDur() {
+            return state.cutDur;
+          },
+          async ensure(ffmpeg) {
+            if (state.released || state.failed || !file || !ffmpeg) return false;
+            // 仅 trim 重编码分支可租：copy 按 span 切会因 GOP/B 帧多吐尾帧，伤预览≡导出
+            if (!(accurate || startSec > 0.05)) return false;
+            if (state.name && state.ffmpeg === ffmpeg) return true;
+            if (state.inflight) return state.inflight;
+            state.inflight = (async () => {
+              let segName = "";
+              try {
+                const ext = v2gSourceExt(file);
+                const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => {});
+                segName = `lease-seg-${Date.now().toString(36)}-${Math.random()
+                  .toString(36)
+                  .slice(2, 6)}.${ext}`;
+                const cutDur = span;
+                const cutArgs = buildVbbSegmentCutArgs(inName, segName, startSec, cutDur, {
+                  accurate: true, // 租约强制 trim 分支，与 canLease 门槛一致
+                });
+                const t0 = performance.now();
+                const code = await ffmpeg.exec(cutArgs);
+                if (code !== 0) {
+                  try {
+                    await ffmpeg.deleteFile(segName);
+                  } catch (_) {}
+                  state.failed = true;
+                  return false;
+                }
+                state.ffmpeg = ffmpeg;
+                state.name = segName;
+                state.cutDur = cutDur;
+                vbbLog(
+                  `[vbb-phase] 段租约已切 ${cutDur.toFixed(2)}s @${startSec.toFixed(2)}s · ${Math.round(
+                    performance.now() - t0
+                  )}ms · accurate=1`
+                );
+                return true;
+              } catch (err) {
+                if (segName) {
+                  try {
+                    await ffmpeg.deleteFile(segName);
+                  } catch (_) {}
+                }
+                state.failed = true;
+                vbbLog(`[vbb-phase] 段租约失败，回退逐次抽片段：${err?.message || err}`);
+                return false;
+              } finally {
+                state.inflight = null;
+              }
+            })();
+            return state.inflight;
+          },
+          async release() {
+            state.released = true;
+            const ff = state.ffmpeg;
+            const nm = state.name;
+            state.name = "";
+            state.ffmpeg = null;
+            state.cutDur = 0;
+            if (ff && nm) {
+              try {
+                await ff.deleteFile(nm);
+              } catch (_) {}
+            }
+          },
+        };
+      }
+
+      /**
+       * 试档入口：若租约可用则把编码输入换成已切短片（encodeSs=0）。
+       * @returns {Promise<{ encodeInput: string, encodeSs: number }|null>}
+       */
+      async function tryApplyBlackboxSegLease(opts, ffmpeg, encodeT) {
+        const lease = opts?.segLease;
+        if (!lease || typeof lease.ensure !== "function" || !ffmpeg) return null;
+        if (opts?.exportedEdit || opts?.exactKeepFrames) return null;
+        // 只接受 trim 租约；copy 窗勿用（B 帧源尾帧会多）
+        if (!(lease.accurate || Number(lease.startSec) > 0.05)) return null;
+        const expectStart = Math.max(0, Number(opts?.startSec) || 0);
+        if (Math.abs(Number(lease.startSec) - expectStart) > 0.001) return null;
+        const needT = Number(encodeT) || 0;
+        if (!(Number(lease.span) + 1e-3 >= needT)) return null;
+        if (!(await lease.ensure(ffmpeg))) return null;
+        if (lease.ffmpeg !== ffmpeg || !lease.name) return null;
+        // 租约按源 span 切；本档 encodeT 必须落在窗内
+        if (!(Number(lease.cutDur) + 1e-3 >= needT)) return null;
+        return { encodeInput: lease.name, encodeSs: 0 };
       }
 
       /**
@@ -2349,11 +2480,19 @@
           if (aborted()) throw new Error("已取消");
 
           // 大文件、或非片头窗：先按段切出（失败则仍用原片+ss）
+          // 黑盒试档：优先复用 segLease；租约失败再逐次抽（日志含「抽片段」便于对照次数）
           const wantSeg =
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
             (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
           if (wantSeg) {
+            const leased = await tryApplyBlackboxSegLease(opts, ffmpeg, encodeT);
+            if (aborted()) throw new Error("已取消");
+            if (leased) {
+              encodeInput = leased.encodeInput;
+              encodeSs = leased.encodeSs;
+              vbbLog(`[vbb-phase] 段租约复用（gifski）`);
+            } else {
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
@@ -2367,11 +2506,13 @@
               encodeInput = segName;
               encodeSs = 0;
               encodeT = cutDur;
+              vbbLog(`[vbb-phase] 抽片段 ${Math.round(performance.now() - tPhase)}ms`);
             } else {
               try {
                 await ffmpeg.deleteFile(segName);
               } catch (_) {}
               segName = null;
+            }
             }
           }
 
@@ -3620,6 +3761,8 @@
           exactKeepFrames: Boolean(o.exactKeepFrames || o.exportedEdit),
           segmentSpans: Array.isArray(o.segmentSpans) ? o.segmentSpans : undefined,
           srcFps: Number(o.srcFps) || Number(srcFps) || 0,
+          // 同一次出片复用预切短片；原生桥不走此字段
+          segLease: o.segLease || undefined,
         };
       }
 
@@ -3631,7 +3774,39 @@
           chunkCount:
             clipOpts?.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
         };
+        /** @type {ReturnType<typeof createBlackboxSegLease>|null} */
+        let segLease = null;
         try {
+        // 仅「会 wantSeg」且非导出编辑片时建租约；懒切，原生成功则整次不切
+        {
+          const file = clipOpts.file;
+          const startSec = Number(clipOpts.startSec);
+          const span = Number(clipOpts.span);
+          const speedPlan = resolveBlackboxSpeed(span, clipOpts.speedLimitSec);
+          const accurate =
+            Boolean(clipOpts.forceAccurateCut) || speedPlan.speed > 1.01;
+          // 只在 trim 重编码分支建租约（startSec>0.05 或倍速/强制精确）。
+          // 片头 copy 分支按 span 切会因 GOP/B 帧多吐尾帧，伤预览≡导出。
+          const canLease =
+            Boolean(file) &&
+            !clipOpts.exportedEdit &&
+            !clipOpts.exactKeepFrames &&
+            !(Array.isArray(clipOpts.segmentSpans) && clipOpts.segmentSpans.length > 1) &&
+            Number.isFinite(startSec) &&
+            Number.isFinite(span) &&
+            (file.size >= FFMPEG_SEG_FILE_BYTES || startSec > 0.05) &&
+            (startSec > 0.05 || accurate);
+          if (canLease) {
+            segLease = createBlackboxSegLease({
+              file,
+              startSec,
+              span,
+              speed: speedPlan.speed,
+              forceAccurateCut: accurate,
+            });
+            clipOpts = { ...clipOpts, segLease };
+          }
+        }
         let result = await encodeBlackboxClipCore(clipOpts);
         if (!result?.blob || !(result.blob.size > 0)) return result;
 
@@ -3696,12 +3871,26 @@
               const q = V2G_BLACKBOX_QUALITY_LADDER[qi];
               onProgress(0.97, `O3后抬画质 · q${q}·宽${targetW}`);
               vbbLog(`[vbb-phase] O3后抬画质 q${quality}→q${q} 宽${targetW}`);
+              // 与 O3 加宽同口径：显式 skipWm/allowWide，避免套上手动帧率帽或烧进水印
               const enc = await encodeBlackboxGif({
-                ...clipOpts,
+                file: clipOpts.file,
+                startSec: clipOpts.startSec,
+                span: clipOpts.span,
+                srcW: clipOpts.srcW,
+                srcH: clipOpts.srcH,
+                crop: clipOpts.crop || null,
+                chunkCount: clipOpts.chunkCount,
+                ffmpeg: clipOpts.ffmpeg || null,
+                isAborted: clipOpts.isAborted,
+                speed,
                 fps,
                 maxW: targetW,
                 quality: q,
-                speed,
+                allowWide: true,
+                skipWatermark: true,
+                skipBright: true,
+                brightness: 0,
+                ...vbbKeepFrameEncodeOpts(clipOpts, speed, result.srcFps),
                 stageLabel: `${fps}FPS·宽${targetW}·q${q}`,
                 onProgress: (local, text) => onProgress(0.97 + local * 0.02, text),
               });
@@ -3815,6 +4004,9 @@
 
         return await enforceBlackboxMaxBytes(result, clipOpts);
         } finally {
+          try {
+            if (segLease) await segLease.release();
+          } catch (_) {}
           clearVbbRgbaTrialCache();
         }
       }

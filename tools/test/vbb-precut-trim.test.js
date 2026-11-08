@@ -99,6 +99,30 @@ t("编码器：非片头窗也允许 wantSeg（失败回退原片）；倍速靠
   assert.ok(shared.includes("accurate: speed > 1.01 || Boolean(opts.forceAccurateCut)"));
 });
 
+t("段租约：同窗只切一次；导出编辑片不建租约；失败回退逐次抽", () => {
+  assert.ok(shared.includes("function createBlackboxSegLease"));
+  assert.ok(shared.includes("function tryApplyBlackboxSegLease"));
+  assert.ok(shared.includes("段租约已切") || shared.includes("段租约复用"));
+  assert.ok(shared.includes("!clipOpts.exportedEdit"));
+  assert.ok(shared.includes("!clipOpts.exactKeepFrames"));
+  assert.ok(shared.includes("segLease: o.segLease"));
+  // 租约按源 span 切，不按某一档 encodeT，避免换帧率后窗不够
+  assert.ok(/createBlackboxSegLease[\s\S]{0,800}cutDur = span/.test(shared) || shared.includes("const cutDur = span"));
+  // 只在 trim 分支建租约，避免片头 copy 多吐尾帧
+  assert.ok(shared.includes("startSec > 0.05 || accurate"));
+  assert.ok(shared.includes("lease.accurate || Number(lease.startSec) > 0.05") || shared.includes("lease.accurate ||"));
+});
+
+t("片头 copy 预切：ss≈0 不传 -ss，避免丢掉首个 GOP", () => {
+  const start = shared.indexOf("function buildVbbSegmentCutArgs");
+  const end = shared.indexOf("function createBlackboxSegLease");
+  const body = shared.slice(start, end > start ? end : start + 2500);
+  assert.ok(body.includes("ss > 0.001") || body.includes("accurate || ss > 0.001"));
+  // copy 分支不得再塞 -ss
+  const copyPart = body.slice(body.lastIndexOf("return ["));
+  assert.ok(!/"-ss"/.test(copyPart), "片头 copy 不得带 -ss");
+});
+
 t("构建产物含门闩与精确预裁标记", () => {
   assert.ok(suite.includes("shouldPrecutVbbWindow"));
   assert.ok(suite.includes("vbbClips[0].start = win.startSec"));

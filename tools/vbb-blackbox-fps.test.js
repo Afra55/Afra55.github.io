@@ -290,6 +290,11 @@ assert(
   assert(/sizeForGuess/.test(src) && /beforeO3/.test(src), "O3 后首探须用压前体积估宽");
   assert(/vbbRgbaTrialCache/.test(src) && /RGBA 缓存命中/.test(src), "同宽换画质须可复用 RGBA");
   assert(/clearVbbRgbaTrialCache/.test(src), "出片结束须清 RGBA 缓存");
+  assert(/createBlackboxSegLease/.test(src) && /tryApplyBlackboxSegLease/.test(src), "须有段租约");
+  assert(/exportedEdit[\s\S]{0,120}exactKeepFrames/.test(src.slice(src.indexOf("async function encodeBlackboxClip"))), "导出编辑片不得建段租约");
+  assert(/startSec > 0\.05 \|\| accurate/.test(src), "段租约仅 trim 分支");
+  assert(/ss≈0 时勿传 -ss|ss > 0\.001/.test(src), "片头 copy 勿丢首 GOP");
+  assert(/O3后抬画质[\s\S]{0,900}skipWatermark:\s*true/.test(src), "O3 抬画质须显式黑盒参数");
   const v2gUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/20-v2g-ui.js"), "utf8");
   assert(!/manualFpsCap/.test(v2gUi), "非黑盒视频转 GIF 不得套性能档帧率帽");
   assert(/gifskiQuality:\s*manualGifskiQuality/.test(v2gUi), "非黑盒须走 gifski 100 满档");
