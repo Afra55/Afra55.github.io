@@ -279,6 +279,13 @@ assert(
   );
   assert(/V2G_GIFSKI_WASM_MAX_FRAMES/.test(src), "须有 wasm 分块安全帧上限");
   assert(/V2G_BLACKBOX_QUALITY_LADDER\s*=\s*\[\s*1\s*,\s*4\s*,\s*6\s*,\s*8\s*,/.test(src), "92–83 须有细档 q4/q6");
+  assert(/hintFps >= 5 && hintFps <= 240/.test(src), "有调用方 srcFps 提示时不得再 1.5s 赛跑探测");
+  assert(/detectSourceFps\._inflight/.test(src), "detectSourceFps 须缓存进行中 Promise");
+  assert(
+    /chunkCount:\s*\n?\s*clipOpts\?\.chunkCount != null \? clipOpts\.chunkCount : readVbbChunkCount/.test(src) ||
+      /chunkCount:\s*[\s\S]{0,80}readVbbChunkCount\(\)/.test(src.slice(src.indexOf("async function encodeBlackboxClip"))),
+    "encodeBlackboxClip 入口须归一 chunkCount"
+  );
   const v2gUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/20-v2g-ui.js"), "utf8");
   assert(!/manualFpsCap/.test(v2gUi), "非黑盒视频转 GIF 不得套性能档帧率帽");
   assert(/gifskiQuality:\s*manualGifskiQuality/.test(v2gUi), "非黑盒须走 gifski 100 满档");

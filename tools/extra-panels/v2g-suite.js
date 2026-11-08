@@ -2805,8 +2805,11 @@
       async function detectSourceFps(srcFile) {
         if (!srcFile) return 0;
         const cache = (detectSourceFps._cache = detectSourceFps._cache || new Map());
+        const inflight = (detectSourceFps._inflight = detectSourceFps._inflight || new Map());
         const key = `${srcFile.name || ""}|${srcFile.size || 0}|${srcFile.lastModified || 0}`;
         if (cache.has(key)) return cache.get(key);
+        if (inflight.has(key)) return inflight.get(key);
+        const run = (async () => {
         let fps = 0;
         // 1) 撞档方案按 fileBytes 回填 srcFps（同文件 2547 曾被 rVFC 估成 30）
         try {
@@ -2913,6 +2916,13 @@
         }
         cache.set(key, fps);
         return fps;
+        })();
+        inflight.set(key, run);
+        try {
+          return await run;
+        } finally {
+          inflight.delete(key);
+        }
       }
 
       /**
@@ -3595,6 +3605,12 @@
 
       /** 黑盒编码对外入口：选优 → gifsicle -O3 → 若 O3 腾出预算再加宽一次 → 硬闸 ≤上限 */
       async function encodeBlackboxClip(clipOpts) {
+        // 入口一次归一 chunkCount，O3 加宽 / 硬闸与核心同口径（防手机 OOM）
+        clipOpts = {
+          ...(clipOpts || {}),
+          chunkCount:
+            clipOpts?.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
+        };
         let result = await encodeBlackboxClipCore(clipOpts);
         if (!result?.blob || !(result.blob.size > 0)) return result;
 
@@ -3898,12 +3914,16 @@
         const qualityFirst = !!(clipOpts && clipOpts.qualityFirst);
         const isAborted = clipOpts.isAborted || (() => abortV2g);
         const onProgress = clipOpts.onProgress || (() => {});
-        // 并行探测源帧率（不挡引擎加载；最多等 1.5s，超时就用默认档位）
-        const srcFpsProbe = detectSourceFps(file).catch(() => 0);
-        const srcFps = await Promise.race([
-          srcFpsProbe,
-          new Promise((r) => setTimeout(() => r(0), 1500)),
-        ]);
+        // 调用方已有可靠 srcFps（编辑器/探测）则优先用，避免 1.5s 赛跑落到 0 → 顿挫档
+        const hintFps = Number(clipOpts.srcFps) || 0;
+        let srcFps = hintFps >= 5 && hintFps <= 240 ? hintFps : 0;
+        if (!(srcFps >= 5)) {
+          const srcFpsProbe = detectSourceFps(file).catch(() => 0);
+          srcFps = await Promise.race([
+            srcFpsProbe,
+            new Promise((r) => setTimeout(() => r(0), 1500)),
+          ]);
+        }
         // 整除档从高到低：先最高帧，超限再按宽/画质让渡后降帧
         let fpsList = resolveBlackboxFpsList(span / speed, srcFps);
         let fpsCapDbg = 0;
@@ -8198,6 +8218,14 @@
       const vbbIngestedFiles = typeof WeakSet !== "undefined" ? new WeakSet() : null;
       /** 并发 load 世代：后一次选文件作废前一次半截恢复 */
       let vbbLoadEpoch = 0;
+      /**
+       * 出片成功时记下「当时编辑签名」：同签名不再写草稿（防清结果后 pagehide 复活）；
+       * 用户再改编辑 → 签名变 → 可重新落盘。
+       * @type {WeakMap<File, string>|null}
+       */
+      const vbbDraftConsumed = typeof WeakMap !== "undefined" ? new WeakMap() : null;
+      /** 单文件：恢复草稿时的旧 LS key（size/mtime 变后 prune 仍能删掉） */
+      let vbbSourceDraftOrigins = null;
       /** 批量模式当前预览/编辑的下标；单文件模式为 -1 */
       let vbbEditBatchIdx = -1;
       /** 单文件可选 trim/crop（整段模式） */
@@ -9929,8 +9957,15 @@
       function resetActiveVbbEdit() {
         const item = getActiveVbbEditItem();
         if (!item) return;
+        try {
+          if (item.file && vbbDraftConsumed) vbbDraftConsumed.delete(item.file);
+        } catch (_) {}
         item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
-        if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
+        item.draftOrigins = null;
+        if (!isVbbBatchMode()) {
+          vbbSingleEdit = item.edit;
+          vbbSourceDraftOrigins = null;
+        }
         try {
           saveVbbEditDraftsSync({ pruneSession: true });
         } catch (_) {}
@@ -10248,15 +10283,27 @@
           await loadVbbFile(file);
           vbbWorkflow = keepWorkflow;
           if (savedEdit) {
+            const cutouts = Array.isArray(savedEdit.cutouts)
+              ? savedEdit.cutouts.map((c) => ({
+                  start: Number(c.start) || 0,
+                  end: Number(c.end) || 0,
+                }))
+              : [];
+            const fps = Number(savedEdit.srcFps) || Number(only.srcFps) || 0;
             vbbSingleEdit = {
               trimStart: Number(savedEdit.trimStart) || 0,
               trimEnd: Number(savedEdit.trimEnd) || Number(vbbVideo?.duration) || 0,
+              cutouts,
               cropOn: Boolean(savedEdit.cropOn),
               crop: savedEdit.crop
                 ? { ...savedEdit.crop }
                 : makeVbbEditState(Number(vbbVideo?.duration) || 0, vbbVideo?.videoWidth || 0, vbbVideo?.videoHeight || 0).crop,
+              ...(fps >= 5 && fps <= 240 ? { srcFps: fps } : {}),
             };
+            if (fps >= 5 && fps <= 240) vbbSingleSrcFps = fps;
+            else if (Number(only.srcFps) >= 5) vbbSingleSrcFps = Number(only.srcFps);
           }
+          if (only.draftOrigins) vbbSourceDraftOrigins = only.draftOrigins;
           vbbMarks = savedMarks;
           vbbDraftStart = Number.isFinite(savedDraft) ? savedDraft : null;
           syncVbbWorkflowUi();
@@ -11227,19 +11274,107 @@
         return files;
       }
 
+      /** 编辑+打点签名：出片成功后同签名不再写草稿 */
+      function vbbDraftConsumeSig(edit, marks, draftStart) {
+        try {
+          return JSON.stringify([
+            serializeVbbEditDraft(edit) || null,
+            Array.isArray(marks)
+              ? marks.map((m) => [Number(m?.start) || 0, Number(m?.end) || 0])
+              : [],
+            draftStart != null && Number.isFinite(Number(draftStart)) ? Number(draftStart) : null,
+          ]);
+        } catch (_) {
+          return "";
+        }
+      }
+
+      function markVbbFileDraftConsumed(file, edit, marks, draftStart) {
+        if (!file || !vbbDraftConsumed) return;
+        const sig = vbbDraftConsumeSig(edit, marks, draftStart);
+        if (sig) vbbDraftConsumed.set(file, sig);
+      }
+
+      function isVbbItemDraftConsumed(item) {
+        if (!item?.file || !vbbDraftConsumed) return false;
+        const prev = vbbDraftConsumed.get(item.file);
+        if (!prev) return false;
+        return prev === vbbDraftConsumeSig(item.edit, item.marks, item.draftStart);
+      }
+
       /**
-       * 该源视频是否已全部出 GIF 成功。
-       * 成功则不再进草稿；取消/失败/未跑的继续自动保存。
+       * 该源视频是否已全部出 GIF 成功（看当前结果列表）。
+       * 真正「别再写草稿」以消费签名为准，避免清结果后 pagehide 复活。
        */
       function isVbbFileEncodeFullyDone(file) {
         if (!file || !Array.isArray(vbbClips) || !vbbClips.length) return false;
         if (!isVbbBatchMode()) {
           return vbbSourceFile === file && vbbClips.every((c) => Boolean(c?.gifBlob));
         }
-        const name = file.name || "";
-        const related = vbbClips.filter((c) => String(c?.sourceFile || "") === name);
+        const key = vbbFileDraftKey(file);
+        const name = String(file.name || "");
+        const related = vbbClips.filter((c) => {
+          if (key && c?.sourceKey && String(c.sourceKey) === key) return true;
+          if (!c?.sourceKey && String(c?.sourceFile || "") === name) return true;
+          return false;
+        });
         if (!related.length) return false;
         return related.every((c) => Boolean(c?.gifBlob));
+      }
+
+      /** 恢复时记下的旧 key，供 prune / 替换时删掉 size 漂移后的原条目 */
+      function vbbCollectDraftOriginSets() {
+        const exact = new Set();
+        const soft = new Set();
+        const add = (o) => {
+          if (!o) return;
+          const k = String(o.exact || "").trim();
+          const s = String(o.soft || "").trim();
+          if (k) exact.add(k);
+          if (s) soft.add(s);
+        };
+        if (isVbbBatchMode() && vbbBatchFiles.length) {
+          vbbBatchFiles.forEach((it) => add(it?.draftOrigins));
+        } else {
+          add(vbbSourceDraftOrigins);
+        }
+        return { exact, soft };
+      }
+
+      /** 出片成功后按 File 列表剔除草稿（拼接源片等） */
+      function pruneVbbEditDraftsForFiles(files) {
+        try {
+          const list = (files || []).filter(Boolean);
+          if (!list.length) return 0;
+          const prev = readVbbEditDraftPayload()?.items || [];
+          if (!prev.length) return 0;
+          const exact = new Set(list.map((f) => vbbFileDraftKey(f)).filter(Boolean));
+          const soft = new Set(list.map((f) => vbbFileDraftSoftKey(f)).filter(Boolean));
+          list.forEach((f) => {
+            try {
+              if (vbbDraftConsumed) vbbDraftConsumed.delete(f);
+            } catch (_) {}
+          });
+          const next = prev.filter((d) => {
+            const key = String(d?.key || "");
+            const s = vbbFileDraftSoftKey(d);
+            if (key && exact.has(key)) return false;
+            if (s && soft.has(s)) return false;
+            return true;
+          });
+          if (!next.length) {
+            localStorage.removeItem(VBB_EDIT_DRAFT_LS_KEY);
+            return 0;
+          }
+          localStorage.setItem(
+            VBB_EDIT_DRAFT_LS_KEY,
+            JSON.stringify({ v: 1, at: Date.now(), items: next })
+          );
+          return next.length;
+        } catch (err) {
+          vbbLog(`[vbb] 剔除源片草稿失败：${err?.message || err}`);
+          return 0;
+        }
       }
 
       /** 有裁剪/打点才值得进草稿；全片未改的不要写回，否则「清除草稿」会被 pagehide 立刻复活 */
@@ -11258,6 +11393,7 @@
           persistActiveVbbMarks();
           vbbBatchFiles.forEach((item) => {
             if (!item?.file) return;
+            if (isVbbItemDraftConsumed(item)) return;
             if (isVbbFileEncodeFullyDone(item.file)) return;
             const marks = Array.isArray(item.marks)
               ? item.marks.map((m) => ({ start: Number(m.start) || 0, end: Number(m.end) || 0 }))
@@ -11293,13 +11429,23 @@
             });
           });
         } else if (vbbSourceFile) {
-          if (isVbbFileEncodeFullyDone(vbbSourceFile)) return items;
           const edit = vbbSingleEdit || getActiveVbbEditItem()?.edit || null;
           const marks = Array.isArray(vbbMarks)
             ? vbbMarks.map((m) => ({ start: Number(m.start) || 0, end: Number(m.end) || 0 }))
             : [];
           const draftStart =
             vbbDraftStart != null && Number.isFinite(Number(vbbDraftStart)) ? Number(vbbDraftStart) : null;
+          if (
+            isVbbItemDraftConsumed({
+              file: vbbSourceFile,
+              edit,
+              marks,
+              draftStart,
+            })
+          ) {
+            return items;
+          }
+          if (isVbbFileEncodeFullyDone(vbbSourceFile)) return items;
           const duration = Number(vbbVideo?.duration) || 0;
           const srcW = Number(vbbVideo?.videoWidth) || 0;
           const srcH = Number(vbbVideo?.videoHeight) || 0;
@@ -11342,6 +11488,14 @@
           const sessionSoft = new Set(sessionFiles.map((f) => vbbFileDraftSoftKey(f)).filter(Boolean));
           const freshExact = new Set(fresh.map((d) => String(d?.key || "")).filter(Boolean));
           const freshSoft = new Set(fresh.map((d) => vbbFileDraftSoftKey(d)).filter(Boolean));
+          // 恢复时记下的旧 key：重选后 size/mtime 变了也能替换/剔除
+          const origins = vbbCollectDraftOriginSets();
+          origins.exact.forEach((k) => freshExact.add(k));
+          origins.soft.forEach((s) => freshSoft.add(s));
+          if (pruneSession) {
+            origins.exact.forEach((k) => sessionExact.add(k));
+            origins.soft.forEach((s) => sessionSoft.add(s));
+          }
           const kept = prev.filter((d) => {
             const key = String(d?.key || "");
             const soft = vbbFileDraftSoftKey(d);
@@ -11429,6 +11583,10 @@
           const d = findVbbEditDraftForItem(item, data.items, used);
           if (d && applyVbbEditDraftToItem(item, d)) {
             if (d.contentSig && !item.contentSig) item.contentSig = String(d.contentSig);
+            item.draftOrigins = {
+              exact: String(d.key || "").trim() || undefined,
+              soft: vbbFileDraftSoftKey(d) || undefined,
+            };
             n += 1;
           }
         });
@@ -12657,6 +12815,7 @@
         vbbNeedReselect = false;
         vbbSourceFile = null;
         vbbSourceContentSig = "";
+        vbbSourceDraftOrigins = null;
         vbbBatchFiles = [];
         vbbEditBatchIdx = -1;
         vbbSingleEdit = null;
@@ -12833,6 +12992,9 @@
             if (Array.isArray(probe.marks) && probe.marks.length) vbbMarks = probe.marks.slice();
             if (probe.draftStart != null) vbbDraftStart = probe.draftStart;
             if (probe.contentSig) vbbSourceContentSig = probe.contentSig;
+            vbbSourceDraftOrigins = probe.draftOrigins || null;
+          } else {
+            vbbSourceDraftOrigins = null;
           }
         }
         if (vbbMeta) {
@@ -12872,6 +13034,10 @@
         const ranges = computeVbbManualRanges();
         const srcW = vbbVideo.videoWidth || 0;
         const srcH = vbbVideo.videoHeight || 0;
+        // 开跑前落盘：中途失败/刷新仍能恢复打点
+        try {
+          saveVbbEditDraftsSync();
+        } catch (_) {}
         const jobEpoch = beginVbbJob();
         setVbbButtons();
         if (vbbAbort) vbbAbort.hidden = false;
@@ -12913,8 +13079,12 @@
             srcH,
             Number(vbbVideo?.duration) || 0
           );
-          let singleSrcFps = 0;
-          if (typeof detectSourceFps === "function" && vbbSourceFile) {
+          let singleSrcFps =
+            Number(vbbSingleEdit?.srcFps) ||
+            Number(getActiveVbbEditItem()?.srcFps) ||
+            Number(vbbSingleSrcFps) ||
+            0;
+          if (!(singleSrcFps >= 5) && typeof detectSourceFps === "function" && vbbSourceFile) {
             singleSrcFps = Number(await detectSourceFps(vbbSourceFile).catch(() => 0)) || 0;
           }
           const singleMeta = buildVbbFeatureMeta({
@@ -12953,6 +13123,7 @@
               seed: reuse.seed || undefined,
               speedLimitSec: vbbSpeedLimitSec(),
               crop: vbbCrop,
+              srcFps: singleSrcFps,
               onProgress: (local, text) => {
                 const p = (i + Math.min(0.98, local)) / ranges.length;
                 const stage = bumpVbbEncodeProgress(p, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), text);
@@ -12994,6 +13165,17 @@
               await new Promise((r) => setTimeout(r, hugeFile ? 180 : 80));
             }
           }
+          const allOk = vbbClips.length > 0 && vbbClips.every((c) => Boolean(c?.gifBlob));
+          if (allOk) {
+            markVbbFileDraftConsumed(vbbSourceFile, vbbSingleEdit, vbbMarks, vbbDraftStart);
+            try {
+              saveVbbEditDraftsSync({ pruneSession: true });
+            } catch (_) {}
+          } else {
+            try {
+              saveVbbEditDraftsSync();
+            } catch (_) {}
+          }
           setVbbProgress(true, 1, `完成 · ${ranges.length} 段`);
           toast(
             isVbbAutoDlEachEnabled()
@@ -13004,9 +13186,15 @@
           if (String(err?.message) !== "已取消") {
             markVbbNeedReselect(err);
             setError(vbbError, vbbFriendlyErr(err));
+            try {
+              saveVbbEditDraftsSync();
+            } catch (_) {}
           } else toastVbbCancelled();
           setVbbProgress(false, 0, "");
         } finally {
+          try {
+            saveVbbEditDraftsSync();
+          } catch (_) {}
           finishVbbJob(jobEpoch);
         }
       }
@@ -13670,11 +13858,15 @@
         if (vbbAbort) vbbAbort.hidden = false;
         setError(vbbError, "");
         const items = vbbBatchFiles.slice();
+        const sourceFiles = items.map((it) => it?.file).filter(Boolean);
         const total = items.length;
         const names = [];
+        /** 拼接用到的 ffmpeg 引用；finally 只删文件，勿再 getFfmpegInstance 重建 worker */
+        let mergeFf = null;
         try {
           await prewarmFfmpegEngine().catch(() => {});
           const ffmpeg = await getFfmpegInstance();
+          mergeFf = ffmpeg;
           for (let i = 0; i < total; i++) {
             if (abortVbb) throw new Error("已取消");
             setVbbProgress(true, (i / total) * 0.45, `拼接 · 写入 ${i + 1}/${total}`, {
@@ -13798,21 +13990,45 @@
           const blob = new Blob([bytes], { type: "video/mp4" });
           if (!blob.size) throw new Error("拼接结果为空");
           const mergedFile = new File([blob], `merged-${Date.now()}.mp4`, { type: "video/mp4" });
+          // GIF 阶段前立刻释放 MEMFS：源片 + merged，避免与试档叠峰
+          try {
+            for (const nm of names) {
+              try {
+                await ffmpeg.deleteFile(nm);
+              } catch (_) {}
+            }
+            try {
+              await ffmpeg.deleteFile("merged.mp4");
+            } catch (_) {}
+            names.length = 0;
+          } catch (_) {}
           setVbbProgress(true, 0.92, `拼接完成 · ${formatKb(blob.size)} · 开始转黑盒 GIF…`);
           // 拼接阶段结束，交给整段黑盒（新 job）；避免旧 finally 误清新任务
           finishVbbJob(jobEpoch);
           await loadVbbFile(mergedFile);
           toast("已拼接，开始生成黑盒 GIF…");
-          await runVbbSingleBlackbox();
+          const gifOk = await runVbbSingleBlackbox();
+          if (gifOk) {
+            // 合并片草稿已在单段成功时清；源片编辑也一并剔除，避免重选旧片复活
+            pruneVbbEditDraftsForFiles(sourceFiles);
+          }
         } catch (err) {
           if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
           else toastVbbCancelled();
           setVbbProgress(false, 0, "");
         } finally {
           try {
-            for (const nm of names) await getFfmpegInstance().then((ff) => ff.deleteFile(nm)).catch(() => {});
-            const ff = await getFfmpegInstance();
-            await ff.deleteFile("merged.mp4");
+            const ff = mergeFf;
+            if (ff) {
+              for (const nm of names) {
+                try {
+                  await ff.deleteFile(nm);
+                } catch (_) {}
+              }
+              try {
+                await ff.deleteFile("merged.mp4");
+              } catch (_) {}
+            }
           } catch (_) {}
           finishVbbJob(jobEpoch);
         }
@@ -13868,6 +14084,7 @@
           span: job.span,
           sourceName: job.sourceName,
           sourceFile: job.item.file.name || "video",
+          sourceKey: vbbFileDraftKey(job.item.file) || "",
           srcW: Number(job.item?.srcW) || 0,
           srcH: Number(job.item?.srcH) || 0,
           gifBlob: null,
@@ -14163,7 +14380,15 @@
                 ok += 1;
                 maybeAutoDownloadVbbGif(vbbClips[i], i);
                 refreshVbbClipRow(i);
-                // 该源片全部成功则从草稿剔除；未完成的继续留着
+                // 该源片全部成功则消费签名 + 从草稿剔除；未完成的继续留着
+                if (isVbbFileEncodeFullyDone(job.item.file)) {
+                  markVbbFileDraftConsumed(
+                    job.item.file,
+                    job.item.edit,
+                    job.item.marks,
+                    job.item.draftStart
+                  );
+                }
                 try {
                   saveVbbEditDraftsSync({ pruneSession: true });
                 } catch (_) {}
@@ -14307,7 +14532,7 @@
       }
 
         async function runVbbSingleBlackbox() {
-          if (!vbbSourceFile || !vbbVideo?.src || vbbBusy) return;
+          if (!vbbSourceFile || !vbbVideo?.src || vbbBusy) return false;
           const duration = Number(vbbVideo.duration) || 0;
           if (!(duration >= VBB_MIN_SPAN)) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
           const srcW = vbbVideo.videoWidth || 0;
@@ -14343,10 +14568,16 @@
         // 预热前就标 running：避免空队列却显示「排队 1 分+」
         setVbbClipJob(0, { status: "running", progress: 0.01, text: "①准备编码器…" });
         let durationLabel = `${win.span.toFixed(1)}s`;
+        let encodeOk = false;
         try {
           await prewarmFfmpegEngine().catch(() => {});
           bumpVbbEncodeProgress(0.03, "整段转换", "准备编码器…");
           setVbbClipJob(0, { status: "running", progress: 0.02, text: formatVbbJobStage("准备编码…") });
+          const hintFps =
+            Number(win.edit?.srcFps) ||
+            Number(getActiveVbbEditItem()?.srcFps) ||
+            Number(vbbSingleSrcFps) ||
+            0;
           const prepared = await prepareVbbEncodeSource(
             vbbSourceFile,
             win.edit,
@@ -14356,11 +14587,7 @@
             {
               startSec: win.startSec,
               span: win.span,
-              srcFps:
-                Number(win.edit?.srcFps) ||
-                Number(getActiveVbbEditItem()?.srcFps) ||
-                Number(vbbSingleSrcFps) ||
-                0,
+              srcFps: hintFps,
               onProgress: (local, text) => {
                 const stage = bumpVbbEncodeProgress(Math.min(0.12, local * 0.12), "整段转换", text || "应用删中间…");
                 setVbbClipJob(0, { status: "running", progress: Math.min(0.12, local * 0.12), text: stage });
@@ -14393,7 +14620,7 @@
             exportedEdit: Boolean(prepared.exportedEdit),
             exactKeepFrames: Boolean(prepared.exportedEdit) || prepared.startSec <= 0.0005,
             segmentSpans: prepared.segmentSpans,
-            srcFps: Number(win.edit?.srcFps) || Number(getActiveVbbEditItem()?.srcFps) || 0,
+            srcFps: hintFps || Number(prepared.srcFps) || 0,
             isAborted: () => abortVbb,
             onProgress: (local, text) => {
               const p = Math.min(0.98, 0.12 + Math.min(0.86, local) * 0.86);
@@ -14425,9 +14652,11 @@
           notifyVbbProgress(0, 1);
           maybeAutoDownloadVbbGif(vbbClips[0], 0);
           refreshVbbClipRow(0);
+          markVbbFileDraftConsumed(vbbSourceFile, vbbSingleEdit, vbbMarks, vbbDraftStart);
           try {
             saveVbbEditDraftsSync({ pruneSession: true }); // 整段成功 → 清掉该片草稿
           } catch (_) {}
+          encodeOk = true;
           const doneBits = [
             formatKb(encoded.blob.size),
             encoded.fps ? `${encoded.fps} FPS` : "",
@@ -14462,6 +14691,7 @@
           } catch (_) {}
           finishVbbJob(jobEpoch);
         }
+        return encodeOk;
       }
 
       async function runVbbOneClick() {

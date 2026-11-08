@@ -160,6 +160,25 @@ t("同一次选文件双投递：WeakSet 去重 + loadEpoch 作废半截恢复",
   assert.ok(src.includes("document capture + input change") || src.includes("双投递"));
 });
 
+t("出片成功清草稿：消费签名 + 手动/整段 prune + 来源 key", () => {
+  assert.ok(src.includes("markVbbFileDraftConsumed"));
+  assert.ok(src.includes("isVbbItemDraftConsumed"));
+  assert.ok(src.includes("vbbDraftConsumeSig"));
+  assert.ok(src.includes("draftOrigins"));
+  assert.ok(src.includes("vbbCollectDraftOriginSets"));
+  assert.ok(src.includes("pruneVbbEditDraftsForFiles"));
+  const manual = src.slice(
+    src.indexOf("async function runVbbManualBlackbox"),
+    src.indexOf("function vbbSpeedLimitSec")
+  );
+  assert.ok(manual.includes("pruneSession: true"));
+  assert.ok(manual.includes("markVbbFileDraftConsumed"));
+  assert.ok(src.includes("sourceKey: vbbFileDraftKey"));
+  // 批量缩到 1 个时保留 cutouts，勿丢掉删中间
+  const rm = src.slice(src.indexOf("async function removeVbbBatchItem"), src.indexOf("function vbbGifBaseName"));
+  assert.ok(rm.includes("cutouts"));
+});
+
 t("无实质编辑不写草稿，避免清除后被 pagehide 复活", () => {
   assert.ok(src.includes("vbbDraftPayloadWorthSaving"));
   assert.ok(src.includes("确有编辑内容"));

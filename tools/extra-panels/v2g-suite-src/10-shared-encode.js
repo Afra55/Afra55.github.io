@@ -2756,8 +2756,11 @@
       async function detectSourceFps(srcFile) {
         if (!srcFile) return 0;
         const cache = (detectSourceFps._cache = detectSourceFps._cache || new Map());
+        const inflight = (detectSourceFps._inflight = detectSourceFps._inflight || new Map());
         const key = `${srcFile.name || ""}|${srcFile.size || 0}|${srcFile.lastModified || 0}`;
         if (cache.has(key)) return cache.get(key);
+        if (inflight.has(key)) return inflight.get(key);
+        const run = (async () => {
         let fps = 0;
         // 1) 撞档方案按 fileBytes 回填 srcFps（同文件 2547 曾被 rVFC 估成 30）
         try {
@@ -2864,6 +2867,13 @@
         }
         cache.set(key, fps);
         return fps;
+        })();
+        inflight.set(key, run);
+        try {
+          return await run;
+        } finally {
+          inflight.delete(key);
+        }
       }
 
       /**
@@ -3546,6 +3556,12 @@
 
       /** 黑盒编码对外入口：选优 → gifsicle -O3 → 若 O3 腾出预算再加宽一次 → 硬闸 ≤上限 */
       async function encodeBlackboxClip(clipOpts) {
+        // 入口一次归一 chunkCount，O3 加宽 / 硬闸与核心同口径（防手机 OOM）
+        clipOpts = {
+          ...(clipOpts || {}),
+          chunkCount:
+            clipOpts?.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
+        };
         let result = await encodeBlackboxClipCore(clipOpts);
         if (!result?.blob || !(result.blob.size > 0)) return result;
 
@@ -3849,12 +3865,16 @@
         const qualityFirst = !!(clipOpts && clipOpts.qualityFirst);
         const isAborted = clipOpts.isAborted || (() => abortV2g);
         const onProgress = clipOpts.onProgress || (() => {});
-        // 并行探测源帧率（不挡引擎加载；最多等 1.5s，超时就用默认档位）
-        const srcFpsProbe = detectSourceFps(file).catch(() => 0);
-        const srcFps = await Promise.race([
-          srcFpsProbe,
-          new Promise((r) => setTimeout(() => r(0), 1500)),
-        ]);
+        // 调用方已有可靠 srcFps（编辑器/探测）则优先用，避免 1.5s 赛跑落到 0 → 顿挫档
+        const hintFps = Number(clipOpts.srcFps) || 0;
+        let srcFps = hintFps >= 5 && hintFps <= 240 ? hintFps : 0;
+        if (!(srcFps >= 5)) {
+          const srcFpsProbe = detectSourceFps(file).catch(() => 0);
+          srcFps = await Promise.race([
+            srcFpsProbe,
+            new Promise((r) => setTimeout(() => r(0), 1500)),
+          ]);
+        }
         // 整除档从高到低：先最高帧，超限再按宽/画质让渡后降帧
         let fpsList = resolveBlackboxFpsList(span / speed, srcFps);
         let fpsCapDbg = 0;
