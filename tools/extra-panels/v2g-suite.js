@@ -8194,6 +8194,10 @@
       let vbbSourceContentSig = "";
       /** @type {{ file: File, duration: number, srcW: number, srcH: number, edit?: object, marks?: {start:number,end:number}[], draftStart?: number|null, contentSig?: string }[]} */
       let vbbBatchFiles = [];
+      /** 同一 File 对象只 ingest 一次（document capture + input change 会双投递） */
+      const vbbIngestedFiles = typeof WeakSet !== "undefined" ? new WeakSet() : null;
+      /** 并发 load 世代：后一次选文件作废前一次半截恢复 */
+      let vbbLoadEpoch = 0;
       /** 批量模式当前预览/编辑的下标；单文件模式为 -1 */
       let vbbEditBatchIdx = -1;
       /** 单文件可选 trim/crop（整段模式） */
@@ -9852,9 +9856,11 @@
               const sig = await ensureVbbItemContentSig(item);
               if (sig && !isVbbBatchMode()) vbbSourceContentSig = sig;
             } catch (_) {}
-            const savedN = saveVbbEditDraftsSync();
+            const dirtyNow = vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH);
+            // 无改动 → prune 掉本片旧草稿；有改动 → upsert
+            const savedN = saveVbbEditDraftsSync({ pruneSession: !dirtyNow });
             let verified = savedN > 0;
-            if (verified && vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) {
+            if (verified && dirtyNow) {
               try {
                 const payload = readVbbEditDraftPayload();
                 const hit = findVbbEditDraftForItem(
@@ -9882,7 +9888,7 @@
             syncVbbEditPreview();
             // 立刻按 keep 校正一次，避免落在删段内
             enforceVbbEditPlaybackWindow();
-            if (!vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) {
+            if (!dirtyNow) {
               toast("已恢复为原片范围");
             } else if (verified) {
               toast("已保存编辑 · 刷新后重选同片会自动套用");
@@ -9926,7 +9932,7 @@
         item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
         if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
         try {
-          saveVbbEditDraftsSync();
+          saveVbbEditDraftsSync({ pruneSession: true });
         } catch (_) {}
         syncVbbEditUi();
         syncVbbEditPreview();
@@ -11317,11 +11323,14 @@
 
       /**
        * 同步写入 localStorage（取消/切后台/刷新前保住未完成裁剪；不含视频文件）。
-       * 按「当前会话文件」合并：只更新/剔除本会话条目，保留其它视频草稿。
-       * 根因修复：选文件前 clearVbb 时内存已空，旧逻辑 items=[] 会整键擦掉，导致下次同片恢复失败。
+       * @param {{ pruneSession?: boolean }} [opts]
+       * - 默认：只替换 fresh 里同 key 的旧条目；会话有文件但 fresh 空时**不删**草稿
+       *   （防：同一次选文件双投递 → clearVbb 把待恢复草稿擦掉）
+       * - pruneSession:true：剔除整个会话文件对应草稿（重置编辑 / 出片成功 / 完成且无改动）
        */
-      function saveVbbEditDraftsSync() {
+      function saveVbbEditDraftsSync(opts = {}) {
         try {
+          const pruneSession = Boolean(opts.pruneSession);
           const fresh = collectVbbEditDraftItems();
           const sessionFiles = vbbEditDraftSessionFiles();
           const prev = readVbbEditDraftPayload()?.items || [];
@@ -11331,11 +11340,19 @@
           }
           const sessionExact = new Set(sessionFiles.map((f) => vbbFileDraftKey(f)).filter(Boolean));
           const sessionSoft = new Set(sessionFiles.map((f) => vbbFileDraftSoftKey(f)).filter(Boolean));
+          const freshExact = new Set(fresh.map((d) => String(d?.key || "")).filter(Boolean));
+          const freshSoft = new Set(fresh.map((d) => vbbFileDraftSoftKey(d)).filter(Boolean));
           const kept = prev.filter((d) => {
             const key = String(d?.key || "");
             const soft = vbbFileDraftSoftKey(d);
-            if (key && sessionExact.has(key)) return false;
-            if (soft && sessionSoft.has(soft)) return false;
+            // fresh 有同片 → 用新条目替换
+            if (key && freshExact.has(key)) return false;
+            if (soft && freshSoft.has(soft)) return false;
+            // 仅显式 prune 时才清「会话里有、但本轮不写草稿」的片
+            if (pruneSession) {
+              if (key && sessionExact.has(key)) return false;
+              if (soft && sessionSoft.has(soft)) return false;
+            }
             return true;
           });
           const items = kept.concat(fresh);
@@ -12684,10 +12701,16 @@
           toast("未识别为视频文件");
           return;
         }
+        // document capture + input change 会用同一批 File 投递两次；第二次会 clear 掉刚要恢复的草稿
+        if (vbbIngestedFiles && files.length && files.every((f) => vbbIngestedFiles.has(f))) {
+          return;
+        }
+        if (vbbIngestedFiles) files.forEach((f) => vbbIngestedFiles.add(f));
         if (files.length === 1) {
           await loadVbbFile(files[0]);
           return;
         }
+        const loadEpoch = ++vbbLoadEpoch;
         clearVbb();
         vbbWorkflow = "single";
         syncVbbWorkflowUi();
@@ -12695,21 +12718,25 @@
         toast(`已选择 ${files.length} 个视频，仅本机处理，不会上传`);
         const probed = [];
         for (const file of files) {
+          if (loadEpoch !== vbbLoadEpoch) return;
           const item = await probeVbbVideoFile(file);
           ensureVbbItemEdit(item);
           probed.push(item);
         }
+        if (loadEpoch !== vbbLoadEpoch) return;
         vbbBatchFiles = probed;
         for (const it of vbbBatchFiles) {
           try {
             await ensureVbbItemContentSig(it);
           } catch (_) {}
         }
+        if (loadEpoch !== vbbLoadEpoch) return;
         const restored = restoreVbbEditDrafts(vbbBatchFiles);
         renderVbbBatchList();
         syncVbbBatchMeta();
         setVbbButtons();
         await selectVbbBatchItem(0, { force: true });
+        if (loadEpoch !== vbbLoadEpoch) return;
         prefetchVbbVtrimEditor();
         toast(
           restored > 0
@@ -12720,6 +12747,7 @@
   
       async function loadVbbFile(file) {
         if (!file) return;
+        const loadEpoch = ++vbbLoadEpoch;
         const keepSession =
           vbbNeedReselect &&
           !vbbBusy &&
@@ -12736,6 +12764,7 @@
         const pinned = await pinLocalMediaFile(file, (ratio, text) => {
           if (vbbMeta) vbbMeta.textContent = formatLocalPickMeta(file, text || "锁定本地副本…");
         });
+        if (loadEpoch !== vbbLoadEpoch) return;
 
         if (keepSession) {
           const oldUrl = vbbObjectUrl;
@@ -12743,6 +12772,7 @@
           vbbObjectUrl = URL.createObjectURL(pinned);
           attachLocalVideoPreview(vbbVideo, vbbObjectUrl);
           await waitVideoMetadata(vbbVideo);
+          if (loadEpoch !== vbbLoadEpoch) return;
           // 新预览挂好后再 revoke 旧 URL，避免中间态黑屏/读失败
           if (oldUrl && oldUrl !== vbbObjectUrl) {
             try {
@@ -12777,6 +12807,7 @@
         vbbObjectUrl = URL.createObjectURL(pinned);
         attachLocalVideoPreview(vbbVideo, vbbObjectUrl);
         await waitVideoMetadata(vbbVideo);
+        if (loadEpoch !== vbbLoadEpoch) return;
         const duration = Number(vbbVideo.duration) || 0;
         if (!(duration > 0) || !vbbVideo.videoWidth) throw new Error("视频时长或尺寸无效");
         if (duration < VBB_MIN_SPAN) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
@@ -12795,6 +12826,7 @@
             probe.contentSig = await vbbFileContentSig(pinned);
             if (probe.contentSig) vbbSourceContentSig = probe.contentSig;
           } catch (_) {}
+          if (loadEpoch !== vbbLoadEpoch) return;
           restored = restoreVbbEditDrafts([probe]);
           if (restored > 0) {
             vbbSingleEdit = probe.edit;
@@ -14133,7 +14165,7 @@
                 refreshVbbClipRow(i);
                 // 该源片全部成功则从草稿剔除；未完成的继续留着
                 try {
-                  saveVbbEditDraftsSync();
+                  saveVbbEditDraftsSync({ pruneSession: true });
                 } catch (_) {}
                 vbbLog(
                   `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(elapsedSec * 1000)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · ${encoded.compressRounds || 0}轮 · conc=${conc}`
@@ -14394,7 +14426,7 @@
           maybeAutoDownloadVbbGif(vbbClips[0], 0);
           refreshVbbClipRow(0);
           try {
-            saveVbbEditDraftsSync(); // 整段成功 → 清掉该片草稿
+            saveVbbEditDraftsSync({ pruneSession: true }); // 整段成功 → 清掉该片草稿
           } catch (_) {}
           const doneBits = [
             formatKb(encoded.blob.size),
