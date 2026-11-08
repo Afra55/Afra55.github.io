@@ -1241,6 +1241,24 @@
       }
 
       /**
+       * 打点/切片窗 → 单段 keep edit，复用 materializeVbbKeepVideo 的校准+frameRaw。
+       * 勿塞进用户编辑（cutouts/crop），避免打点误带上整片删中间。
+       */
+      function vbbSyntheticKeepEdit(startSec, span, srcFps) {
+        const start = Math.max(0, Number(startSec) || 0);
+        const end = start + Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+        const fps = Number(srcFps) || 0;
+        return {
+          trimStart: start,
+          trimEnd: end,
+          cutouts: [],
+          cropOn: false,
+          crop: { x: 0, y: 0, w: 0, h: 0 },
+          ...(fps >= 5 && fps <= 240 ? { srcFps: fps } : {}),
+        };
+      }
+
+      /**
        * 仅「明显裁短」才预裁：避免轻微 trim / 整段路径多一次重编码。
        * 例：30s→7s 会触发；剪掉 1s、或保留大半段 → 仍走旧 start/span。
        */
@@ -1388,6 +1406,7 @@
 
       /**
        * 编码前：有时间编辑则先导出编辑片，GIF 只吃导出片（startSec=0）。
+       * 打点/切片窗（fromMark）：合成单段 keep，走与编辑相同的校准+frameRaw；失败再回退秒切。
        * @returns {Promise<{ file: File, startSec: number, span: number, srcW: number, srcH: number, edit: any, cutNote: string, exportedEdit: boolean, segmentSpans: number[] }>}
        */
       async function prepareVbbEncodeSource(file, edit, srcW, srcH, duration, opts = {}) {
@@ -1402,13 +1421,13 @@
         let exportedEdit = false;
         let segmentSpans = [];
         const fullDur = Math.max(0, Number(duration) || 0);
+        const fpsHint =
+          Number(opts.srcFps) ||
+          Number(edit?.srcFps) ||
+          Number(file?.srcFps) ||
+          0;
         if (!fromMark && edit && vbbEditNeedsExport(edit, duration)) {
           // 导出切片与预览共用源帧时钟：编码前把探测到的 srcFps 写进 edit
-          const fpsHint =
-            Number(opts.srcFps) ||
-            Number(edit.srcFps) ||
-            Number(file?.srcFps) ||
-            0;
           if (fpsHint >= 5 && !(Number(edit.srcFps) >= 5)) {
             try {
               edit.srcFps = fpsHint;
@@ -1455,6 +1474,41 @@
           if (keeps.length === 1) {
             startSec = Number(keeps[0].start) || startSec;
             span = Math.max(VBB_MIN_SPAN, (Number(keeps[0].end) || 0) - startSec);
+          }
+        } else if (fromMark) {
+          // 打点/切片：勿用用户整片 edit（会误带 cutouts）；合成单窗走校准导出
+          const markSpan = span;
+          try {
+            const syn = vbbSyntheticKeepEdit(startSec, span, fpsHint);
+            opts.onProgress?.(0.04, "按预览对齐切片…");
+            const mat = await materializeVbbKeepVideo(
+              file,
+              syn,
+              srcW,
+              srcH,
+              duration,
+              opts.onProgress,
+              opts.ffmpeg || null
+            );
+            if (mat.materialized) {
+              outFile = mat.file;
+              startSec = 0;
+              span = Math.max(
+                VBB_MIN_SPAN,
+                vbbMaterializedKeepDuration(mat.duration, markSpan, fullDur)
+              );
+              outW = mat.srcW;
+              outH = mat.srcH;
+              segmentSpans = Array.isArray(mat.segmentSpans)
+                ? mat.segmentSpans
+                : [span];
+              alreadyMaterialized = true;
+              exportedEdit = true;
+              cutNote = `打点 ${span.toFixed(1)}s`;
+            }
+          } catch (err) {
+            vbbLog(`[vbb] 打点对齐失败，回退秒切：${err?.message || err}`);
+            opts.onProgress?.(0.06, "对齐失败 · 回退秒切…");
           }
         }
         // 未走导出时：明显裁短仍预裁成短片，再 GIF
@@ -4973,6 +5027,7 @@
             qualityFirst: vbbQualityFirstOn(),
             crop: vbbCrop,
           });
+          const duration = Number(vbbVideo?.duration) || 0;
           for (let i = 0; i < ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = ranges[i];
@@ -4990,22 +5045,62 @@
               sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`,
               busy: true,
             });
-            const encoded = await encodeBlackboxClip({
-              file: vbbSourceFile,
-              startSec: r.start,
-              span: r.span,
+            // 打点窗：与编辑同路校准导出；失败 prepare 内回退秒切
+            const prepared = await prepareVbbEncodeSource(
+              vbbSourceFile,
+              null,
               srcW,
               srcH,
+              duration,
+              {
+                fromMark: true,
+                startSec: r.start,
+                span: r.span,
+                srcFps: singleSrcFps,
+                onProgress: (local, text) => {
+                  const p = (i + Math.min(0.12, Number(local) || 0) * 0.12) / ranges.length;
+                  const stage = bumpVbbEncodeProgress(
+                    p,
+                    vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }),
+                    text || "按预览对齐…"
+                  );
+                  setVbbClipJob(i, {
+                    status: "running",
+                    progress: Math.min(0.12, 0.02 + Math.min(0.1, Number(local) || 0) * 0.1),
+                    text: stage,
+                  });
+                },
+              }
+            );
+            if (abortVbb) throw new Error("已取消");
+            // 结果卡仍显示打点起点（prepared.startSec 常为 0）
+            vbbClips[i].start = r.start;
+            vbbClips[i].span = prepared.span;
+            const encoded = await encodeBlackboxClip({
+              file: prepared.file,
+              startSec: prepared.startSec,
+              span: prepared.span,
+              srcW: prepared.srcW,
+              srcH: prepared.srcH,
               qualityFirst: vbbQualityFirstOn(),
               isAborted: () => abortVbb,
               seed: reuse.seed || undefined,
               speedLimitSec: vbbSpeedLimitSec(),
               crop: vbbCrop,
+              forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
+              keepAligned: true,
+              exportedEdit: Boolean(prepared.exportedEdit),
+              exactKeepFrames: Boolean(prepared.exportedEdit) || prepared.startSec <= 0.0005,
+              segmentSpans: prepared.segmentSpans,
               srcFps: singleSrcFps,
               onProgress: (local, text) => {
-                const p = (i + Math.min(0.98, local)) / ranges.length;
+                const p = (i + Math.min(0.98, 0.12 + Math.min(0.86, Number(local) || 0) * 0.86)) / ranges.length;
                 const stage = bumpVbbEncodeProgress(p, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), text);
-                setVbbClipJob(i, { status: "running", progress: Math.min(0.98, local), text: stage });
+                setVbbClipJob(i, {
+                  status: "running",
+                  progress: Math.min(0.98, 0.12 + Math.min(0.86, Number(local) || 0) * 0.86),
+                  text: stage,
+                });
               },
             });
             if (abortVbb) throw new Error("已取消");
@@ -5014,6 +5109,7 @@
               encoded,
               [
                 ...(reuse.fromCache ? ["沿用方案"] : []),
+                ...(prepared.cutNote ? [prepared.cutNote] : []),
                 ...(vbbCrop ? ["去色边"] : []),
               ].filter(Boolean)
             );
@@ -6770,6 +6866,8 @@
             qualityFirst: vbbQualityFirstOn(),
             crop: vbbCrop,
           });
+          const execDuration =
+            Number(vbbVideo?.duration) || Number(vbbAnalysis?.duration) || 0;
           for (let i = 0; i < plan.ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = plan.ranges[i];
@@ -6798,6 +6896,42 @@
             setVbbClipJob(i, { status: "running", progress: 0.02, text: encodeTag ? `${encodeTag}…` : "编码…" });
             setVbbProgress(true, i / plan.ranges.length, mainLine(), { sub: timeRange, busy: true });
             try {
+              // 切片窗：与编辑/打点同路校准导出；失败则 prepare 内回退秒切
+              const prepared = await prepareVbbEncodeSource(
+                vbbSourceFile,
+                null,
+                srcW,
+                srcH,
+                execDuration,
+                {
+                  fromMark: true,
+                  startSec: r.start,
+                  span: r.span,
+                  srcFps: execSrcFps,
+                  onProgress: (local, text) => {
+                    const p = Math.min(0.12, 0.02 + Math.min(0.1, Number(local) || 0) * 0.1);
+                    const stage = vbbTickerLine(text) || "按预览对齐…";
+                    setVbbClipJob(i, { status: "running", progress: p, text: stage });
+                    bumpProgress(p, stage);
+                  },
+                }
+              );
+              if (abortVbb) throw new Error("已取消");
+              clip.start = r.start;
+              clip.span = prepared.span;
+              const encFile = prepared.file;
+              const encStart = prepared.startSec;
+              const encSpan = prepared.span;
+              const encW = prepared.srcW;
+              const encH = prepared.srcH;
+              const encAlign = {
+                keepAligned: true,
+                exportedEdit: Boolean(prepared.exportedEdit),
+                exactKeepFrames: Boolean(prepared.exportedEdit) || encStart <= 0.0005,
+                forceAccurateCut: Boolean(prepared.cutNote) || encStart > 0.05,
+                segmentSpans: prepared.segmentSpans,
+                srcFps: execSrcFps,
+              };
               let encoded;
               let usedFallback = false;
               let usedWidth = reuseSeed && !reuseSeed.usedFallback
@@ -6806,21 +6940,22 @@
               if (isWide && !(reuseSeed && reuseSeed.usedFallback)) {
                 const tryEncodeWide = async (maxW, localBase, localSpan) =>
                   encodeBlackboxGif({
-                    file: vbbSourceFile,
+                    file: encFile,
                     fps: reuseSeed?.fps || 15,
                     maxW,
                     quality: V2G_BLACKBOX_QUALITY,
-                    startSec: r.start,
-                    span: r.span,
-                    srcW,
-                    srcH,
-                    speed: vbbSpeedFactorForSpan(r.span),
+                    startSec: encStart,
+                    span: encSpan,
+                    srcW: encW,
+                    srcH: encH,
+                    speed: vbbSpeedFactorForSpan(encSpan),
                     crop: vbbCrop,
                     skipWatermark: true,
                     skipBright: true,
                     brightness: 0,
                     isAborted,
                     stageLabel: `#${i + 1}`,
+                    ...encAlign,
                     onProgress: (local, text) => {
                       const p = localBase + Math.min(1, local) * localSpan;
                       const stage = vbbTickerLine(text) || `宽${maxW}`;
@@ -6829,7 +6964,7 @@
                     },
                   });
   
-                encoded = await tryEncodeWide(usedWidth, 0, 0.55);
+                encoded = await tryEncodeWide(usedWidth, 0.12, 0.43);
                 if (!encoded?.blob) throw new Error("未产出 GIF");
                 encoded = { ...encoded, compressRounds: encoded.compressRounds || 0, maxW: usedWidth };
                 while (encoded?.blob?.size > V2G_BLACKBOX_MAX_BYTES && usedWidth > V2G_BLACKBOX_BASE_W) {
@@ -6856,16 +6991,17 @@
                   setVbbClipJob(i, { status: "running", progress: 0.8, text: "超限压缩…" });
                   bumpProgress(0.8, "超限压缩");
                   encoded = await encodeBlackboxClip({
-                    file: vbbSourceFile,
-                    startSec: r.start,
-                    span: r.span,
-                    srcW,
-                    srcH,
+                    file: encFile,
+                    startSec: encStart,
+                    span: encSpan,
+                    srcW: encW,
+                    srcH: encH,
                     qualityFirst: vbbQualityFirstOn(),
                     isAborted,
                     seed: reuseSeed || null,
                     speedLimitSec: vbbSpeedLimitSec(),
                     crop: vbbCrop,
+                    ...encAlign,
                     onProgress: (local, text) => {
                       const p = 0.8 + Math.min(0.18, local) * 0.18;
                       const stage = vbbTickerLine(text) || "压缩";
@@ -6877,18 +7013,19 @@
                 }
               } else {
                 encoded = await encodeBlackboxClip({
-                  file: vbbSourceFile,
-                  startSec: r.start,
-                  span: r.span,
-                  srcW,
-                  srcH,
+                  file: encFile,
+                  startSec: encStart,
+                  span: encSpan,
+                  srcW: encW,
+                  srcH: encH,
                   qualityFirst: vbbQualityFirstOn(),
                   isAborted,
                   seed: reuseSeed || null,
                   speedLimitSec: vbbSpeedLimitSec(),
                   crop: vbbCrop,
+                  ...encAlign,
                   onProgress: (local, text) => {
-                    const p = Math.min(0.98, Number(local) || 0);
+                    const p = Math.min(0.98, 0.12 + Math.min(0.86, Number(local) || 0) * 0.86);
                     const stage = vbbTickerLine(text) || "编码…";
                     setVbbClipJob(i, { status: "running", progress: p, text: stage });
                     bumpProgress(p, stage);
@@ -6904,6 +7041,7 @@
               // 与整段/批量同一套：挂 meta + gifNote（含画质），勿手写漏掉 gifskiQuality
               const extraBits = [];
               if (reuse.fromCache) extraBits.push("沿用方案");
+              if (prepared.cutNote) extraBits.push(prepared.cutNote);
               if (usedFallback) extraBits.push("超限");
               else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) {
                 extraBits.push(`已降宽${usedWidth}`);

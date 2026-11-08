@@ -75,15 +75,33 @@ t("整段结果卡时间轴保留编辑起点（勿写成 prepared 的 0）", ()
   assert.ok(src.includes("prepared.startSec 常为 0"));
 });
 
-t("手动打点 / 切分方案未强行改接线（仍可直接 encode）", () => {
+t("手动打点 / 切分方案：与编辑同路 prepare(fromMark) 校准导出", () => {
+  assert.ok(src.includes("function vbbSyntheticKeepEdit"));
+  assert.ok(src.includes("打点/切片窗（fromMark）"));
+  const prep = src.slice(
+    src.indexOf("async function prepareVbbEncodeSource"),
+    src.indexOf("function intersectVbbCrops")
+  );
+  assert.ok(prep.includes("fromMark"), "prepare 须识别 fromMark");
+  assert.ok(prep.includes("vbbSyntheticKeepEdit"), "打点合成单窗 keep");
+  assert.ok(prep.includes("materializeVbbKeepVideo"), "须走校准导出");
+  assert.ok(prep.includes("回退秒切"), "失败须回退秒切");
+
   const manual = src.slice(src.indexOf("async function runVbbManualBlackbox"), src.indexOf("function vbbSpeedLimitSec"));
   assert.ok(manual.includes("vbbResolveCrop("));
-  assert.ok(/encodeBlackboxClip\(\{\s*file:\s*vbbSourceFile/.test(manual));
-  assert.ok(!manual.includes("prepareVbbEncodeSource("), "手动模式勿强行 prepare");
+  assert.ok(manual.includes("prepareVbbEncodeSource("), "手动打点须 prepare");
+  assert.ok(manual.includes("fromMark: true"), "手动须 fromMark");
+  assert.ok(manual.includes("exportedEdit"), "手动须透传 exportedEdit");
+  assert.ok(manual.includes("exactKeepFrames"), "手动须透传 exactKeepFrames");
+  assert.ok(manual.includes("vbbClips[i].start = r.start"), "结果卡保留打点起点");
+  assert.ok(!/encodeBlackboxClip\(\{\s*file:\s*vbbSourceFile/.test(manual), "勿再直接秒切原片");
 
   const exec = src.slice(src.indexOf("async function runVbbExecute"), src.indexOf("async function runVbbMerge"));
   assert.ok(exec.includes("vbbResolveCrop("));
-  assert.ok(!exec.includes("prepareVbbEncodeSource("), "切分执行勿强行 prepare");
+  assert.ok(exec.includes("prepareVbbEncodeSource("), "切分须 prepare");
+  assert.ok(exec.includes("fromMark: true"), "切分须 fromMark");
+  assert.ok(exec.includes("exportedEdit"), "切分须透传 exportedEdit");
+  assert.ok(exec.includes("clip.start = r.start"), "结果卡保留切片起点");
 });
 
 t("去色边仍对原片取样（单段/批量）", () => {
