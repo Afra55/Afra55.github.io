@@ -66,6 +66,21 @@ body.is-dragging .empty-zone {
 .hint.tight { margin: 0; }
 .hint { color: var(--muted); font-size: 0.88rem; margin: 0.65rem 0 0; }
 .error { color: var(--err); margin: 0.5rem 1rem; font-size: 0.9rem; }
+.error.is-toast {
+  color: var(--ink);
+  background: var(--panel-strong, rgba(250, 247, 242, 0.97));
+  border: 1px solid var(--line, rgba(41, 37, 36, 0.14));
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: min(92vw, 28rem);
+  box-shadow: 0 6px 24px rgba(28, 25, 23, 0.12);
+  pointer-events: none;
+}
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
 /* author 的 display:grid/flex 会盖掉 UA 的 [hidden]{display:none}，空页会露出「未命名」大片空白 */

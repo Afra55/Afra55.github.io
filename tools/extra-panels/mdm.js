@@ -3879,9 +3879,11 @@
         item.fmHead = fm.head || "";
         item.fileMtime = mt;
         setEditorText(fm.body);
+        state.bodyCache.set(item.id, fm.body);
         renderPreview();
         renderOutline();
         renderBacklinks();
+        pushMdReadLive(item, text);
         toast("检测到外部修改，已重新加载");
       } catch (_) {
         // 文件不在了 → 可能被外部改名：尝试识别并同步
@@ -3986,6 +3988,8 @@
         try { mdmChannel?.postMessage({ type: "saved", mode: state.mode }); } catch (_) {}
         state.dirty = false;
         updateSaveBtn();
+        // 阅读页若正打开此文：跟盘/跟保存
+        pushMdReadLive(item, full);
         // 细粒度更新：只改当前行；按修改时间排序时顺序会变，才整表重建
         if (state.sort === "updated") renderSidebar();
         else if (!updateItemRow(item)) renderSidebar();
@@ -4758,6 +4762,9 @@
       const body = fm.body != null ? String(fm.body) : String(rawText || "");
       snapshotThemeVarsForMdRead();
       const payload = JSON.stringify({
+        id: item?.id || "",
+        fileName: item?.fileName || "",
+        fileMtime: Number(item?.fileMtime) || 0,
         text: body,
         title:
           item.title ||
@@ -4772,6 +4779,28 @@
         sessionStorage.setItem(HANDOFF_KEY, payload);
       } catch (_) {}
       return payload;
+    }
+
+    /** 阅读页跟盘：外部改动 / 本机保存后推送（同域另一窗靠 storage 事件） */
+    function pushMdReadLive(item, rawText) {
+      if (!item?.id) return;
+      const LIVE_KEY = "devtools-mdread-live";
+      const fm = parseFrontMatter(String(rawText ?? ""));
+      const body = fm.body != null ? String(fm.body) : String(rawText ?? "");
+      const payload = JSON.stringify({
+        id: item.id,
+        fileName: item.fileName || "",
+        fileMtime: Number(item.fileMtime) || Date.now(),
+        text: body,
+        title:
+          item.title ||
+          String(item.fileName || "").replace(/\.(md|markdown|txt)$/i, "") ||
+          "document",
+        t: Date.now(),
+      });
+      try {
+        localStorage.setItem(LIVE_KEY, payload);
+      } catch (_) {}
     }
 
     async function openInMdRead(item) {
@@ -8090,11 +8119,14 @@
           await saveCurrent({ silent: true });
         } else if (act === "reload") {
           const text = await readDocText(item);
-          setEditorText(text);
+          const fm = parseFrontMatter(text);
+          setEditorText(fm.body);
+          state.bodyCache.set(item.id, fm.body);
           state.dirty = false;
           updateSaveBtn();
           renderPreview();
           renderOutline();
+          pushMdReadLive(item, text);
           setSaveStatus("已重新加载外部版本");
         } else if (act === "copy") {
           const text = getEditorText();
