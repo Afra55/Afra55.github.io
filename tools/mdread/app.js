@@ -14,11 +14,24 @@
   const outlineBody = $("#mr-outline-body");
 
   const HANDOFF_KEY = "devtools-mdread-doc";
+  const LIVE_KEY = "devtools-mdread-live";
   const READ_THEME_KEY = "devtools-mdread-theme-v1";
   const READ_CUSTOM_KEY = "devtools-mdread-theme-custom-v1";
   let currentName = "";
   let engine = null;
   let hasDoc = false;
+  /** @type {{ kind: "" | "handle" | "mdm" | "blob", handle: FileSystemFileHandle | null, mdmId: string, fileMtime: number, watchText: string }} */
+  const source = {
+    kind: "",
+    handle: null,
+    mdmId: "",
+    fileMtime: 0,
+    watchText: "",
+  };
+  let watchTimer = 0;
+  let watchBound = false;
+  let toastTimer = 0;
+  let applyingLive = false;
 
   /**
    * 护眼取向：偏低对比、少纯黑纯白、暖/中性纸感；默认纸张。
@@ -250,13 +263,28 @@
 
   function setError(text) {
     if (!errEl) return;
+    window.clearTimeout(toastTimer);
+    errEl.classList.remove("is-toast");
     const msg = String(text || "").trim();
     errEl.hidden = !msg;
     errEl.textContent = msg;
   }
 
-  function toast(_msg) {
-    /* 专注阅读：不刷顶栏状态文案 */
+  function toast(msg) {
+    if (!errEl) return;
+    const m = String(msg || "").trim();
+    if (!m) return;
+    window.clearTimeout(toastTimer);
+    errEl.classList.add("is-toast");
+    errEl.hidden = false;
+    errEl.textContent = m;
+    toastTimer = window.setTimeout(() => {
+      if (errEl.classList.contains("is-toast")) {
+        errEl.hidden = true;
+        errEl.textContent = "";
+        errEl.classList.remove("is-toast");
+      }
+    }, 2800);
   }
 
   function showDocUi(on) {
@@ -267,14 +295,147 @@
     if (!on) closeThemeModal();
   }
 
-  function pickFile() {
-    try {
-      if (typeof fileInput?.showPicker === "function") {
-        fileInput.showPicker();
-        return;
+  function clearWatchSource() {
+    source.kind = "";
+    source.handle = null;
+    source.mdmId = "";
+    source.fileMtime = 0;
+    source.watchText = "";
+  }
+
+  function startExternalWatch() {
+    window.clearInterval(watchTimer);
+    if (!source.kind) return;
+    watchTimer = window.setInterval(() => void checkExternalChange(), 60000);
+    if (watchBound) return;
+    watchBound = true;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") void checkExternalChange();
+    });
+    window.addEventListener("focus", () => void checkExternalChange());
+  }
+
+  async function checkExternalChange() {
+    if (!hasDoc || applyingLive) return;
+    if (source.kind === "handle" && source.handle) {
+      try {
+        const f = await source.handle.getFile();
+        const mt = f.lastModified || 0;
+        if (!source.fileMtime || mt <= source.fileMtime + 1500) return;
+        const text = await f.text();
+        if (text === source.watchText) {
+          source.fileMtime = mt;
+          return;
+        }
+        applyingLive = true;
+        source.fileMtime = mt;
+        source.watchText = text;
+        await openText(text, f.name || currentName, { keepSource: true });
+        toast("检测到外部修改，已重新加载");
+      } catch (_) {
+        /* 权限收回 / 文件删除：静默 */
+      } finally {
+        applyingLive = false;
       }
-    } catch (_) {}
-    fileInput?.click();
+      return;
+    }
+    if (source.kind === "mdm" && source.mdmId) {
+      tryApplyLiveFromStore();
+    }
+  }
+
+  function tryApplyLiveFromStore() {
+    if (!source.mdmId || applyingLive) return false;
+    let raw = "";
+    try {
+      raw = localStorage.getItem(LIVE_KEY) || "";
+    } catch (_) {
+      return false;
+    }
+    if (!raw) return false;
+    try {
+      const data = JSON.parse(raw);
+      if (!data || String(data.id || "") !== source.mdmId) return false;
+      const mt = Number(data.fileMtime) || Number(data.t) || 0;
+      const text = String(data.text ?? "");
+      if (mt && source.fileMtime && mt <= source.fileMtime + 1500 && text === source.watchText) {
+        return false;
+      }
+      if (text === source.watchText && (!mt || mt <= source.fileMtime + 1500)) return false;
+      applyingLive = true;
+      source.fileMtime = mt || Date.now();
+      source.watchText = text;
+      const name = data.title
+        ? `${String(data.title).replace(/\.(md|markdown|txt)$/i, "")}.md`
+        : data.fileName || currentName || "from-mdm.md";
+      void openText(text, name, { keepSource: true }).finally(() => {
+        applyingLive = false;
+      });
+      toast("检测到外部修改，已重新加载");
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function openFromHandle(handle) {
+    if (!handle) return;
+    try {
+      if (handle.queryPermission) {
+        let q = await handle.queryPermission({ mode: "read" });
+        if (q !== "granted" && handle.requestPermission) {
+          q = await handle.requestPermission({ mode: "read" });
+        }
+        if (q !== "granted") throw new Error("未获得读文件权限");
+      }
+      const file = await handle.getFile();
+      source.kind = "handle";
+      source.handle = handle;
+      source.mdmId = "";
+      source.fileMtime = file.lastModified || 0;
+      const text = await file.text();
+      source.watchText = text;
+      await openText(text, file.name || "document.md", { keepSource: true });
+      startExternalWatch();
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      setError(err?.message || String(err));
+    }
+  }
+
+  function pickFile() {
+    void (async () => {
+      if (typeof window.showOpenFilePicker === "function") {
+        try {
+          const [handle] = await window.showOpenFilePicker({
+            multiple: false,
+            types: [
+              {
+                description: "Markdown",
+                accept: {
+                  "text/markdown": [".md", ".markdown"],
+                  "text/plain": [".txt"],
+                },
+              },
+            ],
+          });
+          if (handle) {
+            await openFromHandle(handle);
+            return;
+          }
+        } catch (err) {
+          if (err?.name === "AbortError") return;
+          /* 回退 input */
+        }
+      }
+      try {
+        if (typeof fileInput?.showPicker === "function") {
+          fileInput.showPicker();
+          return;
+        }
+      } catch (_) {}
+      fileInput?.click();
+    })();
   }
 
   async function ensureEngine() {
@@ -290,13 +451,14 @@
     return engine;
   }
 
-  async function openText(text, name) {
+  async function openText(text, name, opts = {}) {
     setError("");
     const src = String(text || "");
     if (!src.trim()) {
       setError("文件为空");
       return;
     }
+    if (!opts.keepSource) clearWatchSource();
     currentName = String(name || "document.md").replace(/^.*[\\/]/, "") || "document.md";
     document.title = `${currentName} · MD 阅读`;
     if (titleEl) titleEl.textContent = currentName.replace(/\.(md|markdown|txt)$/i, "") || currentName;
@@ -310,7 +472,7 @@
     }
   }
 
-  async function openFile(file) {
+  async function openFile(file, opts = {}) {
     if (!file) return;
     const name = file.name || "document.md";
     if (!/\.(md|markdown|txt)$/i.test(name) && !/^text\//i.test(file.type || "")) {
@@ -318,7 +480,14 @@
       return;
     }
     const text = await file.text();
-    await openText(text, name);
+    if (!opts.keepSource) {
+      // <input>/无 handle：无法再读盘，清掉跟盘源
+      clearWatchSource();
+      source.kind = "blob";
+      source.fileMtime = file.lastModified || 0;
+      source.watchText = text;
+    }
+    await openText(text, name, { keepSource: true });
   }
 
   fileInput?.addEventListener("change", () => {
@@ -357,6 +526,7 @@
         setError("剪贴板没有文本，请先复制 Markdown 后再试");
         return;
       }
+      clearWatchSource();
       await openText(text, "clipboard.md");
     } catch (err) {
       setError(err?.message || "无法读取剪贴板，可改用 Ctrl+V / ⌘V 直接粘贴");
@@ -373,6 +543,7 @@
     const text = e.clipboardData?.getData("text/plain");
     if (!String(text || "").trim()) return;
     e.preventDefault();
+    clearWatchSource();
     void openText(text, "clipboard.md");
   });
 
@@ -390,14 +561,34 @@
   window.addEventListener("drop", (e) => {
     e.preventDefault();
     document.body.classList.remove("is-dragging");
-    const f = [...(e.dataTransfer?.files || [])].find(
-      (x) => /\.(md|markdown|txt)$/i.test(x.name) || /^text\//i.test(x.type || "")
-    );
-    if (!f) {
-      setError("请拖入一个 .md / .txt 文件");
-      return;
-    }
-    void openFile(f);
+    void (async () => {
+      const items = e.dataTransfer?.items;
+      if (items?.length) {
+        for (const it of items) {
+          if (it.kind !== "file") continue;
+          try {
+            if (typeof it.getAsFileSystemHandle === "function") {
+              const h = await it.getAsFileSystemHandle();
+              if (h?.kind === "file") {
+                const name = h.name || "";
+                if (/\.(md|markdown|txt)$/i.test(name) || !name) {
+                  await openFromHandle(h);
+                  return;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+      const f = [...(e.dataTransfer?.files || [])].find(
+        (x) => /\.(md|markdown|txt)$/i.test(x.name) || /^text\//i.test(x.type || "")
+      );
+      if (!f) {
+        setError("请拖入一个 .md / .txt 文件");
+        return;
+      }
+      void openFile(f);
+    })();
   });
 
   const HANDOFF_MAX_AGE_MS = 60 * 1000;
@@ -451,7 +642,17 @@
   function consumeHandoff() {
     const handoff = takeHandoff();
     if (!handoff) return false;
-    void openText(String(handoff.text), handoff.title ? `${handoff.title}.md` : "from-mdm.md");
+    const id = String(handoff.id || "");
+    source.kind = id ? "mdm" : "blob";
+    source.handle = null;
+    source.mdmId = id;
+    source.fileMtime = Number(handoff.fileMtime) || Number(handoff.t) || Date.now();
+    source.watchText = String(handoff.text ?? "");
+    void openText(source.watchText, handoff.title ? `${handoff.title}.md` : "from-mdm.md", {
+      keepSource: true,
+    }).then(() => {
+      if (source.kind === "mdm") startExternalWatch();
+    });
     return true;
   }
 
@@ -461,6 +662,7 @@
     consumeHandoff();
     window.addEventListener("storage", (e) => {
       if (e.key === HANDOFF_KEY && e.newValue) consumeHandoff();
+      if (e.key === LIVE_KEY && e.newValue) tryApplyLiveFromStore();
     });
     let handoffPolls = 0;
     const handoffTimer = window.setInterval(() => {
@@ -469,6 +671,13 @@
         window.clearInterval(handoffTimer);
       }
     }, 120);
+  }
+
+  // 非 handoff 入口也可能稍后收到 live（少见）；统一听 storage
+  if (!allowHandoff) {
+    window.addEventListener("storage", (e) => {
+      if (e.key === LIVE_KEY && e.newValue) tryApplyLiveFromStore();
+    });
   }
 
   if ("serviceWorker" in navigator) {
