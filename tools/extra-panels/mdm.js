@@ -21,7 +21,7 @@
   const DEFAULT_TAG_NAME = "默认";
 
   const PANDOC_FORMATS = [
-    ["pdf", "PDF（印刷级 · XeLaTeX）"],
+    ["pdf", "PDF（印刷级 · 可选纸张）"],
     ["docx", "Word (.docx)"],
     ["odt", "OpenDocument (.odt)"],
     ["epub", "EPUB (.epub)"],
@@ -38,6 +38,16 @@
     ["md", "Markdown (.md)"],
     ["html-standalone", "HTML（浏览器单文件）"],
     ["png", "长图 PNG"],
+  ];
+  /** PDF 纸张：默认 A4；ultrawide 不压表宽，仅预览 */
+  const PDF_PAPER_KEY = "mdm-pdf-paper";
+  const PDF_PAPER_OPTIONS = [
+    ["a4", "A4（默认 · 印刷）"],
+    ["letter", "Letter"],
+    ["a3", "A3"],
+    ["a4-land", "A4 横向"],
+    ["a3-land", "A3 横向"],
+    ["ultrawide", "超宽预览（完整表宽 · 不适合打印）"],
   ];
 
   function uid() {
@@ -1006,6 +1016,65 @@
           const b = e.target.closest?.("[data-cf]");
           if (!b) return;
           done(b.dataset.cf === "yes" ? "yes" : b.dataset.cf === "alt" ? "alt" : "no");
+        };
+      });
+    }
+
+    function readSavedPdfPaper() {
+      try {
+        const v = String(localStorage.getItem(PDF_PAPER_KEY) || "a4").trim();
+        if (PDF_PAPER_OPTIONS.some(([id]) => id === v)) return v;
+      } catch (_) {}
+      return "a4";
+    }
+
+    function savePdfPaper(id) {
+      try {
+        localStorage.setItem(PDF_PAPER_KEY, id);
+      } catch (_) {}
+    }
+
+    /** 导出 PDF 前选纸张；取消返回 null */
+    function pickPdfPaperModal() {
+      return new Promise((resolve) => {
+        const box = els.modalBox;
+        const saved = readSavedPdfPaper();
+        const opts = PDF_PAPER_OPTIONS.map(
+          ([id, label]) =>
+            `<option value="${escapeHtml(id)}"${id === saved ? " selected" : ""}>${escapeHtml(label)}</option>`
+        ).join("");
+        box.innerHTML =
+          `<div class="mdm-modal-head"><strong>导出 PDF · 纸张</strong></div>` +
+          `<div class="mdm-modal-body" style="text-align:left">` +
+          `<p class="hint tight" style="margin:0 0 10px">默认 <strong>A4</strong>。超宽预览不压缩表格、页很宽，只适合屏幕看，不适合打印。</p>` +
+          `<label class="flag">纸张 / 版式` +
+          `<select id="mdm-pdf-paper-sel" class="mono" style="display:block;width:100%;margin-top:6px">${opts}</select>` +
+          `</label>` +
+          `</div>` +
+          `<div class="mdm-modal-foot" style="flex-wrap:wrap;gap:8px">` +
+          `<button type="button" class="ghost-btn" data-cf="no">取消</button>` +
+          `<button type="button" class="secondary-btn" data-cf="yes">导出 PDF</button>` +
+          `</div>`;
+        els.modal.hidden = false;
+        const finish = (paper) => {
+          closeModal();
+          resolve(paper);
+        };
+        els.modal.onclick = (e) => {
+          if (e.target === els.modal) finish(null);
+        };
+        box.onclick = (e) => {
+          const b = e.target.closest?.("[data-cf]");
+          if (!b) return;
+          if (b.dataset.cf !== "yes") {
+            finish(null);
+            return;
+          }
+          const sel = box.querySelector("#mdm-pdf-paper-sel");
+          const id = String(sel?.value || "a4");
+          const paper = PDF_PAPER_OPTIONS.some(([x]) => x === id) ? id : "a4";
+          savePdfPaper(paper);
+          finish(paper);
         };
       });
     }
@@ -6343,12 +6412,21 @@
           return;
         }
         if (fmt === "pdf") {
+          // 先选纸张，再探测/转换（取消则不跑）
+          const paper = await pickPdfPaperModal();
+          if (!paper) return;
+          const paperLabel =
+            PDF_PAPER_OPTIONS.find(([id]) => id === paper)?.[1] || paper;
           // 先探测再装：避免一点击就 /convert → 立刻失败 → 误报「自动安装未完成」
           let attemptedInstall = false;
           let lastErr = null;
-          const runPdfExport = async (opts = {}) => {
-            await exportViaPandoc(text, "pdf", title, true);
-            toast("已导出印刷级 PDF");
+          const runPdfExport = async () => {
+            await exportViaPandoc(text, "pdf", title, true, { paper });
+            toast(
+              paper === "ultrawide"
+                ? `已导出超宽预览 PDF（${paperLabel}）`
+                : `已导出印刷级 PDF（${paperLabel}）`
+            );
           };
           const handlePathOrRetry = async (act, hints) => {
             if (act === "path-ok") {
@@ -6722,9 +6800,10 @@
       return ctl;
     }
 
-    async function exportViaPandoc(text, to, title, retried = false) {
+    async function exportViaPandoc(text, to, title, retried = false, extra = {}) {
       const toLabel = String(to || "file").toUpperCase();
       const isPdf = to === "pdf";
+      const pdfPaper = isPdf ? String(extra.paper || readSavedPdfPaper() || "a4") : "";
       const abort = typeof AbortController !== "undefined" ? new AbortController() : null;
       // PDF：无前端超时，跑完为止（仅「取消」会 abort）；其它格式仍 6 分钟
       let timeoutId = null;
@@ -6808,7 +6887,8 @@
                 from,
                 title,
                 images,
-                quality: "max",
+                quality: isPdf && pdfPaper === "ultrawide" ? "preview" : "max",
+                ...(isPdf && pdfPaper ? { paper: pdfPaper } : {}),
               }),
               signal: abort?.signal,
               cache: "no-store",
@@ -6853,7 +6933,7 @@
             });
             if (ok) {
               await runPandocInstall();
-              return await exportViaPandoc(text, to, title, true);
+              return await exportViaPandoc(text, to, title, true, extra);
             }
           }
           throw new Error(msg);
