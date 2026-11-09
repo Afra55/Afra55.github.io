@@ -691,6 +691,78 @@ function makeBridgeTemp(prefix) {
   }
 }
 
+/**
+ * PDF 纸张 / 版式（前端可选；默认显式 A4，避免西文掉到 Letter）。
+ * ultrawide：超宽预览——不压表格列宽，只适合屏幕看，不适合打印。
+ */
+const PDF_PAPER_PRESETS = {
+  a4: {
+    id: "a4",
+    label: "A4",
+    geometry: "a4paper,margin=1.2cm",
+    fitTables: true,
+  },
+  letter: {
+    id: "letter",
+    label: "Letter",
+    geometry: "letterpaper,margin=1.2cm",
+    fitTables: true,
+  },
+  a3: {
+    id: "a3",
+    label: "A3",
+    geometry: "a3paper,margin=1.2cm",
+    fitTables: true,
+  },
+  "a4-land": {
+    id: "a4-land",
+    label: "A4 横向",
+    geometry: "a4paper,landscape,margin=1.2cm",
+    fitTables: true,
+  },
+  "a3-land": {
+    id: "a3-land",
+    label: "A3 横向",
+    geometry: "a3paper,landscape,margin=1.2cm",
+    fitTables: true,
+  },
+  ultrawide: {
+    id: "ultrawide",
+    label: "超宽预览（完整表宽）",
+    // 固定超大页：表格按内容自然展开，不再 table-wrap 压进页宽
+    geometry: "paperwidth=80cm,paperheight=50cm,margin=0.8cm",
+    fitTables: false,
+  },
+};
+
+function normalizePdfPaper(raw) {
+  const k = String(raw || "a4")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+  if (PDF_PAPER_PRESETS[k]) return PDF_PAPER_PRESETS[k];
+  if (k === "a4paper" || k === "a4-portrait" || k === "portrait") return PDF_PAPER_PRESETS.a4;
+  if (k === "a4landscape" || k === "a4-landscape" || k === "landscape") return PDF_PAPER_PRESETS["a4-land"];
+  if (k === "a3landscape" || k === "a3-landscape") return PDF_PAPER_PRESETS["a3-land"];
+  if (
+    k === "fulltable" ||
+    k === "full-table" ||
+    k === "full-width" ||
+    k === "wide" ||
+    k === "preview" ||
+    k === "ultra-wide"
+  ) {
+    return PDF_PAPER_PRESETS.ultrawide;
+  }
+  return PDF_PAPER_PRESETS.a4;
+}
+
+function pdfPaperFileSuffix(paper) {
+  const id = String(paper?.id || "a4");
+  if (id === "a4") return "";
+  return `-${id}`;
+}
+
 /** 宽/长表格：缩小字号与列距；配合 table-wrap.lua 让单元格可换行 */
 function writePdfTableFitHeader(tmp) {
   const p = path.join(tmp, "mdm-table-fit.tex");
@@ -746,18 +818,26 @@ function resolveTableWrapLua(tmp) {
   }
 }
 
-function pushPdfLayoutArgs(args, tmp) {
-  const header = writePdfTableFitHeader(tmp);
-  args.push(
-    "-V",
-    "geometry:margin=1.2cm",
-    "-H",
-    header
-  );
-  const lua = resolveTableWrapLua(tmp);
-  if (lua) {
-    args.push("--lua-filter", lua);
+/**
+ * @param {string[]} args
+ * @param {string} tmp
+ * @param {{ paper?: string, pdfPaper?: string, papersize?: string }} [opts]
+ * @returns {{ id: string, label: string, geometry: string, fitTables: boolean }}
+ */
+function pushPdfLayoutArgs(args, tmp, opts = {}) {
+  const paper = normalizePdfPaper(opts.paper || opts.pdfPaper || opts.papersize);
+  args.push("-V", `geometry:${paper.geometry}`);
+  if (paper.fitTables) {
+    const header = writePdfTableFitHeader(tmp);
+    args.push("-H", header);
+    const lua = resolveTableWrapLua(tmp);
+    if (lua) {
+      args.push("--lua-filter", lua);
+    }
+  } else {
+    console.log(`[pandoc] PDF 纸张=${paper.id} · 超宽预览：不压表格列宽（仅屏幕看）`);
   }
+  return paper;
 }
 
 function resolveCmdCandidates(name) {
@@ -1262,7 +1342,16 @@ function computePdfPercent(state) {
 }
 
 /** 印刷级 PDF：仅 XeLaTeX（复杂图表 + 中文） */
-async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine = "" } = {}) {
+async function convertToPrintPdf({
+  text,
+  from = "gfm",
+  title,
+  images,
+  pdfEngine = "",
+  paper = "a4",
+  pdfPaper,
+  papersize,
+} = {}) {
   const pageEst = estimatePdfPages(text, images);
   const passMax = 3; // pandoc 驱动 XeLaTeX 通常最多约 3 遍
   const progressState = {
@@ -1329,11 +1418,11 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     "--pdf-engine-opt=-interaction=nonstopmode",
     "--verbose"
   );
-  pushPdfLayoutArgs(args, tmp);
+  const paperInfo = pushPdfLayoutArgs(args, tmp, { paper, pdfPaper, papersize });
   if (title) args.push("-V", `title=${String(title).slice(0, 120)}`);
 
   console.log(
-    `[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · font=${cjkFont} · cjk=${hasCjk} · in=${path.basename(inPath)} (${bodyChars} 字) · tmp=${tmp} · 估 ${pageEst} 页`
+    `[pandoc] 印刷级 PDF · engine=${useEngine} · bin=${engineCli} · paper=${paperInfo.id} · font=${cjkFont} · cjk=${hasCjk} · in=${path.basename(inPath)} (${bodyChars} 字) · tmp=${tmp} · 估 ${pageEst} 页`
   );
   progressState.phase = "typeset";
   progressState.pass = 0; // 等首条 Running xelatex / 引擎横幅再记第 1 遍
@@ -1387,12 +1476,15 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
     });
     const buf = fs.readFileSync(outPath);
     clearConvertProgress("完成");
+    const suffix = pdfPaperFileSuffix(paperInfo);
     return {
       dataBase64: buf.toString("base64"),
-      filename: `${safeBase(title)}.pdf`,
+      filename: `${safeBase(title)}${suffix}.pdf`,
       engine: "pandoc",
       pdfEngine: useEngine,
-      quality: "print",
+      quality: paperInfo.fitTables ? "print" : "preview",
+      paper: paperInfo.id,
+      paperLabel: paperInfo.label,
       from: fromFmt,
       to: "pdf",
       cjkFont,
@@ -1411,11 +1503,22 @@ async function convertToPrintPdf({ text, from = "gfm", title, images, pdfEngine 
 }
 
 /** Markdown 文本 → 其它格式（导出，默认最高质量） */
-async function convertFromTextOnce({ text, to, from = "gfm", title, images, quality = "max", pdfEngine } = {}) {
+async function convertFromTextOnce({
+  text,
+  to,
+  from = "gfm",
+  title,
+  images,
+  quality = "max",
+  pdfEngine,
+  paper,
+  pdfPaper,
+  papersize,
+} = {}) {
   const toFmt = String(to || "").trim().toLowerCase();
   if (!toFmt) throw new Error("缺少目标格式");
   if (toFmt === "pdf") {
-    return convertToPrintPdf({ text, from, title, images, pdfEngine });
+    return convertToPrintPdf({ text, from, title, images, pdfEngine, paper, pdfPaper, papersize });
   }
   const ext = EXT[toFmt] || toFmt;
   const tmp = makeBridgeTemp("mdm-pandoc-");
@@ -1483,7 +1586,17 @@ async function convertFromText(opts = {}) {
 }
 
 /** 结构化文档文件 → Markdown（导入，质量优先于 MinerU flash） */
-async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngine = "", quality = "max" } = {}) {
+async function convertFromFile({
+  filename,
+  dataBase64,
+  to = "gfm",
+  from,
+  pdfEngine = "",
+  quality = "max",
+  paper,
+  pdfPaper,
+  papersize,
+} = {}) {
   const name = safeName(filename);
   const ext = path.extname(name).toLowerCase();
   const fromFmt = String(from || FILE_FROM[ext] || "").trim();
@@ -1507,6 +1620,8 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngi
   /** @type {string[]} */
   let args;
   let usedPdfEngine = "";
+  /** @type {{ id: string, label: string, geometry: string, fitTables: boolean } | null} */
+  let filePaperInfo = null;
   if (toFmt === "pdf") {
     const pdfInfo = await probePdfEngines();
     usedPdfEngine = pdfInfo.engines.xelatex?.ok
@@ -1538,7 +1653,7 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngi
       outPath,
       inPath,
     ];
-    pushPdfLayoutArgs(args, tmp);
+    filePaperInfo = pushPdfLayoutArgs(args, tmp, { paper, pdfPaper, papersize });
   } else {
     args = ["-f", fromFmt, "-t", toFmt];
     if (outIsMd) args.push("--wrap=none");
@@ -1574,13 +1689,22 @@ async function convertFromFile({ filename, dataBase64, to = "gfm", from, pdfEngi
     }
     const outBuf = fs.readFileSync(outPath);
     if (!outBuf.length) throw new Error("输出为空");
+    const paperSuffix = toFmt === "pdf" && filePaperInfo ? pdfPaperFileSuffix(filePaperInfo) : "";
     return {
       dataBase64: outBuf.toString("base64"),
-      filename: `${safeBase(path.basename(name, ext))}.${outExt}`,
+      filename: `${safeBase(path.basename(name, ext))}${paperSuffix}.${outExt}`,
       engine: "pandoc",
       from: fromFmt,
       to: toFmt,
-      ...(usedPdfEngine ? { pdfEngine: usedPdfEngine, quality: "print" } : { quality: quality || "max" }),
+      ...(usedPdfEngine
+        ? {
+            pdfEngine: usedPdfEngine,
+            quality: filePaperInfo && !filePaperInfo.fitTables ? "preview" : "print",
+            ...(filePaperInfo
+              ? { paper: filePaperInfo.id, paperLabel: filePaperInfo.label }
+              : {}),
+          }
+        : { quality: quality || "max" }),
     };
   } catch (err) {
     const msg = String(err?.stderr || err?.message || err).trim();
@@ -2857,4 +2981,7 @@ module.exports = {
   clearConvertProgress,
   FILE_FROM,
   PDF_ENGINE_ORDER,
+  PDF_PAPER_PRESETS,
+  normalizePdfPaper,
+  pushPdfLayoutArgs,
 };

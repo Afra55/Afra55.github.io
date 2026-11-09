@@ -43,6 +43,16 @@
               <option value="mediawiki">MediaWiki</option>
             </select>
           </label>
+          <label class="flag" id="docfmt-paper-any-wrap" style="margin-top:0.45rem" hidden>PDF 纸张
+            <select id="docfmt-paper-any" class="mono">
+              <option value="a4" selected>A4（默认 · 印刷）</option>
+              <option value="letter">Letter</option>
+              <option value="a3">A3</option>
+              <option value="a4-land">A4 横向</option>
+              <option value="a3-land">A3 横向</option>
+              <option value="ultrawide">超宽预览（完整表宽 · 不适合打印）</option>
+            </select>
+          </label>
           <ul class="docfmt-list" id="docfmt-list-any"></ul>
           <div class="btn-row tool-actions" style="margin-top:0.6rem">
             <button type="button" class="primary-btn" id="docfmt-run-any">开始互转</button>
@@ -87,6 +97,16 @@
               <option value="rst">reStructuredText</option>
               <option value="org">Org-mode</option>
               <option value="mediawiki">MediaWiki</option>
+            </select>
+          </label>
+          <label class="flag" id="docfmt-paper-md-wrap" style="margin-top:0.45rem">PDF 纸张
+            <select id="docfmt-paper-md" class="mono">
+              <option value="a4" selected>A4（默认 · 印刷）</option>
+              <option value="letter">Letter</option>
+              <option value="a3">A3</option>
+              <option value="a4-land">A4 横向</option>
+              <option value="a3-land">A3 横向</option>
+              <option value="ultrawide">超宽预览（完整表宽 · 不适合打印）</option>
             </select>
           </label>
           <textarea id="docfmt-md-text" class="mono docfmt-ta" rows="12" placeholder="# 标题&#10;&#10;在此粘贴 Markdown…" spellcheck="false"></textarea>

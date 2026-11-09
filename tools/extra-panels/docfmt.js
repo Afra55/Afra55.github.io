@@ -10,6 +10,8 @@
   const DEFAULT_TOKEN = "devtools-bridge";
   const BASE_KEY = "devtools-docfmt-base";
   const TOKEN_KEY = "devtools-docfmt-token";
+  const PAPER_KEY = "docfmt-pdf-paper";
+  const PDF_PAPER_IDS = new Set(["a4", "letter", "a3", "a4-land", "a3-land", "ultrawide"]);
 
   /** Pandoc 可直接读的扩展名（与桥 FILE_FROM 对齐） */
   const PANDOC_READ_EXT =
@@ -355,13 +357,44 @@
       }
     }
 
+    function readPdfPaper(selId) {
+      const el = selId ? $(selId) : null;
+      let v = String(el?.value || "").trim();
+      if (!PDF_PAPER_IDS.has(v)) {
+        try {
+          v = String(localStorage.getItem(PAPER_KEY) || "a4");
+        } catch (_) {
+          v = "a4";
+        }
+      }
+      return PDF_PAPER_IDS.has(v) ? v : "a4";
+    }
+
+    function persistPdfPaper(id) {
+      try {
+        if (PDF_PAPER_IDS.has(id)) localStorage.setItem(PAPER_KEY, id);
+      } catch (_) {}
+    }
+
+    function syncPdfPaperVisibility() {
+      const anyTo = String($("#docfmt-any-to")?.value || "");
+      const mdTo = String($("#docfmt-to-fmt")?.value || "");
+      const anyWrap = $("#docfmt-paper-any-wrap");
+      const mdWrap = $("#docfmt-paper-md-wrap");
+      if (anyWrap) anyWrap.hidden = anyTo !== "pdf";
+      if (mdWrap) mdWrap.hidden = mdTo !== "pdf";
+    }
+
     async function pandocFileTo(file, toFmt) {
       const dataBase64 = await fileToBase64(file);
+      const paper = toFmt === "pdf" ? readPdfPaper("#docfmt-paper-any") : "";
+      if (paper) persistPdfPaper(paper);
       const body = {
         filename: file.name,
         dataBase64,
         to: toFmt,
-        quality: toFmt === "pdf" ? "print" : "max",
+        quality: toFmt === "pdf" ? (paper === "ultrawide" ? "preview" : "print") : "max",
+        ...(paper ? { paper } : {}),
       };
       async function once() {
         return pandocConvertWithProgress({
@@ -389,12 +422,15 @@
 
     async function pandocMdTo(text, toFmt, title) {
       const plan = QR().exportPandocPlan?.(toFmt) || { from: "gfm" };
+      const paper = toFmt === "pdf" ? readPdfPaper("#docfmt-paper-md") : "";
+      if (paper) persistPdfPaper(paper);
       const body = {
         text,
         to: toFmt,
         from: plan.from || "gfm",
         title,
-        quality: toFmt === "pdf" ? "print" : "max",
+        quality: toFmt === "pdf" ? (paper === "ultrawide" ? "preview" : "print") : "max",
+        ...(paper ? { paper } : {}),
       };
       async function once() {
         return pandocConvertWithProgress({
@@ -605,6 +641,18 @@
       renderList("#docfmt-list-any", filesAny, "#docfmt-meta-any");
     });
     $("#docfmt-run-any")?.addEventListener("click", () => void runAny());
+    $("#docfmt-any-to")?.addEventListener("change", () => {
+      syncPdfPaperVisibility();
+      const p = readPdfPaper("#docfmt-paper-any");
+      persistPdfPaper(p);
+    });
+    $("#docfmt-to-fmt")?.addEventListener("change", () => {
+      syncPdfPaperVisibility();
+      const p = readPdfPaper("#docfmt-paper-md");
+      persistPdfPaper(p);
+    });
+    $("#docfmt-paper-any")?.addEventListener("change", () => persistPdfPaper(readPdfPaper("#docfmt-paper-any")));
+    $("#docfmt-paper-md")?.addEventListener("change", () => persistPdfPaper(readPdfPaper("#docfmt-paper-md")));
 
     $("#docfmt-file-in")?.addEventListener("change", (e) => {
       filesIn = [...(e.target.files || [])];
@@ -700,6 +748,15 @@
     if (metaIn) metaIn.dataset.def = metaIn.textContent;
     renderList("#docfmt-list-any", filesAny, "#docfmt-meta-any");
     renderList("#docfmt-list-in", filesIn, "#docfmt-meta-in");
+    // 恢复上次纸张选择
+    try {
+      const saved = String(localStorage.getItem(PAPER_KEY) || "a4");
+      if (PDF_PAPER_IDS.has(saved)) {
+        if ($("#docfmt-paper-any")) $("#docfmt-paper-any").value = saved;
+        if ($("#docfmt-paper-md")) $("#docfmt-paper-md").value = saved;
+      }
+    } catch (_) {}
+    syncPdfPaperVisibility();
     setTab("any");
     void connectBridge();
   }
