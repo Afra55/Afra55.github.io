@@ -39,9 +39,10 @@ t("MDM：handoff 带 id/mtime，并 pushMdReadLive", () => {
   assert.ok(/writeMdReadHandoff[\s\S]*?id:\s*item\?\.id/.test(mdm));
 });
 
-t("空态提示含跟盘说明；资源版本 bump", () => {
-  assert.ok(html.includes("外部改盘后会自动重载"));
-  assert.ok(html.includes("app.js?v=20"));
+t("空态无底部 tips；资源版本 bump", () => {
+  assert.ok(!html.includes("empty-tips"));
+  assert.ok(!html.includes("外部改盘后会自动重载"));
+  assert.ok(html.includes("app.js?v=21"));
 });
 
 console.log(`mdread-ext-watch.test.js: ${n} passed`);
