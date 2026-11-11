@@ -239,6 +239,11 @@ t("外预览 keep 须可带 timeline（删中间接点 ≡ GIF）", () => {
   assert.ok(keepFn.includes("timeline") && keepFn.includes("keepRangesForEncode"), "须把 timeline 传入");
 });
 
+t("打开编辑须传入外预览 timeline（三者同表）", () => {
+  assert.ok(/editor\.open\(\{[\s\S]*?timeline:\s*item\.timeline/.test(vbb), "open 须带 timeline");
+  assert.ok(vbb.includes("__vbbTimeline"), "完成后回写");
+});
+
 t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {
   assert.ok(vbb.includes("禁止用上报时长撑长编码窗"));
   assert.ok(/Math\.min\(\s*requestedSpan\s*,\s*reported\s*\)/.test(vbb));

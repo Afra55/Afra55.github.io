@@ -59,7 +59,11 @@
    - **异常**才 `exportKeepByChromeDisplay`（无表 / CTS 真乱序 / 裁画面 / 快切挂了；toast 须带「异常」；进度「对齐预览帧」——**绝不当默认**）
    - 仍无 → ffmpeg 兜底（无采样表才允许 sec）
 6. GIF：`materializeVbbKeepVideo` 与下载**同一套** `matTimeline` + `matKeeps` + `canFfmpegFirst`  
-   - **删中间**：外预览 `enforceVbbEditPlaybackWindow` / 编辑器 `keepRangesLocal` / GIF `matKeeps` 必须同传校准后 `ctsSec`（`nextStartAfterCutEnd` = 下一采样）。缺表时退回 `1/fps`，接点会差帧。
+   - **删中间（三者同表）**：
+     - 加载后 `ensureVbbSourceTimeline` → `vbbSingleTimeline` / `item.timeline`
+     - 打开编辑：`editor.open({ timeline })` **复用同一引用**，禁止再 probe 第二张表；完成回写 `__vbbTimeline`
+     - 外预览 `enforceVbbEditPlaybackWindow` / 编辑器 `keepRangesLocal` / GIF `matKeeps` 都走 `keepRangesForEncode(..., timeline)`
+     - `nextStartAfterCutEnd` = `ctsSec[sampleIndexAtSec(cutEnd)+1]`；缺表才退回 `1/fps`（接点会差帧）
 7. 诊断 JSON（ver≥6）必含：`calibrateMethod`、`chromeOffsetSec`、`exportOrder`、`exportMethod`、`previewKeeps`
 
 合入前：相关单测 + `build-v2g-suite.cjs` + `bump-version.cjs`。

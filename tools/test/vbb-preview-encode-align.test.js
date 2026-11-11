@@ -20,7 +20,7 @@ function t(name, fn) {
   n += 1;
 }
 
-function loadKeepFns() {
+function loadKeepFns(mp4Api) {
   const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration,? ?\w*\) \{[\s\S]*?\n  \}/);
   const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration,? ?\w*\) \{[\s\S]*?\n  \}/);
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
@@ -32,7 +32,7 @@ function loadKeepFns() {
   const displayFrame = vtrim.match(/function displayFrameAtSec\(sec, fps\) \{[\s\S]*?\n  \}/);
   const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
   assert.ok(fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && displayFrame && normalizeFps);
-  const box = {};
+  const box = { window: { DevToolsMp4Timeline: mp4Api || null } };
   vm.runInNewContext(
     `
     const MIN_SPAN = 0.5, MIN_CUTOUT = 0.2;
@@ -40,6 +40,7 @@ function loadKeepFns() {
     const DEFAULT_FRAME_FPS = 30;
     const ENCODE_BOUND_PAD_SEC = 0;
     const ENCODE_CUT_JUNCTION_PAD_FRAMES = 0;
+    const window = this.window;
     ${normalizeFps[0]}
     ${resolveKeep[0]}
     ${secToFrame[0]}
@@ -59,6 +60,34 @@ function loadKeepFns() {
   return box;
 }
 
+/** 均匀 25fps 假采样表：验证删中间接点 = 下一采样，而非 1/fps 近似 */
+function mockTimeline25(n = 100) {
+  const ctsSec = Float64Array.from({ length: n }, (_, i) => i / 25);
+  return {
+    ok: true,
+    fps: 25,
+    ctsSec,
+    mediaCtsSec: ctsSec.slice(),
+    sampleIndexAtSec(timeline, sec) {
+      const arr = timeline.ctsSec;
+      const t = Math.max(0, Number(sec) || 0);
+      let ans = 0;
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] <= t + 1e-9) ans = i;
+        else break;
+      }
+      return ans;
+    },
+    sampleRangeForKeep(timeline, startSec, endSec) {
+      const a = Math.max(0, Number(startSec) || 0);
+      const b = Math.max(a, Number(endSec) || 0);
+      const startF = this.sampleIndexAtSec(timeline, a);
+      const endF = Math.min(timeline.ctsSec.length, this.sampleIndexAtSec(timeline, Math.max(0, b - 0.5 / 25)) + 1);
+      return { startF, endF };
+    },
+  };
+}
+
 t("编辑内 keepRangesLocal 走 keepRangesForEncode（预览=成片）", () => {
   const block = vtrim.slice(
     vtrim.indexOf("function keepRangesLocal()"),
@@ -67,6 +96,15 @@ t("编辑内 keepRangesLocal 走 keepRangesForEncode（预览=成片）", () => 
   assert.ok(block.includes("keepRangesForEncode("));
   assert.ok(!block.includes("keepRangesFromEdit("));
   assert.ok(/srcFps:\s*sourceFps/.test(block), "播放 keep 必须带 srcFps");
+  assert.ok(block.includes("sourceTimeline"), "编辑播放须带采样表");
+});
+
+t("编辑器须能复用外预览 timeline（三者同表）", () => {
+  assert.ok(vtrim.includes("opts.timeline"));
+  assert.ok(vtrim.includes("复用同一引用") || vtrim.includes("禁止另 probe"));
+  assert.ok(vtrim.includes("__vbbTimeline"), "完成须回写采样表");
+  assert.ok(vbb.includes("timeline: item.timeline") || /timeline:\s*item\.timeline/.test(vbb));
+  assert.ok(vbb.includes("__vbbTimeline"), "外预览须接回编辑器表");
 });
 
 t("拖拽半开 endKeepStepSec ≡ resolveEndKeepSec(sourceFps)", () => {
@@ -110,6 +148,44 @@ t("多段删中间：预览≡成片；红柄闭区间；片尾=黄柄半开", (
     assert.ok(Math.abs(enc[i].start - preview[i].start) < 1e-9);
     assert.ok(Math.abs(enc[i].end - preview[i].end) < 1e-9);
   }
+});
+
+t("删中间有采样表：下一段起点=下一 CTS（外预览≡编辑≡GIF 同公式）", () => {
+  const api = mockTimeline25(100);
+  const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns(api);
+  const tl = {
+    fps: 25,
+    ctsSec: api.ctsSec,
+    mediaCtsSec: api.mediaCtsSec,
+  };
+  const edit = {
+    trimStart: 1,
+    trimEnd: 3.5,
+    srcFps: 25,
+    cutouts: [{ start: 1.6, end: 2.0 }],
+  };
+  // 模拟三处各自调用但传入同一张表
+  const outer = keepRangesForEncode(edit, 4, tl);
+  const editor = keepRangesFromEdit(edit, 4, tl);
+  const gif = keepRangesForEncode(edit, 4, tl);
+  assert.strictEqual(outer.length, 2);
+  assert.strictEqual(editor.length, 2);
+  assert.strictEqual(gif.length, 2);
+  // cut end=2.0 → sampleIndex 50 → 下一采样 51 → 2.04
+  const resume = 51 / 25;
+  assert.ok(Math.abs(outer[1].start - resume) < 1e-9, `outer resume=${outer[1].start}`);
+  assert.ok(Math.abs(editor[1].start - resume) < 1e-9);
+  assert.ok(Math.abs(gif[1].start - resume) < 1e-9);
+  // 无表时会是 2+1/25=2.04，此处刻意用非整数 cut end 证明走表
+  const odd = keepRangesForEncode(
+    { ...edit, cutouts: [{ start: 1.6, end: 2.01 }] },
+    4,
+    tl
+  );
+  // 2.01 → index 50 (cts=2.0) → next 2.04；1/fps 近似会是 2.05
+  assert.ok(Math.abs(odd[1].start - resume) < 1e-9, `table resume not 1/fps: ${odd[1].start}`);
+  const noTl = keepRangesForEncode({ ...edit, cutouts: [{ start: 1.6, end: 2.01 }] }, 4, null);
+  assert.ok(Math.abs(noTl[1].start - (2.01 + 1 / 25)) < 1e-9, "无表退回 1/fps");
 });
 
 t("仅裁片头片尾：起点/终点=黄柄秒值半开", () => {

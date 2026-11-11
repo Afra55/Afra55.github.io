@@ -1532,11 +1532,41 @@
     }
 
     /**
+     * 把当前 sourceTimeline 校准到本页 video，并重吸附黄/红柄。
+     * 外预览 / GIF 若传入同一对象，此处原地平移 ctsSec，三处删中间接点才同表。
+     */
+    async function calibrateSourceTimelineToEditorVideo() {
+      if (closed || !sourceTimeline?.ctsSec?.length || !video) return;
+      const calibrate = window.DevToolsMp4Timeline?.calibrateToElement;
+      if (typeof calibrate !== "function") return;
+      try {
+        // 允许对已校准表再锚到本页 video（外预览与编辑器 element 不同）
+        sourceTimeline.calibrated = false;
+        await calibrate(sourceTimeline, video);
+      } catch (_) {}
+      if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
+        try {
+          rematchHandlesAfterCalibrate();
+        } catch (_) {}
+      }
+    }
+
+    /**
      * 后台探测片源 fps（优先共用 detectSourceFps；否则本页 rVFC 轻量估）。
      * 不阻塞打开；探测到后更新 frameSnapSec，后续松手即用真实格。
+     * 若 open({ timeline }) 已传入外预览表：复用，禁止另 probe 出第二张表。
      */
     async function detectAndApplySourceTimeline(srcFile) {
-      if (closed || !srcFile) return;
+      if (closed) return;
+      // 外预览 / GIF 已校准的采样表：复用同一引用
+      const shared = opts.timeline;
+      if (shared?.ctsSec?.length) {
+        sourceTimeline = shared;
+        if (Number(shared.fps) >= 5) applySourceFps(shared.fps);
+        await calibrateSourceTimelineToEditorVideo();
+        return;
+      }
+      if (!srcFile) return;
       const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
       if (typeof probe !== "function") return;
       try {
@@ -1544,19 +1574,7 @@
         if (closed || !tl?.ok || !(tl.fps >= 5)) return;
         sourceTimeline = tl;
         applySourceFps(tl.fps);
-        // 把 ctsSec 校准到 ≡ 编辑器 video.currentTime / 显示时钟
-        const calibrate = window.DevToolsMp4Timeline?.calibrateToElement;
-        if (typeof calibrate === "function" && video) {
-          try {
-            await calibrate(sourceTimeline, video);
-          } catch (_) {}
-        }
-        // 校准后旧柄可能落在帧间：重吸附到成片时钟，避免索引掉上一帧
-        if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
-          try {
-            rematchHandlesAfterCalibrate();
-          } catch (_) {}
-        }
+        await calibrateSourceTimelineToEditorVideo();
       } catch (_) {}
     }
 
@@ -2180,6 +2198,8 @@
           w: Math.round(clamp(crop.w, 2, srcW)),
           h: Math.round(clamp(crop.h, 2, srcH)),
         },
+        // 运行时回写采样表（勿入 LS 草稿）；外预览/GIF 与编辑器同表
+        ...(sourceTimeline?.ctsSec?.length ? { __vbbTimeline: sourceTimeline } : {}),
       };
     }
 

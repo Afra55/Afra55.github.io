@@ -1871,17 +1871,32 @@
               })
               .catch(() => {});
           }
+          // 打开前尽量挂上外预览表，编辑器 keepRangesLocal ≡ 外预览 enforce ≡ GIF
+          try {
+            await ensureVbbSourceTimeline(item, vbbVideo);
+          } catch (_) {}
           const openP = editor.open({
             file: item.file,
             title: item.file.name || "视频",
             initial: draft,
             initialMode: "trim",
             srcFps: openSrcFps >= 5 ? openSrcFps : 0,
+            timeline: item.timeline || vbbSingleTimeline || null,
           });
           editorOpened = true;
           boot.remove();
           const next = await openP;
           if (next) {
+            // 编辑器可能新建/再校准了表：回写缓存，禁止外预览另持一张
+            if (next.__vbbTimeline?.ctsSec?.length) {
+              item.timeline = next.__vbbTimeline;
+              if (!isVbbBatchMode()) vbbSingleTimeline = next.__vbbTimeline;
+              try {
+                delete next.__vbbTimeline;
+              } catch (_) {
+                next.__vbbTimeline = undefined;
+              }
+            }
             const nextFps = Number(next.srcFps) || Number(item.srcFps) || Number(vbbSingleSrcFps) || 0;
             item.edit = {
               trimStart: Number(next.trimStart) || 0,
