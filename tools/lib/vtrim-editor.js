@@ -1490,6 +1490,36 @@
     }
 
     /**
+     * 校准后黄柄 + 红段一起吸到成片时钟，再 clip。
+     * 只吸黄柄会导致 cutouts 落在窗外，完成/落盘时被 normalize 静默清空 → 下次只剩片头片尾。
+     */
+    function rematchHandlesAfterCalibrate() {
+      const beforeCuts = Array.isArray(cutouts) ? cutouts.length : 0;
+      startSec = snapToEncodeClock(startSec);
+      endSec = Math.max(startSec + MIN_SPAN, snapToEncodeClock(endSec));
+      endParkAtSec = encodeParkSecForEdge("end");
+      if (beforeCuts) {
+        cutouts = cutouts.map((c) => {
+          let a = snapToEncodeClock(Number(c.start) || 0);
+          let b = snapToEncodeClock(Number(c.end) || 0);
+          if (b < a + MIN_CUTOUT) b = a + MIN_CUTOUT;
+          return { start: a, end: b };
+        });
+        clipCutoutsToWindow();
+        const afterCuts = Array.isArray(cutouts) ? cutouts.length : 0;
+        if (afterCuts < beforeCuts) {
+          toast(`校准后保留 ${afterCuts}/${beforeCuts} 段删中间`);
+        }
+        if (selectedCutout >= cutouts.length) {
+          selectedCutout = cutouts.length ? cutouts.length - 1 : -1;
+        }
+        syncCutoutUi();
+      }
+      paintTimeline();
+      updateLabels();
+    }
+
+    /**
      * 后台探测片源 fps（优先共用 detectSourceFps；否则本页 rVFC 轻量估）。
      * 不阻塞打开；探测到后更新 frameSnapSec，后续松手即用真实格。
      */
@@ -1512,11 +1542,7 @@
         // 校准后旧柄可能落在帧间：重吸附到成片时钟，避免索引掉上一帧
         if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
           try {
-            startSec = snapToEncodeClock(startSec);
-            endSec = Math.max(startSec + MIN_SPAN, snapToEncodeClock(endSec));
-            endParkAtSec = encodeParkSecForEdge("end");
-            paintTimeline();
-            updateLabels();
+            rematchHandlesAfterCalibrate();
           } catch (_) {}
         }
       } catch (_) {}
@@ -1551,11 +1577,7 @@
         await calibrate(sourceTimeline, video);
         if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
           try {
-            startSec = snapToEncodeClock(startSec);
-            endSec = Math.max(startSec + MIN_SPAN, snapToEncodeClock(endSec));
-            endParkAtSec = encodeParkSecForEdge("end");
-            paintTimeline();
-            updateLabels();
+            rematchHandlesAfterCalibrate();
           } catch (_) {}
         }
       } catch (_) {}

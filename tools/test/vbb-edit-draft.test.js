@@ -217,6 +217,9 @@ t("单段黑盒：开跑前+失败/finally 都落盘，刷新可恢复", () => {
   assert.ok(body.includes("开跑前先落盘"));
   assert.ok(body.includes("生成失败 · 编辑已保存"));
   assert.ok(/finally\s*\{[\s\S]*saveVbbEditDraftsSync/.test(body));
+  // 无 gifBlob 不得 prune（假成功会清掉删中间草稿）
+  assert.ok(body.includes("!vbbClips[0]?.gifBlob") || body.includes("!vbbClips[0].gifBlob"));
+  assert.ok(body.includes("确有 GIF 才清草稿") || body.includes("勿 prune"));
 });
 
 t("草稿匹配含指纹/放宽时长/唯一文件名，防 size 漂移丢恢复", () => {

@@ -213,6 +213,17 @@ t("vtrim：帧内 seek + 校准", () => {
   assert.ok(park.includes("seekSecForTime"), "片尾停帧走帧内点");
 });
 
+t("校准 rematch 须同时吸附红段，防删中间被 normalize 静默清空", () => {
+  assert.ok(vtrim.includes("function rematchHandlesAfterCalibrate"));
+  const fn = vtrim.slice(
+    vtrim.indexOf("function rematchHandlesAfterCalibrate"),
+    vtrim.indexOf("async function detectAndApplySourceTimeline")
+  );
+  assert.ok(fn.includes("clipCutoutsToWindow"), "须 clip 红段");
+  assert.ok(fn.includes("snapToEncodeClock"), "红段两端须吸附");
+  assert.ok(vtrim.includes("rematchHandlesAfterCalibrate()"), "校准后须调用");
+});
+
 t("prepare：时间编辑先导出再 GIF", () => {
   assert.ok(vbb.includes("function vbbEditNeedsExport"));
   assert.ok(vbb.includes("exportedEdit"));
