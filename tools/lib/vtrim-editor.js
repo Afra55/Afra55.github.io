@@ -318,7 +318,7 @@
           <div class="vtrim-cut-panel" id="${p("cut-panel")}" hidden>
             <div class="btn-row tool-actions vtrim-cut-tools" id="${p("cut-tools")}" aria-label="删中间">
               <button type="button" class="secondary-btn" id="${p("cut-add")}" title="从进度条当前位置起添加删除区（当前帧=删除起点；红柄两端所见帧都会删）">添加删除段</button>
-              <button type="button" class="secondary-btn" id="${p("cut-play-join")}" title="跳到删段接点前（不自动播放），再点底部播放核对">跳到接点</button>
+              <button type="button" class="secondary-btn" id="${p("cut-play-join")}" title="点一下跳到起始接点，再点跳到结尾接点（不自动播放）">跳到接点</button>
               <button type="button" class="ghost-btn" id="${p("cut-del")}" title="删除当前选中的删除段" disabled>删选中段</button>
               <button type="button" class="ghost-btn" id="${p("cut-clear")}" title="清空全部删除段">清空</button>
             </div>
@@ -502,6 +502,8 @@
     /** @type {{ start: number, end: number }[]} */
     let cutouts = [];
     let selectedCutout = -1;
+    /** 跳到接点：0=下次去起始接点，1=下次去结尾接点 */
+    let cutJoinVisit = 0;
     const initMode = String(opts.initialMode || "trim");
     let editMode = initMode === "crop" || initMode === "cut" ? initMode : "trim";
     let drag = null;
@@ -776,6 +778,7 @@
         cutouts.findIndex((c) => a >= c.start - 0.05 && a <= c.end + 0.05)
       );
       if (selectedCutout < 0) selectedCutout = cutouts.length - 1;
+      cutJoinVisit = 0;
       syncCutoutUi();
       updateLabels();
       // 落到删段前约 0.4s，方便再「跳到接点」后点底部播放核对（不自动播）
@@ -784,16 +787,20 @@
       const joinAt = prevKeep
         ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.4)
         : Math.max(startSec, a - 0.4);
-      previewSeek(joinAt, { throttle: false });
+      // 勿用 previewSeek：inflight 卡住会导致随后「起点+/终点+」进度不动
+      void seekPlayheadExact(joinAt);
       hapticLight();
       toast(
         coarseUi()
-          ? "已添加 · 用上方起点/终点 ±1 帧 · 「跳到接点」后播放"
-          : "已添加删除段 · 用片头/片尾位按钮 ±1 帧 · 可跳到接点后播放核对"
+          ? "已添加 · 用上方起点/终点 ±1 帧 · 「跳到接点」切换两端"
+          : "已添加删除段 · 用起点/终点 ±1 帧微调 · 「跳到接点」切换起始/结尾"
       );
     }
 
-    /** 跳到选中/首个删段接点前；不自动播放——须用户点底部播放 */
+    /**
+     * 跳到选中/首个删段接点：点一下起始接点，再点结尾接点（交替）。
+     * 不自动播放——须用户点底部播放。不改 keep/成片时钟。
+     */
     async function seekCutJoinPreview() {
       const cuts = normalizeCutoutsList(cutouts, startSec, endSec);
       if (!cuts.length) {
@@ -803,20 +810,44 @@
       const keeps = keepRangesLocal();
       const cut =
         selectedCutout >= 0 && selectedCutout < cuts.length ? cuts[selectedCutout] : cuts[0];
-      const prevKeep = [...keeps].reverse().find((k) => Number(k.end) <= Number(cut.start) + 0.08);
-      const joinAt = prevKeep
-        ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.45)
-        : Math.max(startSec, Number(cut.start) - 0.45);
       playWindowLooping = false;
       try {
         video.pause();
       } catch (_) {}
-      await seekPlayheadExact(joinAt);
+      scrubSeekWanted = null;
+      if (dragSeekTimer) {
+        clearTimeout(dragSeekTimer);
+        dragSeekTimer = 0;
+      }
+      scrubSeekInflight = false;
+      let target;
+      let tip;
+      if (cutJoinVisit % 2 === 0) {
+        // 起始接点：红段起点所见帧（在删段内，必须 raw，勿走 keep 重映射）
+        target = Number(cut.start) || startSec;
+        tip = "已跳到起始接点 · 再点到结尾接点";
+        cutJoinVisit = 1;
+      } else {
+        // 结尾接点：删段后第一保留帧（半开 end ≡ 下一段 keep.start）
+        const nextKeep = keeps.find((k) => Number(k.start) >= Number(cut.end) - 0.05);
+        target =
+          nextKeep && Number.isFinite(Number(nextKeep.start))
+            ? Number(nextKeep.start)
+            : Number(cut.end) || endSec;
+        tip = "已跳到结尾接点 · 再点回起始接点";
+        cutJoinVisit = 0;
+      }
+      await seekRawExact(target);
+      if (cutPlayJoinBtn) {
+        cutPlayJoinBtn.title =
+          cutJoinVisit === 0
+            ? "点一下跳到起始接点，再点跳到结尾接点（不自动播放）"
+            : "再点跳到结尾接点（不自动播放）";
+      }
       hapticLight();
-      // 提醒点底部播放（不自动播）
       playBtn?.classList.add("is-attn");
       window.setTimeout(() => playBtn?.classList.remove("is-attn"), 1600);
-      toast("已跳到接点前 · 点底部播放核对");
+      toast(tip);
     }
 
     function deleteSelectedCutout() {
@@ -840,17 +871,32 @@
       const c = { ...cutouts[index] };
       if (edge === "start") {
         c.start = clamp(t, startSec, c.end - MIN_CUTOUT);
-        previewSeek(c.start, { throttle: Boolean(drag) });
       } else {
         c.end = clamp(t, c.start + MIN_CUTOUT, endSec);
-        previewSeek(c.end, { throttle: Boolean(drag) });
       }
       const next = cutouts.slice();
       next[index] = c;
       cutouts = normalizeCutoutsList(next, startSec, endSec);
-      selectedCutout = Math.min(index, cutouts.length - 1);
+      selectedCutout = Math.min(index, Math.max(0, cutouts.length - 1));
       paintCutouts();
       updateLabels();
+      const park =
+        edge === "start"
+          ? Number(cutouts[selectedCutout]?.start) || c.start
+          : Number(cutouts[selectedCutout]?.end) || c.end;
+      if (drag) {
+        // 拖红柄：节流 preview 即可
+        previewSeek(park, { throttle: true });
+        return;
+      }
+      // 起点+/终点+：必须能停在删段端点。previewSeek 会被 keep 重映射/inflight 卡住 → 进度「没反应」
+      scrubSeekWanted = null;
+      if (dragSeekTimer) {
+        clearTimeout(dragSeekTimer);
+        dragSeekTimer = 0;
+      }
+      scrubSeekInflight = false;
+      void seekRawExact(park);
     }
 
     /** 对选中红段端点做 ± 步进（成片 CTS；与预览/导出同一套） */
@@ -867,7 +913,16 @@
         dir === 1 || dir === -1
           ? nudgeEncodeSec(cur, dir)
           : quantizeTrimSec(cur + dir);
+      const before = cur;
       setCutoutEdge(selectedCutout, kind, quantizeTrimSec(next));
+      const after =
+        kind === "end"
+          ? Number(cutouts[selectedCutout]?.end) || before
+          : Number(cutouts[selectedCutout]?.start) || before;
+      // 已顶到最短删段/窗边界：仍 seek 到该端，让进度跟上去（避免「点了没动」）
+      if (Math.abs(after - before) < 1e-6) {
+        hapticLight();
+      }
       return true;
     }
 
@@ -1017,17 +1072,25 @@
         return;
       }
       scrubSeekInflight = true;
-      const onSeeked = () => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
         video.removeEventListener("seeked", onSeeked);
         scrubSeekInflight = false;
         paintTimeline();
         updateLabels();
         pumpPreviewScrubSeek();
       };
+      const onSeeked = () => finish();
       video.addEventListener("seeked", onSeeked, { once: true });
+      // 部分机型 seeked 不触发会卡住后续微调；短超时兜底
+      window.setTimeout(finish, 320);
       try {
         video.currentTime = t;
-      } catch (_) {}
+      } catch (_) {
+        finish();
+      }
     }
 
     /**
@@ -2543,11 +2606,13 @@
         syncHandleTips();
       } else if (kind === "cut-select") {
         selectedCutout = Number(hit.cutIndex) || 0;
+        cutJoinVisit = 0;
         syncCutoutUi();
         drag = null;
         timeline?.classList.remove("is-dragging");
       } else if (kind === "cut-start" || kind === "cut-end") {
         selectedCutout = Number(hit.cutIndex) || 0;
+        cutJoinVisit = 0;
         syncCutoutUi();
         drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout, samples: [] };
         timeline?.setPointerCapture?.(e.pointerId);

@@ -52,17 +52,29 @@ t("预览轻点不 toggle 播放（只用底部按钮）", () => {
   assert.ok(!block.includes("togglePlay"));
 });
 
-t("删中间「跳到接点」只 seek、不 video.play", () => {
+t("删中间「跳到接点」只 seek、不 video.play；起始/结尾交替", () => {
   assert.ok(vtrim.includes("跳到接点"));
   assert.ok(vtrim.includes("async function seekCutJoinPreview"));
   const fn = vtrim.slice(
     vtrim.indexOf("async function seekCutJoinPreview"),
     vtrim.indexOf("function deleteSelectedCutout")
   );
-  assert.ok(fn.includes("seekPlayheadExact"));
+  assert.ok(fn.includes("cutJoinVisit"));
+  assert.ok(fn.includes("起始接点"));
+  assert.ok(fn.includes("结尾接点"));
+  assert.ok(fn.includes("seekRawExact"), "接点须 raw seek，勿被 keep 重映射");
   assert.ok(fn.includes("video.pause()"));
   assert.ok(!fn.includes("video.play("), "跳到接点不得自动播放");
-  assert.ok(vtrim.includes("点底部播放核对"));
+});
+
+t("删中间起点+/终点+：非拖拽走 seekRawExact，避免进度卡住", () => {
+  const fn = vtrim.slice(
+    vtrim.indexOf("function setCutoutEdge"),
+    vtrim.indexOf("function nudgeSelectedCutout")
+  );
+  assert.ok(fn.includes("seekRawExact"));
+  assert.ok(fn.includes("scrubSeekInflight = false"));
+  assert.ok(fn.includes("if (drag)"));
 });
 
 t("编辑层去掉中间播放钮", () => {

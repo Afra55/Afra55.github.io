@@ -50,6 +50,7 @@ t("快捷键：空格播放、Delete 删段、方向键微调进度", () => {
 t("删中间可跳到接点再手动播放", () => {
   assert.ok(vtrim.includes("跳到接点") || vtrim.includes("seekCutJoinPreview"));
   assert.ok(vtrim.includes("flashSnapFeedback") || vtrim.includes("snapNearCutouts"));
+  assert.ok(vtrim.includes("起始接点") && vtrim.includes("结尾接点"));
 });
 
 console.log(`vbb-editor-ux.test.js: ${n} passed`);
