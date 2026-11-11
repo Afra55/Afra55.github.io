@@ -87,6 +87,11 @@ function buildFile() {
   assert.strictEqual(api.canFfmpegFirst(tl), true, "already-aligned 可 ffmpeg-first");
   tl.calibrateMethod = "mid-check-fail";
   assert.strictEqual(api.canFfmpegFirst(tl), false, "mid-check-fail 不可");
+  // 源码：中点容差须 ≥1 帧，过紧会误杀快切
+  assert.ok(
+    /frameTol\s*=\s*1\s*\/\s*Math\.max/.test(src) || /1\s*\/\s*Math\.max\(5,\s*Number\(timeline\.fps\)/.test(src),
+    "mid-check 容差须 1 帧"
+  );
   tl.calibrateMethod = "already-aligned";
   assert.ok(tl.mediaCtsSec && tl.mediaCtsSec.length === tl.ctsSec.length, "mediaCtsSec");
   const seek0 = api.frameSeekSec(tl, 0);

@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const BUILD = "2026.11.11-220928";
+  const BUILD = "2026.11.11-222206";
   window.TOOLS_BUILD = BUILD;
   window.TOOLS_VERSION = BUILD;
 

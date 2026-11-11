@@ -218,8 +218,14 @@ t("删中间 materialize：校准后可 ffmpeg 先；勿 -r cfr", () => {
   assert.ok(fn.includes("canFfmpegFirst"), "快切门槛");
   assert.ok(!/"-r"[\s\S]{0,40}String\(keepFps\)/.test(fn));
   assert.ok(fn.includes('"vfr"'));
-  assert.ok(fn.includes('["sec", "ss", "frameRaw", "frameGrid"]') || fn.includes("frameGrid"), "ffmpeg 兜底");
+  assert.ok(
+    fn.includes("frameGrid") &&
+      (fn.includes('["sec", "ss", "frameRaw", "frameGrid"]') ||
+        fn.includes('["frameRaw", "frameGrid", "sec", "ss"]')),
+    "ffmpeg 兜底"
+  );
   assert.ok(fn.includes("calibrateToElement") && fn.includes("matTimeline"), "GIF 同编辑器时钟");
+  assert.ok(fn.includes("校准显示时钟") || fn.includes("mid-check-fail"), "校准可重试防误走预览帧");
 });
 
 t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {
