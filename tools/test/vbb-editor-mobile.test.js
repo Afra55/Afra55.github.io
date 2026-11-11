@@ -78,6 +78,14 @@ t("删中间起点+/终点+：非拖拽走 seekRawExact，避免进度卡住", (
   assert.ok(vtrim.includes("ensureSelectedCutout"), "± 须能自动选红段");
   const sync = vtrim.slice(vtrim.indexOf("function syncCutoutUi"), vtrim.indexOf("function ensureSelectedCutout"));
   assert.ok(!/btn\.disabled\s*=\s*!hasSel/.test(sync), "± 勿因未选中 disabled");
+  // 松手勿再 floor 吸附，否则 + 会被吸回上一帧
+  const snap = vtrim.slice(
+    vtrim.indexOf("async function snapCutNudgeToShown"),
+    vtrim.indexOf("function syncAspectUi")
+  );
+  assert.ok(snap.includes("seekRawExact"), "松手只停端点");
+  assert.ok(!snap.includes("snapToEncodeClock"), "松手勿 floor 吸附 undo +");
+  assert.ok(fn.includes("cutouts[index + 1]") || fn.includes("index < cutouts.length - 1"), "多段终点勿并段");
 });
 
 t("编辑层去掉中间播放钮", () => {
