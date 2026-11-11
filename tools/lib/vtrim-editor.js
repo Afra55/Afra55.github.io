@@ -893,14 +893,23 @@
       if (index < 0 || index >= cutouts.length) return;
       const c = { ...cutouts[index] };
       if (edge === "start") {
-        c.start = clamp(t, startSec, c.end - MIN_CUTOUT);
+        // 多段时勿越过上一段终点（否则 normalize 合并，看起来像 +/− 乱跳）
+        let lo = startSec;
+        if (index > 0) lo = Math.max(lo, Number(cutouts[index - 1].end) || lo);
+        c.start = clamp(t, lo, c.end - MIN_CUTOUT);
       } else {
-        c.end = clamp(t, c.start + MIN_CUTOUT, endSec);
+        let hi = endSec;
+        if (index < cutouts.length - 1) {
+          hi = Math.min(hi, Number(cutouts[index + 1].start) || hi);
+        }
+        c.end = clamp(t, c.start + MIN_CUTOUT, hi);
       }
       const next = cutouts.slice();
       next[index] = c;
       cutouts = normalizeCutoutsList(next, startSec, endSec);
-      selectedCutout = Math.min(index, Math.max(0, cutouts.length - 1));
+      // 多段时尽量保住原下标（合并后才回退）
+      selectedCutout =
+        index < cutouts.length ? index : Math.max(0, cutouts.length - 1);
       paintCutouts();
       updateLabels();
       const park =
@@ -953,16 +962,18 @@
     }
 
     /**
-     * 红段微调松手：吸到成片帧格，停在该端点画面。
-     * 点起点停起点、点终点停终点（勿再跳回接点/片头）。
+     * 红段微调松手：只停在当前端点画面。
+     * 勿再 floor 吸附——CTS<=t 会把「+」刚进的下一帧吸回上一格，表现为只有 − 能动。
+     * （片头/片尾微调已是「只停预览」；红段对齐同一策略。）
      */
     async function snapCutNudgeToShown(edge) {
       const idx = selectedCutout;
       if (idx < 0 || idx >= cutouts.length) return;
       const kindEdge = edge === "end" ? "end" : "start";
-      const live = kindEdge === "end" ? cutouts[idx].end : cutouts[idx].start;
-      const want = quantizeTrimSec(snapToEncodeClock(live));
-      setCutoutEdge(idx, kindEdge, want);
+      const live =
+        kindEdge === "end"
+          ? Number(cutouts[idx].end) || 0
+          : Number(cutouts[idx].start) || 0;
       try {
         video.pause();
       } catch (_) {}
@@ -971,7 +982,8 @@
         clearTimeout(dragSeekTimer);
         dragSeekTimer = 0;
       }
-      await seekRawExact(kindEdge === "end" ? cutouts[idx].end : cutouts[idx].start);
+      scrubSeekInflight = false;
+      await seekRawExact(live);
       syncCutoutUi();
       paintTimeline();
       updateLabels();
