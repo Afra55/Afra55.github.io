@@ -1514,7 +1514,10 @@
       }
       if (closed || !sourceTimeline?.ctsSec?.length) return;
       const method = String(sourceTimeline.calibrateMethod || "");
-      const trusted = method === "videoframe-t0" || method === "already-aligned";
+      const trusted =
+        method === "videoframe-t0" ||
+        method === "videoframe-t0-soft" ||
+        method === "already-aligned";
       if (trusted && sourceTimeline.calibrated) return;
       const calibrate = window.DevToolsMp4Timeline?.calibrateToElement;
       if (typeof calibrate !== "function" || !video) return;
@@ -2218,14 +2221,18 @@
         if (!out) {
           try {
             if (ffFirst) {
-              onProgress(0.08, "快切未成，按预览帧…");
-              toast(ffFailReason ? `快切未成（${ffFailReason}），改按预览帧…` : "快切未成，改按预览帧…");
+              onProgress(0.08, "异常：快切未成，改预览帧…");
+              toast(
+                ffFailReason
+                  ? `异常：快切未成（${ffFailReason}），改用预览帧`
+                  : "异常：快切未成，改用预览帧"
+              );
             } else {
               const why = edit.cropOn
                 ? "已裁画面"
-                : `时钟=${sourceTimeline?.calibrateMethod || "未校准"}`;
-              onProgress(0.08, "按预览帧导出…");
-              toast(`${why}，走预览帧（慢）`);
+                : `时钟异常=${sourceTimeline?.calibrateMethod || "未校准"}`;
+              onProgress(0.08, "异常：按预览帧导出…");
+              toast(`${why}，改用预览帧（慢）`);
             }
             out = await exportKeepByChromeDisplay(video, previewKeeps, {
               keepFps: sourceFps || resolveKeepFps(edit),

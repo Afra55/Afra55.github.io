@@ -85,9 +85,12 @@ function buildFile() {
   tl.calibrateMethod = "already-aligned";
   tl.calibrated = true;
   assert.strictEqual(api.canFfmpegFirst(tl), true, "already-aligned 可 ffmpeg-first");
-  tl.calibrateMethod = "mid-check-fail";
-  assert.strictEqual(api.canFfmpegFirst(tl), false, "mid-check-fail 不可");
-  // 源码：中点容差须 ≥1 帧，过紧会误杀快切
+  tl.calibrateMethod = "videoframe-t0-soft";
+  assert.strictEqual(api.canFfmpegFirst(tl), true, "soft 中点抖动仍可 ffmpeg-first");
+  tl.calibrateMethod = "out-of-range";
+  assert.strictEqual(api.canFfmpegFirst(tl), false, "out-of-range 不可");
+  // 源码：中点失败须 soft 应用 t0，勿标 mid-check-fail 堵死快切
+  assert.ok(src.includes("videoframe-t0-soft"), "mid 抖须 soft");
   assert.ok(
     /frameTol\s*=\s*1\s*\/\s*Math\.max/.test(src) || /1\s*\/\s*Math\.max\(5,\s*Number\(timeline\.fps\)/.test(src),
     "mid-check 容差须 1 帧"

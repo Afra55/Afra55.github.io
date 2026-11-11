@@ -257,6 +257,7 @@ t("下载：校准可信 ffmpeg 先，否则 chrome", () => {
     "导出前须 await 校准，防误走对齐预览帧"
   );
   assert.ok(dl.includes("校准显示时钟") || vtrim.includes("校准显示时钟"), "导出前校准文案");
+  assert.ok(dl.includes("异常") || vtrim.includes("异常："), "chrome 兜底须标异常");
 });
 
 t("ffmpeg onepass：有采样表只用 frameRaw（校准后禁止 sec）", () => {
