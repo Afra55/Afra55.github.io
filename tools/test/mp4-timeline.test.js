@@ -81,20 +81,24 @@ function buildFile() {
   assert.ok(typeof api.frameSeekSec === "function", "frameSeekSec");
   assert.ok(typeof api.calibrateToElement === "function", "calibrateToElement");
   assert.ok(typeof api.canFfmpegFirst === "function", "canFfmpegFirst");
-  assert.strictEqual(api.canFfmpegFirst(tl), false, "未校准不可 ffmpeg-first");
+  // 有采样表且单调 → 默认可快切（校准 method 不挡；对齐预览帧不当默认）
+  assert.strictEqual(api.canFfmpegFirst(tl), true, "有 stts 默认可 ffmpeg-first");
   tl.calibrateMethod = "already-aligned";
   tl.calibrated = true;
   assert.strictEqual(api.canFfmpegFirst(tl), true, "already-aligned 可 ffmpeg-first");
-  tl.calibrateMethod = "videoframe-t0-soft";
-  assert.strictEqual(api.canFfmpegFirst(tl), true, "soft 中点抖动仍可 ffmpeg-first");
   tl.calibrateMethod = "out-of-range";
-  assert.strictEqual(api.canFfmpegFirst(tl), false, "out-of-range 不可");
-  // 源码：中点失败须 soft 应用 t0，勿标 mid-check-fail 堵死快切
+  assert.strictEqual(api.canFfmpegFirst(tl), true, "校准失败也不挡有表快切");
   assert.ok(src.includes("videoframe-t0-soft"), "mid 抖须 soft");
   assert.ok(
     /frameTol\s*=\s*1\s*\/\s*Math\.max/.test(src) || /1\s*\/\s*Math\.max\(5,\s*Number\(timeline\.fps\)/.test(src),
     "mid-check 容差须 1 帧"
   );
+  // 乱序拒快切
+  const bad = {
+    ctsSec: Float64Array.from([0, 0.1, 0.05, 0.2]),
+    mediaCtsSec: Float64Array.from([0, 0.1, 0.05, 0.2]),
+  };
+  assert.strictEqual(api.canFfmpegFirst(bad), false, "CTS 乱序不可");
   tl.calibrateMethod = "already-aligned";
   assert.ok(tl.mediaCtsSec && tl.mediaCtsSec.length === tl.ctsSec.length, "mediaCtsSec");
   const seek0 = api.frameSeekSec(tl, 0);

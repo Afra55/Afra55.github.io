@@ -649,15 +649,11 @@
   }
 
   /**
-   * 默认可 ffmpeg frameRaw 快切。真正异常（无表 / CTS 乱序 / 校准失败且未锚上）才应走预览帧。
-   * videoframe-t0-soft：中点复核有噪声但仍已按 t0 平移，算正常可用。
+   * 默认快切：只要有采样表且 CTS 近似单调就走 ffmpeg frameRaw。
+   * 校准 method 只写诊断，不挡快切——「对齐预览帧」仅异常兜底，绝不当默认。
    */
   function canFfmpegFirst(timeline) {
     if (!timeline?.ctsSec?.length) return false;
-    const m = String(timeline.calibrateMethod || "");
-    if (m !== "videoframe-t0" && m !== "videoframe-t0-soft" && m !== "already-aligned") {
-      return false;
-    }
     // 真乱序才拒：前 64 帧或中→尾倒退（异常片）
     const arr = timeline.mediaCtsSec?.length === timeline.ctsSec.length ? timeline.mediaCtsSec : timeline.ctsSec;
     let prev = -Infinity;

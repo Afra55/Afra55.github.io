@@ -9418,7 +9418,11 @@
             exportMethod: out.exportMethod || method,
           };
         };
-        const ffFirst = Boolean(window.DevToolsMp4Timeline?.canFfmpegFirst?.(matTimeline));
+        // 有采样表即默认快切；对齐预览帧只作异常兜底
+        const ffFirst = Boolean(
+          window.DevToolsMp4Timeline?.canFfmpegFirst?.(matTimeline) ||
+            (matTimeline?.ctsSec && matTimeline.ctsSec.length)
+        );
         const exp = window.DevToolsVtrimEditor?.exportKeepVideo;
         if (ffFirst && typeof exp === "function") {
           try {

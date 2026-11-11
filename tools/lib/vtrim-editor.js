@@ -727,13 +727,34 @@
       const inCut = editMode === "cut";
       const hasSel = inCut && selectedCutout >= 0 && selectedCutout < cutouts.length;
       if (cutDelBtn) cutDelBtn.disabled = !hasSel;
-      // 删中间时：未选中红段则禁用共用 ± 按钮；修剪模式始终可用
-      if (inCut) {
-        for (const btn of sharedNudgeBtns) btn.disabled = !hasSel;
-      } else if (editMode === "trim") {
-        for (const btn of sharedNudgeBtns) btn.disabled = false;
-      }
+      // ± 始终可点：未选红段时点一下会自动选/提示，勿 disabled（手机上看起来像「没反应」）
+      for (const btn of sharedNudgeBtns) btn.disabled = false;
       paintCutouts();
+    }
+
+    /** 删中间微调前保证有选中红段：唯一段 / 进度所在段 / 首段 */
+    function ensureSelectedCutout() {
+      const list = normalizeCutoutsList(cutouts, startSec, endSec);
+      if (!list.length) {
+        toast("先点「添加删除段」");
+        return false;
+      }
+      if (selectedCutout >= 0 && selectedCutout < list.length) return true;
+      if (list.length === 1) {
+        selectedCutout = 0;
+        syncCutoutUi();
+        return true;
+      }
+      const hit = cutoutAtTime(Number(video.currentTime) || 0);
+      if (hit && hit.index >= 0) {
+        selectedCutout = hit.index;
+        syncCutoutUi();
+        return true;
+      }
+      selectedCutout = 0;
+      syncCutoutUi();
+      toast("已选中第 1 段红段 · 再点 ± 微调");
+      return true;
     }
 
     function paintCutouts() {
@@ -903,6 +924,7 @@
 
     /** 对选中红段端点做 ± 步进（成片 CTS；与预览/导出同一套） */
     function nudgeSelectedCutout(edge, dirOrDelta) {
+      if (!ensureSelectedCutout()) return false;
       if (selectedCutout < 0 || selectedCutout >= cutouts.length) {
         toast("先点选一条红段");
         return false;
@@ -921,9 +943,11 @@
         kind === "end"
           ? Number(cutouts[selectedCutout]?.end) || before
           : Number(cutouts[selectedCutout]?.start) || before;
-      // 已顶到最短删段/窗边界：仍 seek 到该端，让进度跟上去（避免「点了没动」）
+      // 已顶到最短删段/窗边界：仍 seek 到该端，并提示（避免「点了没动」）
       if (Math.abs(after - before) < 1e-6) {
         hapticLight();
+        toast(kind === "end" ? "终点已到边界" : "起点已到边界");
+        void seekRawExact(after);
       }
       return true;
     }
@@ -2192,9 +2216,11 @@
         const filenameBase = String(file.name || "video").replace(/\.[^.]+$/, "");
         // 必须先等校准：打开时探测是异步的，未完成会误判走「对齐预览帧」
         await ensureSourceTimelineForExport(onProgress);
-        // 校准可信 → ffmpeg frameRaw 快切；否则 / 失败再预览帧（准但慢）
+        // 默认 ffmpeg frameRaw 快切（有采样表即试）；预览帧只作异常兜底，绝不当默认
         const ffFirst = Boolean(
-          !edit.cropOn && window.DevToolsMp4Timeline?.canFfmpegFirst?.(sourceTimeline)
+          !edit.cropOn &&
+            (window.DevToolsMp4Timeline?.canFfmpegFirst?.(sourceTimeline) ||
+              (sourceTimeline?.ctsSec && sourceTimeline.ctsSec.length))
         );
         let out = null;
         let ffFailReason = "";
