@@ -110,6 +110,8 @@
       let vbbSingleEdit = null;
       /** 单文件探测到的源 fps（getActive 临时对象不会丢掉） */
       let vbbSingleSrcFps = 0;
+      /** 单文件校准后的 MP4 采样表：外预览 / GIF 与编辑器共用，避免接点差帧 */
+      let vbbSingleTimeline = null;
       let vbbObjectUrl = "";
       /** 编码因 File 引用失效失败后，允许重选同视频并保留方案/打点 */
       let vbbNeedReselect = false;
@@ -708,11 +710,59 @@
       }
 
       /** 成片 keep ≡ 预览 keep（源帧半开窗，不再叠垫） */
-      function vbbKeepRangesForEncode(edit, duration) {
+      function vbbKeepRangesForEncode(edit, duration, timeline) {
         const stamped = vbbEditWithSrcFps(edit);
+        const tl =
+          timeline ||
+          getActiveVbbEditItem()?.timeline ||
+          (!isVbbBatchMode() ? vbbSingleTimeline : null) ||
+          null;
         const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
-        if (typeof fn === "function") return fn(stamped, duration);
+        if (typeof fn === "function") return fn(stamped, duration, tl || undefined);
         return vbbKeepRangesFromEdit(stamped, duration);
+      }
+
+      /**
+       * 探测 + 校准片源时间轴，挂到 item / 单文件缓存。
+       * 外预览 enforce、GIF materialize 与编辑器 keep 必须同表，否则删中间接点会差帧。
+       */
+      async function ensureVbbSourceTimeline(item, videoEl) {
+        if (!item?.file) return null;
+        if (item.timeline?.ctsSec?.length) {
+          if (!isVbbBatchMode()) vbbSingleTimeline = item.timeline;
+          return item.timeline;
+        }
+        try {
+          if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
+            await window.DevToolsLazy.loadScript("./lib/mp4-timeline.js", {
+              timeoutMs: 12000,
+              label: "片源时间轴",
+            }).catch(() => null);
+          }
+          const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
+          if (typeof probe !== "function") return null;
+          const tl = await probe(item.file);
+          if (!tl?.ok || !(tl.ctsSec && tl.ctsSec.length)) return null;
+          const el = videoEl || vbbVideo;
+          const cal = window.DevToolsMp4Timeline?.calibrateToElement;
+          if (typeof cal === "function" && el) {
+            try {
+              await cal(tl, el);
+            } catch (_) {}
+          }
+          item.timeline = tl;
+          if (tl.fps >= 5) {
+            item.srcFps = tl.fps;
+            if (item.edit && !(Number(item.edit.srcFps) >= 5)) item.edit.srcFps = tl.fps;
+          }
+          if (!isVbbBatchMode()) {
+            vbbSingleTimeline = tl;
+            if (tl.fps >= 5) vbbSingleSrcFps = tl.fps;
+          }
+          return tl;
+        } catch (_) {
+          return null;
+        }
       }
 
       function vbbEditIsDirty(edit, duration, srcW, srcH) {
@@ -777,6 +827,8 @@
           srcH: vbbVideo.videoHeight || 0,
           srcFps: srcFps >= 5 ? srcFps : 0,
           edit: vbbSingleEdit,
+          timeline: vbbSingleTimeline || null,
+          contentSig: vbbSourceContentSig || "",
         };
       }
 
@@ -874,14 +926,6 @@
        * @returns {Promise<{ file: File, duration: number, srcW: number, srcH: number, materialized: boolean, segmentSpans: number[] }>}
        */
       async function materializeVbbKeepVideo(file, edit, srcW, srcH, duration, onProgress, ffmpegLease) {
-        const keeps = vbbKeepRangesForEncode(edit, duration);
-        const keepSpan = vbbKeepSpanSec(keeps);
-        let segmentSpans = keeps.map((k) =>
-          Math.max(0.05, (Number(k.end) || 0) - (Number(k.start) || 0))
-        );
-        if (!keeps.length) {
-          return { file, duration, srcW, srcH, materialized: false, segmentSpans: [] };
-        }
         // 校准可信 → ffmpeg frameRaw 快切；否则预览帧；再 ffmpeg 兜底
         if (!window.DevToolsVtrimEditor?.exportKeepByChromeDisplay) {
           await ensureVbbVtrimEditor().catch(() => null);
@@ -892,8 +936,11 @@
             : Number(edit?.srcFps) >= 5
               ? Number(edit.srcFps)
               : 24;
-        let matTimeline = null;
-        let matKeeps = keeps;
+        // 优先复用外预览已校准采样表，删中间接点才 ≡ 编辑预览 / 编辑器播放
+        let matTimeline =
+          getActiveVbbEditItem()?.timeline ||
+          (!isVbbBatchMode() ? vbbSingleTimeline : null) ||
+          null;
         let matVideo = null;
         let matUrl = null;
         const ensureMatVideo = async () => {
@@ -932,45 +979,70 @@
             matVideo = null;
           }
         };
-        try {
-          if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
-            await window.DevToolsLazy.loadScript("./lib/mp4-timeline.js", {
-              timeoutMs: 12000,
-              label: "片源时间轴",
-            }).catch(() => null);
-          }
-          const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
-          if (typeof probe === "function") {
-            onProgress?.(0.03, "校准显示时钟…");
-            matTimeline = await probe(file);
-            if (matTimeline?.ok) {
-              try {
-                const v = await ensureMatVideo();
-                const cal = window.DevToolsMp4Timeline?.calibrateToElement;
-                if (typeof cal === "function") {
-                  await cal(matTimeline, v);
-                  // 未锚上才重试；mid 抖动现已 soft 应用 t0，不再当失败
-                  const m = String(matTimeline.calibrateMethod || "");
-                  if (m === "failed-no-frame" || m === "out-of-range" || m === "mid-check-fail") {
-                    matTimeline.calibrated = false;
-                    await cal(matTimeline, v);
-                  }
-                }
-              } catch (_) {}
+        if (!matTimeline?.ctsSec?.length) {
+          try {
+            if (!window.DevToolsMp4Timeline?.probeMp4VideoTimeline && window.DevToolsLazy?.loadScript) {
+              await window.DevToolsLazy.loadScript("./lib/mp4-timeline.js", {
+                timeoutMs: 12000,
+                label: "片源时间轴",
+              }).catch(() => null);
             }
+            const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
+            if (typeof probe === "function") {
+              onProgress?.(0.03, "校准显示时钟…");
+              matTimeline = await probe(file);
+              if (matTimeline?.ok) {
+                try {
+                  const v = await ensureMatVideo();
+                  const cal = window.DevToolsMp4Timeline?.calibrateToElement;
+                  if (typeof cal === "function") {
+                    await cal(matTimeline, v);
+                    // 未锚上才重试；mid 抖动现已 soft 应用 t0，不再当失败
+                    const m = String(matTimeline.calibrateMethod || "");
+                    if (m === "failed-no-frame" || m === "out-of-range" || m === "mid-check-fail") {
+                      matTimeline.calibrated = false;
+                      await cal(matTimeline, v);
+                    }
+                  }
+                } catch (_) {}
+                // 回写缓存，后续外预览 enforce 与本次 GIF 同表
+                try {
+                  const active = getActiveVbbEditItem();
+                  if (active) active.timeline = matTimeline;
+                  if (!isVbbBatchMode()) vbbSingleTimeline = matTimeline;
+                  else if (active && vbbBatchFiles[vbbEditBatchIdx]) {
+                    vbbBatchFiles[vbbEditBatchIdx].timeline = matTimeline;
+                  }
+                } catch (_) {}
+              } else {
+                matTimeline = null;
+              }
+            }
+          } catch (_) {
+            matTimeline = null;
           }
-        } catch (_) {
-          matTimeline = null;
         }
+        // 有表用表算 keep（删中间下一段起点 = 下一采样）；无表才退回 1/fps
+        let keeps = vbbKeepRangesForEncode(edit, duration, matTimeline);
+        let matKeeps = keeps;
         if (
           matTimeline?.ctsSec?.length &&
           typeof window.DevToolsVtrimEditor?.keepRangesForEncode === "function"
         ) {
           try {
             matKeeps = window.DevToolsVtrimEditor.keepRangesForEncode(edit, duration, matTimeline);
+            keeps = matKeeps;
           } catch (_) {
             matKeeps = keeps;
           }
+        }
+        const keepSpan = vbbKeepSpanSec(keeps);
+        let segmentSpans = keeps.map((k) =>
+          Math.max(0.05, (Number(k.end) || 0) - (Number(k.start) || 0))
+        );
+        if (!keeps.length) {
+          cleanupMatVideo();
+          return { file, duration, srcW, srcH, materialized: false, segmentSpans: [] };
         }
         const pinOut = async (outFile) => {
           try {
@@ -988,7 +1060,8 @@
           if (!(out?.file || out?.blob?.size > 0)) return null;
           let outFile = out.file || new File([out.blob], "edit.mp4", { type: "video/mp4" });
           outFile = await pinOut(outFile);
-          if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === keeps.length) {
+          const spanN = (matKeeps && matKeeps.length) || keeps.length;
+          if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === spanN) {
             segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
           }
           return {
@@ -1836,6 +1909,10 @@
               const sig = await ensureVbbItemContentSig(item);
               if (sig && !isVbbBatchMode()) vbbSourceContentSig = sig;
             } catch (_) {}
+            // 编辑器关掉后，外预览按同表跳删中间接点
+            try {
+              await ensureVbbSourceTimeline(item, vbbVideo);
+            } catch (_) {}
             const dirtyNow = vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH);
             // 无改动 → prune 掉本片旧草稿；有改动 → upsert
             const savedN = saveVbbEditDraftsSync({ pruneSession: !dirtyNow });
@@ -1860,7 +1937,11 @@
               }
             }
             // 外预览落点与成片 keep 首帧一致（所见即所得）
-            const encodeKeeps = vbbKeepRangesForEncode(item.edit, item.duration);
+            const encodeKeeps = vbbKeepRangesForEncode(
+              item.edit,
+              item.duration,
+              item.timeline || vbbSingleTimeline
+            );
             const seekTo = Number(encodeKeeps[0]?.start);
             applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
               keepPlaying: false,
@@ -2143,6 +2224,10 @@
           vbbVideo.hidden = false;
           vbbVideo.controls = !isVbbManualMode();
         }
+        // 批量预览也要采样表：删中间接点与 GIF 同窗
+        try {
+          await ensureVbbSourceTimeline(item, vbbVideo);
+        } catch (_) {}
         const edit = item.edit;
         clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
         let seekTo = 0;
@@ -2152,7 +2237,7 @@
               ? vbbDraftStart
               : completeVbbMarks()[0]?.start ?? 0;
         } else {
-          const encodeKeeps = vbbKeepRangesForEncode(edit, item.duration);
+          const encodeKeeps = vbbKeepRangesForEncode(edit, item.duration, item.timeline);
           seekTo = Number(encodeKeeps[0]?.start);
           if (!Number.isFinite(seekTo)) seekTo = Number(edit.trimStart) || 0;
         }
@@ -4772,6 +4857,7 @@
         vbbEditBatchIdx = -1;
         vbbSingleEdit = null;
         vbbSingleSrcFps = 0;
+        vbbSingleTimeline = null;
         vbbAnalysis = null;
         clearVbbResults();
         if (vbbObjectUrl) {
@@ -4949,6 +5035,19 @@
             vbbSourceDraftOrigins = null;
           }
         }
+        // 外预览与 GIF 共用采样表（删中间接点半开窗）
+        try {
+          await ensureVbbSourceTimeline(
+            {
+              file: pinned,
+              duration,
+              srcW: vbbVideo.videoWidth,
+              srcH: vbbVideo.videoHeight,
+              edit: vbbSingleEdit,
+            },
+            vbbVideo
+          );
+        } catch (_) {}
         if (vbbMeta) {
           vbbMeta.textContent = formatLocalPickMeta(
             pinned,
@@ -4963,7 +5062,11 @@
         syncVbbEditUi();
         syncVbbEditPreview();
         if (restored > 0 && !isVbbManualMode()) {
-          const encodeKeeps = vbbKeepRangesForEncode(vbbSingleEdit, duration);
+          const encodeKeeps = vbbKeepRangesForEncode(
+            vbbSingleEdit,
+            duration,
+            vbbSingleTimeline
+          );
           const seekTo = Number(encodeKeeps[0]?.start);
           applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(vbbSingleEdit?.trimStart) || 0, {
             keepPlaying: false,

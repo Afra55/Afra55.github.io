@@ -197,6 +197,10 @@ t("materialize：校准可信 ffmpeg 先，否则 chrome；带回 segmentSpans",
   assert.ok(body.includes("calibrateToElement"), "GIF materialize 须校准显示时钟");
   assert.ok(body.includes("matTimeline"), "共用校准 timeline");
   assert.ok(body.includes("matKeeps"), "ffmpeg/chrome 同 keeps");
+  assert.ok(
+    body.includes("vbbSingleTimeline") || body.includes("getActiveVbbEditItem()?.timeline"),
+    "GIF 须优先复用外预览采样表（删中间接点）"
+  );
 });
 
 t("vtrim：帧内 seek + 校准", () => {

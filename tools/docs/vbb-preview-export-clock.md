@@ -58,7 +58,8 @@
    - **默认** `canFfmpegFirst`（有 `ctsSec` 且 CTS 近似单调即可；**校准 method 不挡**）→ **`exportKeepVideo` frameRaw**（「快速切片…」）
    - **异常**才 `exportKeepByChromeDisplay`（无表 / CTS 真乱序 / 裁画面 / 快切挂了；toast 须带「异常」；进度「对齐预览帧」——**绝不当默认**）
    - 仍无 → ffmpeg 兜底（无采样表才允许 sec）
-6. GIF：`materializeVbbKeepVideo` 与下载**同一套** `matTimeline` + `matKeeps` + `canFfmpegFirst`
+6. GIF：`materializeVbbKeepVideo` 与下载**同一套** `matTimeline` + `matKeeps` + `canFfmpegFirst`  
+   - **删中间**：外预览 `enforceVbbEditPlaybackWindow` / 编辑器 `keepRangesLocal` / GIF `matKeeps` 必须同传校准后 `ctsSec`（`nextStartAfterCutEnd` = 下一采样）。缺表时退回 `1/fps`，接点会差帧。
 7. 诊断 JSON（ver≥6）必含：`calibrateMethod`、`chromeOffsetSec`、`exportOrder`、`exportMethod`、`previewKeeps`
 
 合入前：相关单测 + `build-v2g-suite.cjs` + `bump-version.cjs`。
