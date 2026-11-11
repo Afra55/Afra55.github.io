@@ -6628,6 +6628,15 @@
           });
           if (abortVbb) throw new Error("已取消");
           applyVbbClipEncoded(vbbClips[0], encoded);
+          // 无 gifBlob（超限等）不算成功：勿标 done / 勿 prune，否则删中间草稿被清光
+          if (!vbbClips[0]?.gifBlob) {
+            const failMsg =
+              String(vbbClips[0]?.error || "").trim() ||
+              "未产出 GIF（可能超大小上限）";
+            setVbbClipJob(0, { status: "error", progress: 0, text: "失败" });
+            refreshVbbClipRow(0);
+            throw new Error(failMsg);
+          }
           const editBits = [];
           if (prepared.startSec > 0.05 || Math.abs(prepared.span - duration) > 0.05) {
             editBits.push(`裁 ${prepared.span.toFixed(1)}s`);
@@ -6648,7 +6657,7 @@
           refreshVbbClipRow(0);
           markVbbFileDraftConsumed(vbbSourceFile, vbbSingleEdit, vbbMarks, vbbDraftStart);
           try {
-            saveVbbEditDraftsSync({ pruneSession: true }); // 整段成功 → 清掉该片草稿
+            saveVbbEditDraftsSync({ pruneSession: true }); // 确有 GIF 才清草稿
           } catch (_) {}
           encodeOk = true;
           const doneBits = [
