@@ -185,7 +185,13 @@ t("materialize：校准可信 ffmpeg 先，否则 chrome；带回 segmentSpans",
   assert.ok(body.includes("快速切片") || body.includes("ffFirst"), "快切优先文案/分支");
   assert.ok(!/keeps\.length\s*<=\s*1/.test(body) || body.includes("单段 keep 也会导出"), "单段也要能导出");
   assert.ok(body.includes("out.segmentSpans") || body.includes("segmentSpans = out") || body.includes("finishMat"), "优先用导出实测段长");
-  assert.ok(body.includes("frameGrid") && body.includes('["sec", "ss", "frameRaw", "frameGrid"]'), "ffmpeg 兜底 PTS");
+  assert.ok(
+    body.includes("frameGrid") &&
+      (body.includes('["sec", "ss", "frameRaw", "frameGrid"]') ||
+        body.includes('["frameRaw", "frameGrid", "sec", "ss"]')),
+    "ffmpeg 兜底须含 frameRaw/frameGrid"
+  );
+  assert.ok(body.includes("mid-check-fail") || body.includes("校准显示时钟"), "GIF 校准可重试");
   assert.ok(!/setsar=1,fps=\$\{keepFps\}/.test(body), "scalePad 勿再叠 fps=");
   assert.ok(!/\[\$\{i\}:v\]fps=\$\{keepFps\}/.test(body), "concat 勿再 fps=");
   assert.ok(body.includes("calibrateToElement"), "GIF materialize 须校准显示时钟");
@@ -245,6 +251,12 @@ t("下载：校准可信 ffmpeg 先，否则 chrome", () => {
   assert.ok(dl.includes("exportKeepVideo"));
   assert.ok(dl.includes("快速切片") || dl.includes("ffFirst"));
   assert.ok(dl.indexOf("ffFirst") < dl.indexOf("exportKeepByChromeDisplay"));
+  assert.ok(
+    vtrim.includes("ensureSourceTimelineForExport") &&
+      vtrim.includes("sourceTimelineReady"),
+    "导出前须 await 校准，防误走对齐预览帧"
+  );
+  assert.ok(dl.includes("校准显示时钟") || vtrim.includes("校准显示时钟"), "导出前校准文案");
 });
 
 t("ffmpeg onepass：有采样表只用 frameRaw（校准后禁止 sec）", () => {

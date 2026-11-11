@@ -493,6 +493,8 @@
     let sourceFps = DEFAULT_FRAME_FPS;
     /** @type {null|{fps:number,fpsRaw?:number,sampleCount?:number,ctsSec?:Float64Array,hasCtts?:boolean,elstMediaTime?:number}} */
     let sourceTimeline = null;
+    /** @type {Promise<void>} 片源 stts + 显示时钟校准；导出前必须 await，否则会误走「对齐预览帧」 */
+    let sourceTimelineReady = Promise.resolve();
     let frameSnapSec = FRAME_SNAP_SEC;
     let startSec = 0;
     let endSec = 0;
@@ -1496,6 +1498,42 @@
       } catch (_) {}
     }
 
+    /** 导出前强制等 stts+校准；未过门槛则再校准一次，避免误走「对齐预览帧」 */
+    async function ensureSourceTimelineForExport(onProgress) {
+      try {
+        onProgress?.(0.03, "校准显示时钟…");
+      } catch (_) {}
+      try {
+        await sourceTimelineReady;
+      } catch (_) {}
+      if (closed) return;
+      if (!sourceTimeline?.ctsSec?.length) {
+        try {
+          await detectAndApplySourceTimeline(file);
+        } catch (_) {}
+      }
+      if (closed || !sourceTimeline?.ctsSec?.length) return;
+      const method = String(sourceTimeline.calibrateMethod || "");
+      const trusted = method === "videoframe-t0" || method === "already-aligned";
+      if (trusted && sourceTimeline.calibrated) return;
+      const calibrate = window.DevToolsMp4Timeline?.calibrateToElement;
+      if (typeof calibrate !== "function" || !video) return;
+      try {
+        // mid-check-fail / 未标 method：允许再跑；calibrate 对已 calibrated 会早退
+        sourceTimeline.calibrated = false;
+        await calibrate(sourceTimeline, video);
+        if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
+          try {
+            startSec = snapToEncodeClock(startSec);
+            endSec = Math.max(startSec + MIN_SPAN, snapToEncodeClock(endSec));
+            endParkAtSec = encodeParkSecForEdge("end");
+            paintTimeline();
+            updateLabels();
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
     async function detectAndApplySourceFps(srcFile, detectOpts) {
       if (closed) return;
       // 优先 MP4 stts（容器真实帧率）；再 rVFC / 共用探测
@@ -2149,11 +2187,14 @@
           if (downloadBtn) downloadBtn.textContent = "正在导出…";
         };
         const filenameBase = String(file.name || "video").replace(/\.[^.]+$/, "");
+        // 必须先等校准：打开时探测是异步的，未完成会误判走「对齐预览帧」
+        await ensureSourceTimelineForExport(onProgress);
         // 校准可信 → ffmpeg frameRaw 快切；否则 / 失败再预览帧（准但慢）
         const ffFirst = Boolean(
           !edit.cropOn && window.DevToolsMp4Timeline?.canFfmpegFirst?.(sourceTimeline)
         );
         let out = null;
+        let ffFailReason = "";
         if (ffFirst) {
           try {
             onProgress(0.06, "快速切片…");
@@ -2165,14 +2206,27 @@
               timeline: sourceTimeline || undefined,
               onProgress,
             });
-            if (!(out?.blob?.size > 0)) out = null;
-          } catch (_) {
+            if (!(out?.blob?.size > 0)) {
+              out = null;
+              ffFailReason = "快切无输出";
+            }
+          } catch (err) {
             out = null;
+            ffFailReason = String(err?.message || err || "快切异常").slice(0, 80);
           }
         }
         if (!out) {
           try {
-            onProgress(0.08, ffFirst ? "快切未成，按预览帧…" : "按预览帧导出…");
+            if (ffFirst) {
+              onProgress(0.08, "快切未成，按预览帧…");
+              toast(ffFailReason ? `快切未成（${ffFailReason}），改按预览帧…` : "快切未成，改按预览帧…");
+            } else {
+              const why = edit.cropOn
+                ? "已裁画面"
+                : `时钟=${sourceTimeline?.calibrateMethod || "未校准"}`;
+              onProgress(0.08, "按预览帧导出…");
+              toast(`${why}，走预览帧（慢）`);
+            }
             out = await exportKeepByChromeDisplay(video, previewKeeps, {
               keepFps: sourceFps || resolveKeepFps(edit),
               applyCrop: Boolean(edit.cropOn),
@@ -2849,7 +2903,7 @@
         // 方案/调用方 fps 先用上；后台探 MP4 stts（更准可覆盖）；无 stts 时不让 rVFC 盖掉已知值
         const knownFps = Number(opts.srcFps) || Number(initial.srcFps) || 0;
         const knownOk = applySourceFps(knownFps);
-        detectAndApplySourceFps(file, { preferKnown: knownOk }).catch(() => {});
+        sourceTimelineReady = detectAndApplySourceFps(file, { preferKnown: knownOk }).catch(() => {});
         startSec = clamp(Number(initial.trimStart) || 0, 0, Math.max(0, duration - MIN_SPAN));
         endSec = clamp(Number(initial.trimEnd) || duration, startSec + MIN_SPAN, duration || MIN_SPAN);
         endParkAtSec = endKeepSec();

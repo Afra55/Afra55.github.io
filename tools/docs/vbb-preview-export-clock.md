@@ -51,12 +51,12 @@
 打开片源 / 导出前：
 
 1. `probeMp4VideoTimeline(file)` → 得到 `ctsSec` + `mediaCtsSec`
-2. `calibrateToElement(timeline, videoEl)` → `chromeOffsetSec` / `calibrateMethod`
+2. `calibrateToElement(timeline, videoEl)` → `chromeOffsetSec` / `calibrateMethod`（中点容差 **1 帧**；过紧会误 `mid-check-fail`→永远「对齐预览帧」）
 3. 停帧 / 精确 seek：`seekSecForTime` / `frameSeekSec`（勿裸 CTS）
 4. keep：`keepRangesFromEdit(edit, duration, timeline)`（半开采样窗）
-5. 导出顺序：
-   - `canFfmpegFirst(timeline)`（`videoframe-t0` 或 `already-aligned`，且 CTS 近似单调）→ **`exportKeepVideo` frameRaw**
-   - 否则 / 失败 → `exportKeepByChromeDisplay`
+5. 导出顺序（下载须先 `ensureSourceTimelineForExport` / await `sourceTimelineReady`）：
+   - `canFfmpegFirst(timeline)`（`videoframe-t0` 或 `already-aligned`，且 CTS 近似单调）→ **`exportKeepVideo` frameRaw**（进度「快速切片…」）
+   - 否则 / 失败 → `exportKeepByChromeDisplay`（进度「对齐预览帧 N/M」；须 toast 说明原因）
    - 仍无 → ffmpeg 兜底（无采样表才允许 sec）
 6. GIF：`materializeVbbKeepVideo` 与下载**同一套** `matTimeline` + `matKeeps` + `canFfmpegFirst`
 7. 诊断 JSON（ver≥6）必含：`calibrateMethod`、`chromeOffsetSec`、`exportOrder`、`exportMethod`、`previewKeeps`

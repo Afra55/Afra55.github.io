@@ -941,12 +941,21 @@
           }
           const probe = window.DevToolsMp4Timeline?.probeMp4VideoTimeline;
           if (typeof probe === "function") {
+            onProgress?.(0.03, "校准显示时钟…");
             matTimeline = await probe(file);
             if (matTimeline?.ok) {
               try {
                 const v = await ensureMatVideo();
                 const cal = window.DevToolsMp4Timeline?.calibrateToElement;
-                if (typeof cal === "function") await cal(matTimeline, v);
+                if (typeof cal === "function") {
+                  await cal(matTimeline, v);
+                  // mid-check 偶发误杀：再跑一次（容差已放宽）争取恢复 ffmpeg 快切
+                  const m = String(matTimeline.calibrateMethod || "");
+                  if (m === "mid-check-fail" || m === "failed-no-frame") {
+                    matTimeline.calibrated = false;
+                    await cal(matTimeline, v);
+                  }
+                }
               } catch (_) {}
             }
           }
@@ -1016,7 +1025,12 @@
         try {
           const chromeExp = window.DevToolsVtrimEditor?.exportKeepByChromeDisplay;
           if (typeof chromeExp === "function" && file) {
-            onProgress?.(0.08, ffFirst ? "快切未成，按预览帧…" : "按预览帧导出编辑片…");
+            onProgress?.(
+              0.08,
+              ffFirst
+                ? "快切未成，按预览帧…"
+                : `按预览帧导出编辑片…（时钟=${matTimeline?.calibrateMethod || "未校准"}）`
+            );
             const v = await ensureMatVideo();
             const out = await chromeExp(v, matKeeps, {
               keepFps: Number(matTimeline?.fps) >= 5 ? matTimeline.fps : keepFps,
@@ -1140,8 +1154,10 @@
           const start0 = Math.max(0, Number(k.start) || 0);
           const end0 = Math.max(start0 + 0.05, Number(k.end) || 0);
           const out = `keep${i}.mp4`;
-          // PTS 优先（≡预览）；帧号/抽格回退
-          const modes = ["sec", "ss", "frameRaw", "frameGrid"];
+          // 有采样表：frameRaw 优先（与下载快切一致）；无表才 PTS sec
+          const modes = matTimeline?.ctsSec?.length
+            ? ["frameRaw", "frameGrid", "sec", "ss"]
+            : ["sec", "ss", "frameRaw", "frameGrid"];
           let ok = false;
           for (const mode of modes) {
             ok = await tryPart(start0, end0, out, mode);

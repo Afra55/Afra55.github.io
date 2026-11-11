@@ -468,24 +468,35 @@
         timeline.calibrateMethod = Math.abs(X) < 0.002 ? "already-aligned" : "out-of-range";
         return timeline;
       }
-      // 中点复核：比 VideoFrame.timestamp，容差 ¼ 帧
+      // 中点复核：比 VideoFrame.timestamp。手机端采样噪声大，容差 1 帧（过紧→误判 mid-check-fail→永远走慢的「对齐预览帧」）
       const mid = Math.floor(timeline.ctsSec.length / 2);
       const midMedia = Number(timeline.mediaCtsSec[mid]);
       const midSeek = frameSeekSec({ ctsSec: timeline.mediaCtsSec, fps: timeline.fps }, mid);
-      const frameTol = 0.25 / Math.max(5, Number(timeline.fps) || 24);
+      const frameTol = 1 / Math.max(5, Number(timeline.fps) || 24);
+      let midOk = true;
       try {
         videoEl.currentTime = Math.max(0, midSeek + X);
         await waitSeek(videoEl);
         await waitPresented(videoEl);
-        const tsMid = sampleTsSec(videoEl);
+        let tsMid = sampleTsSec(videoEl);
         const expect = midMedia + X;
         if (Number.isFinite(tsMid) && Math.abs(tsMid - expect) > frameTol) {
-          timeline.chromeOffsetSec = X;
-          timeline.calibrated = false;
-          timeline.calibrateMethod = "mid-check-fail";
-          return timeline;
+          // 再等一帧重采，避免单次 rVFC/VideoFrame 抖动误杀快切
+          await waitPresented(videoEl);
+          tsMid = sampleTsSec(videoEl);
+          if (Number.isFinite(tsMid) && Math.abs(tsMid - expect) > frameTol) {
+            midOk = false;
+          }
         }
-      } catch (_) {}
+      } catch (_) {
+        midOk = true; // 复核异常时信任 t0 锚点
+      }
+      if (!midOk) {
+        timeline.chromeOffsetSec = X;
+        timeline.calibrated = false;
+        timeline.calibrateMethod = "mid-check-fail";
+        return timeline;
+      }
       applyOffset(X, "videoframe-t0");
       return timeline;
     } finally {
