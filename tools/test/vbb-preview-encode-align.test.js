@@ -241,12 +241,13 @@ t("片尾抬手成片时钟吸附；不按 Chrome shown 改写黄柄", () => {
   assert.ok(!/Math\.max\(\s*want\s*,\s*shown\s*\+\s*END_KEEP_SEC\s*\)/.test(finish));
 });
 
-t("下载：校准可信 ffmpeg 先，否则 chrome", () => {
+t("下载：默认 ffmpeg 快切，chrome 仅异常兜底", () => {
+  const marker = vtrim.indexOf("默认 ffmpeg frameRaw 快切");
   const dl = vtrim.slice(
-    vtrim.indexOf("校准可信 → ffmpeg frameRaw"),
+    marker > 0 ? marker : vtrim.indexOf("async function downloadEditedVideo"),
     vtrim.indexOf("const blob = out?.blob")
   );
-  assert.ok(dl.includes("canFfmpegFirst"));
+  assert.ok(dl.includes("canFfmpegFirst") || dl.includes("ctsSec"), "须试快切");
   assert.ok(dl.includes("exportKeepByChromeDisplay"));
   assert.ok(dl.includes("exportKeepVideo"));
   assert.ok(dl.includes("快速切片") || dl.includes("ffFirst"));
@@ -258,6 +259,7 @@ t("下载：校准可信 ffmpeg 先，否则 chrome", () => {
   );
   assert.ok(dl.includes("校准显示时钟") || vtrim.includes("校准显示时钟"), "导出前校准文案");
   assert.ok(dl.includes("异常") || vtrim.includes("异常："), "chrome 兜底须标异常");
+  assert.ok(dl.includes("绝不当默认") || vtrim.includes("绝不当默认"), "预览帧不当默认");
 });
 
 t("ffmpeg onepass：有采样表只用 frameRaw（校准后禁止 sec）", () => {

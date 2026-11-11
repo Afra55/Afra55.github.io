@@ -55,8 +55,8 @@
 3. 停帧 / 精确 seek：`seekSecForTime` / `frameSeekSec`（勿裸 CTS）
 4. keep：`keepRangesFromEdit(edit, duration, timeline)`（半开采样窗）
 5. 导出顺序（下载须先 `ensureSourceTimelineForExport` / await `sourceTimelineReady`）：
-   - **默认** `canFfmpegFirst`（`videoframe-t0` / `videoframe-t0-soft` / `already-aligned`，且 CTS 近似单调）→ **`exportKeepVideo` frameRaw**（「快速切片…」）
-   - **异常**才 `exportKeepByChromeDisplay`（无表 / CTS 真乱序 / 校准未锚上 / 裁画面 / 快切挂了；toast 须带「异常」；进度「对齐预览帧」）
+   - **默认** `canFfmpegFirst`（有 `ctsSec` 且 CTS 近似单调即可；**校准 method 不挡**）→ **`exportKeepVideo` frameRaw**（「快速切片…」）
+   - **异常**才 `exportKeepByChromeDisplay`（无表 / CTS 真乱序 / 裁画面 / 快切挂了；toast 须带「异常」；进度「对齐预览帧」——**绝不当默认**）
    - 仍无 → ffmpeg 兜底（无采样表才允许 sec）
 6. GIF：`materializeVbbKeepVideo` 与下载**同一套** `matTimeline` + `matKeeps` + `canFfmpegFirst`
 7. 诊断 JSON（ver≥6）必含：`calibrateMethod`、`chromeOffsetSec`、`exportOrder`、`exportMethod`、`previewKeeps`
@@ -85,7 +85,7 @@
 |------|------|
 | `exportOrder` | `ffmpeg-first` / `chrome-first` |
 | `export.exportMethod` | 期望快切：`ffmpeg-onepass-frameRaw`；慢路径：`chrome-VideoFrame`；**若见 `onepass-sec` 且有 timeline = 回归 bug** |
-| `source.calibrateMethod` | `videoframe-t0` / `videoframe-t0-soft` / `already-aligned` → ffmpeg-first；`out-of-range` / `failed-no-frame` / 无表 → 异常走 chrome |
+| `source.calibrateMethod` | 诊断用；有表即应 `exportOrder=ffmpeg-first`；仅无表/乱序/快切挂 → chrome |
 | `source.chromeOffsetSec` | 显示相对媒体的 X（秒） |
 | `previewKeeps` / `export.keeps` | 比对是否同窗；同 keeps 仍偏画面 → 仍是时钟/seek，不是 keep 公式 |
 
