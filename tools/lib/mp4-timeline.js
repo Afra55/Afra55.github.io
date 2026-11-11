@@ -492,12 +492,13 @@
         midOk = true; // 复核异常时信任 t0 锚点
       }
       if (!midOk) {
-        timeline.chromeOffsetSec = X;
-        timeline.calibrated = false;
-        timeline.calibrateMethod = "mid-check-fail";
+        // 中点抖动≠片子乱帧：仍信 t0 锚点并平移，标 soft；勿因此默认走慢预览帧
+        applyOffset(X, "videoframe-t0-soft");
+        timeline.calibrateSoft = true;
         return timeline;
       }
       applyOffset(X, "videoframe-t0");
+      timeline.calibrateSoft = false;
       return timeline;
     } finally {
       videoEl.muted = wasMuted;
@@ -648,14 +649,16 @@
   }
 
   /**
-   * 校准可信时可用 ffmpeg frameRaw 快切（不必逐帧 chrome seek）。
-   * mid-check-fail / out-of-range / elst-lead 等仍应走预览帧。
+   * 默认可 ffmpeg frameRaw 快切。真正异常（无表 / CTS 乱序 / 校准失败且未锚上）才应走预览帧。
+   * videoframe-t0-soft：中点复核有噪声但仍已按 t0 平移，算正常可用。
    */
   function canFfmpegFirst(timeline) {
     if (!timeline?.ctsSec?.length) return false;
     const m = String(timeline.calibrateMethod || "");
-    if (m !== "videoframe-t0" && m !== "already-aligned") return false;
-    // cts 须近似单调（无严重 B 帧乱序）
+    if (m !== "videoframe-t0" && m !== "videoframe-t0-soft" && m !== "already-aligned") {
+      return false;
+    }
+    // 真乱序才拒：前 64 帧或中→尾倒退（异常片）
     const arr = timeline.mediaCtsSec?.length === timeline.ctsSec.length ? timeline.mediaCtsSec : timeline.ctsSec;
     let prev = -Infinity;
     for (let i = 0; i < Math.min(arr.length, 64); i++) {

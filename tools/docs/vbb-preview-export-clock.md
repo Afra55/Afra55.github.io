@@ -51,12 +51,12 @@
 打开片源 / 导出前：
 
 1. `probeMp4VideoTimeline(file)` → 得到 `ctsSec` + `mediaCtsSec`
-2. `calibrateToElement(timeline, videoEl)` → `chromeOffsetSec` / `calibrateMethod`（中点容差 **1 帧**；过紧会误 `mid-check-fail`→永远「对齐预览帧」）
+2. `calibrateToElement(timeline, videoEl)` → `chromeOffsetSec` / `calibrateMethod`（中点容差 **1 帧**；中点仍抖 → **仍应用 t0**，标 `videoframe-t0-soft`，**不算失败**）
 3. 停帧 / 精确 seek：`seekSecForTime` / `frameSeekSec`（勿裸 CTS）
 4. keep：`keepRangesFromEdit(edit, duration, timeline)`（半开采样窗）
 5. 导出顺序（下载须先 `ensureSourceTimelineForExport` / await `sourceTimelineReady`）：
-   - `canFfmpegFirst(timeline)`（`videoframe-t0` 或 `already-aligned`，且 CTS 近似单调）→ **`exportKeepVideo` frameRaw**（进度「快速切片…」）
-   - 否则 / 失败 → `exportKeepByChromeDisplay`（进度「对齐预览帧 N/M」；须 toast 说明原因）
+   - **默认** `canFfmpegFirst`（`videoframe-t0` / `videoframe-t0-soft` / `already-aligned`，且 CTS 近似单调）→ **`exportKeepVideo` frameRaw**（「快速切片…」）
+   - **异常**才 `exportKeepByChromeDisplay`（无表 / CTS 真乱序 / 校准未锚上 / 裁画面 / 快切挂了；toast 须带「异常」；进度「对齐预览帧」）
    - 仍无 → ffmpeg 兜底（无采样表才允许 sec）
 6. GIF：`materializeVbbKeepVideo` 与下载**同一套** `matTimeline` + `matKeeps` + `canFfmpegFirst`
 7. 诊断 JSON（ver≥6）必含：`calibrateMethod`、`chromeOffsetSec`、`exportOrder`、`exportMethod`、`previewKeeps`
@@ -69,8 +69,8 @@
 
 | 路径 | 速度 | 何时用 |
 |------|------|--------|
-| ffmpeg `trim=start_frame/end_frame`（frameRaw） | 快（一次滤镜） | `canFfmpegFirst` 为真 |
-| chrome 逐帧 seek + `VideoFrame` + Encoder | 最慢 | 校准失败、裁画面走不通 chrome、快切失败 |
+| ffmpeg `trim=start_frame/end_frame`（frameRaw） | 快（一次滤镜） | **默认**（`canFfmpegFirst`） |
+| chrome 逐帧 seek + `VideoFrame` + Encoder | 最慢 | **异常兜底**（无表/乱序/未锚上/裁画面/快切挂） |
 | `-c copy` | 最快 | **不考虑**（只能切关键帧） |
 
 以后可演进（未做）：WebCodecs 顺序解码按下标取帧；chrome 兜底改「播放抓帧」少 seek。**先保证时钟与门槛，再谈换编码器。**
@@ -85,7 +85,7 @@
 |------|------|
 | `exportOrder` | `ffmpeg-first` / `chrome-first` |
 | `export.exportMethod` | 期望快切：`ffmpeg-onepass-frameRaw`；慢路径：`chrome-VideoFrame`；**若见 `onepass-sec` 且有 timeline = 回归 bug** |
-| `source.calibrateMethod` | `videoframe-t0` / `already-aligned` 才应 ffmpeg-first；`mid-check-fail` / `out-of-range` 应走 chrome |
+| `source.calibrateMethod` | `videoframe-t0` / `videoframe-t0-soft` / `already-aligned` → ffmpeg-first；`out-of-range` / `failed-no-frame` / 无表 → 异常走 chrome |
 | `source.chromeOffsetSec` | 显示相对媒体的 X（秒） |
 | `previewKeeps` / `export.keeps` | 比对是否同窗；同 keeps 仍偏画面 → 仍是时钟/seek，不是 keep 公式 |
 
@@ -117,4 +117,4 @@
 
 1. 先读本文件 + 用户最新 `*-export-diag.json`，**不要**先改导出优先顺序碰运气。  
 2. 若 `exportMethod` 已是 frameRaw 仍偏：查 `calibrateMethod`、帧内 seek、demux `firstPresentIdx` / B 帧乱序，而不是再切回「永远 chrome」。  
-3. 用户要快：保 `canFfmpegFirst` 门槛，勿默默改回 chrome-first。
+3. 用户要快：默认 ffmpeg-first；chrome 是**异常兜底**，勿当常态路径。中点抖动用 soft，勿再因 mid-check 丢掉快切。

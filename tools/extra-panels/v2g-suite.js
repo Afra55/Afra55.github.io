@@ -9366,9 +9366,9 @@
                 const cal = window.DevToolsMp4Timeline?.calibrateToElement;
                 if (typeof cal === "function") {
                   await cal(matTimeline, v);
-                  // mid-check 偶发误杀：再跑一次（容差已放宽）争取恢复 ffmpeg 快切
+                  // 未锚上才重试；mid 抖动现已 soft 应用 t0，不再当失败
                   const m = String(matTimeline.calibrateMethod || "");
-                  if (m === "mid-check-fail" || m === "failed-no-frame") {
+                  if (m === "failed-no-frame" || m === "out-of-range" || m === "mid-check-fail") {
                     matTimeline.calibrated = false;
                     await cal(matTimeline, v);
                   }
@@ -9445,8 +9445,8 @@
             onProgress?.(
               0.08,
               ffFirst
-                ? "快切未成，按预览帧…"
-                : `按预览帧导出编辑片…（时钟=${matTimeline?.calibrateMethod || "未校准"}）`
+                ? "异常：快切未成，改预览帧…"
+                : `异常：按预览帧导出…（时钟=${matTimeline?.calibrateMethod || "未校准"}）`
             );
             const v = await ensureMatVideo();
             const out = await chromeExp(v, matKeeps, {
