@@ -18,11 +18,12 @@ t("存在 nudgeStepSec = endKeepStepSec", () => {
   assert.ok(src.includes("endKeepStepSec()"));
 });
 
-t("按钮绑定用 nudgeStepSec，不再 ±0.1", () => {
+t("按钮绑定按帧步进（nudgeTrimEdgeSec / nudgeSelectedCutout），不再 ±0.1", () => {
   const start = src.indexOf("bindNudgeHold(");
   const end = src.indexOf("cutAddBtn?.addEventListener", start);
   const bind = src.slice(start, end > start ? end : start + 2000);
-  assert.ok(bind.includes("nudgeStepSec()"));
+  assert.ok(bind.includes("nudgeTrimEdgeSec(") || bind.includes("nudgeStepSec()"));
+  assert.ok(bind.includes('nudgeSelectedCutout("start"'));
   assert.ok(!/nudgeSelectedCutout\("start", -0\.1\)/.test(bind));
   assert.ok(!/setStart\(startSec - 0\.1/.test(bind));
   assert.ok(!/setEnd\(endSec - 0\.1/.test(src));
