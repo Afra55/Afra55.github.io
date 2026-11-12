@@ -380,6 +380,8 @@ t("备份/导入走成片时钟字段：serialize/apply 保留 srcFps，打开�
   );
   assert.ok(ser.includes("srcFps"));
   assert.ok(!ser.includes("chrome") && !ser.includes("VideoFrame"));
+  assert.ok(!ser.includes("__vbbTimeline"), "采样表禁止进 LS / JSON 备份");
+  assert.ok(!ser.includes("...edit"), "草稿须白名单字段，禁止整对象展开");
   const apply = src.slice(
     src.indexOf("function applyVbbEditDraftToItem"),
     src.indexOf("function restoreVbbEditDrafts")

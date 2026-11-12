@@ -34,17 +34,18 @@ function loadFn(src, name) {
 }
 
 function loadVtrimKeepFns() {
-  const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration\) \{[\s\S]*?\n  \}/);
-  const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration\) \{[\s\S]*?\n  \}/);
+  const fromEdit = vtrim.match(/function keepRangesFromEdit\(edit, duration,? ?\w*\) \{[\s\S]*?\n  \}/);
+  const forEnc = vtrim.match(/function keepRangesForEncode\(edit, duration,? ?\w*\) \{[\s\S]*?\n  \}/);
   const norm = vtrim.match(/function normalizeCutouts\([\s\S]*?\n  \}/);
   const resolveEnd = vtrim.match(/function resolveEndKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
   const resolveStart = vtrim.match(/function resolveStartKeepSec\(editOrFps\) \{[\s\S]*?\n  \}/);
   const resolveKeep = vtrim.match(/function resolveKeepFps\(editOrFps\) \{[\s\S]*?\n  \}/);
   const secToFrame = vtrim.match(/function secToFrame\(sec, fps\) \{[\s\S]*?\n  \}/);
   const frameToSec = vtrim.match(/function frameToSec\(frame, fps\) \{[\s\S]*?\n  \}/);
+  const displayFrame = vtrim.match(/function displayFrameAtSec\(sec, fps\) \{[\s\S]*?\n  \}/);
   const normalizeFps = vtrim.match(/function normalizeSourceFps\(raw\) \{[\s\S]*?\n  \}/);
   assert.ok(
-    fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && normalizeFps,
+    fromEdit && forEnc && norm && resolveEnd && resolveStart && resolveKeep && secToFrame && frameToSec && displayFrame && normalizeFps,
     "vtrim keep helpers"
   );
   const box = {};
@@ -62,6 +63,7 @@ function loadVtrimKeepFns() {
     ${resolveKeep[0]}
     ${secToFrame[0]}
     ${frameToSec[0]}
+    ${displayFrame[0]}
     ${resolveEnd[0]}
     ${resolveStart[0]}
     ${norm[0]}

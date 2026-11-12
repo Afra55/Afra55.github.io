@@ -9037,7 +9037,12 @@
         let fps = Number(e.srcFps) || Number(item?.srcFps) || 0;
         if (!(fps >= 5)) {
           try {
-            fps = Number(getActiveVbbEditItem()?.srcFps) || 0;
+            const active = getActiveVbbEditItem();
+            const file = item?.file || null;
+            // 批量编码另一条时，禁止借当前预览条的 fps（无表时 1/fps 接点会差帧）
+            if (!file || !active?.file || active.file === file) {
+              fps = Number(active?.srcFps) || Number(active?.edit?.srcFps) || 0;
+            }
           } catch (_) {
             fps = 0;
           }
@@ -9145,7 +9150,8 @@
         }
         try {
           const active = getActiveVbbEditItem();
-          if (active?.timeline?.ctsSec?.length && (!file || active.file === file)) {
+          // 必须 file 对得上。漏传 file 时若走 !file，批量会串用当前预览条的表。
+          if (active?.timeline?.ctsSec?.length && file && active.file === file) {
             return active.timeline;
           }
         } catch (_) {}
@@ -9176,8 +9182,11 @@
 
       /** 成片 keep ≡ 预览 keep（源帧半开窗，不再叠垫） */
       function vbbKeepRangesForEncode(edit, duration, timeline, file) {
-        const stamped = vbbEditWithSrcFps(edit);
         const tl = resolveVbbTimelineForFile(file || null, timeline || null);
+        const stamped = vbbEditWithSrcFps(edit, {
+          file: file || null,
+          srcFps: Number(tl?.fps) >= 5 ? Number(tl.fps) : 0,
+        });
         const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
         if (typeof fn === "function") return fn(stamped, duration, tl || undefined);
         return vbbKeepRangesFromEdit(stamped, duration);
@@ -9406,12 +9415,6 @@
         if (!window.DevToolsVtrimEditor?.exportKeepByChromeDisplay) {
           await ensureVbbVtrimEditor().catch(() => null);
         }
-        const keepFps =
-          typeof window.DevToolsVtrimEditor?.resolveKeepFps === "function"
-            ? window.DevToolsVtrimEditor.resolveKeepFps(edit)
-            : Number(edit?.srcFps) >= 5
-              ? Number(edit.srcFps)
-              : 24;
         // 按本 file 取表（批量勿串用当前预览条），删中间接点才 ≡ 外预览 / 编辑器
         let matTimeline = resolveVbbTimelineForFile(file, timelineHint || null);
         let matVideo = null;
@@ -9488,20 +9491,19 @@
             matTimeline = null;
           }
         }
-        // 有表用表算 keep（删中间下一段起点 = 下一采样）；无表才退回 1/fps
-        let keeps = vbbKeepRangesForEncode(edit, duration, matTimeline, file);
-        let matKeeps = keeps;
-        if (
-          matTimeline?.ctsSec?.length &&
-          typeof window.DevToolsVtrimEditor?.keepRangesForEncode === "function"
-        ) {
-          try {
-            matKeeps = window.DevToolsVtrimEditor.keepRangesForEncode(edit, duration, matTimeline);
-            keeps = matKeeps;
-          } catch (_) {
-            matKeeps = keeps;
-          }
-        }
+        // 有表用表算 keep（删中间下一段起点 = 下一采样）；无表才退回 1/fps。
+        // 只算一次：第二次若不盖 srcFps，缺 fps 时会和这里分叉。
+        const keeps = vbbKeepRangesForEncode(edit, duration, matTimeline, file);
+        const matKeeps = keeps;
+        const tlFps = Number(matTimeline?.fps) || 0;
+        const keepFps =
+          tlFps >= 5
+            ? tlFps
+            : typeof window.DevToolsVtrimEditor?.resolveKeepFps === "function"
+              ? window.DevToolsVtrimEditor.resolveKeepFps(edit)
+              : Number(edit?.srcFps) >= 5
+                ? Number(edit.srcFps)
+                : 24;
         const keepSpan = vbbKeepSpanSec(keeps);
         let segmentSpans = keeps.map((k) =>
           Math.max(0.05, (Number(k.end) || 0) - (Number(k.start) || 0))
@@ -9785,10 +9787,10 @@
       }
 
       /** 编辑是否改变时间轴（需先导出再 GIF） */
-      function vbbEditNeedsExport(edit, duration) {
+      function vbbEditNeedsExport(edit, duration, file, timeline) {
         if (!edit) return false;
         const d = Math.max(0, Number(duration) || 0);
-        const keeps = vbbKeepRangesForEncode(edit, d);
+        const keeps = vbbKeepRangesForEncode(edit, d, timeline || null, file || null);
         if (keeps.length > 1) return true;
         if ((edit.cutouts || []).length) return true;
         if (keeps.length === 1) {
@@ -9985,7 +9987,7 @@
           Number(edit?.srcFps) ||
           Number(file?.srcFps) ||
           0;
-        if (!fromMark && edit && vbbEditNeedsExport(edit, duration)) {
+        if (!fromMark && edit && vbbEditNeedsExport(edit, duration, file, opts.timeline || null)) {
           // 导出切片与预览共用源帧时钟：编码前把探测到的 srcFps 写进 edit
           if (fpsHint >= 5 && !(Number(edit.srcFps) >= 5)) {
             try {
@@ -10354,7 +10356,7 @@
             initial: draft,
             initialMode: "trim",
             srcFps: openSrcFps >= 5 ? openSrcFps : 0,
-            timeline: item.timeline || vbbSingleTimeline || null,
+            timeline: resolveVbbTimelineForFile(item.file, item.timeline || null),
           });
           editorOpened = true;
           boot.remove();
@@ -10428,7 +10430,8 @@
             const encodeKeeps = vbbKeepRangesForEncode(
               item.edit,
               item.duration,
-              item.timeline || vbbSingleTimeline
+              item.timeline || null,
+              item.file || null
             );
             const seekTo = Number(encodeKeeps[0]?.start);
             applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
@@ -10730,7 +10733,12 @@
               ? vbbDraftStart
               : completeVbbMarks()[0]?.start ?? 0;
         } else {
-          const encodeKeeps = vbbKeepRangesForEncode(edit, item.duration, item.timeline);
+          const encodeKeeps = vbbKeepRangesForEncode(
+            edit,
+            item.duration,
+            item.timeline,
+            item.file
+          );
           seekTo = Number(encodeKeeps[0]?.start);
           if (!Number.isFinite(seekTo)) seekTo = Number(edit.trimStart) || 0;
         }
@@ -13558,7 +13566,8 @@
           const encodeKeeps = vbbKeepRangesForEncode(
             vbbSingleEdit,
             duration,
-            vbbSingleTimeline
+            vbbSingleTimeline,
+            pinned
           );
           const seekTo = Number(encodeKeeps[0]?.start);
           applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(vbbSingleEdit?.trimStart) || 0, {
@@ -14751,7 +14760,14 @@
           // 删中间要走单例拼接/裁剪：并行会互踢卡住第二路 → 强制串行
           const needsMaterialize = jobs.some((j) => {
             const cuts = Array.isArray(j.edit?.cutouts) ? j.edit.cutouts.length : 0;
-            const keeps = j.edit ? vbbKeepRangesForEncode(j.edit, j.item.duration) : [];
+            const keeps = j.edit
+              ? vbbKeepRangesForEncode(
+                  j.edit,
+                  j.item.duration,
+                  j.item?.timeline || null,
+                  j.item?.file || null
+                )
+              : [];
             return cuts > 0 || keeps.length > 1;
           });
           if (needsMaterialize && conc > 1) {

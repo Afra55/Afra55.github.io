@@ -211,7 +211,7 @@ t("预裁切不再对 keep span 二次减半帧", () => {
 t("删中间 materialize：校准后可 ffmpeg 先；勿 -r cfr", () => {
   const fn = vbb.slice(
     vbb.indexOf("async function materializeVbbKeepVideo"),
-    vbb.indexOf("async function shouldPrecutVbbWindow")
+    vbb.indexOf("function shouldPrecutVbbWindow")
   );
   assert.ok(fn.includes("exportKeepByChromeDisplay"), "chrome 兜底");
   assert.ok(fn.includes("exportKeepVideo"), "ffmpeg");
@@ -226,7 +226,11 @@ t("删中间 materialize：校准后可 ffmpeg 先；勿 -r cfr", () => {
   );
   assert.ok(fn.includes("calibrateToElement") && fn.includes("matTimeline"), "GIF 同编辑器时钟");
   assert.ok(fn.includes("校准显示时钟") || fn.includes("mid-check-fail"), "校准可重试防误走预览帧");
-  assert.ok(fn.includes("vbbSingleTimeline") || fn.includes("优先复用外预览"), "删中间复用外预览表");
+  assert.ok(
+    fn.includes("resolveVbbTimelineForFile(file"),
+    "删中间须按 file 复用外预览表"
+  );
+  assert.ok(fn.includes("const matKeeps = keeps"), "matKeeps 与 keeps 只算一次");
 });
 
 t("外预览 keep 须可带 timeline（删中间接点 ≡ GIF）", () => {
@@ -248,7 +252,7 @@ t("批量 materialize/编码须按 file 取表（勿串用当前预览条）", (
   assert.ok(vbb.includes("function resolveVbbTimelineForFile"));
   const mat = vbb.slice(
     vbb.indexOf("async function materializeVbbKeepVideo"),
-    vbb.indexOf("async function shouldPrecutVbbWindow")
+    vbb.indexOf("function shouldPrecutVbbWindow")
   );
   assert.ok(mat.includes("resolveVbbTimelineForFile(file"), "GIF 按 file");
   assert.ok(mat.includes("cacheVbbTimelineForFile(file"), "回写按 file");

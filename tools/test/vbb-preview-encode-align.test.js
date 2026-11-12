@@ -384,4 +384,126 @@ t("有 srcFps：keep.end=黄柄秒值半开", () => {
   }
 });
 
+function loadTimelineHelpers() {
+  const trusted = vtrim.match(/function timelineCalibrationTrusted\(timeline\) \{[\s\S]*?\n  \}/);
+  const align = vtrim.match(/function alignTrimSecToSamples\(raw, timeline, sampleIndexAtSec\) \{[\s\S]*?\n  \}/);
+  assert.ok(trusted && align, "须导出校准判定与采样对齐");
+  const box = {};
+  vm.runInNewContext(
+    `${trusted[0]}\n${align[0]}\nthis.timelineCalibrationTrusted = timelineCalibrationTrusted;\nthis.alignTrimSecToSamples = alignTrimSecToSamples;`,
+    box
+  );
+  return box;
+}
+
+t("已校准表：编辑器克隆后不再平移 cts", () => {
+  const { timelineCalibrationTrusted } = loadTimelineHelpers();
+  const cts = Float64Array.from([0, 0.04, 0.08]);
+  const trusted = {
+    ctsSec: cts,
+    mediaCtsSec: Float64Array.from(cts),
+    calibrated: true,
+    calibrateMethod: "videoframe-t0",
+    chromeOffsetSec: 0.02,
+  };
+  assert.strictEqual(timelineCalibrationTrusted(trusted), true);
+  assert.strictEqual(
+    timelineCalibrationTrusted({ ...trusted, calibrated: false, calibrateMethod: "failed-no-frame" }),
+    false
+  );
+  assert.strictEqual(timelineCalibrationTrusted({ ctsSec: cts, calibrated: true, calibrateMethod: "out-of-range" }), false);
+  const fn = vtrim.slice(
+    vtrim.indexOf("async function detectAndApplySourceTimeline"),
+    vtrim.indexOf("async function ensureSourceTimelineForExport")
+  );
+  assert.ok(fn.includes("timelineCalibrationTrusted(shared)"));
+  assert.ok(fn.includes("if (!trusted)"));
+  assert.ok(fn.includes("calibrated: trusted ? true : false"));
+  assert.ok(fn.includes("ctsSec: cts"), "须切片，禁止与外预览共用数组");
+  const before = trusted.ctsSec[1];
+  trusted.ctsSec[1] = 1.23;
+  assert.ok(fn.includes("shared.ctsSec.slice()"), "克隆后改编辑器表不能写回原数组（源码须 slice）");
+  trusted.ctsSec[1] = before;
+});
+
+t("采样点保留全精度：毫秒取整会让删中间接点退回上一帧", () => {
+  const { alignTrimSecToSamples, keepRangesForEncode } = {
+    ...loadTimelineHelpers(),
+    ...loadKeepFns(mockTimeline25(100)),
+  };
+  const api = mockTimeline25(100);
+  // 非毫秒对齐：第 50 帧 CTS = 50/25 + 0.0004 = 2.0004
+  const cts = Float64Array.from({ length: 100 }, (_, i) => i / 25 + 0.0004);
+  const tl = { fps: 25, ctsSec: cts, mediaCtsSec: cts.slice() };
+  const sampleIndexAtSec = (timeline, sec) => api.sampleIndexAtSec(timeline, sec);
+  const kept = alignTrimSecToSamples(2.0004, tl, sampleIndexAtSec);
+  assert.strictEqual(kept, 2.0004);
+  const ms = Math.round(2.0004 * 1000) / 1000;
+  assert.strictEqual(ms, 2);
+  const editExact = {
+    trimStart: 0.0004,
+    trimEnd: 3.0004,
+    srcFps: 25,
+    cutouts: [{ start: 1.0004, end: 2.0004 }],
+  };
+  const editMs = {
+    trimStart: 0,
+    trimEnd: 3,
+    srcFps: 25,
+    cutouts: [{ start: 1, end: 2 }],
+  };
+  const a = keepRangesForEncode(editExact, 4, tl);
+  const b = keepRangesForEncode(editMs, 4, tl);
+  assert.strictEqual(a.length, 2);
+  assert.strictEqual(b.length, 2);
+  // 精确 CTS：删到 index 50，下一段从 index 51
+  assert.ok(Math.abs(a[1].start - cts[51]) < 1e-9, `exact resume=${a[1].start}`);
+  // 毫秒 2.000 落在 2.0004 之前 → index 49 → 下一段从 index 50（少删一帧）
+  assert.ok(Math.abs(b[1].start - cts[50]) < 1e-9, `ms resume=${b[1].start}`);
+  assert.ok(Math.abs(a[1].start - b[1].start) > 1e-4, "三处若一个取整一个不取整，接点差一帧");
+});
+
+t("外预览/编辑/GIF 同表同公式：非对齐 CTS 的删中间接点一致", () => {
+  const api = mockTimeline25(80);
+  const cts = Float64Array.from({ length: 80 }, (_, i) => i / 25 + 0.0004);
+  const tl = { fps: 25, ctsSec: cts };
+  const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns(api);
+  const edit = {
+    trimStart: 0.0004,
+    trimEnd: 3.0004,
+    srcFps: 25,
+    cutouts: [{ start: 1.0004, end: 2.0004 }],
+  };
+  const outer = keepRangesForEncode(edit, 4, tl);
+  const editor = keepRangesFromEdit(edit, 4, tl);
+  const gif = keepRangesForEncode(edit, 4, tl);
+  assert.strictEqual(outer.length, editor.length);
+  assert.strictEqual(gif.length, editor.length);
+  for (let i = 0; i < outer.length; i++) {
+    assert.strictEqual(outer[i].start, editor[i].start);
+    assert.strictEqual(outer[i].end, editor[i].end);
+    assert.strictEqual(gif[i].start, editor[i].start);
+    assert.strictEqual(gif[i].end, editor[i].end);
+    assert.strictEqual(outer[i].startF, editor[i].startF);
+    assert.strictEqual(gif[i].endF, editor[i].endF);
+  }
+});
+
+t("批量漏传 file 不得借用当前预览条；诊断 JSON 不写采样表", () => {
+  const resolve = vbb.slice(
+    vbb.indexOf("function resolveVbbTimelineForFile"),
+    vbb.indexOf("function cacheVbbTimelineForFile")
+  );
+  assert.ok(!resolve.includes("!file || active.file === file"), "漏传 file 会串表");
+  assert.ok(resolve.includes("file && active.file === file"));
+  assert.ok(vbb.includes("vbbEditNeedsExport(edit, duration, file"));
+  assert.ok(vbb.includes("resolveVbbTimelineForFile(item.file, item.timeline"));
+  const diag = vtrim.slice(vtrim.indexOf("const diag = {"), vtrim.indexOf("setExportProgress(true, 1, \"开始下载…\")"));
+  assert.ok(diag.includes("delete copy.__vbbTimeline"), "诊断 JSON 不得内嵌整张 cts");
+  const serStart = vbb.indexOf("function serializeVbbEditDraft");
+  const ser = vbb.slice(serStart, vbb.indexOf("function vbbEditDraftSessionFiles", serStart));
+  assert.ok(!ser.includes("__vbbTimeline"));
+  assert.ok(!ser.includes("...edit"));
+});
+
 console.log(`vbb-preview-encode-align.test.js: ${n} passed`);

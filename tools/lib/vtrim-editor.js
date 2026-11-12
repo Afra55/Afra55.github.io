@@ -70,6 +70,41 @@
     const f = normalizeSourceFps(fps) || DEFAULT_FRAME_FPS;
     return 1 / f;
   }
+
+  /**
+   * 外预览已锚过的采样表：编辑器必须沿用同一 cts 数字。
+   * 再对另一枚 video 平移会改接点，完成回写后外预览跟着漂。
+   */
+  function timelineCalibrationTrusted(timeline) {
+    if (!timeline?.ctsSec?.length || !timeline.calibrated) return false;
+    const method = String(timeline.calibrateMethod || "");
+    return (
+      method === "videoframe-t0" ||
+      method === "videoframe-t0-soft" ||
+      method === "already-aligned"
+    );
+  }
+
+  /**
+   * 手柄秒：已落在采样 CTS 上就保留全精度。
+   * 毫秒取整会落到该 CTS 之前，sampleIndexAtSec 退回上一帧（删中间 + 被吸回）。
+   * 不在采样点上仍取整到毫秒，只去掉浮点噪点。
+   */
+  function alignTrimSecToSamples(raw, timeline, sampleIndexAtSec) {
+    const t = Number(raw);
+    if (!Number.isFinite(t)) return 0;
+    const arr = timeline?.ctsSec;
+    if (!arr || !arr.length || typeof sampleIndexAtSec !== "function") {
+      return Math.round(t * 1000) / 1000;
+    }
+    const idx = sampleIndexAtSec(timeline, t);
+    const n = arr.length;
+    const cts = Number(arr[Math.max(0, Math.min(n - 1, idx))]);
+    if (Number.isFinite(cts) && Math.abs(cts - t) <= 0.0005) return cts;
+    const nxt = idx + 1 < n ? Number(arr[idx + 1]) : NaN;
+    if (Number.isFinite(nxt) && Math.abs(nxt - t) <= 0.0005) return nxt;
+    return Math.round(t * 1000) / 1000;
+  }
   /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
   const DRAG_SEEK_MS = 72;
   /** 半开片尾兜底（约 1 帧 @25fps）；有片源 fps 时用 1/fps */
@@ -1459,9 +1494,15 @@
       return next;
     }
 
-    /** 毫秒对齐，避免浮点噪点；不改变用户拖到的画面 */
+    /** 采样点保留全精度；其余毫秒对齐，避免浮点噪点把删中间接点吸回上一帧 */
     function quantizeTrimSec(t) {
-      return Math.round(clamp(t, 0, duration) * 1000) / 1000;
+      const raw = clamp(t, 0, duration);
+      const api = window.DevToolsMp4Timeline;
+      return clamp(
+        alignTrimSecToSamples(raw, sourceTimeline, api?.sampleIndexAtSec),
+        0,
+        duration
+      );
     }
 
     function applySourceFps(fps) {
@@ -1532,8 +1573,8 @@
     }
 
     /**
-     * 把当前 sourceTimeline 校准到本页 video，并重吸附黄/红柄。
-     * 外预览 / GIF 若传入同一对象，此处原地平移 ctsSec，三处删中间接点才同表。
+     * 把当前 sourceTimeline（编辑器自己的克隆）校准到本页 video，并重吸附黄/红柄。
+     * 不改外预览正在用的数组。已可信校准的表不要走这里。
      */
     async function calibrateSourceTimelineToEditorVideo() {
       if (closed || !sourceTimeline?.ctsSec?.length || !video) return;
@@ -1558,22 +1599,24 @@
      */
     async function detectAndApplySourceTimeline(srcFile) {
       if (closed) return;
-      // 外预览 / GIF 已有表：克隆后再锚到本页 video，避免校准中途改掉外预览正在用的数组
+      // 外预览 / GIF 已有表：克隆后再决定要不要锚。禁止另 probe 出第二张表。
+      // 已可信校准：保持同一 cts 数字（克隆只为隔离后续写入）。再锚会改接点，完成回写把外预览带漂。
       const shared = opts.timeline;
       if (shared?.ctsSec?.length) {
+        const trusted = timelineCalibrationTrusted(shared);
         const cts = shared.ctsSec.slice();
         const media =
           shared.mediaCtsSec && shared.mediaCtsSec.length === shared.ctsSec.length
             ? shared.mediaCtsSec.slice()
-            : shared.ctsSec.slice();
+            : null;
         sourceTimeline = {
           ...shared,
           ctsSec: cts,
-          mediaCtsSec: media,
-          calibrated: false,
+          mediaCtsSec: media || undefined,
+          calibrated: trusted ? true : false,
         };
         if (Number(shared.fps) >= 5) applySourceFps(shared.fps);
-        await calibrateSourceTimelineToEditorVideo();
+        if (!trusted) await calibrateSourceTimelineToEditorVideo();
         return;
       }
       if (!srcFile) return;
@@ -1603,12 +1646,7 @@
         } catch (_) {}
       }
       if (closed || !sourceTimeline?.ctsSec?.length) return;
-      const method = String(sourceTimeline.calibrateMethod || "");
-      const trusted =
-        method === "videoframe-t0" ||
-        method === "videoframe-t0-soft" ||
-        method === "already-aligned";
-      if (trusted && sourceTimeline.calibrated) return;
+      if (timelineCalibrationTrusted(sourceTimeline)) return;
       const calibrate = window.DevToolsMp4Timeline?.calibrateToElement;
       if (typeof calibrate !== "function" || !video) return;
       try {
@@ -2391,7 +2429,12 @@
             endParkAtSec: Number.isFinite(endParkAtSec) ? endParkAtSec : null,
             cutouts: (cutouts || []).map((c) => ({ start: c.start, end: c.end })),
           },
-          edit,
+          // 采样表是 Float64Array，进诊断 JSON 会膨胀成逐采样对象；完成回写走返回值，不走这份 diag
+          edit: (() => {
+            const copy = { ...edit };
+            delete copy.__vbbTimeline;
+            return copy;
+          })(),
           previewKeeps,
           export: {
             exportMethod: out?.exportMethod || "ffmpeg",
@@ -3886,6 +3929,8 @@
     estimateFpsFromMediaTimes,
     normalizeSourceFps,
     frameSnapSecFromFps,
+    timelineCalibrationTrusted,
+    alignTrimSecToSamples,
     resolveKeepFps,
     secToFrame,
     frameToSec,

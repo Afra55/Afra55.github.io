@@ -61,9 +61,10 @@
 6. GIF：`materializeVbbKeepVideo` 与下载**同一套** `matTimeline` + `matKeeps` + `canFfmpegFirst`  
    - **删中间（三者同表）**：
      - 加载后 `ensureVbbSourceTimeline` → `vbbSingleTimeline` / `item.timeline`
-     - 取表一律 `resolveVbbTimelineForFile(file, hint)`：**按 file 对齐**，批量禁止串用当前预览条的表
-     - 打开编辑：`editor.open({ timeline })` 克隆后校准（勿中途改外预览数组）；完成回写 `__vbbTimeline`
-     - 外预览 `enforceVbbEditPlaybackWindow` / 编辑器 `keepRangesLocal` / GIF `matKeeps` 都走 `keepRangesForEncode(..., timeline, file)`
+     - 取表一律 `resolveVbbTimelineForFile(file, hint)`：**按 file 对齐**。hint → 同 file 的批量项 → 单文件缓存；**漏传 file 时不借用当前预览条**
+     - 打开编辑：`editor.open({ timeline })` **克隆** cts。外预览表已可信校准（`videoframe-t0` / `soft` / `already-aligned`）则**不再平移**，避免完成回写把外预览带漂；未校准才在克隆上锚。完成回写 `__vbbTimeline`（不进 LS / JSON 备份）
+     - 外预览 `enforceVbbEditPlaybackWindow` / 编辑器 `keepRangesLocal` / GIF `matKeeps` 都走 `keepRangesForEncode(..., timeline)`；`matKeeps` 只算一次
+     - 手柄若已在采样 CTS 上，`alignTrimSecToSamples` 保留全精度；毫秒取整会让 `sampleIndexAtSec` 退回上一帧
      - `nextStartAfterCutEnd` = `ctsSec[sampleIndexAtSec(cutEnd)+1]`；缺表才退回 `1/fps`（接点会差帧）
 7. 诊断 JSON（ver≥6）必含：`calibrateMethod`、`chromeOffsetSec`、`exportOrder`、`exportMethod`、`previewKeeps`
 
