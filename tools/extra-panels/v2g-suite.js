@@ -12455,6 +12455,14 @@
         return `${Math.max(1, Math.round(b / 1024))}KB`;
       }
 
+      /** 编码墙钟耗时（jobStartedAt→done）；挂结果描述末尾 */
+      function formatVbbEncodeElapsed(ms) {
+        const sec = Math.max(0, Number(ms) || 0) / 1000;
+        if (!(sec >= 0.05)) return "";
+        if (sec < 10) return `耗时 ${sec.toFixed(1)}秒`;
+        return `耗时 ${Math.round(sec)}秒`;
+      }
+
       function formatVbbClipMeta(c, { mobile = false } = {}) {
         if (c.error && !c.gifBlob) return c.error;
         if (!c.gifBlob) {
@@ -12470,7 +12478,7 @@
           }
           return c.error || "";
         }
-        // 顺序固定：帧率 · 尺寸 · 体积 · 时长（其余附加信息尽量少）
+        // 顺序固定：帧率 · 尺寸 · 体积 · 时长 · 画质 · 耗时
         const bits = [];
         const fps = Number(c.gifFps) || 0;
         const speed = Math.max(1, Number(c.gifSpeed) || 1);
@@ -12489,6 +12497,8 @@
         if (videoSec > 0) bits.push(formatVsplitSpanSec(videoSec));
         const qBit = formatVbbQualityBit(c);
         if (qBit) bits.push(qBit);
+        const elapsedBit = formatVbbEncodeElapsed(c.encodeMs);
+        if (elapsedBit) bits.push(elapsedBit);
         const extra = simplifyVbbGifNote(c.gifNote, { mobile });
         if (extra) {
           extra.split(" · ").forEach((part) => {
@@ -12497,7 +12507,8 @@
             if (/^\d+\s*FPS$/i.test(part)) return; // 帧率已在最前
             if (/^宽/.test(part)) return; // 宽度不再展示
             if (/^画质|^\d+\s*色/.test(part)) return; // 画质已用字段展示
-            if (/^已压|^超限|^已抽稀|^降宽|^沿用|^耗时|^加速|^已重启/.test(part)) bits.push(part);
+            if (/^耗时/.test(part)) return; // 耗时已用 encodeMs
+            if (/^已压|^超限|^已抽稀|^降宽|^沿用|^加速|^已重启/.test(part)) bits.push(part);
           });
         }
         if (c.error) bits.push(c.error);
