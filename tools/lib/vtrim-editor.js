@@ -1558,10 +1558,20 @@
      */
     async function detectAndApplySourceTimeline(srcFile) {
       if (closed) return;
-      // 外预览 / GIF 已校准的采样表：复用同一引用
+      // 外预览 / GIF 已有表：克隆后再锚到本页 video，避免校准中途改掉外预览正在用的数组
       const shared = opts.timeline;
       if (shared?.ctsSec?.length) {
-        sourceTimeline = shared;
+        const cts = shared.ctsSec.slice();
+        const media =
+          shared.mediaCtsSec && shared.mediaCtsSec.length === shared.ctsSec.length
+            ? shared.mediaCtsSec.slice()
+            : shared.ctsSec.slice();
+        sourceTimeline = {
+          ...shared,
+          ctsSec: cts,
+          mediaCtsSec: media,
+          calibrated: false,
+        };
         if (Number(shared.fps) >= 5) applySourceFps(shared.fps);
         await calibrateSourceTimelineToEditorVideo();
         return;

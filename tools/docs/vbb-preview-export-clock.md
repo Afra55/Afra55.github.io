@@ -61,8 +61,9 @@
 6. GIF：`materializeVbbKeepVideo` 与下载**同一套** `matTimeline` + `matKeeps` + `canFfmpegFirst`  
    - **删中间（三者同表）**：
      - 加载后 `ensureVbbSourceTimeline` → `vbbSingleTimeline` / `item.timeline`
-     - 打开编辑：`editor.open({ timeline })` **复用同一引用**，禁止再 probe 第二张表；完成回写 `__vbbTimeline`
-     - 外预览 `enforceVbbEditPlaybackWindow` / 编辑器 `keepRangesLocal` / GIF `matKeeps` 都走 `keepRangesForEncode(..., timeline)`
+     - 取表一律 `resolveVbbTimelineForFile(file, hint)`：**按 file 对齐**，批量禁止串用当前预览条的表
+     - 打开编辑：`editor.open({ timeline })` 克隆后校准（勿中途改外预览数组）；完成回写 `__vbbTimeline`
+     - 外预览 `enforceVbbEditPlaybackWindow` / 编辑器 `keepRangesLocal` / GIF `matKeeps` 都走 `keepRangesForEncode(..., timeline, file)`
      - `nextStartAfterCutEnd` = `ctsSec[sampleIndexAtSec(cutEnd)+1]`；缺表才退回 `1/fps`（接点会差帧）
 7. 诊断 JSON（ver≥6）必含：`calibrateMethod`、`chromeOffsetSec`、`exportOrder`、`exportMethod`、`previewKeeps`
 

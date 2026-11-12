@@ -101,10 +101,15 @@ t("编辑内 keepRangesLocal 走 keepRangesForEncode（预览=成片）", () => 
 
 t("编辑器须能复用外预览 timeline（三者同表）", () => {
   assert.ok(vtrim.includes("opts.timeline"));
-  assert.ok(vtrim.includes("复用同一引用") || vtrim.includes("禁止另 probe"));
+  assert.ok(
+    vtrim.includes("克隆后再锚") || vtrim.includes("禁止另 probe") || vtrim.includes("复用"),
+    "须接外预览表"
+  );
   assert.ok(vtrim.includes("__vbbTimeline"), "完成须回写采样表");
   assert.ok(vbb.includes("timeline: item.timeline") || /timeline:\s*item\.timeline/.test(vbb));
   assert.ok(vbb.includes("__vbbTimeline"), "外预览须接回编辑器表");
+  assert.ok(vbb.includes("function resolveVbbTimelineForFile"), "批量须按 file 取表");
+  assert.ok(vbb.includes("cacheVbbTimelineForFile"), "回写须按 file");
 });
 
 t("拖拽半开 endKeepStepSec ≡ resolveEndKeepSec(sourceFps)", () => {
@@ -119,7 +124,11 @@ t("外预览播放/落点走 vbbKeepRangesForEncode", () => {
   assert.ok(enforce.includes("vbbKeepRangesForEncode("));
   assert.ok(!enforce.includes("vbbKeepRangesFromEdit("));
   assert.ok(vbb.includes("外预览落点与成片 keep 首帧一致"));
-  assert.ok(/vbbKeepRangesForEncode\(item\.edit,\s*item\.duration\)/.test(vbb));
+  assert.ok(
+    /vbbKeepRangesForEncode\(\s*item\.edit,\s*item\.duration/.test(enforce),
+    "enforce 须用当前 item 的 keep"
+  );
+  assert.ok(enforce.includes("item.timeline") || enforce.includes("item.file"), "须带本条 timeline/file");
   assert.ok(enforce.includes("earlySlop"), "keep-seek 须容忍偏早关键帧，防播放按钮狂切");
   assert.ok(enforce.includes("pastSlop"), "越过片尾停帧必须拉回");
 });
@@ -274,8 +283,8 @@ t("materialize：校准可信 ffmpeg 先，否则 chrome；带回 segmentSpans",
   assert.ok(body.includes("matTimeline"), "共用校准 timeline");
   assert.ok(body.includes("matKeeps"), "ffmpeg/chrome 同 keeps");
   assert.ok(
-    body.includes("vbbSingleTimeline") || body.includes("getActiveVbbEditItem()?.timeline"),
-    "GIF 须优先复用外预览采样表（删中间接点）"
+    body.includes("resolveVbbTimelineForFile(file") || body.includes("vbbSingleTimeline"),
+    "GIF 须按 file 复用外预览采样表（删中间接点）"
   );
 });
 

@@ -244,6 +244,17 @@ t("打开编辑须传入外预览 timeline（三者同表）", () => {
   assert.ok(vbb.includes("__vbbTimeline"), "完成后回写");
 });
 
+t("批量 materialize/编码须按 file 取表（勿串用当前预览条）", () => {
+  assert.ok(vbb.includes("function resolveVbbTimelineForFile"));
+  const mat = vbb.slice(
+    vbb.indexOf("async function materializeVbbKeepVideo"),
+    vbb.indexOf("async function shouldPrecutVbbWindow")
+  );
+  assert.ok(mat.includes("resolveVbbTimelineForFile(file"), "GIF 按 file");
+  assert.ok(mat.includes("cacheVbbTimelineForFile(file"), "回写按 file");
+  assert.ok(!/getActiveVbbEditItem\(\)\?\.timeline\s*\|\|/.test(mat), "禁止先取 active 再忽略 file");
+});
+
 t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {
   assert.ok(vbb.includes("禁止用上报时长撑长编码窗"));
   assert.ok(/Math\.min\(\s*requestedSpan\s*,\s*reported\s*\)/.test(vbb));

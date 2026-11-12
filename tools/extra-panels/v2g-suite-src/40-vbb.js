@@ -709,14 +709,58 @@
         return keeps;
       }
 
+      /**
+       * 按「这份 file」取采样表，禁止批量时误用当前预览条目的表。
+       * hint 优先；再 batch 同 file；再单文件缓存；最后才允许同 file 的 active。
+       */
+      function resolveVbbTimelineForFile(file, hint) {
+        if (hint?.ctsSec?.length) return hint;
+        try {
+          if (file && isVbbBatchMode() && Array.isArray(vbbBatchFiles)) {
+            for (let i = 0; i < vbbBatchFiles.length; i++) {
+              const it = vbbBatchFiles[i];
+              if (it?.file === file && it.timeline?.ctsSec?.length) return it.timeline;
+            }
+          }
+        } catch (_) {}
+        if (!isVbbBatchMode() && vbbSingleTimeline?.ctsSec?.length) {
+          if (!file || file === vbbSourceFile) return vbbSingleTimeline;
+        }
+        try {
+          const active = getActiveVbbEditItem();
+          if (active?.timeline?.ctsSec?.length && (!file || active.file === file)) {
+            return active.timeline;
+          }
+        } catch (_) {}
+        return null;
+      }
+
+      /** 把校准表写回对应 item / 单文件缓存（按 file 对齐，勿写错批量子项） */
+      function cacheVbbTimelineForFile(file, timeline) {
+        if (!timeline?.ctsSec?.length) return;
+        try {
+          if (file && isVbbBatchMode() && Array.isArray(vbbBatchFiles)) {
+            for (let i = 0; i < vbbBatchFiles.length; i++) {
+              if (vbbBatchFiles[i]?.file === file) {
+                vbbBatchFiles[i].timeline = timeline;
+                return;
+              }
+            }
+          }
+        } catch (_) {}
+        if (!isVbbBatchMode()) {
+          vbbSingleTimeline = timeline;
+          try {
+            const active = getActiveVbbEditItem();
+            if (active && (!file || active.file === file)) active.timeline = timeline;
+          } catch (_) {}
+        }
+      }
+
       /** 成片 keep ≡ 预览 keep（源帧半开窗，不再叠垫） */
-      function vbbKeepRangesForEncode(edit, duration, timeline) {
+      function vbbKeepRangesForEncode(edit, duration, timeline, file) {
         const stamped = vbbEditWithSrcFps(edit);
-        const tl =
-          timeline ||
-          getActiveVbbEditItem()?.timeline ||
-          (!isVbbBatchMode() ? vbbSingleTimeline : null) ||
-          null;
+        const tl = resolveVbbTimelineForFile(file || null, timeline || null);
         const fn = window.DevToolsVtrimEditor?.keepRangesForEncode;
         if (typeof fn === "function") return fn(stamped, duration, tl || undefined);
         return vbbKeepRangesFromEdit(stamped, duration);
@@ -884,7 +928,13 @@
         if (edit) {
           clampVbbEdit(edit, duration, srcW, srcH);
           if (editRaw && edit.srcFps && !editRaw.srcFps) editRaw.srcFps = edit.srcFps;
-          keepRanges = vbbKeepRangesForEncode(edit, duration);
+          // 必须按本条 file 取表：批量编码时 active 可能是另一条
+          keepRanges = vbbKeepRangesForEncode(
+            edit,
+            duration,
+            item?.timeline || null,
+            item?.file || file || null
+          );
           startSec = Number(keepRanges[0]?.start) || 0;
           const last = keepRanges[keepRanges.length - 1];
           const end = Number(last?.end) || duration;
@@ -925,7 +975,16 @@
        * 单段 keep 也会导出（不再早退原片）。
        * @returns {Promise<{ file: File, duration: number, srcW: number, srcH: number, materialized: boolean, segmentSpans: number[] }>}
        */
-      async function materializeVbbKeepVideo(file, edit, srcW, srcH, duration, onProgress, ffmpegLease) {
+      async function materializeVbbKeepVideo(
+        file,
+        edit,
+        srcW,
+        srcH,
+        duration,
+        onProgress,
+        ffmpegLease,
+        timelineHint
+      ) {
         // 校准可信 → ffmpeg frameRaw 快切；否则预览帧；再 ffmpeg 兜底
         if (!window.DevToolsVtrimEditor?.exportKeepByChromeDisplay) {
           await ensureVbbVtrimEditor().catch(() => null);
@@ -936,11 +995,8 @@
             : Number(edit?.srcFps) >= 5
               ? Number(edit.srcFps)
               : 24;
-        // 优先复用外预览已校准采样表，删中间接点才 ≡ 编辑预览 / 编辑器播放
-        let matTimeline =
-          getActiveVbbEditItem()?.timeline ||
-          (!isVbbBatchMode() ? vbbSingleTimeline : null) ||
-          null;
+        // 按本 file 取表（批量勿串用当前预览条），删中间接点才 ≡ 外预览 / 编辑器
+        let matTimeline = resolveVbbTimelineForFile(file, timelineHint || null);
         let matVideo = null;
         let matUrl = null;
         const ensureMatVideo = async () => {
@@ -1005,15 +1061,8 @@
                     }
                   }
                 } catch (_) {}
-                // 回写缓存，后续外预览 enforce 与本次 GIF 同表
-                try {
-                  const active = getActiveVbbEditItem();
-                  if (active) active.timeline = matTimeline;
-                  if (!isVbbBatchMode()) vbbSingleTimeline = matTimeline;
-                  else if (active && vbbBatchFiles[vbbEditBatchIdx]) {
-                    vbbBatchFiles[vbbEditBatchIdx].timeline = matTimeline;
-                  }
-                } catch (_) {}
+                // 回写到「这份 file」对应 item，禁止写到当前预览的另一条
+                cacheVbbTimelineForFile(file, matTimeline);
               } else {
                 matTimeline = null;
               }
@@ -1023,7 +1072,7 @@
           }
         }
         // 有表用表算 keep（删中间下一段起点 = 下一采样）；无表才退回 1/fps
-        let keeps = vbbKeepRangesForEncode(edit, duration, matTimeline);
+        let keeps = vbbKeepRangesForEncode(edit, duration, matTimeline, file);
         let matKeeps = keeps;
         if (
           matTimeline?.ctsSec?.length &&
@@ -1526,7 +1575,8 @@
               edit.srcFps = fpsHint;
             } catch (_) {}
           }
-          const keeps = vbbKeepRangesForEncode(edit, duration);
+          const fileTl = resolveVbbTimelineForFile(file, opts.timeline || null);
+          const keeps = vbbKeepRangesForEncode(edit, duration, fileTl, file);
           const keepSpan = vbbKeepSpanSec(keeps);
           const cuts = vbbNormalizeCutouts(edit.cutouts, edit.trimStart, edit.trimEnd);
           opts.onProgress?.(0.04, keeps.length > 1 ? "先导出编辑片（删中间）…" : "先导出编辑片…");
@@ -1537,7 +1587,8 @@
             srcH,
             duration,
             opts.onProgress,
-            opts.ffmpeg || null
+            opts.ffmpeg || null,
+            fileTl
           );
           if (mat.materialized) {
             outFile = mat.file;
@@ -1563,7 +1614,12 @@
             if (cuts.length) cutNote = `删${cuts.length}段`;
           }
         } else if (!fromMark && edit) {
-          const keeps = vbbKeepRangesForEncode(edit, duration);
+          const keeps = vbbKeepRangesForEncode(
+            edit,
+            duration,
+            resolveVbbTimelineForFile(file, opts.timeline || null),
+            file
+          );
           if (keeps.length === 1) {
             startSec = Number(keeps[0].start) || startSec;
             span = Math.max(VBB_MIN_SPAN, (Number(keeps[0].end) || 0) - startSec);
@@ -1887,10 +1943,10 @@
           boot.remove();
           const next = await openP;
           if (next) {
-            // 编辑器可能新建/再校准了表：回写缓存，禁止外预览另持一张
+            // 编辑器可能新建/再校准了表：按 file 回写，禁止外预览另持一张
             if (next.__vbbTimeline?.ctsSec?.length) {
+              cacheVbbTimelineForFile(item.file, next.__vbbTimeline);
               item.timeline = next.__vbbTimeline;
-              if (!isVbbBatchMode()) vbbSingleTimeline = next.__vbbTimeline;
               try {
                 delete next.__vbbTimeline;
               } catch (_) {
@@ -2129,7 +2185,12 @@
         const item = getActiveVbbEditItem();
         if (!item?.edit || !vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) return;
         // 与成片同一套 keep，预览接点才不会比 GIF 少跳/多带帧
-        const keeps = vbbKeepRangesForEncode(item.edit, item.duration);
+        const keeps = vbbKeepRangesForEncode(
+          item.edit,
+          item.duration,
+          item.timeline || null,
+          item.file || null
+        );
         if (!keeps.length) return;
         const clock = Number(vbbVideo.currentTime) || 0;
         // 根因同编辑器：currentTime 滞后于已绘帧；截断跟 max(clock, presented)，勿盲目减帧
@@ -6016,7 +6077,9 @@
                     0.42 + (i / total) * 0.05 + Math.min(0.04, p * 0.04),
                     t || "删中间…",
                     { busy: true }
-                  )
+                  ),
+                null,
+                item.timeline || null
               );
               startSec = 0;
               span = vbbMaterializedKeepDuration(
@@ -6368,6 +6431,7 @@
                     startSec: win.startSec,
                     span: win.span,
                     srcFps: Number(item.srcFps) || Number(item.edit?.srcFps) || 0,
+                    timeline: item.timeline || null,
                     ffmpeg: ffmpegLease || null,
                     onProgress: (local, text) => {
                       if (itemAborted()) return;
@@ -6700,6 +6764,7 @@
               startSec: win.startSec,
               span: win.span,
               srcFps: hintFps,
+              timeline: vbbSingleTimeline || null,
               onProgress: (local, text) => {
                 const stage = bumpVbbEncodeProgress(Math.min(0.12, local * 0.12), "整段转换", text || "应用删中间…");
                 setVbbClipJob(0, { status: "running", progress: Math.min(0.12, local * 0.12), text: stage });
@@ -8443,7 +8508,12 @@
           }
           clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
           if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
-          const encodeKeeps = vbbKeepRangesForEncode(item.edit, item.duration);
+          const encodeKeeps = vbbKeepRangesForEncode(
+            item.edit,
+            item.duration,
+            item.timeline || null,
+            item.file || null
+          );
           const seekTo = Number(encodeKeeps[0]?.start);
           applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
             keepPlaying: false,
