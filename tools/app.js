@@ -3651,7 +3651,10 @@
     dateremindIdleScheduled = true;
     const idle = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 2500));
     idle(() => {
-      window.DevToolsLazy?.ensureForTool?.("dateremind")
+      // 先挂面板 CSS（含历史兜底），再拉脚本；全屏层主样式已在 shell-overlays.css
+      Promise.resolve()
+        .then(() => window.DevToolsPanels?.ensure?.("dateremind"))
+        .then(() => window.DevToolsLazy?.ensureForTool?.("dateremind"))
         .then(() => {
           window.DevToolsDateRemind?.checkOnVisit?.();
         })

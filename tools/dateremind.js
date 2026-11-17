@@ -318,8 +318,24 @@
     fsDueIds = [];
   }
 
+  /** 兜底：若 shell-overlays 未进 HTML，弹出前补挂全屏层 CSS，避免掉进文档流底部 */
+  function ensureFullscreenCss() {
+    try {
+      if (document.querySelector('link[href*="shell-overlays.css"], link[data-panel-css="dateremind"]')) {
+        return;
+      }
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      const v = window.TOOLS_BUILD || window.TOOLS_VERSION || "";
+      link.href = `./styles/shell-overlays.css${v ? `?v=${encodeURIComponent(v)}` : ""}`;
+      link.dataset.shellOverlay = "dateremind-fs";
+      document.head.appendChild(link);
+    } catch (_) {}
+  }
+
   function renderFullscreen(due) {
     if (!fs || !fsList) return;
+    ensureFullscreenCss();
     fsDueIds = due.map((d) => d.id);
     fsList.innerHTML = due
       .map((it) => {
