@@ -3504,7 +3504,8 @@
        * 旧 firstSeed / 只按时长方案已移除，避免两套规则串味。
        */
       const VBB_FEATURE_SCHEME_KEY = "devtools-vbb-feature-scheme-v1";
-      const VBB_FEATURE_SCHEME_MAX = 64;
+      /** 无硬上限：撞档库持续增长；仅 localStorage 配额满时按 at 旧→新腾出 */
+      const VBB_FEATURE_SCHEME_QUOTA_DROP = 16;
       /** 特征键/匹配算法变更时递增；旧 span-scheme-v1 与低 ver 一律不命中 */
       const VBB_FEATURE_SCHEME_VER = 1;
       /** 同轮即时命中（不依赖 localStorage 读写次序） */
@@ -3605,14 +3606,30 @@
         }
       }
 
-      /** 持久化特征库并与同轮内存 LRU 对齐 */
+      /** 持久化特征库并与同轮内存对齐（不主动裁条数；配额满才删最旧） */
       function persistVbbFeatureSchemes(map) {
-        const keys = Object.keys(map).sort((a, b) => (map[b].at || 0) - (map[a].at || 0));
-        while (keys.length > VBB_FEATURE_SCHEME_MAX) delete map[keys.pop()];
-        try {
+        const write = () => {
           purgeLegacyVbbSpanScheme();
           localStorage.setItem(VBB_FEATURE_SCHEME_KEY, JSON.stringify(map));
-        } catch (_) {}
+        };
+        try {
+          write();
+        } catch (_) {
+          // QuotaExceeded：按 at 升序丢掉最旧一批，直到写得下或清空
+          const oldest = Object.keys(map).sort((a, b) => (map[a].at || 0) - (map[b].at || 0));
+          let i = 0;
+          while (i < oldest.length) {
+            const n = Math.min(VBB_FEATURE_SCHEME_QUOTA_DROP, oldest.length - i);
+            for (let j = 0; j < n; j += 1) delete map[oldest[i + j]];
+            i += n;
+            try {
+              write();
+              break;
+            } catch (__) {
+              /* 继续腾 */
+            }
+          }
+        }
         for (const k of [...vbbFeatureSchemeMem.keys()]) {
           if (!(k in map)) vbbFeatureSchemeMem.delete(k);
         }

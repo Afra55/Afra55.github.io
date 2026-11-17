@@ -45,7 +45,7 @@ function loadSchemeApi() {
     },
   };
   vm.runInNewContext(
-    `${shared.slice(start, end)}\nthis.api = {\n  exportMap: exportVbbFeatureSchemesMap,\n  merge: mergeVbbFeatureSchemes,\n  load: loadVbbFeatureSchemes,\n  key: VBB_FEATURE_SCHEME_KEY,\n  max: VBB_FEATURE_SCHEME_MAX,\n  ver: VBB_FEATURE_SCHEME_VER,\n};`,
+    `${shared.slice(start, end)}\nthis.api = {\n  exportMap: exportVbbFeatureSchemesMap,\n  merge: mergeVbbFeatureSchemes,\n  load: loadVbbFeatureSchemes,\n  persist: persistVbbFeatureSchemes,\n  key: VBB_FEATURE_SCHEME_KEY,\n  quotaDrop: VBB_FEATURE_SCHEME_QUOTA_DROP,\n  ver: VBB_FEATURE_SCHEME_VER,\n};`,
     box
   );
   return { api: box.api, store };
@@ -126,19 +126,63 @@ t("导出只含当前 ver，坏条目丢弃", () => {
   assert.equal(out.bad, undefined);
 });
 
-t("合并后不超过 MAX，按 at LRU", () => {
+t("合并可持续增长，无 64 条硬上限", () => {
   const { api } = loadSchemeApi();
   /** @type {Record<string, any>} */
   const incoming = {};
-  for (let i = 0; i < api.max + 5; i += 1) {
+  const n = 80;
+  for (let i = 0; i < n; i += 1) {
     incoming[`span${i}#1280x720|30|5-15|bb`] = sampleEntry({ at: i + 1, fps: 10 + (i % 5) });
   }
   const r = api.merge(incoming);
-  assert.equal(r.total, api.max);
+  assert.equal(r.total, n);
   const map = api.load();
-  assert.equal(Object.keys(map).length, api.max);
-  assert.equal(map[`span${api.max + 4}#1280x720|30|5-15|bb`].at, api.max + 5);
-  assert.equal(map[`span0#1280x720|30|5-15|bb`], undefined);
+  assert.equal(Object.keys(map).length, n);
+  assert.equal(map[`span0#1280x720|30|5-15|bb`].at, 1);
+  assert.equal(map[`span${n - 1}#1280x720|30|5-15|bb`].at, n);
+});
+
+t("配额满时按 at 旧→新腾出后再写入", () => {
+  let calls = 0;
+  const base = Object.create(null);
+  const box = {
+    V2G_BLACKBOX_BASE_W: 480,
+    localStorage: {
+      getItem(k) {
+        return Object.prototype.hasOwnProperty.call(base, k) ? base[k] : null;
+      },
+      setItem(k, v) {
+        calls += 1;
+        if (calls === 1) {
+          const err = new Error("QuotaExceededError");
+          err.name = "QuotaExceededError";
+          throw err;
+        }
+        base[k] = String(v);
+      },
+      removeItem(k) {
+        delete base[k];
+      },
+    },
+  };
+  const start = shared.indexOf("const VBB_FEATURE_SCHEME_KEY");
+  const end = shared.indexOf("/** 同轮/跨次统一查找：只按特征键");
+  vm.runInNewContext(
+    `${shared.slice(start, end)}\nthis.api = {\n  persist: persistVbbFeatureSchemes,\n  load: loadVbbFeatureSchemes,\n  quotaDrop: VBB_FEATURE_SCHEME_QUOTA_DROP,\n};`,
+    box
+  );
+  /** @type {Record<string, any>} */
+  const map = {};
+  const n = box.api.quotaDrop + 4;
+  for (let i = 0; i < n; i += 1) {
+    map[`k${i}#1280x720|30|5-15|bb`] = sampleEntry({ at: i + 1 });
+  }
+  box.api.persist(map);
+  assert.ok(calls >= 2);
+  const left = Object.keys(box.api.load());
+  assert.equal(left.length, n - box.api.quotaDrop);
+  assert.equal(box.api.load()[`k0#1280x720|30|5-15|bb`], undefined);
+  assert.ok(box.api.load()[`k${n - 1}#1280x720|30|5-15|bb`]);
 });
 
 console.log(`vbb-scheme-backup.test.js: ${n} passed`);
