@@ -3833,6 +3833,340 @@
         return true;
       }
 
+      /** 诊断用：只留 File 元数据，不含内容 */
+      function summarizeVbbDiagFile(file) {
+        if (!file) return null;
+        return {
+          name: String(file.name || ""),
+          size: Number(file.size) || 0,
+          type: String(file.type || ""),
+          lastModified: Number(file.lastModified) || 0,
+        };
+      }
+
+      function summarizeVbbDiagEdit(edit) {
+        if (!edit || typeof edit !== "object") return null;
+        const cutouts = Array.isArray(edit.cutouts)
+          ? edit.cutouts.map((c) => ({
+              start: Number(c?.start) || 0,
+              end: Number(c?.end) || 0,
+            }))
+          : [];
+        return {
+          trimStart: Number(edit.trimStart) || 0,
+          trimEnd: Number(edit.trimEnd) || 0,
+          cutouts,
+          cropOn: Boolean(edit.cropOn),
+          crop: edit.crop
+            ? {
+                x: Number(edit.crop.x) || 0,
+                y: Number(edit.crop.y) || 0,
+                w: Number(edit.crop.w) || 0,
+                h: Number(edit.crop.h) || 0,
+              }
+            : null,
+          srcFps: Number(edit.srcFps) || 0,
+        };
+      }
+
+      function summarizeVbbDiagTimeline(tl) {
+        if (!tl || typeof tl !== "object") return null;
+        const frames = Array.isArray(tl.frames) ? tl.frames.length : Number(tl.frameCount) || 0;
+        let canFf = null;
+        try {
+          canFf = Boolean(window.DevToolsMp4Timeline?.canFfmpegFirst?.(tl));
+        } catch (_) {
+          canFf = null;
+        }
+        return {
+          frameCount: frames,
+          durationSec: Number(tl.durationSec) || Number(tl.duration) || 0,
+          timescale: Number(tl.timescale) || 0,
+          canFfmpegFirst: canFf,
+        };
+      }
+
+      function summarizeVbbDiagItem(item, idx) {
+        if (!item) return null;
+        const marks = Array.isArray(item.marks)
+          ? item.marks.map((m) => ({
+              start: Number(m?.start) || 0,
+              end: Number(m?.end) || 0,
+            }))
+          : [];
+        const edit = item.edit || null;
+        const dirty = edit
+          ? Boolean(vbbEditIsDirty(edit, item.duration, item.srcW, item.srcH))
+          : false;
+        return {
+          idx,
+          file: summarizeVbbDiagFile(item.file),
+          duration: Number(item.duration) || 0,
+          srcW: Number(item.srcW) || 0,
+          srcH: Number(item.srcH) || 0,
+          srcFps: Number(item.srcFps) || 0,
+          contentSig: String(item.contentSig || "").slice(0, 80),
+          draftKey: vbbFileDraftKey(item.file) || "",
+          softKey: typeof vbbFileDraftSoftKey === "function" ? vbbFileDraftSoftKey(item.file) || "" : "",
+          edit: summarizeVbbDiagEdit(edit),
+          editDirty: dirty,
+          marks,
+          draftStart: item.draftStart == null ? null : Number(item.draftStart),
+          timeline: summarizeVbbDiagTimeline(item.timeline),
+        };
+      }
+
+      function summarizeVbbDiagClip(c, idx) {
+        if (!c) return null;
+        return {
+          idx,
+          start: Number(c.start) || 0,
+          span: Number(c.span) || 0,
+          sourceName: String(c.sourceName || ""),
+          sourceFile: String(c.sourceFile || ""),
+          sourceKey: String(c.sourceKey || ""),
+          srcW: Number(c.srcW) || 0,
+          srcH: Number(c.srcH) || 0,
+          jobStatus: String(c.jobStatus || ""),
+          jobProgress: Number(c.jobProgress) || 0,
+          jobText: String(c.jobText || ""),
+          jobQueuedAt: Number(c.jobQueuedAt) || 0,
+          jobStartedAt: Number(c.jobStartedAt) || 0,
+          encodeMs: Number(c.encodeMs) || 0,
+          gifNote: String(c.gifNote || ""),
+          gifDuration: Number(c.gifDuration) || 0,
+          gifOutW: Number(c.gifOutW) || 0,
+          gifOutH: Number(c.gifOutH) || 0,
+          gifFps: Number(c.gifFps) || 0,
+          gifSpeed: Number(c.gifSpeed) || 0,
+          gifskiQuality: Number(c.gifskiQuality) || 0,
+          gifQualityLadder: Number(c.gifQualityLadder) || 0,
+          gifMaxColors: Number(c.gifMaxColors) || 0,
+          gifEngine: String(c.gifEngine || ""),
+          hasGif: Boolean(c.gifBlob),
+          gifBytes: c.gifBlob ? Number(c.gifBlob.size) || 0 : 0,
+          error: String(c.error || ""),
+        };
+      }
+
+      /** 组装完整诊断包（无视频字节 / 无 GIF 二进制） */
+      function buildVbbDiagPayload() {
+        try {
+          saveVbbEditDraftsSync();
+        } catch (_) {}
+        const active = getActiveVbbEditItem?.() || null;
+        const perf =
+          typeof currentMediaPerf === "function"
+            ? currentMediaPerf()
+            : typeof mediaPerfProfile === "function"
+              ? mediaPerfProfile()
+              : null;
+        const schemes = (() => {
+          try {
+            return exportVbbFeatureSchemesMap();
+          } catch (_) {
+            return {};
+          }
+        })();
+        const schemeKeys = Object.keys(schemes || {});
+        const draftPayload = (() => {
+          try {
+            return readVbbEditDraftPayload?.() || null;
+          } catch (_) {
+            return null;
+          }
+        })();
+        let ua = "";
+        let lang = "";
+        let hw = null;
+        try {
+          ua = String(navigator.userAgent || "");
+          lang = String(navigator.language || "");
+          hw = {
+            hardwareConcurrency: Number(navigator.hardwareConcurrency) || 0,
+            deviceMemory: Number(navigator.deviceMemory) || 0,
+            maxTouchPoints: Number(navigator.maxTouchPoints) || 0,
+            platform: String(navigator.platform || ""),
+          };
+        } catch (_) {}
+        const uiError = (() => {
+          try {
+            return String(vbbError?.textContent || "").trim();
+          } catch (_) {
+            return "";
+          }
+        })();
+        const videoSnap = (() => {
+          try {
+            if (!vbbVideo) return null;
+            return {
+              srcHas: Boolean(vbbVideo.src),
+              currentTime: Number(vbbVideo.currentTime) || 0,
+              duration: Number(vbbVideo.duration) || 0,
+              videoWidth: Number(vbbVideo.videoWidth) || 0,
+              videoHeight: Number(vbbVideo.videoHeight) || 0,
+              paused: Boolean(vbbVideo.paused),
+              readyState: Number(vbbVideo.readyState) || 0,
+            };
+          } catch (_) {
+            return null;
+          }
+        })();
+        const jobsSnap = (() => {
+          try {
+            if (!isVbbBatchMode()) return null;
+            return buildVbbBatchJobs().map((j, i) => ({
+              idx: i,
+              sourceName: j.sourceName,
+              startSec: Number(j.startSec) || 0,
+              span: Number(j.span) || 0,
+              fromMark: Boolean(j.fromMark),
+              file: summarizeVbbDiagFile(j.item?.file),
+              edit: summarizeVbbDiagEdit(j.edit),
+            }));
+          } catch (err) {
+            return { error: String(err?.message || err) };
+          }
+        })();
+        const logLines = typeof getVbbLogRing === "function" ? getVbbLogRing() : [];
+        return {
+          v: 1,
+          kind: "vbb-diag",
+          at: Date.now(),
+          atIso: new Date().toISOString(),
+          env: {
+            toolsVersion: String(TOOLS_VERSION || window.TOOLS_VERSION || ""),
+            href: String(location.href || ""),
+            ua,
+            lang,
+            hw,
+            coarsePointer: typeof isCoarsePointer === "function" ? Boolean(isCoarsePointer()) : null,
+            mobileLikely:
+              typeof isLikelyMobileBrowser === "function" ? Boolean(isLikelyMobileBrowser()) : null,
+            perf,
+            blackboxMaxMb: typeof blackboxMaxMb === "function" ? blackboxMaxMb() : null,
+            qualityFirst: vbbQualityFirstOn(),
+            autoCrop: typeof vbbAutoCropEnabled === "function" ? vbbAutoCropEnabled() : null,
+            speedLimitSec: typeof vbbSpeedLimitSec === "function" ? vbbSpeedLimitSec() : null,
+            debugLogToConsole: Boolean(VBB_DEBUG),
+          },
+          session: {
+            busy: Boolean(vbbBusy),
+            abort: Boolean(abortVbb),
+            needReselect: Boolean(vbbNeedReselect),
+            workflow: String(vbbWorkflow || ""),
+            mode: String(vbbMode || ""),
+            batchMode: Boolean(isVbbBatchMode()),
+            manualMode: Boolean(isVbbManualMode()),
+            splitMode: Boolean(isVbbSplitMode()),
+            editBatchIdx: Number(vbbEditBatchIdx),
+            editOpening: Boolean(vbbEditOpening),
+            editOpenStartedAt: Number(vbbEditOpenStartedAt) || 0,
+            jobEpoch: Number(vbbJobEpoch) || 0,
+            jobActiveEpoch: Number(vbbJobActiveEpoch) || 0,
+            previewIdx: Number(vbbPreviewIdx),
+            cropFailReason: String(vbbCropFailReason || ""),
+            uiError,
+            liveFfmpegPool: Array.isArray(vbbLiveFfmpegPool) ? vbbLiveFfmpegPool.length : 0,
+            precutCache: vbbPrecutClipCache?.size || 0,
+          },
+          source: {
+            single: summarizeVbbDiagFile(vbbSourceFile),
+            singleSrcFps: Number(vbbSingleSrcFps) || 0,
+            singleEdit: summarizeVbbDiagEdit(vbbSingleEdit),
+            singleTimeline: summarizeVbbDiagTimeline(vbbSingleTimeline),
+            contentSig: String(vbbSourceContentSig || "").slice(0, 80),
+            marks: Array.isArray(vbbMarks)
+              ? vbbMarks.map((m) => ({
+                  start: Number(m?.start) || 0,
+                  end: Number(m?.end) || 0,
+                }))
+              : [],
+            draftStart: vbbDraftStart == null ? null : Number(vbbDraftStart),
+            video: videoSnap,
+            activeItem: active ? summarizeVbbDiagItem(active, vbbEditBatchIdx) : null,
+          },
+          batchFiles: Array.isArray(vbbBatchFiles)
+            ? vbbBatchFiles.map((it, i) => summarizeVbbDiagItem(it, i))
+            : [],
+          jobs: jobsSnap,
+          clips: Array.isArray(vbbClips) ? vbbClips.map((c, i) => summarizeVbbDiagClip(c, i)) : [],
+          clipsSummary: (() => {
+            const list = Array.isArray(vbbClips) ? vbbClips : [];
+            return {
+              total: list.length,
+              done: list.filter((c) => c?.gifBlob).length,
+              error: list.filter((c) => c?.error && !c?.gifBlob).length,
+              pending: list.filter((c) => !c?.gifBlob && !c?.error).length,
+              running: list.filter((c) => String(c?.jobStatus || "") === "running").length,
+            };
+          })(),
+          analysis: vbbAnalysis
+            ? {
+                duration: Number(vbbAnalysis.duration) || 0,
+                srcW: Number(vbbAnalysis.srcW) || 0,
+                srcH: Number(vbbAnalysis.srcH) || 0,
+                bps15: Number(vbbAnalysis.bps15) || 0,
+                sampleBytes: Number(vbbAnalysis.sampleBytes) || 0,
+                sampleSpan: Number(vbbAnalysis.sampleSpan) || 0,
+                activeCount: Array.isArray(vbbAnalysis.active?.ranges)
+                  ? vbbAnalysis.active.ranges.length
+                  : 0,
+              }
+            : null,
+          drafts: {
+            storedCount: Array.isArray(draftPayload?.items) ? draftPayload.items.length : 0,
+            storedAt: Number(draftPayload?.at) || 0,
+          },
+          schemes: {
+            count: schemeKeys.length,
+            /** 只给键+摘要，避免诊断文件过大；完整库用「备份编辑」 */
+            sample: schemeKeys.slice(0, 40).map((k) => {
+              const hit = schemes[k];
+              return {
+                key: k,
+                fps: Number(hit?.fps) || 0,
+                maxW: Number(hit?.maxW) || 0,
+                at: Number(hit?.at) || 0,
+                srcFps: Number(hit?.srcFps) || 0,
+                fileBytes: Number(hit?.fileBytes) || 0,
+              };
+            }),
+          },
+          logs: {
+            count: logLines.length,
+            max: typeof VBB_LOG_RING_MAX === "number" ? VBB_LOG_RING_MAX : 3000,
+            lines: logLines,
+          },
+        };
+      }
+
+      function downloadVbbDiagJson() {
+        vbbLog(`[vbb] export diag · clips=${vbbClips.length} · batch=${vbbBatchFiles.length}`);
+        const payload = buildVbbDiagPayload();
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `vbb-diag-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => {
+          try {
+            URL.revokeObjectURL(url);
+          } catch (_) {}
+        }, 2000);
+        const sum = payload.clipsSummary || {};
+        const logN = payload.logs?.count || 0;
+        toast(
+          `已下载诊断（片段 ${sum.done || 0}/${sum.total || 0} · 失败 ${sum.error || 0} · 日志 ${logN}）· 可发给开发排查`
+        );
+        return true;
+      }
+
       /**
        * 从「备份编辑」的 JSON 写回本机草稿，并合并撞档库（同键保留较新 at）。
        * 兼容旧版只含 items、或只含 schemes 的文件。
@@ -5084,6 +5418,12 @@
         syncVbbWorkflowUi();
         setError(vbbError, "");
         toast(`已选择 ${files.length} 个视频，仅本机处理，不会上传`);
+        vbbLog(
+          `[vbb] select batch n=${files.length} · ${files
+            .slice(0, 8)
+            .map((f) => `${f.name}:${Math.round((Number(f.size) || 0) / 1024)}KB`)
+            .join(", ")}${files.length > 8 ? "…" : ""}`
+        );
         const probed = [];
         for (const file of files) {
           if (loadEpoch !== vbbLoadEpoch) return;
@@ -6398,6 +6738,9 @@
           toast("没有可转换的片段");
           return;
         }
+        vbbLog(
+          `[vbb] batch start · jobs=${total} · files=${vbbBatchFiles.length} · workflow=${vbbWorkflow} · retryFailed=${retryFailed ? 1 : 0} · qf=${vbbQualityFirstOn() ? 1 : 0}`
+        );
         /** 已有成功 GIF 的下标：重跑失败时跳过，绝不重编码成功项 */
         const skipOk = new Set();
         if (retryFailed) {
@@ -6843,6 +7186,9 @@
             saveVbbEditDraftsSync();
           } catch (_) {}
           const win = resolveVbbEncodeEdits({ edit: vbbSingleEdit, duration, srcW, srcH }, vbbSourceFile, duration, srcW, srcH);
+          vbbLog(
+            `[vbb] single start · ${vbbSourceFile.name} · ${Math.round((Number(vbbSourceFile.size) || 0) / 1024)}KB · ${duration.toFixed(1)}s · ${srcW}x${srcH} · enc ${win.startSec.toFixed(2)}+${win.span.toFixed(2)}s · qf=${vbbQualityFirstOn() ? 1 : 0}`
+          );
           const jobEpoch = beginVbbJob();
           vbbSuppressGlobalProgress = true; // 只留卡片进度
           setVbbButtons();
@@ -8574,6 +8920,12 @@
         getBatchFiles: () => vbbBatchFiles.slice(),
         /** 紧急：导出/导入/保存/清除（编辑草稿 + 撞档库；不含视频）；强制取消 */
         exportEditDrafts: () => downloadVbbEditDraftsJson(),
+        exportDiag: () => downloadVbbDiagJson(),
+        getDiagPayload: () => buildVbbDiagPayload(),
+        getLogRing: () => (typeof getVbbLogRing === "function" ? getVbbLogRing() : []),
+        clearLogRing: () => {
+          if (typeof clearVbbLogRing === "function") clearVbbLogRing();
+        },
         importEditDrafts: (file) => importVbbEditDraftsFromFile(file),
         saveEditDrafts: () => saveVbbEditDraftsSync(),
         clearEditDrafts: (opts) => clearVbbStoredEditDrafts(opts || { resetCurrent: true }),
@@ -8688,6 +9040,14 @@
       });
       $("#vbb-export-edits")?.addEventListener("click", () => {
         downloadVbbEditDraftsJson();
+      });
+      $("#vbb-export-diag")?.addEventListener("click", () => {
+        try {
+          downloadVbbDiagJson();
+        } catch (err) {
+          setError(vbbError, err?.message || String(err));
+          toast(err?.message || "导出诊断失败");
+        }
       });
       $("#vbb-import-edits")?.addEventListener("change", (e) => {
         const f = e.target?.files?.[0];
