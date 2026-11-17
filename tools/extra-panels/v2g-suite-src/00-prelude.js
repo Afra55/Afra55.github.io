@@ -34,7 +34,7 @@
     encodeAnimatedWebpFromStillFrames, isAutoPackZipEnabled, setAutoPackZipEnabled, syncAutoPackZipToggles,
     bindAutoPackZipToggles, canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors,
     gifQualityToGifskiQuality,
-    terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, scheduleFfmpegPrewarm,
+    terminateFfmpegInstance, clearFfmpegInputCache, paintFfmpegWarmHint, prewarmFfmpegEngine, scheduleFfmpegPrewarm,
     TOOLS_VERSION, GIF_TOOL_VERSION, compressExistingGifToBlackbox, blackboxUseMaxBytes,
     blackboxMaxMb, blackboxMaxLabel, setBlackboxMaxMb,
     readMediaPerfMode, setMediaPerfMode, mediaPerfProfile, isCoarsePointerMedia,
