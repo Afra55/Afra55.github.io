@@ -3209,34 +3209,53 @@
       }
 
       /**
-       * 每条 GIF 完成后释放堆：清 RGBA 试算缓存、FFmpeg 输入索引，串行路径销毁 wasm 实例并短歇后预热。
-       * 批量第 N 条变慢 / 出帧卡死多与残留 MEMFS + 大块 RGBA 有关；并行租约只清缓存不杀租约实例。
+       * 每条 GIF 后释放试算堆。
+       * 桌面默认只清 RGBA、保留 FFmpeg Worker（换文件靠 ensureFfmpegInputWritten 按键改写）；
+       * 手机 / OOM / 显式 recycle 才 terminate + 清输入索引 + 短歇预热——避免「单条快、批量每条冷启动」。
        */
       async function releaseVbbEncodeHeapAfterClip({
         serial = true,
         lease = null,
         restMs = null,
-        prewarm = true,
+        prewarm = null,
         label = "",
+        recycleFfmpeg = null,
+        clearInput = null,
       } = {}) {
         try {
           clearVbbRgbaTrialCache?.();
         } catch (_) {}
-        try {
-          if (typeof clearFfmpegInputCache === "function") {
-            clearFfmpegInputCache(lease || undefined);
-          }
-        } catch (_) {}
-        if (serial && !lease) {
+        const mobile = typeof isLikelyMobileBrowser === "function" && isLikelyMobileBrowser();
+        const doRecycle =
+          recycleFfmpeg != null
+            ? Boolean(recycleFfmpeg)
+            : Boolean(serial && !lease && mobile);
+        const doClearInput = clearInput != null ? Boolean(clearInput) : doRecycle;
+        if (doClearInput) {
+          try {
+            if (typeof clearFfmpegInputCache === "function") {
+              clearFfmpegInputCache(lease || undefined);
+            }
+          } catch (_) {}
+        }
+        if (doRecycle && serial && !lease) {
           try {
             terminateFfmpegInstance({ revokeAssets: false });
           } catch (_) {}
         }
-        const mobile = typeof isLikelyMobileBrowser === "function" && isLikelyMobileBrowser();
-        const wait = restMs != null ? Math.max(0, Number(restMs) || 0) : mobile ? 280 : 120;
+        const wait =
+          restMs != null
+            ? Math.max(0, Number(restMs) || 0)
+            : doRecycle
+              ? mobile
+                ? 280
+                : 120
+              : 16;
         if (label) {
           try {
-            vbbLog(`[vbb] release heap${label ? ` · ${label}` : ""} · wait=${wait}ms`);
+            vbbLog(
+              `[vbb] release heap · ${label} · recycle=${doRecycle ? 1 : 0} · wait=${wait}ms`
+            );
           } catch (_) {}
         }
         if (wait > 0) {
@@ -3245,7 +3264,9 @@
             if (typeof yieldToUi === "function") await yieldToUi();
           } catch (_) {}
         }
-        if (prewarm && serial && !lease && !abortVbb) {
+        const doPrewarm =
+          prewarm != null ? Boolean(prewarm) : Boolean(doRecycle && serial && !lease && !abortVbb);
+        if (doPrewarm && serial && !lease && !abortVbb) {
           try {
             await prewarmFfmpegEngine().catch(() => {});
           } catch (_) {}
@@ -5392,8 +5413,10 @@
               refreshVbbClipRow(i);
               await releaseVbbEncodeHeapAfterClip({
                 serial: true,
-                restMs: mobile ? 200 : 100,
-                prewarm: i < ranges.length - 1,
+                recycleFfmpeg: mobile,
+                clearInput: mobile,
+                restMs: mobile ? 200 : 16,
+                prewarm: mobile && i < ranges.length - 1,
                 label: "失败后清理 · 准备下一段…",
               });
               continue;
@@ -5418,9 +5441,11 @@
             const moreMarks = i < ranges.length - 1 && !abortVbb;
             await releaseVbbEncodeHeapAfterClip({
               serial: true,
-              restMs: mobile ? (hugeFile ? 300 : 180) : hugeFile ? 140 : 90,
-              prewarm: moreMarks,
-              label: moreMarks ? "清理内存 · 准备下一段…" : "",
+              recycleFfmpeg: mobile,
+              clearInput: mobile,
+              restMs: mobile ? (hugeFile ? 300 : 180) : 16,
+              prewarm: mobile && moreMarks,
+              label: moreMarks ? (mobile ? "重建编码器 · 准备下一段…" : "清试算缓存…") : "",
             });
           }
           const allOk = vbbClips.length > 0 && vbbClips.every((c) => Boolean(c?.gifBlob));
@@ -6486,6 +6511,7 @@
               let lastLocal = 0;
               let lastStallHintAt = 0;
               let lastProgressText = "";
+              let memoryFail = false;
               const itemAborted = () => abortVbb;
               const watchdog = window.setInterval(() => {
                 if (itemAborted()) return;
@@ -6505,12 +6531,6 @@
                 vbbLog(`[vbb] #${i + 1} stall ${sec}s wall=${wall}s stage=${lastStage}`);
               }, 2000);
               try {
-                // 上一条 finally 已 release；此处仅兜底（异常路径漏清时）
-                if (conc <= 1 && i > 0 && !ffmpegLease) {
-                  try {
-                    clearFfmpegInputCache?.();
-                  } catch (_) {}
-                }
                 const prepared = await prepareVbbEncodeSource(
                   item.file,
                   win.edit,
@@ -6678,7 +6698,8 @@
               vbbLog(`[vbb] #${i + 1} FAIL ${Math.round(elapsedSec * 1000)}ms · ${msg}`);
               setVbbClipJob(i, { status: "error", progress: 0, text: "失败" });
               refreshVbbClipRow(i);
-              return { ok: false, memory: isLikelyMemoryError(err), err };
+              memoryFail = isLikelyMemoryError(err);
+              return { ok: false, memory: memoryFail, err };
             } finally {
               window.clearInterval(watchdog);
               if (!finishedIdx.has(i)) {
@@ -6689,23 +6710,29 @@
               setVbbProgress(true, doneCount / total, `批量转换 · ${doneCount}/${total}${conc > 1 ? ` · ${conc}路` : ""}`, {
                 busy: moreLeft,
               });
-              // 每条 GIF 后：清 RGBA/输入缓存；串行销毁 FFmpeg wasm 并短歇+预热，下一条更快更稳
+              // 桌面：只清 RGBA，保留 Worker（换片按输入键改写）。手机/OOM 才拆重建。
               const mobile = typeof isLikelyMobileBrowser === "function" && isLikelyMobileBrowser();
+              const recycle = Boolean(memoryFail) || (conc <= 1 && !ffmpegLease && mobile);
               await releaseVbbEncodeHeapAfterClip({
                 serial: conc <= 1,
                 lease: ffmpegLease || null,
-                restMs:
-                  conc <= 1
-                    ? mobile
-                      ? doneCount >= 4
-                        ? 420
-                        : 260
-                      : needsMaterialize
-                        ? 220
-                        : 110
-                    : 40,
-                prewarm: conc <= 1 && moreLeft,
-                label: conc <= 1 && moreLeft ? "清理内存 · 准备下一条…" : "",
+                recycleFfmpeg: recycle,
+                clearInput: recycle,
+                restMs: recycle
+                  ? mobile
+                    ? doneCount >= 4
+                      ? 420
+                      : 260
+                    : 120
+                  : conc <= 1
+                    ? 16
+                    : 0,
+                prewarm: recycle && moreLeft,
+                label: moreLeft
+                  ? recycle
+                    ? "重建编码器 · 准备下一条…"
+                    : "清试算缓存…"
+                  : "",
               });
             }
           };
@@ -6972,7 +6999,9 @@
           try {
             await releaseVbbEncodeHeapAfterClip({
               serial: true,
-              restMs: 80,
+              recycleFfmpeg: false,
+              clearInput: false,
+              restMs: 16,
               prewarm: false,
             });
           } catch (_) {}
@@ -7396,15 +7425,17 @@
             }
             // 只刷新列表元数据，不自动展开全部预览
             refreshVbbClipRow(i);
-            // 每段 GIF 后清缓存 + 重建 FFmpeg（大文件/手机歇更久）
+            // 同文件多段：桌面保留 Worker+输入缓存；手机才拆重建
             const moreRanges = i < plan.ranges.length - 1 && !abortVbb;
             await releaseVbbEncodeHeapAfterClip({
               serial: true,
-              restMs: mobile ? (hugeFile ? 320 : 200) : hugeFile ? 160 : 100,
-              prewarm: moreRanges,
-              label: moreRanges ? "清理内存 · 准备下一段…" : "",
+              recycleFfmpeg: mobile,
+              clearInput: mobile,
+              restMs: mobile ? (hugeFile ? 320 : 200) : 16,
+              prewarm: mobile && moreRanges,
+              label: moreRanges ? (mobile ? "重建编码器 · 准备下一段…" : "清试算缓存…") : "",
             });
-            if (moreRanges && (hugeFile || mobile)) {
+            if (moreRanges && mobile && hugeFile) {
               try {
                 const ff = await getFfmpegInstance();
                 await ensureFfmpegInputWritten(ff, vbbSourceFile, () => {});
