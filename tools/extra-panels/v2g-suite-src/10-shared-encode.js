@@ -2432,6 +2432,15 @@
           chunkCount = Math.ceil(frameCount / chunkMax);
           vbbLog(`[vbb-phase] wasm 强制分块 ${chunkCount}×${chunkMax} 帧（防 OOM，原单段 ${frameCount}）`);
         }
+        // 手机长片：再压块大小。大块 RGBA 读回/wasm 编码易在「出帧 100%」后假死十几分钟
+        const spanHint = Math.max(0, Number(opts.span) || 0);
+        if (isCoarsePointer() && spanHint >= 18 && chunkMax > 72) {
+          chunkMax = 72;
+          chunkCount = Math.ceil(frameCount / chunkMax);
+          vbbLog(
+            `[vbb-phase] 手机长片≥18s 强压分块 ${chunkCount}×${chunkMax} 帧（防出帧顶满后卡住）`
+          );
+        }
         vbbLog(
           `[vbb-phase] gifski 分块 chunkCount=${chunkCount} chunkMax=${chunkMax} 帧${frameCount} 每帧${formatKb(
             perFrameBytes
@@ -2631,21 +2640,49 @@
             const outArgs = ["-frames:v", String(chunkFrames), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
             const tChunk = Date.now();
             report(0.08, `${stageLabel}导出 RGBA · ${chunkFrames}帧`);
+            let lastChunkProg = 0;
+            let lastChunkProgAt = Date.now();
+            const RGBA_TAIL_STALL_MS = isCoarsePointer() ? 90000 : 180000;
             const onChunkFfmpegProgress = ({ progress }) => {
               if (aborted()) return;
               const p = Math.max(0, Math.min(1, Number(progress) || 0));
+              if (p > lastChunkProg + 0.005) {
+                lastChunkProg = p;
+                lastChunkProgAt = Date.now();
+              } else if (p >= lastChunkProg) {
+                lastChunkProg = p;
+              }
               report(0.08 + p * 0.52, `${stageLabel}导出 RGBA · ${Math.round(p * 100)}%`);
             };
             const onChunkFfmpegLog = () => {
               if (aborted()) return;
               const sec = Math.max(1, Math.round((Date.now() - tChunk) / 1000));
+              // log 也算存活，避免「进度已满但还在 flush」被立刻判死
+              if (lastChunkProg < 0.99) lastChunkProgAt = Date.now();
               report(0.2, `${stageLabel}导出 RGBA · 已 ${sec}s`);
             };
-            // FFmpeg 偶发不报 progress：定时心跳，避免批量 stall 误判
+            // FFmpeg 偶发：progress 顶满 100% 后 exec 仍挂很久；心跳区分解码/收尾，超时则掐断重来
             const chunkHb = window.setInterval(() => {
               if (aborted()) return;
               const sec = Math.max(1, Math.round((Date.now() - tChunk) / 1000));
-              report(0.35, `${stageLabel}导出 RGBA · 已 ${sec}s（解码中）`);
+              if (lastChunkProg >= 0.99) {
+                const tailSec = Math.max(1, Math.round((Date.now() - lastChunkProgAt) / 1000));
+                report(0.6, `${stageLabel}导出 RGBA · 100% · 收尾 ${tailSec}s`);
+                if (Date.now() - lastChunkProgAt >= RGBA_TAIL_STALL_MS) {
+                  vbbLog(
+                    `[vbb-phase] RGBA 出帧顶满后卡住 ${tailSec}s · 终止 FFmpeg 以便降档/分块重试`
+                  );
+                  try {
+                    if (typeof terminateFfmpegInstance === "function") {
+                      terminateFfmpegInstance({ revokeAssets: false });
+                    } else {
+                      ffmpeg.terminate();
+                    }
+                  } catch (_) {}
+                }
+              } else {
+                report(0.35, `${stageLabel}导出 RGBA · 已 ${sec}s（解码中）`);
+              }
             }, 2500);
             let code;
             try {
@@ -2659,6 +2696,8 @@
                 ...outArgs,
               ]);
               if (code !== 0 && useDenoise) {
+                lastChunkProg = 0;
+                lastChunkProgAt = Date.now();
                 code = await ffmpeg.exec([
                   ...baseArgs,
                   ...buildRawArgs(false, dur, chunkFrames, ptsStart),
@@ -2675,9 +2714,26 @@
               } catch (_) {}
             }
             if (aborted()) throw new Error("已取消");
-            if (code !== 0) throw new Error(`FFmpeg 导出 RGBA 失败（code=${code}）`);
+            if (code !== 0) {
+              throw new Error(
+                lastChunkProg >= 0.99
+                  ? "FFmpeg 出帧收尾超时（进度已满仍未返回）"
+                  : `FFmpeg 导出 RGBA 失败（code=${code}）`
+              );
+            }
             report(0.62, `${stageLabel}读取帧数据…`);
-            const data = await ffmpeg.readFile(rawName);
+            const tRead = Date.now();
+            const readHb = window.setInterval(() => {
+              if (aborted()) return;
+              const sec = Math.max(1, Math.round((Date.now() - tRead) / 1000));
+              report(0.65, `${stageLabel}读取帧数据 · 已 ${sec}s`);
+            }, 2000);
+            let data;
+            try {
+              data = await ffmpeg.readFile(rawName);
+            } finally {
+              window.clearInterval(readHb);
+            }
             const frames = data instanceof Uint8Array ? data : new Uint8Array(data);
             // 先释放 ffmpeg 侧文件，降低 gifski 拷贝帧时的峰值内存
             try {
@@ -2754,12 +2810,19 @@
             }
             const mergedView = view.subarray(0, encodedFrames * stride);
             // gifski.encode 是同步 wasm：先让出一帧给滚动，再编码（此间主线程会卡住，无法刷新 UI）
-            report(0.72, `${stageLabel}gifski 编码 ${encodedFrames}帧（手机可能短暂无响应）`);
+            report(
+              0.72,
+              `${stageLabel}gifski 编码 ${encodedFrames}帧（手机可能短暂无响应，属正常）`
+            );
             await yieldToUi();
             if (aborted()) throw new Error("已取消");
             const fpsInt = Math.max(1, Math.round(fps));
             const canPassFps = gifskiWasmDurationsAreUniform(durations) && Math.abs(fps - fpsInt) < 0.01;
             const wasmDurations = canPassFps ? undefined : durationsForGifskiWasmPts(durations);
+            const tSki = Date.now();
+            // 编码前再刷一次文案；同步 wasm 期间定时器也会停，完成后立刻报完成
+            report(0.74, `${stageLabel}gifski 编码 ${encodedFrames}帧…`);
+            await yieldToUi();
             const gifBytes = await withGifskiEncodeLock(() =>
               mod.encode(
                 mergedView,
@@ -2770,6 +2833,9 @@
                 wasmDurations,
                 gifskiQuality
               )
+            );
+            vbbLog(
+              `[vbb-phase] gifski wasm ${encodedFrames}帧 ${Math.round(Date.now() - tSki)}ms`
             );
             if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
             report(0.95, `${stageLabel}gifski 完成`);

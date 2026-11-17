@@ -2913,6 +2913,14 @@
         if (/压缩|轻压|O3|lossy/i.test(t) && !/导出|RGBA|写入/.test(t)) return "④压缩中";
 
         // —— ③ 出帧 / 写 GIF ——
+        if (/收尾/.test(t) && /RGBA|出帧|导出/.test(t)) {
+          const sec = t.match(/收尾\s*(\d+)\s*s/);
+          return sec ? `③出帧收尾 · ${sec[1]}s` : "③出帧收尾";
+        }
+        if (/读取帧|读帧|复用\s*RGBA/.test(t)) {
+          const sec = t.match(/已\s*(\d+)\s*s/);
+          return sec ? `③读帧 · ${sec[1]}s` : "③读帧";
+        }
         if (/导出\s*RGBA|导出帧|抽帧|截取片段|抽取片段/.test(t)) {
           const pct = t.match(/(\d+)\s*%/);
           const frac = t.match(/(\d+)\s*\/\s*(\d+)/);
@@ -2924,7 +2932,10 @@
         }
         if (/写入\s*GIF|编码\s*GIF|GIF\s*…|GIF\s*\.\.\.|gifski|调色板|写入帧|本机编码\s*GIF/i.test(t)) {
           const pct = t.match(/(\d+)\s*%/);
-          return pct ? `③写GIF · ${pct[1]}%` : "③写GIF中";
+          const n = t.match(/(\d+)\s*帧/);
+          if (pct) return `③写GIF · ${pct[1]}%`;
+          if (n) return `③写GIF · ${n[1]}帧`;
+          return "③写GIF中";
         }
         if (/读取\s*GIF|读取结果|封装/.test(t)) return "③收尾";
 
@@ -6581,6 +6592,10 @@
                 setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
                 notifyVbbProgress(i, total);
                 ok += 1;
+                // 批量连跑：丢掉试档 RGBA 缓存，减轻后面长片「出帧顶满」后的内存压力
+                try {
+                  if (typeof clearVbbRgbaTrialCache === "function") clearVbbRgbaTrialCache();
+                } catch (_) {}
                 maybeAutoDownloadVbbGif(vbbClips[i], i);
                 refreshVbbClipRow(i);
                 // 该源片全部成功则消费签名 + 从草稿剔除；未完成的继续留着
