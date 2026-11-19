@@ -991,6 +991,108 @@
     return JSON.parse(raw);
   }
 
+  /** 去 BOM / 零宽字符 */
+  function cleanJsonInvisible(text) {
+    return String(text || "")
+      .replace(/^\uFEFF/, "")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
+      .trim();
+  }
+
+  /**
+   * 字符串外把中文全角标点 / 裸 = 收成 JSON 标点。
+   * 粘贴自文档/聊天时常见「"a"：1」→ Colon expected；字符串内的「说明：…」不动。
+   */
+  function normalizeLooseJsonPunct(text) {
+    const s = String(text || "");
+    const map = {
+      "\uFF1A": ":", // ：
+      "\uFF0C": ",", // ，
+      "\u3001": ",", // 、
+      "\uFF5B": "{", // ｛
+      "\uFF5D": "}", // ｝
+      "\uFF3B": "[", // ［
+      "\uFF3D": "]", // ］
+    };
+    let out = "";
+    let inStr = false;
+    let quote = "";
+    let esc = false;
+    for (let i = 0; i < s.length; i += 1) {
+      const ch = s[i];
+      if (inStr) {
+        out += ch;
+        if (esc) {
+          esc = false;
+        } else if (ch === "\\" && quote === '"') {
+          esc = true;
+        } else if (ch === quote) {
+          inStr = false;
+          quote = "";
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        inStr = true;
+        quote = ch;
+        out += ch;
+        continue;
+      }
+      if (map[ch]) {
+        out += map[ch];
+        continue;
+      }
+      // 结构位裸等号：{a=1} / "a"=1
+      if (ch === "=") {
+        out += ":";
+        continue;
+      }
+      out += ch;
+    }
+    return out;
+  }
+
+  /** 报错附带出错点附近片段，方便对照 */
+  function describeJsonRepairError(err, source) {
+    const msg = String(err?.message || err || "未知错误");
+    const pos = Number(err?.position);
+    if (!Number.isFinite(pos) || pos < 0 || !source) return msg;
+    const before = source.slice(0, pos);
+    const line = before.split(/\n/).length;
+    const col = pos - (before.lastIndexOf("\n") + 1) + 1;
+    const start = Math.max(0, pos - 28);
+    const end = Math.min(source.length, pos + 28);
+    const snippet = source.slice(start, end).replace(/\s+/g, " ");
+    const bad = source.slice(pos, pos + 1);
+    const badHint =
+      bad === "\uFF1A"
+        ? "（全角冒号 ：）"
+        : bad === "="
+          ? "（等号 =，已尝试改冒号）"
+          : bad
+            ? `（字符 ${JSON.stringify(bad)}）`
+            : "";
+    return `${msg} · 约第 ${line} 行第 ${col} 列${badHint} · 附近「${snippet}」`;
+  }
+
+  /** 先原样修，失败再全角规范化后修 */
+  function repairJsonText(jsonrepair, raw) {
+    const cleaned = cleanJsonInvisible(raw);
+    if (!cleaned) throw new Error("请先输入 JSON");
+    try {
+      return { text: jsonrepair(cleaned), usedNormalize: false };
+    } catch (err1) {
+      const normalized = normalizeLooseJsonPunct(cleaned);
+      if (normalized === cleaned) throw err1;
+      try {
+        return { text: jsonrepair(normalized), usedNormalize: true };
+      } catch (err2) {
+        err2._diagSource = normalized;
+        throw err2;
+      }
+    }
+  }
+
   function runJson(mode) {
     const editors = jsonEditors().filter((el) => getJsonText(el).trim());
     if (!editors.length) {
@@ -1062,17 +1164,22 @@
       editors.forEach((el) => {
         const label = el === jsonInput ? "A" : "B";
         try {
-          const raw = getJsonText(el).trim();
-          const repaired = jsonrepair(raw);
+          const raw = getJsonText(el);
+          const { text: repaired, usedNormalize } = repairJsonText(jsonrepair, raw);
           const data = JSON.parse(repaired);
           const pretty = JSON.stringify(data, null, 2);
           pushJsonExternalHist(el, getJsonText(el));
           setJsonText(el, pretty);
           pushJsonExternalHist(el, pretty);
           saveJsonDraft(el);
-          bits.push(`${label} ${pretty.split("\n").length} 行`);
+          bits.push(
+            `${label} ${pretty.split("\n").length} 行${usedNormalize ? " · 已转换全角标点" : ""}`
+          );
         } catch (err) {
-          if (!firstErr) firstErr = `${label}：${err?.message || err}`;
+          if (!firstErr) {
+            const src = err?._diagSource || cleanJsonInvisible(getJsonText(el));
+            firstErr = `${label}：${describeJsonRepairError(err, src)}`;
+          }
         }
       });
       if (firstErr) setToolError(jsonError, `修复失败：${firstErr}`);
@@ -1080,8 +1187,7 @@
       if (bits.length) showToast("JSON 已修复");
     } catch (err) {
       jsonMeta.textContent = "";
-      const msg = err?.position != null ? `${err.message}` : String(err?.message || err);
-      setToolError(jsonError, `修复失败：${msg}`);
+      setToolError(jsonError, `修复失败：${describeJsonRepairError(err, "")}`);
     } finally {
       if (repairBtn) repairBtn.disabled = false;
     }
@@ -1146,10 +1252,7 @@
 
   /** 下载某一栏：能 parse 则美化；坏 JSON 先修复再美化；写回编辑区后下 .json */
   async function downloadJsonPane(el, label, btn) {
-    const raw0 = getJsonText(el)
-      .replace(/^\uFEFF/, "")
-      .replace(/[\u200B-\u200D\uFEFF]/g, "")
-      .trim();
+    const raw0 = cleanJsonInvisible(getJsonText(el));
     if (!raw0) {
       setToolError(jsonError, `请先在 ${label} 输入 JSON`);
       showToast(`请先在 ${label} 输入 JSON`);
@@ -1170,7 +1273,7 @@
         await window.DevToolsLazy?.loadVendor("jsonrepair");
         const jsonrepair = globalThis.JSONRepair?.jsonrepair;
         if (typeof jsonrepair !== "function") throw new Error("JSON 修复库未就绪");
-        const fixed = jsonrepair(raw0);
+        const fixed = repairJsonText(jsonrepair, raw0).text;
         data = JSON.parse(fixed);
         repaired = true;
       }
@@ -1192,7 +1295,8 @@
       showToast(`${verb} ${name}`);
     } catch (err) {
       jsonMeta.textContent = "";
-      setToolError(jsonError, `${label} 无法下载：${err?.message || err}`);
+      const src = err?._diagSource || raw0;
+      setToolError(jsonError, `${label} 无法下载：${describeJsonRepairError(err, src)}`);
       showToast(`${label} 下载失败`);
     } finally {
       if (actionBtn) actionBtn.disabled = false;
