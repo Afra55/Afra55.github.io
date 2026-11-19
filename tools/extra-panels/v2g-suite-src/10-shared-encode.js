@@ -2306,14 +2306,50 @@
       }
 
       /**
-       * 同宽多画质试档：复用已导出的 RGBA（仅桌面单块；手机不缓存防 OOM）。
-       * key 不含画质；换 q 时只重跑 gifski。
-       * @type {{ key: string, frames: Uint8Array, n: number, stride: number, outW: number, outH: number }|null}
+       * 同宽多画质试档：按块复用已导出 RGBA（key 不含画质；换 q 只重跑 gifski）。
+       * 分块/手机也缓存单块（≤32MB），总预算约 96MB，避免 18s 每档重抽 4 段。
+       * @type {Map<string, { frames: Uint8Array, n: number, stride: number, outW: number, outH: number, at: number }>}
        */
-      let vbbRgbaTrialCache = null;
-      const VBB_RGBA_CACHE_MAX_BYTES = 160 * 1024 * 1024;
+      const vbbRgbaTrialCacheMap = new Map();
+      let vbbRgbaTrialCacheBytes = 0;
+      const VBB_RGBA_CACHE_MAX_BYTES = 96 * 1024 * 1024;
+      const VBB_RGBA_CACHE_CHUNK_MAX_BYTES = 32 * 1024 * 1024;
       function clearVbbRgbaTrialCache() {
-        vbbRgbaTrialCache = null;
+        vbbRgbaTrialCacheMap.clear();
+        vbbRgbaTrialCacheBytes = 0;
+      }
+      function getVbbRgbaTrialCache(key) {
+        const hit = vbbRgbaTrialCacheMap.get(key);
+        if (!hit?.frames) return null;
+        hit.at = Date.now();
+        return hit;
+      }
+      function putVbbRgbaTrialCache(key, entry) {
+        if (!key || !entry?.frames) return;
+        const bytes = entry.frames.byteLength || 0;
+        if (!(bytes > 0) || bytes > VBB_RGBA_CACHE_CHUNK_MAX_BYTES) return;
+        const prev = vbbRgbaTrialCacheMap.get(key);
+        if (prev?.frames) vbbRgbaTrialCacheBytes -= prev.frames.byteLength || 0;
+        while (
+          vbbRgbaTrialCacheBytes + bytes > VBB_RGBA_CACHE_MAX_BYTES &&
+          vbbRgbaTrialCacheMap.size
+        ) {
+          let oldestKey = "";
+          let oldestAt = Infinity;
+          for (const [k, v] of vbbRgbaTrialCacheMap) {
+            const at = Number(v?.at) || 0;
+            if (at < oldestAt) {
+              oldestAt = at;
+              oldestKey = k;
+            }
+          }
+          if (!oldestKey) break;
+          const drop = vbbRgbaTrialCacheMap.get(oldestKey);
+          vbbRgbaTrialCacheMap.delete(oldestKey);
+          vbbRgbaTrialCacheBytes -= drop?.frames?.byteLength || 0;
+        }
+        vbbRgbaTrialCacheMap.set(key, { ...entry, at: Date.now() });
+        vbbRgbaTrialCacheBytes += bytes;
       }
 
       async function encodeV2gGifGifski(opts) {
@@ -2574,7 +2610,7 @@
            * 单段：FFmpeg 导 RGBA → gifski wasm。
            * 手机分块时旧逻辑会 stop 外层 ticker，整段 exec 无回调 → 批量误报「1800s 无进度」。
            * 这里自带心跳 + ffmpeg progress，保证 mapProgress 持续有信号。
-           * 桌面单块：同输入换画质时命中 vbbRgbaTrialCache，跳过重复解码。
+           * 分块 RGBA 缓存：同输入换画质时命中 vbbRgbaTrialCacheMap，跳过重复解码。
            */
           const encodeChunk = async (chunkStartFrame, chunkFrames, chunkMap) => {
             const report =
@@ -2611,27 +2647,21 @@
               chunkFrames,
               usedWm ? 1 : 0,
             ].join("|");
+            const chunkBytesEst = chunkFrames * stride;
             const canUseRgbaCache =
-              chunkCount <= 1 &&
-              !isCoarsePointer() &&
-              chunkFrames * stride > 0 &&
-              chunkFrames * stride <= VBB_RGBA_CACHE_MAX_BYTES;
+              chunkBytesEst > 0 && chunkBytesEst <= VBB_RGBA_CACHE_CHUNK_MAX_BYTES;
 
             let view;
             let n;
-            if (
-              canUseRgbaCache &&
-              vbbRgbaTrialCache &&
-              vbbRgbaTrialCache.key === rgbaKey &&
-              vbbRgbaTrialCache.frames?.length >= 2 * stride
-            ) {
+            const rgbaHit = canUseRgbaCache ? getVbbRgbaTrialCache(rgbaKey) : null;
+            if (rgbaHit?.frames?.length >= 2 * stride) {
               report(0.62, `${stageLabel}复用 RGBA 帧…`);
-              vbbLog(`[vbb-phase] RGBA 缓存命中 · ${vbbRgbaTrialCache.n}帧 ${outW}×${outH}`);
+              vbbLog(`[vbb-phase] RGBA 缓存命中 · ${rgbaHit.n}帧 ${outW}×${outH}`);
               // 拷贝一份再 merge/encode，避免静止帧合并改坏缓存
-              const cached = vbbRgbaTrialCache.frames;
+              const cached = rgbaHit.frames;
               const copy = new Uint8Array(cached.byteLength);
               copy.set(cached);
-              n = vbbRgbaTrialCache.n;
+              n = rgbaHit.n;
               view = copy;
             } else {
             const baseArgs = ["-i", encodeInput];
@@ -2747,16 +2777,15 @@
               try {
                 const store = new Uint8Array(n * stride);
                 store.set(view.subarray(0, n * stride));
-                vbbRgbaTrialCache = {
-                  key: rgbaKey,
+                putVbbRgbaTrialCache(rgbaKey, {
                   frames: store,
                   n,
                   stride,
                   outW,
                   outH,
-                };
+                });
               } catch (_) {
-                vbbRgbaTrialCache = null;
+                /* 配额/拷贝失败则本块不缓存 */
               }
             }
             }
@@ -3269,7 +3298,9 @@
           w >= V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5 &&
           blackboxSrcAllowsHighFps(src, high) &&
           size > 0 &&
-          size < V2G_BLACKBOX_MAX_BYTES * 0.88
+          size < V2G_BLACKBOX_MAX_BYTES * 0.88 &&
+          // 阶梯已因「时长×帧」跳过的高档，余量提帧也不要加回来（18s@30 会白编一整枪）
+          !blackboxShouldSkipHighFpsByDuration(high, s, src)
         ) {
           list.push(high);
         }
@@ -3929,7 +3960,8 @@
           // 必须沿用核心阶段的加速倍率：clipOpts 只有 speedLimitSec，直接展开会丢掉 speed → 缩时长失效
           const speed = Math.max(1, Number(result.speed) || 1);
           const effSpan = Math.max(0.05, Number(clipOpts.span) || 0) / speed;
-          const isShortFill = effSpan <= V2G_BLACKBOX_SHORT_SPAN_SEC + 0.01;
+          // 与 finishBlackbox 一致：仅 ≤10s 激进 O3 后加宽；18s 用默认探次
+          const isShortFill = effSpan <= V2G_BLACKBOX_KEEP_Q_MAX_SPAN_SEC + 0.01;
           let quality = blackboxLadderQuality(result);
           let gifskiQuality = Number.isFinite(Number(result.gifskiQuality))
             ? Number(result.gifskiQuality)
@@ -4307,9 +4339,14 @@
           );
           const enc = await encodeAtWidthFps(f, width);
           if (!enc?.blob) return best;
-          let cand = { ...enc, compressRounds: 0, maxW: width };
-          if (cand.blob.size > V2G_BLACKBOX_MAX_BYTES) cand = await compressAt(cand, f, true, 0.96);
+          const cand = { ...enc, compressRounds: 0, maxW: width };
+          // 超限直接放弃提帧，勿再 compressAt 缩宽重编（那是额外一整枪）
           if (cand.blob.size <= V2G_BLACKBOX_MAX_BYTES) out = cand;
+          else {
+            vbbLog(
+              `[vbb-phase] 提帧 ${f}fps 超限 ${formatKb(cand.blob.size)} → 保留 ${curFps}fps`
+            );
+          }
           return out;
         }
 
@@ -4333,8 +4370,8 @@
           let fpsNow = Number(cur.fps) || curFps;
           const effSpan = span / speed;
           const isLong = effSpan > V2G_BLACKBOX_MID_SPAN_SEC + 0.01;
-          // ≤24s：预算优先换成宽度（吃满上限）；更长仍限 2× 控探测成本
-          const isShortFill = !isLong;
+          // 仅 ≤10s 短片激进吃满加宽；10～24s（如 18s）用默认探次，避免好压片狂加宽
+          const isShortFill = effSpan <= V2G_BLACKBOX_KEEP_Q_MAX_SPAN_SEC + 0.01;
           const atCap = () =>
             (srcW > 0 && cur.outW >= srcW - 2) || (Number(cur.maxW) || 0) >= Number(hardMax) - 2;
           const widthOkForRaise = () => {
@@ -5002,7 +5039,20 @@
           const lastOverRatio = () =>
             (Number(tried[tried.length - 1]?.blob?.size) || 0) / V2G_BLACKBOX_MAX_BYTES;
           const tryQualities = async (w, qiFrom, qiTo) => {
+            const qKeepLocal = V2G_BLACKBOX_QUALITY_LADDER[keepMaxQi];
+            const keepCached = trialCache.get(`${Number(fps)}|${Number(w)}|${qKeepLocal}`);
+            const keepOverRatio =
+              keepCached?.blob?.size > V2G_BLACKBOX_MAX_BYTES
+                ? keepCached.blob.size / V2G_BLACKBOX_MAX_BYTES
+                : 0;
             for (let qi = qiFrom; qi <= qiTo; qi++) {
+              // q4/q6 画质高于 q8：q8 已超预算则必更大，勿再打（并行时 lastOverRatio 可能仍是 q1）
+              if ((qi === 1 || qi === 2) && keepOverRatio > 1) {
+                vbbLog(
+                  `[vbb-phase] 细档跳过 q${V2G_BLACKBOX_QUALITY_LADDER[qi]}：q${qKeepLocal} 已 ${keepOverRatio.toFixed(2)}×`
+                );
+                continue;
+              }
               if (blackboxShouldSkipFineQi(qi, lastOverRatio())) {
                 vbbLog(
                   `[vbb-phase] 细档跳过 q${V2G_BLACKBOX_QUALITY_LADDER[qi]}：已 ${lastOverRatio().toFixed(2)}×，未贴预算`

@@ -7253,6 +7253,17 @@
             srcH,
             duration
           );
+          const singleMeta = buildVbbFeatureMeta({
+            srcW: prepared.srcW || srcW,
+            srcH: prepared.srcH || srcH,
+            srcFps: hintFps || Number(prepared.srcFps) || Number(vbbSingleSrcFps) || 0,
+            fileBytes: vbbSourceFile?.size || 0,
+            qualityFirst: vbbQualityFirstOn(),
+            crop: vbbCrop,
+          });
+          const speedFac = vbbSpeedFactorForSpan(prepared.span);
+          const seedForSingle = loadVbbSpanScheme(prepared.span, speedFac, singleMeta);
+          const usedSeed = Boolean(seedForSingle);
           const encoded = await encodeBlackboxClip({
             file: prepared.file,
             startSec: prepared.startSec,
@@ -7260,6 +7271,7 @@
             srcW: prepared.srcW,
             srcH: prepared.srcH,
             qualityFirst: vbbQualityFirstOn(),
+            seed: seedForSingle || undefined,
             speedLimitSec: vbbSpeedLimitSec(),
             crop: vbbCrop,
             forceAccurateCut: Boolean(prepared.cutNote) || prepared.startSec > 0.05,
@@ -7280,7 +7292,24 @@
             },
           });
           if (abortVbb) throw new Error("已取消");
-          applyVbbClipEncoded(vbbClips[0], encoded);
+          applyVbbClipEncoded(vbbClips[0], encoded, usedSeed ? ["沿用方案"] : []);
+          if (encoded?.fps && vbbClips[0]?.gifBlob) {
+            try {
+              saveVbbSpanScheme(
+                prepared.span,
+                snapshotVbbEncodeSeed(encoded, {
+                  srcW: singleMeta.srcW,
+                  srcH: singleMeta.srcH,
+                  effW: singleMeta.effW,
+                  effH: singleMeta.effH,
+                  srcFps: singleMeta.srcFps || Number(encoded.srcFps) || 0,
+                  fileBytes: singleMeta.fileBytes,
+                  qualityFirst: singleMeta.qualityFirst,
+                }),
+                "blackbox"
+              );
+            } catch (_) {}
+          }
           // 无 gifBlob（超限等）不算成功：勿标 done / 勿 prune，否则删中间草稿被清光
           if (!vbbClips[0]?.gifBlob) {
             const failMsg =

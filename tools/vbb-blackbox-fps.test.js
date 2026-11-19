@@ -228,7 +228,10 @@ assert(
   );
   assert(!/本条已\$\{wall\}s（正常试档中，可取消）/.test(vbbUi), "stall 不得再塞本条已长串");
   assert(/导出 RGBA · 已 \$\{sec\}s（解码中）|解码中/.test(src), "分块导出须有心跳，避免手机批量假死提示");
-  assert(/清理内存后继续/.test(vbbUi), "手机批量条间须清理内存再续");
+  assert(
+    /releaseVbbEncodeHeapAfterClip|重建编码器 · 准备下一条|recycleFfmpeg/.test(vbbUi),
+    "批量条间须释放/重建堆（手机 recycle）"
+  );
   assert(/沿用帧率/.test(src), "seed 须只沿用帧率");
   assert(/忽略缓存宽/.test(src), "seed 不得直接从上次加宽后的宽度起编");
   assert(/VBB_FEATURE_SCHEME_VER\s*=\s*1/.test(src), "改 seed 特征策略须 bump 缓存版本");
