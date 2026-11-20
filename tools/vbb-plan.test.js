@@ -470,15 +470,6 @@ function almost(a, b, eps = 1e-6) {
     if (!(w >= 16 && h >= 16)) return "";
     return `${Math.round(w / 40) * 40}x${Math.round(h / 40) * 40}`;
   }
-  function vbbFileSizeBucket(fileBytes) {
-    const mb = (Number(fileBytes) || 0) / (1024 * 1024);
-    if (!(mb > 0)) return "";
-    if (mb < 5) return "0-5";
-    if (mb < 15) return "5-15";
-    if (mb < 40) return "15-40";
-    if (mb < 100) return "40-100";
-    return "100+";
-  }
   function vbbSpanBucket(span) {
     const s = Math.max(0.5, Number(span) || 0.5);
     return (Math.round(s * 2) / 2).toFixed(1);
@@ -496,10 +487,9 @@ function almost(a, b, eps = 1e-6) {
     const dims = vbbFeatureDims(meta);
     const size = vbbSchemeSizeBucket(dims.w, dims.h);
     const fpsB = vbbSrcFpsBucket(meta?.srcFps);
-    const vol = vbbFileSizeBucket(meta?.fileBytes);
     const mode = meta?.qualityFirst ? "qf" : "bb";
-    if (!size || !fpsB || !vol) return "";
-    return `${base}#${size}|${fpsB}|${vol}|${mode}`;
+    if (!size || !fpsB) return "";
+    return `${base}#${size}|${fpsB}|${mode}`;
   }
   function vbbSeedFitsMeta(seed, meta) {
     if (!seed?.fps || !meta) return false;
@@ -511,9 +501,6 @@ function almost(a, b, eps = 1e-6) {
     const fpsA = vbbSrcFpsBucket(seed.srcFps);
     const fpsB = vbbSrcFpsBucket(meta.srcFps);
     if (!fpsA || !fpsB || fpsA !== fpsB) return false;
-    const volA = vbbFileSizeBucket(seed.fileBytes);
-    const volB = vbbFileSizeBucket(meta.fileBytes);
-    if (!volA || !volB || volA !== volB) return false;
     if (Boolean(seed.qualityFirst) !== Boolean(meta.qualityFirst)) return false;
     return true;
   }
@@ -533,12 +520,12 @@ function almost(a, b, eps = 1e-6) {
   const metaE = { ...metaA, qualityFirst: true };
   const metaCrop = { ...metaA, effW: 800, effH: 450 };
   assert(
-    vbbSpanSchemeKey(12, 1, metaA) === "12.0#880x600|25|15-40|bb",
-    "key includes size+fps+volume+mode"
+    vbbSpanSchemeKey(12, 1, metaA) === "12.0#880x600|25|bb",
+    "key includes duration+resolution+fps+mode（不含体积）"
   );
   assert(
-    vbbSpanSchemeKey(12, 1, { srcW: 860, srcH: 610, srcFps: 25 }) === "",
-    "缺体积不得建键"
+    vbbSpanSchemeKey(12, 1, { srcW: 860, srcH: 610 }) === "",
+    "缺帧率不得建键"
   );
   assert(
     vbbSpanSchemeKey(12, 1, metaA) !== vbbSpanSchemeKey(12, 1, metaB),
@@ -549,22 +536,22 @@ function almost(a, b, eps = 1e-6) {
     "25fps and 30fps must not share scheme"
   );
   assert(
-    vbbSpanSchemeKey(12, 1, metaA) !== vbbSpanSchemeKey(12, 1, metaD),
-    "different file size bucket must not share"
+    vbbSpanSchemeKey(12, 1, metaA) === vbbSpanSchemeKey(12, 1, metaD),
+    "不同文件体积档仍可撞（v2 去掉体积维）"
   );
   assert(
     vbbSpanSchemeKey(12, 1, metaA) !== vbbSpanSchemeKey(12, 1, metaE),
     "qualityFirst must not share with normal"
   );
   assert(
-    vbbSpanSchemeKey(12, 1, metaCrop) === "12.0#800x440|25|15-40|bb",
+    vbbSpanSchemeKey(12, 1, metaCrop) === "12.0#800x440|25|bb",
     "有效分辨率优先于源尺寸"
   );
-  assert(vbbSpanSchemeKey(40, 2, metaA) === "40.0@x2.00#880x600|25|15-40|bb", "speed in key");
+  assert(vbbSpanSchemeKey(40, 2, metaA) === "40.0@x2.00#880x600|25|bb", "speed in key");
   assert(vbbSeedFitsMeta({ fps: 15, ...metaA }, metaA), "same meta fits");
   assert(!vbbSeedFitsMeta({ fps: 15, ...metaA }, metaB), "diff size must not fit");
   assert(!vbbSeedFitsMeta({ fps: 15, ...metaA }, metaC), "diff fps must not fit");
-  assert(!vbbSeedFitsMeta({ fps: 15, ...metaA }, metaD), "diff volume must not fit");
+  assert(vbbSeedFitsMeta({ fps: 15, ...metaA }, metaD), "diff volume still fits");
 }
 
 {

@@ -3611,14 +3611,14 @@
   
       /**
        * 统一特征库（同轮内存 + 跨次 localStorage）：
-       * 时长桶 + 体积桶 + 有效分辨率 + 源帧率 + 加速 + 模式。
-       * 旧 firstSeed / 只按时长方案已移除，避免两套规则串味。
+       * 时长桶 + 有效分辨率 + 源帧率 + 加速 + 模式。
+       * v2 起不再用文件体积档（同规格片体积差几 MB 也能撞）；旧 ver 不命中。
        */
       const VBB_FEATURE_SCHEME_KEY = "devtools-vbb-feature-scheme-v1";
       /** 无硬上限：撞档库持续增长；仅 localStorage 配额满时按 at 旧→新腾出 */
       const VBB_FEATURE_SCHEME_QUOTA_DROP = 16;
       /** 特征键/匹配算法变更时递增；旧 span-scheme-v1 与低 ver 一律不命中 */
-      const VBB_FEATURE_SCHEME_VER = 1;
+      const VBB_FEATURE_SCHEME_VER = 2;
       /** 同轮即时命中（不依赖 localStorage 读写次序） */
       const vbbFeatureSchemeMem = new Map();
 
@@ -3668,8 +3668,8 @@
       }
 
       /**
-       * 特征键：时长桶 + 加速 + 有效分辨率 + 帧率 + 体积 + 模式。
-       * 缺任一指纹返回 ""（调用方拒绝读写，禁止只按时长误沿用）。
+       * 特征键：时长桶 + 加速 + 有效分辨率 + 帧率 + 模式（不含文件体积）。
+       * 缺分辨率/帧率返回 ""（禁止只按时长误沿用）。
        */
       function vbbSpanSchemeKey(span, speed = 1, meta = null) {
         const sp = Math.max(1, Number(speed) || 1);
@@ -3678,13 +3678,12 @@
         const dims = vbbFeatureDims(meta);
         const size = vbbSchemeSizeBucket(dims.w, dims.h);
         const fpsB = vbbSrcFpsBucket(meta?.srcFps);
-        const vol = vbbFileSizeBucket(meta?.fileBytes);
         const mode = meta?.qualityFirst ? "qf" : "bb";
-        if (!size || !fpsB || !vol) return "";
-        return `${base}#${size}|${fpsB}|${vol}|${mode}`;
+        if (!size || !fpsB) return "";
+        return `${base}#${size}|${fpsB}|${mode}`;
       }
 
-      /** 内存 / 持久条目与当前片是否够像 */
+      /** 内存 / 持久条目与当前片是否够像（时长键已对齐；这里校分辨率/帧率/模式） */
       function vbbSeedFitsMeta(seed, meta) {
         if (!seed?.fps || !meta) return false;
         const dimsA = vbbFeatureDims(seed);
@@ -3695,9 +3694,6 @@
         const fpsA = vbbSrcFpsBucket(seed.srcFps);
         const fpsB = vbbSrcFpsBucket(meta.srcFps);
         if (!fpsA || !fpsB || fpsA !== fpsB) return false;
-        const volA = vbbFileSizeBucket(seed.fileBytes);
-        const volB = vbbFileSizeBucket(meta.fileBytes);
-        if (!volA || !volB || volA !== volB) return false;
         if (Boolean(seed.qualityFirst) !== Boolean(meta.qualityFirst)) return false;
         const sw = dimsA.w;
         const sh = dimsA.h;
@@ -3775,7 +3771,6 @@
         const fileBytes = Math.max(0, Number(raw.fileBytes) || 0);
         if (!vbbSchemeSizeBucket(effW || srcW, effH || srcH)) return null;
         if (!vbbSrcFpsBucket(srcFps)) return null;
-        if (!vbbFileSizeBucket(fileBytes)) return null;
         return {
           ver: VBB_FEATURE_SCHEME_VER,
           fps: Number(raw.fps) || 15,

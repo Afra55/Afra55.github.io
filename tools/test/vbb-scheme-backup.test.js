@@ -53,7 +53,7 @@ function loadSchemeApi() {
 
 function sampleEntry(over = {}) {
   return {
-    ver: 1,
+    ver: 2,
     fps: 12,
     maxW: 480,
     compressRounds: 1,
@@ -88,8 +88,8 @@ t("源码含导出/合并撞档与备份 payload v2", () => {
 
 t("合并：新增键写入，本机更新的同键保留", () => {
   const { api } = loadSchemeApi();
-  const k1 = "3.0#1280x720|30|5-15|bb";
-  const k2 = "5.0#1280x720|30|5-15|bb";
+  const k1 = "3.0#1280x720|30|bb";
+  const k2 = "5.0#1280x720|30|bb";
   api.merge({
     [k1]: sampleEntry({ at: 100, fps: 10 }),
     [k2]: sampleEntry({ at: 200, fps: 14 }),
@@ -101,7 +101,7 @@ t("合并：新增键写入，本机更新的同键保留", () => {
   const r = api.merge({
     [k1]: sampleEntry({ at: 50, fps: 99 }), // 更旧 → 跳过
     [k2]: sampleEntry({ at: 500, fps: 8 }), // 更新 → 覆盖
-    "7.0#1280x720|30|5-15|bb": sampleEntry({ at: 300, fps: 15 }),
+    "7.0#1280x720|30|bb": sampleEntry({ at: 300, fps: 15 }),
   });
   assert.equal(r.added, 1);
   assert.equal(r.updated, 1);
@@ -109,7 +109,7 @@ t("合并：新增键写入，本机更新的同键保留", () => {
   map = api.load();
   assert.equal(map[k1].fps, 10);
   assert.equal(map[k2].fps, 8);
-  assert.equal(map["7.0#1280x720|30|5-15|bb"].fps, 15);
+  assert.equal(map["7.0#1280x720|30|bb"].fps, 15);
   assert.equal(r.total, 3);
 });
 
@@ -132,14 +132,14 @@ t("合并可持续增长，无 64 条硬上限", () => {
   const incoming = {};
   const n = 80;
   for (let i = 0; i < n; i += 1) {
-    incoming[`span${i}#1280x720|30|5-15|bb`] = sampleEntry({ at: i + 1, fps: 10 + (i % 5) });
+    incoming[`span${i}#1280x720|30|bb`] = sampleEntry({ at: i + 1, fps: 10 + (i % 5) });
   }
   const r = api.merge(incoming);
   assert.equal(r.total, n);
   const map = api.load();
   assert.equal(Object.keys(map).length, n);
-  assert.equal(map[`span0#1280x720|30|5-15|bb`].at, 1);
-  assert.equal(map[`span${n - 1}#1280x720|30|5-15|bb`].at, n);
+  assert.equal(map[`span0#1280x720|30|bb`].at, 1);
+  assert.equal(map[`span${n - 1}#1280x720|30|bb`].at, n);
 });
 
 t("配额满时按 at 旧→新腾出后再写入", () => {
@@ -175,14 +175,14 @@ t("配额满时按 at 旧→新腾出后再写入", () => {
   const map = {};
   const n = box.api.quotaDrop + 4;
   for (let i = 0; i < n; i += 1) {
-    map[`k${i}#1280x720|30|5-15|bb`] = sampleEntry({ at: i + 1 });
+    map[`k${i}#1280x720|30|bb`] = sampleEntry({ at: i + 1 });
   }
   box.api.persist(map);
   assert.ok(calls >= 2);
   const left = Object.keys(box.api.load());
   assert.equal(left.length, n - box.api.quotaDrop);
-  assert.equal(box.api.load()[`k0#1280x720|30|5-15|bb`], undefined);
-  assert.ok(box.api.load()[`k${n - 1}#1280x720|30|5-15|bb`]);
+  assert.equal(box.api.load()[`k0#1280x720|30|bb`], undefined);
+  assert.ok(box.api.load()[`k${n - 1}#1280x720|30|bb`]);
 });
 
 console.log(`vbb-scheme-backup.test.js: ${n} passed`);
