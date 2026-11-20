@@ -3149,6 +3149,9 @@
         let fps = 0;
         // 1) 撞档方案按 fileBytes 回填 srcFps（同文件 2547 曾被 rVFC 估成 30）
         try {
+          if (typeof vbbEnsureSchemeReady === "function") {
+            await vbbEnsureSchemeReady();
+          }
           const bytes = Number(srcFile.size) || 0;
           if (bytes > 0) {
             const map = typeof loadVbbFeatureSchemes === "function" ? loadVbbFeatureSchemes() : null;
@@ -3610,17 +3613,30 @@
       }
   
       /**
-       * 统一特征库（同轮内存 + 跨次 localStorage）：
-       * 时长桶 + 有效分辨率 + 源帧率 + 加速 + 模式。
-       * v2 起不再用文件体积档（同规格片体积差几 MB 也能撞）；旧 ver 不命中。
+       * 统一特征库（同步内存 + IndexedDB；旧 localStorage 仅迁移一次）：
+       * 键 = 时长桶 + 有效分辨率 + 源帧率（不含加速/画质/体积）。
+       * 先撞档，再按画质开关微调 fps；v3 起旧键形不直接命中，导入时折成新键。
        */
       const VBB_FEATURE_SCHEME_KEY = "devtools-vbb-feature-scheme-v1";
-      /** 无硬上限：撞档库持续增长；仅 localStorage 配额满时按 at 旧→新腾出 */
+      const VBB_FEATURE_SCHEME_IDB_NAME = "devtools-vbb-scheme";
+      const VBB_FEATURE_SCHEME_IDB_STORE = "schemes";
+      const VBB_FEATURE_SCHEME_IDB_VER = 1;
+      /** 无硬上限：撞档库持续增长；仅配额满时按 at 旧→新腾出 */
       const VBB_FEATURE_SCHEME_QUOTA_DROP = 16;
       /** 特征键/匹配算法变更时递增；旧 span-scheme-v1 与低 ver 一律不命中 */
-      const VBB_FEATURE_SCHEME_VER = 2;
-      /** 同轮即时命中（不依赖 localStorage 读写次序） */
+      const VBB_FEATURE_SCHEME_VER = 3;
+      /** 同轮即时命中 */
       const vbbFeatureSchemeMem = new Map();
+      /** 同步真源（水合后与 IDB 对齐）；编码路径只读这里 */
+      let vbbFeatureSchemeStore = Object.create(null);
+      let vbbSchemeHydrated = false;
+      let vbbSchemeHydratePromise = null;
+      let vbbSchemeDb = null;
+      let vbbSchemeDbOk = false;
+      /** 仅在成功 getAll（可为空库）后才允许 clear+全量写，避免读失败时空内存盖掉 IDB */
+      let vbbSchemeIdbLoaded = false;
+      let vbbSchemeFlushChain = Promise.resolve();
+      let vbbSchemeFlushGen = 0;
 
       /** 源帧率分桶：25 与 30 不可互沿用 */
       function vbbSrcFpsBucket(srcFps) {
@@ -3642,7 +3658,7 @@
         return `${Math.round(w / 40) * 40}x${Math.round(h / 40) * 40}`;
       }
 
-      /** 源体积粗档（MB）：相似片命中用，精确字节太碎 */
+      /** 源体积粗档（MB）：仅诊断/回填用，不进撞档键 */
       function vbbFileSizeBucket(fileBytes) {
         const mb = (Number(fileBytes) || 0) / (1024 * 1024);
         if (!(mb > 0)) return "";
@@ -3668,22 +3684,30 @@
       }
 
       /**
-       * 特征键：时长桶 + 加速 + 有效分辨率 + 帧率 + 模式（不含文件体积）。
+       * 特征键：时长桶 + 有效分辨率 + 帧率（加速/画质不进键；时长按源片准备段）。
        * 缺分辨率/帧率返回 ""（禁止只按时长误沿用）。
        */
       function vbbSpanSchemeKey(span, speed = 1, meta = null) {
-        const sp = Math.max(1, Number(speed) || 1);
+        void speed;
         const spanB = vbbSpanBucket(span);
-        const base = sp > 1.02 ? `${spanB}@x${sp.toFixed(2)}` : spanB;
         const dims = vbbFeatureDims(meta);
         const size = vbbSchemeSizeBucket(dims.w, dims.h);
         const fpsB = vbbSrcFpsBucket(meta?.srcFps);
-        const mode = meta?.qualityFirst ? "qf" : "bb";
         if (!size || !fpsB) return "";
-        return `${base}#${size}|${fpsB}|${mode}`;
+        return `${spanB}#${size}|${fpsB}`;
       }
 
-      /** 内存 / 持久条目与当前片是否够像（时长键已对齐；这里校分辨率/帧率/模式） */
+      /** 把旧键（含 @x加速 / 体积档 / qf|bb）折成 v3 键 */
+      function vbbCanonicalSchemeKey(key) {
+        let k = String(key || "").trim();
+        if (!k) return "";
+        k = k.replace(/@x\d+(?:\.\d+)?/g, "");
+        k = k.replace(/\|(?:qf|bb)$/i, "");
+        k = k.replace(/\|(?:0-5|5-15|15-40|40-100|100\+)$/i, "");
+        return k;
+      }
+
+      /** 内存 / 持久条目与当前片是否够像（不比加速、不比画质开关） */
       function vbbSeedFitsMeta(seed, meta) {
         if (!seed?.fps || !meta) return false;
         const dimsA = vbbFeatureDims(seed);
@@ -3694,7 +3718,6 @@
         const fpsA = vbbSrcFpsBucket(seed.srcFps);
         const fpsB = vbbSrcFpsBucket(meta.srcFps);
         if (!fpsA || !fpsB || fpsA !== fpsB) return false;
-        if (Boolean(seed.qualityFirst) !== Boolean(meta.qualityFirst)) return false;
         const sw = dimsA.w;
         const sh = dimsA.h;
         const mw = dimsB.w;
@@ -3704,46 +3727,294 @@
         return true;
       }
 
+      /**
+       * 撞档命中后按画质开关微调 fps（不改宽/压缩轮次，不写回库）。
+       * ≤10s 两种模式都守 80，政策相同 → 不挪。
+       */
+      function adjustVbbSeedForQuality(seed, meta, span, speed = 1) {
+        if (!seed?.fps || !meta) return seed;
+        const storedQf = Boolean(seed.qualityFirst);
+        const wantQf = Boolean(meta.qualityFirst);
+        if (storedQf === wantQf) return seed;
+        const sp = Math.max(1, Number(speed) || 1);
+        const eff = (Number(span) || 0) / sp;
+        if (blackboxKeepQualityUntilFloor(eff, false)) return seed;
+        const cands = blackboxFpsCandidates(meta.srcFps || seed.srcFps);
+        if (!Array.isArray(cands) || !cands.length) return seed;
+        const idx = cands.findIndex((f) => Math.abs(Number(f) - Number(seed.fps)) < 0.2);
+        if (idx < 0) return seed;
+        let nextIdx = idx;
+        if (!storedQf && wantQf) nextIdx = Math.min(cands.length - 1, idx + 1);
+        else if (storedQf && !wantQf) nextIdx = Math.max(0, idx - 1);
+        if (nextIdx === idx) return seed;
+        const nextFps = cands[nextIdx];
+        vbbLog(
+          `[vbb-phase] 撞档后按画质调档 fps ${seed.fps}→${nextFps}（存=${storedQf ? "qf" : "bb"} 现=${wantQf ? "qf" : "bb"}）`
+        );
+        return { ...seed, fps: nextFps };
+      }
+
+      function syncVbbFeatureSchemeMemFromStore(map) {
+        vbbFeatureSchemeStore = map && typeof map === "object" ? map : Object.create(null);
+        vbbFeatureSchemeMem.clear();
+        for (const [k, entry] of Object.entries(vbbFeatureSchemeStore)) {
+          if (entry && Number(entry.fps) > 0) vbbFeatureSchemeMem.set(k, entry);
+        }
+      }
+
       function loadVbbFeatureSchemes() {
+        return vbbFeatureSchemeStore;
+      }
+
+      function vbbIdbReq(req) {
+        return new Promise((resolve, reject) => {
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error || new Error("idb request failed"));
+        });
+      }
+
+      function vbbOpenSchemeDb() {
+        if (vbbSchemeDb) return Promise.resolve(vbbSchemeDb);
+        if (typeof indexedDB === "undefined" || !indexedDB?.open) {
+          return Promise.reject(new Error("indexedDB unavailable"));
+        }
+        return new Promise((resolve, reject) => {
+          let settled = false;
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(new Error("scheme idb open timeout"));
+          }, 2500);
+          try {
+            const req = indexedDB.open(VBB_FEATURE_SCHEME_IDB_NAME, VBB_FEATURE_SCHEME_IDB_VER);
+            req.onupgradeneeded = () => {
+              const db = req.result;
+              if (!db.objectStoreNames.contains(VBB_FEATURE_SCHEME_IDB_STORE)) {
+                const store = db.createObjectStore(VBB_FEATURE_SCHEME_IDB_STORE, { keyPath: "k" });
+                try {
+                  store.createIndex("at", "at", { unique: false });
+                } catch (_) {}
+              }
+            };
+            req.onsuccess = () => {
+              if (settled) {
+                try {
+                  req.result.close();
+                } catch (_) {}
+                return;
+              }
+              settled = true;
+              clearTimeout(timer);
+              vbbSchemeDb = req.result;
+              resolve(vbbSchemeDb);
+            };
+            req.onerror = () => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              reject(req.error || new Error("scheme idb open failed"));
+            };
+          } catch (err) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            reject(err);
+          }
+        });
+      }
+
+      async function vbbIdbLoadAllSchemes() {
+        const db = await vbbOpenSchemeDb();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(VBB_FEATURE_SCHEME_IDB_STORE, "readonly");
+          const req = tx.objectStore(VBB_FEATURE_SCHEME_IDB_STORE).getAll();
+          req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : []);
+          req.onerror = () => reject(req.error || new Error("scheme idb getAll failed"));
+        });
+      }
+
+      async function vbbIdbReplaceAllSchemes(map, opts = {}) {
+        if (!vbbSchemeIdbLoaded && !opts.forceAfterLoad) {
+          throw new Error("scheme idb not loaded; refuse clear");
+        }
+        const db = await vbbOpenSchemeDb();
+        const flushGen = Number(opts.flushGen) || 0;
+        const entries = Object.entries(map || {}).filter(
+          ([k, hit]) => k && hit && Number(hit.fps) > 0
+        );
+        const writeOnce = (dropOldest) =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(VBB_FEATURE_SCHEME_IDB_STORE, "readwrite");
+            const store = tx.objectStore(VBB_FEATURE_SCHEME_IDB_STORE);
+            store.clear();
+            let list = entries;
+            if (dropOldest > 0) {
+              list = entries
+                .slice()
+                .sort((a, b) => (Number(a[1].at) || 0) - (Number(b[1].at) || 0))
+                .slice(dropOldest);
+            }
+            for (const [k, hit] of list) {
+              store.put({ ...hit, k, ver: VBB_FEATURE_SCHEME_VER });
+            }
+            tx.oncomplete = () => resolve(list.length);
+            tx.onerror = () => reject(tx.error || new Error("scheme idb write failed"));
+            tx.onabort = () => reject(tx.error || new Error("scheme idb write aborted"));
+          });
+        try {
+          await writeOnce(0);
+          return { wrote: entries.length, dropped: 0 };
+        } catch (_) {
+          /* 配额：按批丢掉最旧 */
+        }
+        let dropped = 0;
+        while (dropped < entries.length) {
+          dropped += VBB_FEATURE_SCHEME_QUOTA_DROP;
+          if (dropped >= entries.length) {
+            // 至少保留最新一批，禁止「空 clear」冒充成功
+            dropped = Math.max(0, entries.length - Math.max(1, VBB_FEATURE_SCHEME_QUOTA_DROP));
+          }
+          try {
+            await writeOnce(dropped);
+            // 仅当仍是最新一次 flush 时才回写内存，避免盖掉排队期间的新条目
+            if (!flushGen || flushGen === vbbSchemeFlushGen) {
+              const keep = Object.create(null);
+              const sorted = entries
+                .slice()
+                .sort((a, b) => (Number(a[1].at) || 0) - (Number(b[1].at) || 0))
+                .slice(dropped);
+              for (const [k, hit] of sorted) keep[k] = hit;
+              syncVbbFeatureSchemeMemFromStore(keep);
+            }
+            return { wrote: entries.length - dropped, dropped };
+          } catch (__) {
+            if (dropped >= entries.length - 1) break;
+          }
+        }
+        throw new Error("scheme idb write exhausted");
+      }
+
+      function vbbReadLegacyLocalSchemeMap() {
         try {
           const raw = localStorage.getItem(VBB_FEATURE_SCHEME_KEY);
-          return raw ? JSON.parse(raw) : {};
+          if (!raw) return {};
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
         } catch (_) {
           return {};
         }
       }
 
-      /** 持久化特征库并与同轮内存对齐（不主动裁条数；配额满才删最旧） */
-      function persistVbbFeatureSchemes(map) {
-        const write = () => {
-          purgeLegacyVbbSpanScheme();
-          localStorage.setItem(VBB_FEATURE_SCHEME_KEY, JSON.stringify(map));
-        };
-        try {
-          write();
-        } catch (_) {
-          // QuotaExceeded：按 at 升序丢掉最旧一批，直到写得下或清空
-          const oldest = Object.keys(map).sort((a, b) => (map[a].at || 0) - (map[b].at || 0));
-          let i = 0;
-          while (i < oldest.length) {
-            const n = Math.min(VBB_FEATURE_SCHEME_QUOTA_DROP, oldest.length - i);
-            for (let j = 0; j < n; j += 1) delete map[oldest[i + j]];
-            i += n;
+      function vbbMergeSchemeEntryInto(map, key, raw) {
+        const canon = vbbCanonicalSchemeKey(key);
+        if (!canon) return false;
+        const entry = normalizeVbbFeatureSchemeEntry(raw, { acceptLegacyVer: true });
+        if (!entry) return false;
+        const prev = map[canon];
+        if (!prev || !(Number(prev.fps) > 0) || (Number(entry.at) || 0) >= (Number(prev.at) || 0)) {
+          map[canon] = entry;
+          return true;
+        }
+        return false;
+      }
+
+      async function vbbEnsureSchemeReady() {
+        if (vbbSchemeHydrated) return true;
+        if (vbbSchemeHydratePromise) return vbbSchemeHydratePromise;
+        vbbSchemeHydratePromise = (async () => {
+          const map = Object.create(null);
+          let idbReadOk = false;
+          try {
+            const rows = await vbbIdbLoadAllSchemes();
+            vbbSchemeDbOk = true;
+            idbReadOk = true;
+            vbbSchemeIdbLoaded = true;
+            for (const row of rows) {
+              if (!row || typeof row !== "object") continue;
+              vbbMergeSchemeEntryInto(map, row.k || "", row);
+            }
+          } catch (_) {
+            vbbSchemeDbOk = false;
+            vbbSchemeIdbLoaded = false;
+            vbbSchemeDb = null;
+          }
+          const legacy = vbbReadLegacyLocalSchemeMap();
+          let migrated = 0;
+          for (const [k, raw] of Object.entries(legacy)) {
+            if (vbbMergeSchemeEntryInto(map, k, raw)) migrated += 1;
+          }
+          syncVbbFeatureSchemeMemFromStore(map);
+          // 只有完整读到 IDB 后才允许全量写；写成功才删 LS，避免读失败空库盖档
+          if (idbReadOk) {
             try {
-              write();
-              break;
-            } catch (__) {
-              /* 继续腾 */
+              await vbbIdbReplaceAllSchemes(vbbFeatureSchemeStore, { forceAfterLoad: true });
+              if (migrated > 0 || Object.keys(legacy).length) {
+                try {
+                  localStorage.removeItem(VBB_FEATURE_SCHEME_KEY);
+                } catch (_) {}
+              }
+              purgeLegacyVbbSpanScheme();
+            } catch (_) {
+              /* 保留 LS，下次再迁 */
             }
           }
+          vbbSchemeHydrated = true;
+          return true;
+        })().catch(() => {
+          // 水合异常：仍可用当前内存；不要假装 IDB 已加载
+          vbbSchemeIdbLoaded = false;
+          syncVbbFeatureSchemeMemFromStore(vbbFeatureSchemeStore || Object.create(null));
+          vbbSchemeHydrated = true;
+          return false;
+        });
+        return vbbSchemeHydratePromise;
+      }
+
+      async function vbbEnsureSchemeIdbLoadedForWrite() {
+        if (vbbSchemeIdbLoaded) return true;
+        try {
+          const rows = await vbbIdbLoadAllSchemes();
+          vbbSchemeDbOk = true;
+          vbbSchemeIdbLoaded = true;
+          const map = { ...vbbFeatureSchemeStore };
+          for (const row of rows) {
+            if (!row || typeof row !== "object") continue;
+            vbbMergeSchemeEntryInto(map, row.k || "", row);
+          }
+          syncVbbFeatureSchemeMemFromStore(map);
+          return true;
+        } catch (_) {
+          vbbSchemeDbOk = false;
+          vbbSchemeIdbLoaded = false;
+          vbbSchemeDb = null;
+          return false;
         }
-        for (const k of [...vbbFeatureSchemeMem.keys()]) {
-          if (!(k in map)) vbbFeatureSchemeMem.delete(k);
-        }
-        for (const [k, entry] of Object.entries(map)) {
-          if (entry && Number(entry.fps) > 0) vbbFeatureSchemeMem.set(k, entry);
-        }
-        return map;
+      }
+
+      function vbbScheduleSchemeFlush() {
+        const gen = (vbbSchemeFlushGen += 1);
+        vbbSchemeFlushChain = vbbSchemeFlushChain
+          .then(async () => {
+            const loaded = await vbbEnsureSchemeIdbLoadedForWrite();
+            if (!loaded) return; // 未读成功：绝不 clear
+            // 读最新内存（非排队瞬间快照）
+            await vbbIdbReplaceAllSchemes(vbbFeatureSchemeStore, { flushGen: gen });
+            purgeLegacyVbbSpanScheme();
+          })
+          .catch(() => {});
+        return vbbSchemeFlushChain;
+      }
+
+      async function vbbFlushSchemeStore() {
+        await vbbEnsureSchemeReady();
+        return vbbScheduleSchemeFlush();
+      }
+
+      /** 持久化：先写同步内存，再异步刷 IDB（不主动裁条数；配额满才删最旧） */
+      function persistVbbFeatureSchemes(map) {
+        syncVbbFeatureSchemeMemFromStore(map || Object.create(null));
+        vbbScheduleSchemeFlush();
+        return vbbFeatureSchemeStore;
       }
 
       /** 导出可备份的撞档条目（仅当前 ver、有效 fps） */
@@ -3759,10 +4030,21 @@
         return out;
       }
 
-      /** 规范化导入条目；缺字段则丢弃 */
-      function normalizeVbbFeatureSchemeEntry(raw) {
+      /**
+       * 规范化导入条目；缺字段则丢弃。
+       * acceptLegacyVer：迁移/导入时收 ver 2（及带完整字段的 ver1），落盘一律 ver 3。
+       */
+      function normalizeVbbFeatureSchemeEntry(raw, opts = {}) {
         if (!raw || !(Number(raw.fps) > 0)) return null;
-        if (Number(raw.ver) !== VBB_FEATURE_SCHEME_VER) return null;
+        const ver = Number(raw.ver) || 0;
+        const acceptLegacy = Boolean(opts.acceptLegacyVer);
+        if (ver === VBB_FEATURE_SCHEME_VER) {
+          /* ok */
+        } else if (acceptLegacy && (ver === 2 || ver === 1)) {
+          /* migrate */
+        } else {
+          return null;
+        }
         const srcW = Math.max(0, Number(raw.srcW) || 0);
         const srcH = Math.max(0, Number(raw.srcH) || 0);
         const effW = Math.max(0, Number(raw.effW) || srcW);
@@ -3792,13 +4074,13 @@
 
       /**
        * 合并他人/本机备份的撞档库：同键保留 at 更新者；本地更新则不动。
-       * 返回 { added, updated, skipped, total }。
+       * 旧键自动折成 v3；返回 { added, updated, skipped, total }。
        */
       function mergeVbbFeatureSchemes(incoming) {
         /** @type {Record<string, any>} */
         const src =
           incoming && typeof incoming === "object" && !Array.isArray(incoming) ? incoming : {};
-        const map = loadVbbFeatureSchemes();
+        const map = { ...loadVbbFeatureSchemes() };
         let added = 0;
         let updated = 0;
         let skipped = 0;
@@ -3807,21 +4089,22 @@
             skipped += 1;
             continue;
           }
-          const entry = normalizeVbbFeatureSchemeEntry(raw);
-          if (!entry) {
+          const canon = vbbCanonicalSchemeKey(k);
+          const entry = normalizeVbbFeatureSchemeEntry(raw, { acceptLegacyVer: true });
+          if (!canon || !entry) {
             skipped += 1;
             continue;
           }
-          const prev = map[k];
+          const prev = map[canon];
           if (!prev || !(Number(prev.fps) > 0)) {
-            map[k] = entry;
+            map[canon] = entry;
             added += 1;
             continue;
           }
           const prevAt = Number(prev.at) || 0;
           const nextAt = Number(entry.at) || 0;
           if (nextAt > prevAt) {
-            map[k] = entry;
+            map[canon] = entry;
             updated += 1;
           } else {
             skipped += 1;
@@ -3829,6 +4112,13 @@
         }
         persistVbbFeatureSchemes(map);
         return { added, updated, skipped, total: Object.keys(map).length };
+      }
+
+      async function mergeVbbFeatureSchemesAndFlush(incoming) {
+        await vbbEnsureSchemeReady();
+        const r = mergeVbbFeatureSchemes(incoming);
+        await vbbFlushSchemeStore();
+        return r;
       }
 
       function purgeLegacyVbbSpanScheme() {
@@ -3841,14 +4131,18 @@
         const key = vbbSpanSchemeKey(span, speed, meta);
         if (!key) return null;
         const fromMem = vbbFeatureSchemeMem.get(key);
+        let hit = null;
         if (fromMem && Number(fromMem.fps) > 0 && Number(fromMem.ver) === VBB_FEATURE_SCHEME_VER) {
-          if (vbbSeedFitsMeta(fromMem, meta)) return fromMem;
+          if (vbbSeedFitsMeta(fromMem, meta)) hit = fromMem;
         }
-        const hit = loadVbbFeatureSchemes()[key];
-        if (!hit || !(Number(hit.fps) > 0)) return null;
-        if (Number(hit.ver) !== VBB_FEATURE_SCHEME_VER) return null;
-        if (!vbbSeedFitsMeta(hit, meta)) return null;
-        return hit;
+        if (!hit) {
+          const stored = loadVbbFeatureSchemes()[key];
+          if (!stored || !(Number(stored.fps) > 0)) return null;
+          if (Number(stored.ver) !== VBB_FEATURE_SCHEME_VER) return null;
+          if (!vbbSeedFitsMeta(stored, meta)) return null;
+          hit = stored;
+        }
+        return adjustVbbSeedForQuality(hit, meta, span, speed);
       }
 
       function saveVbbSpanScheme(span, seed, encode) {
@@ -3882,12 +4176,9 @@
           encode: encode || "blackbox",
           at: Date.now(),
         };
-        vbbFeatureSchemeMem.set(key, entry);
-        try {
-          const map = loadVbbFeatureSchemes();
-          map[key] = entry;
-          persistVbbFeatureSchemes(map);
-        } catch (_) {}
+        const map = { ...loadVbbFeatureSchemes() };
+        map[key] = entry;
+        persistVbbFeatureSchemes(map);
       }
 
       /** 同轮/跨次统一查找：只按特征键，不再走 firstSeed 特例 */
@@ -3899,6 +4190,11 @@
         }
         return { seed: null, fromCache: false, encode: planEncode };
       }
+
+      // 启动即水合（不阻塞首屏；编码/导出前会再 await）
+      try {
+        vbbEnsureSchemeReady();
+      } catch (_) {}
 
       function snapshotVbbEncodeSeed(encoded, extras = {}) {
         if (!encoded?.blob) return null;
@@ -12367,8 +12663,9 @@
       }
 
       /** 组装「编辑草稿 + 撞档库」备份；任一有内容即可导出 */
-      function buildVbbBackupPayload() {
+      async function buildVbbBackupPayload() {
         saveVbbEditDraftsSync();
+        if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
         const items = collectVbbEditDraftItems();
         const schemes = exportVbbFeatureSchemesMap();
         return {
@@ -12379,8 +12676,19 @@
         };
       }
 
-      function downloadVbbEditDraftsJson() {
-        const payload = buildVbbBackupPayload();
+      /** 仅撞档库（IndexedDB）导出外壳 */
+      function buildVbbSchemeDbPayload() {
+        const schemes = exportVbbFeatureSchemesMap();
+        return {
+          v: 2,
+          kind: "vbb-scheme-db",
+          at: Date.now(),
+          schemes,
+        };
+      }
+
+      async function downloadVbbEditDraftsJson() {
+        const payload = await buildVbbBackupPayload();
         const itemN = Array.isArray(payload.items) ? payload.items.length : 0;
         const schemeN = payload.schemes ? Object.keys(payload.schemes).length : 0;
         if (!itemN && !schemeN) {
@@ -12406,6 +12714,33 @@
         if (itemN) parts.push(`编辑 ${itemN}`);
         if (schemeN) parts.push(`撞档 ${schemeN}`);
         toast(`已下载备份（${parts.join(" · ")}）· 对方点「导入备份」可合并撞档`);
+        return true;
+      }
+
+      async function downloadVbbSchemeDbJson() {
+        if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
+        const payload = buildVbbSchemeDbPayload();
+        const schemeN = payload.schemes ? Object.keys(payload.schemes).length : 0;
+        if (!schemeN) {
+          toast("撞档库为空，先成功出几条 GIF 再导出");
+          return false;
+        }
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `vbb-scheme-db-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => {
+          try {
+            URL.revokeObjectURL(url);
+          } catch (_) {}
+        }, 2000);
+        toast(`已导出撞档库 ${schemeN} 条（浏览器数据库）· 对方用「导入撞档库」合并`);
         return true;
       }
 
@@ -12717,7 +13052,8 @@
         };
       }
 
-      function downloadVbbDiagJson() {
+      async function downloadVbbDiagJson() {
+        if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
         vbbLog(`[vbb] export diag · clips=${vbbClips.length} · batch=${vbbBatchFiles.length}`);
         const payload = buildVbbDiagPayload();
         const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -12800,7 +13136,10 @@
 
         let schemeMerge = null;
         if (hasSchemes) {
-          schemeMerge = mergeVbbFeatureSchemes(data.schemes);
+          schemeMerge =
+            typeof mergeVbbFeatureSchemesAndFlush === "function"
+              ? await mergeVbbFeatureSchemesAndFlush(data.schemes)
+              : mergeVbbFeatureSchemes(data.schemes);
         }
 
         const bits = [];
@@ -12819,6 +13158,36 @@
           draftRestored,
           schemes: schemeMerge,
         };
+      }
+
+      /** 仅导入/合并撞档库（兼容完整备份 JSON 或 kind=vbb-scheme-db） */
+      async function importVbbSchemeDbFromFile(file) {
+        if (!file) return null;
+        let data;
+        try {
+          const text = await file.text();
+          data = JSON.parse(text);
+        } catch (_) {
+          throw new Error("撞档库文件不是有效 JSON");
+        }
+        if (!data || typeof data !== "object") throw new Error("撞档库格式无效");
+        const schemes =
+          data.schemes && typeof data.schemes === "object" && !Array.isArray(data.schemes)
+            ? data.schemes
+            : data && !Array.isArray(data) && !data.items
+              ? data
+              : null;
+        if (!schemes || !Object.keys(schemes).length) {
+          throw new Error("文件里没有可合并的撞档记录");
+        }
+        const schemeMerge =
+          typeof mergeVbbFeatureSchemesAndFlush === "function"
+            ? await mergeVbbFeatureSchemesAndFlush(schemes)
+            : mergeVbbFeatureSchemes(schemes);
+        toast(
+          `撞档库已合并：+${schemeMerge.added}/更${schemeMerge.updated}/跳${schemeMerge.skipped}（共 ${schemeMerge.total}）`
+        );
+        return schemeMerge;
       }
 
       function destroyVbbLiveFfmpegPool() {
@@ -14239,6 +14608,7 @@
             crop: vbbCrop,
           });
           const duration = Number(vbbVideo?.duration) || 0;
+          if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
           for (let i = 0; i < ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = ranges[i];
@@ -15501,6 +15871,7 @@
                   crop: vbbCrop,
                 });
                 const speedFac = vbbSpeedFactorForSpan(prepared.span);
+                if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
                 const seedForItem = loadVbbSpanScheme(prepared.span, speedFac, itemMeta);
                 const usedSeed = Boolean(seedForItem);
                 const encoded = await encodeBlackboxClip({
@@ -15838,6 +16209,7 @@
             crop: vbbCrop,
           });
           const speedFac = vbbSpeedFactorForSpan(prepared.span);
+          if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
           const seedForSingle = loadVbbSpanScheme(prepared.span, speedFac, singleMeta);
           const usedSeed = Boolean(seedForSingle);
           const encoded = await encodeBlackboxClip({
@@ -16164,6 +16536,7 @@
           });
           const execDuration =
             Number(vbbVideo?.duration) || Number(vbbAnalysis?.duration) || 0;
+          if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
           for (let i = 0; i < plan.ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = plan.ranges[i];
@@ -17525,6 +17898,7 @@
         getBatchFiles: () => vbbBatchFiles.slice(),
         /** 紧急：导出/导入/保存/清除（编辑草稿 + 撞档库；不含视频）；强制取消 */
         exportEditDrafts: () => downloadVbbEditDraftsJson(),
+        exportSchemeDb: () => downloadVbbSchemeDbJson(),
         exportDiag: () => downloadVbbDiagJson(),
         getDiagPayload: () => buildVbbDiagPayload(),
         getLogRing: () => (typeof getVbbLogRing === "function" ? getVbbLogRing() : []),
@@ -17532,12 +17906,18 @@
           if (typeof clearVbbLogRing === "function") clearVbbLogRing();
         },
         importEditDrafts: (file) => importVbbEditDraftsFromFile(file),
+        importSchemeDb: (file) => importVbbSchemeDbFromFile(file),
         saveEditDrafts: () => saveVbbEditDraftsSync(),
         clearEditDrafts: (opts) => clearVbbStoredEditDrafts(opts || { resetCurrent: true }),
         forceAbort: () => forceAbortVbb(),
         getEditDraftPayload: () => buildVbbBackupPayload(),
         exportFeatureSchemes: () => exportVbbFeatureSchemesMap(),
-        mergeFeatureSchemes: (map) => mergeVbbFeatureSchemes(map),
+        mergeFeatureSchemes: (map) =>
+          typeof mergeVbbFeatureSchemesAndFlush === "function"
+            ? mergeVbbFeatureSchemesAndFlush(map)
+            : mergeVbbFeatureSchemes(map),
+        ensureSchemeReady: () =>
+          typeof vbbEnsureSchemeReady === "function" ? vbbEnsureSchemeReady() : Promise.resolve(false),
         syncUi: () => {
           syncVbbEditUi();
           renderVbbBatchList({ keepSelection: true });
@@ -17644,15 +18024,22 @@
         forceAbortVbb();
       });
       $("#vbb-export-edits")?.addEventListener("click", () => {
-        downloadVbbEditDraftsJson();
+        downloadVbbEditDraftsJson().catch((err) => {
+          setError(vbbError, err?.message || String(err));
+          toast(err?.message || "导出备份失败");
+        });
+      });
+      $("#vbb-export-schemes")?.addEventListener("click", () => {
+        downloadVbbSchemeDbJson().catch((err) => {
+          setError(vbbError, err?.message || String(err));
+          toast(err?.message || "导出撞档库失败");
+        });
       });
       $("#vbb-export-diag")?.addEventListener("click", () => {
-        try {
-          downloadVbbDiagJson();
-        } catch (err) {
+        downloadVbbDiagJson().catch((err) => {
           setError(vbbError, err?.message || String(err));
           toast(err?.message || "导出诊断失败");
-        }
+        });
       });
       $("#vbb-import-edits")?.addEventListener("change", (e) => {
         const f = e.target?.files?.[0];
@@ -17661,6 +18048,15 @@
         importVbbEditDraftsFromFile(f).catch((err) => {
           setError(vbbError, err?.message || String(err));
           toast(err?.message || "导入失败");
+        });
+      });
+      $("#vbb-import-schemes")?.addEventListener("change", (e) => {
+        const f = e.target?.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        importVbbSchemeDbFromFile(f).catch((err) => {
+          setError(vbbError, err?.message || String(err));
+          toast(err?.message || "导入撞档库失败");
         });
       });
       $("#vbb-clear-drafts")?.addEventListener("click", () => {

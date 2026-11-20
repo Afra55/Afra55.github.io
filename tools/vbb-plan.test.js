@@ -481,15 +481,13 @@ function almost(a, b, eps = 1e-6) {
     return { w: Number(meta?.srcW) || 0, h: Number(meta?.srcH) || 0 };
   }
   function vbbSpanSchemeKey(span, speed = 1, meta = null) {
-    const sp = Math.max(1, Number(speed) || 1);
+    void speed;
     const spanB = vbbSpanBucket(span);
-    const base = sp > 1.02 ? `${spanB}@x${sp.toFixed(2)}` : spanB;
     const dims = vbbFeatureDims(meta);
     const size = vbbSchemeSizeBucket(dims.w, dims.h);
     const fpsB = vbbSrcFpsBucket(meta?.srcFps);
-    const mode = meta?.qualityFirst ? "qf" : "bb";
     if (!size || !fpsB) return "";
-    return `${base}#${size}|${fpsB}|${mode}`;
+    return `${spanB}#${size}|${fpsB}`;
   }
   function vbbSeedFitsMeta(seed, meta) {
     if (!seed?.fps || !meta) return false;
@@ -501,7 +499,6 @@ function almost(a, b, eps = 1e-6) {
     const fpsA = vbbSrcFpsBucket(seed.srcFps);
     const fpsB = vbbSrcFpsBucket(meta.srcFps);
     if (!fpsA || !fpsB || fpsA !== fpsB) return false;
-    if (Boolean(seed.qualityFirst) !== Boolean(meta.qualityFirst)) return false;
     return true;
   }
   assert(vbbSpanBucket(12.04) === "12.0", "span bucket 0.5s");
@@ -520,8 +517,8 @@ function almost(a, b, eps = 1e-6) {
   const metaE = { ...metaA, qualityFirst: true };
   const metaCrop = { ...metaA, effW: 800, effH: 450 };
   assert(
-    vbbSpanSchemeKey(12, 1, metaA) === "12.0#880x600|25|bb",
-    "key includes duration+resolution+fps+mode（不含体积）"
+    vbbSpanSchemeKey(12, 1, metaA) === "12.0#880x600|25",
+    "key = 时长+分辨率+帧率（不含加速/画质/体积）"
   );
   assert(
     vbbSpanSchemeKey(12, 1, { srcW: 860, srcH: 610 }) === "",
@@ -537,21 +534,22 @@ function almost(a, b, eps = 1e-6) {
   );
   assert(
     vbbSpanSchemeKey(12, 1, metaA) === vbbSpanSchemeKey(12, 1, metaD),
-    "不同文件体积档仍可撞（v2 去掉体积维）"
+    "不同文件体积档仍可撞"
   );
   assert(
-    vbbSpanSchemeKey(12, 1, metaA) !== vbbSpanSchemeKey(12, 1, metaE),
-    "qualityFirst must not share with normal"
+    vbbSpanSchemeKey(12, 1, metaA) === vbbSpanSchemeKey(12, 1, metaE),
+    "画质开关不进键，先撞档再调档"
   );
   assert(
-    vbbSpanSchemeKey(12, 1, metaCrop) === "12.0#800x440|25|bb",
+    vbbSpanSchemeKey(12, 1, metaCrop) === "12.0#800x440|25",
     "有效分辨率优先于源尺寸"
   );
-  assert(vbbSpanSchemeKey(40, 2, metaA) === "40.0@x2.00#880x600|25|bb", "speed in key");
+  assert(vbbSpanSchemeKey(40, 2, metaA) === "40.0#880x600|25", "加速不进键，只按时长桶");
   assert(vbbSeedFitsMeta({ fps: 15, ...metaA }, metaA), "same meta fits");
   assert(!vbbSeedFitsMeta({ fps: 15, ...metaA }, metaB), "diff size must not fit");
   assert(!vbbSeedFitsMeta({ fps: 15, ...metaA }, metaC), "diff fps must not fit");
   assert(vbbSeedFitsMeta({ fps: 15, ...metaA }, metaD), "diff volume still fits");
+  assert(vbbSeedFitsMeta({ fps: 15, ...metaA }, metaE), "diff qualityFirst still fits");
 }
 
 {

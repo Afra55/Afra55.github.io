@@ -234,15 +234,20 @@ assert(
   );
   assert(/沿用帧率/.test(src), "seed 须只沿用帧率");
   assert(/忽略缓存宽/.test(src), "seed 不得直接从上次加宽后的宽度起编");
-  assert(/VBB_FEATURE_SCHEME_VER\s*=\s*2/.test(src), "改 seed 特征策略须 bump 缓存版本");
+  assert(/VBB_FEATURE_SCHEME_VER\s*=\s*3/.test(src), "改 seed 特征策略须 bump 缓存版本");
   assert(/vbbSeedFitsMeta|vbbSchemeSizeBucket|vbbSrcFpsBucket/.test(src), "沿用须校验分辨率/帧率");
-  assert(/不含文件体积|不再用文件体积档/.test(src), "v2 撞档键不含体积档");
+  assert(/devtools-vbb-scheme/.test(src), "撞档须走 IndexedDB");
+  assert(/adjustVbbSeedForQuality/.test(src), "先撞档再按画质调档");
+  assert(/加速\/画质不进键|不含加速\/画质/.test(src), "v3 键不含加速与画质");
   assert(/只按时长/.test(src), "须显式禁止只按时长沿用");
   assert(/vbbFeatureSchemeMem/.test(src), "同轮须走内存特征库");
   assert(!/function shouldReuseVbbFirstPlan/.test(src), "旧 firstSeed 同轮逻辑须移除");
-  assert(/devtools-vbb-feature-scheme-v1/.test(src), "须换用新特征库键名");
+  assert(/devtools-vbb-feature-scheme-v1/.test(src), "旧 LS 键仅作迁移源");
   assert(/chunkTargetRequested/.test(src), "压缩时长须按请求份额对准目标");
-  assert(/vbbFeatureSchemeMem\.delete/.test(src), "特征内存须与持久 LRU 对齐");
+  assert(
+    /vbbFeatureSchemeMem\.clear|syncVbbFeatureSchemeMemFromStore/.test(src),
+    "特征内存须与持久库对齐"
+  );
   const gifskiCore = fs.readFileSync(path.join(__dirname, "ffmpeg-bridge/gifski-core.js"), "utf8");
   assert(!/srcSpan\s*\+\s*0\.05/.test(gifskiCore), "原生 gifski 不得再给片尾 +50ms");
   assert(/-ss"[\s\S]{0,80}opts\.startSec/.test(gifskiCore), "原生裁剪须有 -ss");

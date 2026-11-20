@@ -3791,8 +3791,9 @@
       }
 
       /** 组装「编辑草稿 + 撞档库」备份；任一有内容即可导出 */
-      function buildVbbBackupPayload() {
+      async function buildVbbBackupPayload() {
         saveVbbEditDraftsSync();
+        if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
         const items = collectVbbEditDraftItems();
         const schemes = exportVbbFeatureSchemesMap();
         return {
@@ -3803,8 +3804,19 @@
         };
       }
 
-      function downloadVbbEditDraftsJson() {
-        const payload = buildVbbBackupPayload();
+      /** 仅撞档库（IndexedDB）导出外壳 */
+      function buildVbbSchemeDbPayload() {
+        const schemes = exportVbbFeatureSchemesMap();
+        return {
+          v: 2,
+          kind: "vbb-scheme-db",
+          at: Date.now(),
+          schemes,
+        };
+      }
+
+      async function downloadVbbEditDraftsJson() {
+        const payload = await buildVbbBackupPayload();
         const itemN = Array.isArray(payload.items) ? payload.items.length : 0;
         const schemeN = payload.schemes ? Object.keys(payload.schemes).length : 0;
         if (!itemN && !schemeN) {
@@ -3830,6 +3842,33 @@
         if (itemN) parts.push(`编辑 ${itemN}`);
         if (schemeN) parts.push(`撞档 ${schemeN}`);
         toast(`已下载备份（${parts.join(" · ")}）· 对方点「导入备份」可合并撞档`);
+        return true;
+      }
+
+      async function downloadVbbSchemeDbJson() {
+        if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
+        const payload = buildVbbSchemeDbPayload();
+        const schemeN = payload.schemes ? Object.keys(payload.schemes).length : 0;
+        if (!schemeN) {
+          toast("撞档库为空，先成功出几条 GIF 再导出");
+          return false;
+        }
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `vbb-scheme-db-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => {
+          try {
+            URL.revokeObjectURL(url);
+          } catch (_) {}
+        }, 2000);
+        toast(`已导出撞档库 ${schemeN} 条（浏览器数据库）· 对方用「导入撞档库」合并`);
         return true;
       }
 
@@ -4141,7 +4180,8 @@
         };
       }
 
-      function downloadVbbDiagJson() {
+      async function downloadVbbDiagJson() {
+        if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
         vbbLog(`[vbb] export diag · clips=${vbbClips.length} · batch=${vbbBatchFiles.length}`);
         const payload = buildVbbDiagPayload();
         const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -4224,7 +4264,10 @@
 
         let schemeMerge = null;
         if (hasSchemes) {
-          schemeMerge = mergeVbbFeatureSchemes(data.schemes);
+          schemeMerge =
+            typeof mergeVbbFeatureSchemesAndFlush === "function"
+              ? await mergeVbbFeatureSchemesAndFlush(data.schemes)
+              : mergeVbbFeatureSchemes(data.schemes);
         }
 
         const bits = [];
@@ -4243,6 +4286,36 @@
           draftRestored,
           schemes: schemeMerge,
         };
+      }
+
+      /** 仅导入/合并撞档库（兼容完整备份 JSON 或 kind=vbb-scheme-db） */
+      async function importVbbSchemeDbFromFile(file) {
+        if (!file) return null;
+        let data;
+        try {
+          const text = await file.text();
+          data = JSON.parse(text);
+        } catch (_) {
+          throw new Error("撞档库文件不是有效 JSON");
+        }
+        if (!data || typeof data !== "object") throw new Error("撞档库格式无效");
+        const schemes =
+          data.schemes && typeof data.schemes === "object" && !Array.isArray(data.schemes)
+            ? data.schemes
+            : data && !Array.isArray(data) && !data.items
+              ? data
+              : null;
+        if (!schemes || !Object.keys(schemes).length) {
+          throw new Error("文件里没有可合并的撞档记录");
+        }
+        const schemeMerge =
+          typeof mergeVbbFeatureSchemesAndFlush === "function"
+            ? await mergeVbbFeatureSchemesAndFlush(schemes)
+            : mergeVbbFeatureSchemes(schemes);
+        toast(
+          `撞档库已合并：+${schemeMerge.added}/更${schemeMerge.updated}/跳${schemeMerge.skipped}（共 ${schemeMerge.total}）`
+        );
+        return schemeMerge;
       }
 
       function destroyVbbLiveFfmpegPool() {
@@ -5663,6 +5736,7 @@
             crop: vbbCrop,
           });
           const duration = Number(vbbVideo?.duration) || 0;
+          if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
           for (let i = 0; i < ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = ranges[i];
@@ -6925,6 +6999,7 @@
                   crop: vbbCrop,
                 });
                 const speedFac = vbbSpeedFactorForSpan(prepared.span);
+                if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
                 const seedForItem = loadVbbSpanScheme(prepared.span, speedFac, itemMeta);
                 const usedSeed = Boolean(seedForItem);
                 const encoded = await encodeBlackboxClip({
@@ -7262,6 +7337,7 @@
             crop: vbbCrop,
           });
           const speedFac = vbbSpeedFactorForSpan(prepared.span);
+          if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
           const seedForSingle = loadVbbSpanScheme(prepared.span, speedFac, singleMeta);
           const usedSeed = Boolean(seedForSingle);
           const encoded = await encodeBlackboxClip({
@@ -7588,6 +7664,7 @@
           });
           const execDuration =
             Number(vbbVideo?.duration) || Number(vbbAnalysis?.duration) || 0;
+          if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
           for (let i = 0; i < plan.ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = plan.ranges[i];
@@ -8949,6 +9026,7 @@
         getBatchFiles: () => vbbBatchFiles.slice(),
         /** 紧急：导出/导入/保存/清除（编辑草稿 + 撞档库；不含视频）；强制取消 */
         exportEditDrafts: () => downloadVbbEditDraftsJson(),
+        exportSchemeDb: () => downloadVbbSchemeDbJson(),
         exportDiag: () => downloadVbbDiagJson(),
         getDiagPayload: () => buildVbbDiagPayload(),
         getLogRing: () => (typeof getVbbLogRing === "function" ? getVbbLogRing() : []),
@@ -8956,12 +9034,18 @@
           if (typeof clearVbbLogRing === "function") clearVbbLogRing();
         },
         importEditDrafts: (file) => importVbbEditDraftsFromFile(file),
+        importSchemeDb: (file) => importVbbSchemeDbFromFile(file),
         saveEditDrafts: () => saveVbbEditDraftsSync(),
         clearEditDrafts: (opts) => clearVbbStoredEditDrafts(opts || { resetCurrent: true }),
         forceAbort: () => forceAbortVbb(),
         getEditDraftPayload: () => buildVbbBackupPayload(),
         exportFeatureSchemes: () => exportVbbFeatureSchemesMap(),
-        mergeFeatureSchemes: (map) => mergeVbbFeatureSchemes(map),
+        mergeFeatureSchemes: (map) =>
+          typeof mergeVbbFeatureSchemesAndFlush === "function"
+            ? mergeVbbFeatureSchemesAndFlush(map)
+            : mergeVbbFeatureSchemes(map),
+        ensureSchemeReady: () =>
+          typeof vbbEnsureSchemeReady === "function" ? vbbEnsureSchemeReady() : Promise.resolve(false),
         syncUi: () => {
           syncVbbEditUi();
           renderVbbBatchList({ keepSelection: true });
@@ -9068,15 +9152,22 @@
         forceAbortVbb();
       });
       $("#vbb-export-edits")?.addEventListener("click", () => {
-        downloadVbbEditDraftsJson();
+        downloadVbbEditDraftsJson().catch((err) => {
+          setError(vbbError, err?.message || String(err));
+          toast(err?.message || "导出备份失败");
+        });
+      });
+      $("#vbb-export-schemes")?.addEventListener("click", () => {
+        downloadVbbSchemeDbJson().catch((err) => {
+          setError(vbbError, err?.message || String(err));
+          toast(err?.message || "导出撞档库失败");
+        });
       });
       $("#vbb-export-diag")?.addEventListener("click", () => {
-        try {
-          downloadVbbDiagJson();
-        } catch (err) {
+        downloadVbbDiagJson().catch((err) => {
           setError(vbbError, err?.message || String(err));
           toast(err?.message || "导出诊断失败");
-        }
+        });
       });
       $("#vbb-import-edits")?.addEventListener("change", (e) => {
         const f = e.target?.files?.[0];
@@ -9085,6 +9176,15 @@
         importVbbEditDraftsFromFile(f).catch((err) => {
           setError(vbbError, err?.message || String(err));
           toast(err?.message || "导入失败");
+        });
+      });
+      $("#vbb-import-schemes")?.addEventListener("change", (e) => {
+        const f = e.target?.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        importVbbSchemeDbFromFile(f).catch((err) => {
+          setError(vbbError, err?.message || String(err));
+          toast(err?.message || "导入撞档库失败");
         });
       });
       $("#vbb-clear-drafts")?.addEventListener("click", () => {
