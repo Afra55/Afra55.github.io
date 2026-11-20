@@ -1,6 +1,10 @@
 # 黑盒 GIF（#vbb）优化历程与后续空间
 
-面向后期查阅与继续优化。实现主路径：`tools/extra-panels/v2g-suite-src/10-shared-encode.js`（`encodeBlackboxClip` / `encodeBlackboxClipCore`），面板与批处理：`40-vbb.js` + `tools/panels/vbb.html`。改分片后必须：
+面向后期查阅与继续优化。实现主路径：`tools/extra-panels/v2g-suite-src/10-shared-encode.js`（`encodeBlackboxClip` / `encodeBlackboxClipCore`），面板与批处理：`40-vbb.js` + `tools/panels/vbb.html`。
+
+**编辑 / 外预览 / 成片对齐**不在本文（试档体积策略与 keep 正交）。改裁切接点、差帧、删中间：先读 [`vbb-edit-preview-export-parity.md`](./vbb-edit-preview-export-parity.md) + [`vbb-preview-export-clock.md`](./vbb-preview-export-clock.md)，勿先动阶梯。
+
+改分片后必须：
 
 ```bash
 node tools/scripts/build-v2g-suite.cjs

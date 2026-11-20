@@ -8,7 +8,10 @@
 | 修剪编辑器 | `tools/lib/vtrim-editor.js` |
 | 黑盒面板 / GIF 物化 / 草稿 | `tools/extra-panels/v2g-suite-src/40-vbb.js`（改完跑 `build-v2g-suite.cjs`） |
 
-相关：黑盒体积/帧率策略见 [`vbb-blackbox-optimization.md`](./vbb-blackbox-optimization.md)。
+相关：
+
+- **编辑 ≡ 预览 ≡ 生成 GIF**（keep / materialize / encode flags）见 [`vbb-edit-preview-export-parity.md`](./vbb-edit-preview-export-parity.md)
+- 黑盒体积/帧率策略见 [`vbb-blackbox-optimization.md`](./vbb-blackbox-optimization.md)
 
 ---
 
