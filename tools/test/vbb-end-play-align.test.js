@@ -53,6 +53,52 @@ t("末帧播完再回绕；暂停停在帧内而不是裸 CTS", () => {
   assert.ok(park != null && park > lastStart + ek * 0.15 && park < 5 - 1e-4);
 });
 
+t("有采样表时片头停进 startF 帧内，不把已在帧后段的手柄再推进下一帧", () => {
+  const p = vtrim.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?\n  \}/);
+  assert.ok(p);
+  const box = {
+    window: {
+      DevToolsMp4Timeline: {
+        frameSeekSec(tl, idx) {
+          const k = Math.max(0, Math.round(Number(idx) || 0));
+          const t0 = Number(tl.ctsSec[k]);
+          const t1 = Number(tl.ctsSec[Math.min(tl.ctsSec.length - 1, k + 1)]);
+          const span = t1 > t0 ? t1 - t0 : 0.04;
+          return t0 + span * 0.25;
+        },
+      },
+    },
+  };
+  vm.runInNewContext(
+    `
+    const DISPLAY_SEEK_EPS = 1e-4;
+    function resolveEndKeepSec() { return 1 / 25; }
+    ${p[0]}
+    this.fn = previewSeekForKeepRanges;
+    `,
+    box
+  );
+  const tl = { ctsSec: [0, 0.04, 0.08, 0.12], fps: 25 };
+  // 手柄在帧 0 的后段（0.03）。再加 1/4 帧会落到 0.04，那是下一帧。
+  const keeps = [{ start: 0.03, end: 0.12, startF: 0, endF: 3 }];
+  const head = box.fn(keeps, -1, { paused: false, endKeepSec: 0.04, timeline: tl });
+  assert.ok(Math.abs(head - 0.01) < 1e-9, `head interior=${head}`);
+  const tail = box.fn(keeps, 0.12, { paused: true, endKeepSec: 0.04, timeline: tl });
+  // endF-1 = 2 → CTS 0.08，帧内 0.09。不是 end-1/fps=0.08 再误进上一帧。
+  assert.ok(Math.abs(tail - 0.09) < 1e-9, `tail interior=${tail}`);
+});
+
+t("编辑拖动预览和外预览落点都走帧内 seek", () => {
+  const scrub = vtrim.slice(vtrim.indexOf("function pumpPreviewScrubSeek"), vtrim.indexOf("function endKeepStepSec"));
+  assert.ok(scrub.includes("seekSecForTime(sourceTimeline"));
+  assert.ok(scrub.includes("video.currentTime = seekT"));
+  assert.ok(!/video\.currentTime\s*=\s*t\s*;/.test(scrub));
+  const apply = vbb.slice(vbb.indexOf("function applyVbbSeek"), vbb.indexOf("function pumpVbbScrubSeek"));
+  assert.ok(apply.includes("vbbDisplaySeekSec"));
+  assert.ok(vbb.includes("function vbbDisplaySeekSec"));
+  assert.ok(vbb.includes("seekSecForTime"));
+});
+
 t("clipPlayWindow 在半开上界回绕，不在末帧 CTS 上截断", () => {
   const fn = vtrim.slice(vtrim.indexOf("function mediaTimeForCut"), vtrim.indexOf("function armFrameWatch"));
   assert.ok(fn.includes("playCutParkSec()"));

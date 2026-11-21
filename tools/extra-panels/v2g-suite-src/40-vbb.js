@@ -216,10 +216,42 @@
         vbbScrub.value = String(vbbTimeToScrubValue(vbbMarkTime()));
       }
   
+      /**
+       * 把「这一时刻的采样」seek 进帧内。
+       * 裸 CTS / CTS+0.1ms 在 Android 上画出上一帧：编辑实时预览会比编辑内播放和 GIF 的 startF 早一帧。
+       */
+      function vbbDisplaySeekSec(sec) {
+        const t = Number(sec);
+        if (!Number.isFinite(t)) return 0;
+        // 不走 getActiveVbbEditItem：那条路径会在没有草稿时造出一份 edit。
+        let tl = null;
+        let fps = 0;
+        try {
+          if (isVbbBatchMode() && vbbEditBatchIdx >= 0 && vbbBatchFiles?.[vbbEditBatchIdx]) {
+            const item = vbbBatchFiles[vbbEditBatchIdx];
+            if (item?.timeline?.ctsSec?.length) tl = item.timeline;
+            fps = Number(item?.edit?.srcFps) || Number(item?.srcFps) || 0;
+          } else if (vbbSingleTimeline?.ctsSec?.length) {
+            tl = vbbSingleTimeline;
+            fps = Number(vbbSingleEdit?.srcFps) || Number(vbbSingleSrcFps) || 0;
+          }
+        } catch (_) {}
+        if (!(fps >= 5)) fps = Number(tl?.fps) || 0;
+        const fn = window.DevToolsVtrimEditor?.seekSecForTime;
+        if (tl?.ctsSec?.length && typeof fn === "function") {
+          const s = Number(fn(tl, t, fps));
+          if (Number.isFinite(s)) return Math.max(0, s);
+        }
+        return Math.max(0, t);
+      }
+
       function applyVbbSeek(sec, opts = {}) {
         if (!vbbVideo?.src) return;
         const d = vbbVideoDuration();
-        const t = Math.max(0, Math.min(d || 0, Number(sec) || 0));
+        const raw = Math.max(0, Math.min(d || 0, Number(sec) || 0));
+        // 拖进度跟手用原时刻；松手/编辑落点进帧内，避免片头停在上一帧
+        const shown = opts.fromScrub ? raw : vbbDisplaySeekSec(raw);
+        const t = Math.max(0, Math.min(d || 0, shown));
         if (!opts.keepPlaying) pauseVbbPreview();
         // 拖进度走 pumpVbbScrubSeek；其它跳转直接设 currentTime（勿密集 fastSeek）
         try {
@@ -668,10 +700,11 @@
         const last = keeps[keeps.length - 1];
         const endEps = 0.0005;
         const startEps = 0.0005;
-        const headSeek = (start) => {
+        const headSeek = (k) => {
+          const start = Number(k?.start);
           const frame = endKeep > 0 ? endKeep : 1 / 30;
           const into = Math.min(frame * 0.45, Math.max(frame * 0.25, 0.0005));
-          return Math.max(0, Number(start) || 0) + into;
+          return Math.max(0, start || 0) + into;
         };
         // 与 vtrim 一致：末帧播到半开上界再回绕；片头/接点进帧内，不贴裸 CTS
         for (let i = 0; i < keeps.length; i++) {
@@ -679,10 +712,10 @@
           const endLimit = k.end - endEps;
           if (time >= k.start - startEps && time < endLimit) return null;
         }
-        if (time < first.start - startEps) return headSeek(first.start);
+        if (time < first.start - startEps) return headSeek(first);
         for (let i = 0; i < keeps.length; i++) {
           const nxt = keeps[i + 1];
-          if (nxt && time < nxt.start) return headSeek(nxt.start);
+          if (nxt && time < nxt.start) return headSeek(nxt);
         }
         if (paused) {
           const ctsApprox = Math.max(last.start, last.end - endKeep);
@@ -690,7 +723,7 @@
           const into = Math.min(room, Math.max(endEps * 4, endKeep * 0.25));
           return ctsApprox + into;
         }
-        return headSeek(first.start);
+        return headSeek(first);
       }
 
       /**
@@ -2268,6 +2301,7 @@
           paused: vbbVideo.paused,
           edit: item.edit,
           srcFps,
+          timeline: item.timeline || null,
         });
         if (next == null || !Number.isFinite(next)) {
           vbbEditEnforceAcceptTarget = null;
@@ -3402,14 +3436,17 @@
         if (doPrewarm && serial && !lease && !abortVbb) {
           // ffmpeg.load 在 terminate 后可能永远不回；超时必须放弃 Worker 再进下一条
           prewarmHow = await vbbAwaitWithCap(prewarmFfmpegEngine(), 50000);
-          if (prewarmHow === "timeout") {
+          if (prewarmHow === "timeout" || prewarmHow === "err") {
+            // 失败的 load 若还占着单例，下一条 getFfmpegInstance 会接着挂
             try {
               window.DevToolsExtraMedia?.abandonFfmpegWarmLoad?.();
             } catch (_) {}
             try {
               terminateFfmpegInstance({ revokeAssets: false });
             } catch (_) {}
-            vbbLog("[vbb] prewarm timeout · 放弃本次重建，继续下一条");
+            if (prewarmHow === "timeout") {
+              vbbLog("[vbb] prewarm timeout · 放弃本次重建，继续下一条");
+            }
           }
         }
         if (label || prewarmHow === "timeout" || prewarmHow === "err") {

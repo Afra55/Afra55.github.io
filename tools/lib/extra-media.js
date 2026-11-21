@@ -955,7 +955,12 @@
         } catch (_) {
           /* ignore */
         }
-        await loadPromise.catch(() => {});
+        // terminate 之后 LOAD 经常永远不回。再 await 会把批量停在「重建编码器」后面。
+        const linger = loadPromise.catch(() => {});
+        await Promise.race([
+          linger,
+          new Promise((resolve) => setTimeout(resolve, 1200)),
+        ]);
       }
       throw err;
     } finally {
@@ -1025,7 +1030,10 @@
         } catch (_) {
           /* ignore */
         }
-        terminateFfmpegInstance({ revokeAssets: false });
+        // epoch 已变：调用方已放弃这次加载，可能正在建下一只 Worker，不能把单例拆掉。
+        if (epoch === ffmpegEngineEpoch && (!ffmpegInstance || ffmpegInstance === ffmpeg)) {
+          terminateFfmpegInstance({ revokeAssets: false });
+        }
         const msg = err?.message || String(err);
         if (/已取消|AbortError/i.test(msg)) throw new Error("已取消");
         if (/加载超时/.test(msg)) throw new Error("FFmpeg 引擎加载超时");

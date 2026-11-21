@@ -57,6 +57,10 @@ t("ffmpeg.load 有超时，挂死的预热可以被放弃", () => {
   assert.ok(media.includes("ffmpegLoadingInstance"));
   assert.ok(media.includes("FFMPEG_LOAD_TIMEOUT_MS = 45000"));
   assert.ok(media.includes("abandonFfmpegWarmLoad"));
+  const load = media.slice(media.indexOf("async function loadFfmpegWithTimeout"), media.indexOf("function abandonFfmpegWarmLoad"));
+  assert.ok(load.includes("Promise.race"), "超时后的 LOAD 不能无限 await");
+  assert.ok(!/await loadPromise\.catch\(\(\) => \{\}\);/.test(load), "不能在 terminate 后再死等 load");
+  assert.ok(media.includes("epoch === ffmpegEngineEpoch"), "放弃后的失败回调不能拆掉下一只 Worker");
 });
 
 t("批量释放预热超时后继续下一条，并记下一条与 materialize", () => {

@@ -1140,9 +1140,11 @@
       if (scrubSeekWanted == null) return;
       const t = Math.max(0, Math.min(duration || 0, scrubSeekWanted));
       scrubSeekWanted = null;
+      // 裸 CTS：Android 画出上一帧。拖到哪一采样，预览就停进该帧内部，和播放/GIF 的 startF 同一张画面。
+      const seekT = seekSecForTime(sourceTimeline, t, sourceFps);
       // 近邻阈值跟帧格走：固定 0.03s 在 ≥30fps 上会吞掉约 1 帧，造成「预览总靠前几帧」
       const nearEps = Math.max(0.001, Math.min(0.012, frameSnapSec * 0.2));
-      if (Math.abs((Number(video.currentTime) || 0) - t) < nearEps && !video.seeking) {
+      if (Math.abs((Number(video.currentTime) || 0) - seekT) < nearEps && !video.seeking) {
         paintTimeline();
         updateLabels();
         return;
@@ -1163,7 +1165,7 @@
       // 部分机型 seeked 不触发会卡住后续微调；短超时兜底
       window.setTimeout(finish, 320);
       try {
-        video.currentTime = t;
+        video.currentTime = seekT;
       } catch (_) {
         finish();
       }
@@ -2067,6 +2069,7 @@
       const jump = previewSeekForKeepRanges(keepRangesLocal(), target, {
         paused: true,
         endKeepSec: endKeepStepSec(),
+        timeline: sourceTimeline,
       });
       if (jump != null && Number.isFinite(jump)) {
         target = clamp(jump, startSec, endKeepSec());
@@ -2126,6 +2129,7 @@
       const after = previewSeekForKeepRanges(keeps, cut.end + 1e-4, {
         paused: true,
         endKeepSec: endKeepStepSec(),
+        timeline: sourceTimeline,
       });
       if (after != null && Number.isFinite(after)) return after;
       return Math.min(endKeepSec(), cut.end + frame);
@@ -2169,6 +2173,7 @@
         jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
           paused: false,
           endKeepSec: step,
+          timeline: sourceTimeline,
         });
       }
       if (jump == null || !Number.isFinite(jump)) return false;
@@ -3263,11 +3268,26 @@
       Number(opts?.endKeepSec) > 0
         ? Number(opts.endKeepSec)
         : resolveEndKeepSec(opts?.srcFps || opts?.edit || 0);
-    // 片头/接点：进到该帧约 1/4。CTS 或 +0.1ms 在 Android 上显示上一帧，片头会多带更早的一帧
-    const headSeek = (start) => {
+    const tl = opts?.timeline;
+    const mp4 = typeof window !== "undefined" ? window.DevToolsMp4Timeline : null;
+    // 优先停进 startF/endF 那一采样的帧内。往 keep.start 上再加 1/4 帧，手柄已在帧中后段时会滑进下一帧。
+    const sampleInterior = (sampleIdx, capEnd) => {
+      if (!(tl?.ctsSec?.length && typeof mp4?.frameSeekSec === "function")) return null;
+      const s = Number(mp4.frameSeekSec(tl, sampleIdx));
+      if (!Number.isFinite(s)) return null;
+      const cap = Number(capEnd);
+      if (Number.isFinite(cap) && s >= cap - 0.001) return Math.max(0, cap - 0.001);
+      return Math.max(0, s);
+    };
+    const headSeek = (k) => {
+      const start = Number(k?.start);
+      if (Number.isFinite(Number(k?.startF))) {
+        const s = sampleInterior(Math.round(Number(k.startF)), Number(k?.end));
+        if (s != null) return s;
+      }
       const frame = endKeep > 0 ? endKeep : 1 / 30;
       const into = Math.min(frame * 0.45, Math.max(frame * 0.25, 0.0005));
-      return Math.max(0, Number(start) || 0) + into;
+      return Math.max(0, start || 0) + into;
     };
     // 播放与暂停都留到半开上界；末帧 CTS（end-endKeep）仍在窗内，不要在那里回绕
     for (let i = 0; i < keeps.length; i++) {
@@ -3275,19 +3295,23 @@
       const endLimit = k.end - endEps;
       if (time >= k.start - startEps && time < endLimit) return null;
     }
-    if (time < first.start - startEps) return headSeek(first.start);
+    if (time < first.start - startEps) return headSeek(first);
     for (let i = 0; i < keeps.length; i++) {
       const nxt = keeps[i + 1];
-      if (nxt && time < nxt.start) return headSeek(nxt.start);
+      if (nxt && time < nxt.start) return headSeek(nxt);
     }
-    // 半开上界：暂停停在末帧内部。last.end - endKeep ≈ 末帧 CTS，再进约 1/4 帧长
+    // 暂停停在末帧（endF-1）帧内。end-1/fps 近似常落到上一帧，片尾预览会把前一帧再画一次。
     if (paused) {
+      if (Number.isFinite(Number(last.endF))) {
+        const s = sampleInterior(Math.max(0, Math.round(Number(last.endF)) - 1), Number(last.end));
+        if (s != null) return s;
+      }
       const ctsApprox = Math.max(last.start, last.end - endKeep);
       const room = Math.max(0, last.end - endEps - ctsApprox);
       const into = Math.min(room, Math.max(endEps * 4, endKeep * 0.25));
       return ctsApprox + into;
     }
-    return headSeek(first.start);
+    return headSeek(first);
   }
 
   function evenDim(n) {
