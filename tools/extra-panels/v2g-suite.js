@@ -9244,6 +9244,8 @@
         vbbScrubSeekInflight = false;
         const t = vbbScrubSeekWanted != null ? vbbScrubSeekWanted : vbbScrubLastSec;
         vbbScrubSeekWanted = null;
+        // 用完即清：否则后续 keepPlaying 跳转会先被旧 lastSec 暂停掉
+        vbbScrubLastSec = null;
         // 松手一律进帧内（勿 fromScrub 裸 CTS）；wanted 被 pump 清掉也用 lastSec
         if (t != null && Number.isFinite(Number(t))) {
           applyVbbSeek(t, { keepPlaying: false });

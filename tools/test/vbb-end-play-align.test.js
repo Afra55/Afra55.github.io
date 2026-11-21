@@ -166,6 +166,7 @@ t("外预览松手用 lastSec 进帧内（wanted 被 pump 清掉也行）", () =
     vbb.indexOf("function scheduleVbbSeek")
   );
   assert.ok(flush.includes("vbbScrubLastSec"));
+  assert.ok(flush.includes("vbbScrubLastSec = null"));
   assert.ok(flush.includes("applyVbbSeek(t, { keepPlaying: false })"));
   assert.ok(!flush.includes("fromScrub: true"));
 });
