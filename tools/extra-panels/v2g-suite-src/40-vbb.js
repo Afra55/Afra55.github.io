@@ -125,6 +125,8 @@
       let vbbEditOpenStartedAt = 0;
       let vbbPreviewWrap = null;
       let vbbScrubSeekWanted = null;
+      /** 拖进度最近一次目标秒；松手时 wanted 可能已被 pump 清掉，仍要用它进帧内 */
+      let vbbScrubLastSec = null;
       let vbbScrubSeekInflight = false;
       let vbbScrubSeekToken = 0;
       let vbbEditSkipBusy = false;
@@ -302,6 +304,7 @@
       function scheduleVbbScrubSeek(sec) {
         pauseVbbPreview();
         vbbScrubSeekWanted = sec;
+        vbbScrubLastSec = sec;
         if (vbbScrubRaf) return;
         vbbScrubRaf = requestAnimationFrame(() => {
           vbbScrubRaf = 0;
@@ -316,10 +319,10 @@
         }
         vbbScrubSeekToken += 1;
         vbbScrubSeekInflight = false;
-        if (vbbScrubSeekWanted != null) {
-          const t = vbbScrubSeekWanted;
-          vbbScrubSeekWanted = null;
-          // 松手落点进帧内（勿 fromScrub 裸 CTS），与编辑片头/GIF startF 同一画面
+        const t = vbbScrubSeekWanted != null ? vbbScrubSeekWanted : vbbScrubLastSec;
+        vbbScrubSeekWanted = null;
+        // 松手一律进帧内（勿 fromScrub 裸 CTS）；wanted 被 pump 清掉也用 lastSec
+        if (t != null && Number.isFinite(Number(t))) {
           applyVbbSeek(t, { keepPlaying: false });
         }
       }
@@ -2298,8 +2301,10 @@
           presented = clock;
         }
         const t = Math.max(clock, Number.isFinite(presented) ? presented : clock);
+        // 用户中途暂停才「停末帧」；文件 ended 仍算播放态 → 回绕并 play
+        const holding = Boolean(vbbVideo.paused) && !vbbVideo.ended;
         const next = vbbPreviewSeekForKeepRanges(keeps, t, {
-          paused: vbbVideo.paused,
+          paused: holding,
           edit: item.edit,
           srcFps,
           timeline: item.timeline || null,
@@ -2311,7 +2316,7 @@
         // 关键帧常「偏早到不了」；片尾越过目标必须拉回，否则外预览比编辑停帧多画几帧
         const earlySlop = Math.max(0.05, 2 * frame);
         // 越过停帧：禁止 pastSlop 吞掉（哪怕半帧也要拉回），否则外预览比片尾±所见多画
-        const pastSlop = vbbVideo.paused ? Math.max(0.012, 0.35 * frame) : 0;
+        const pastSlop = holding ? Math.max(0.012, 0.35 * frame) : 0;
         const delta = next - t; // >0 还需往后 seek；<0 已越过目标
         if (delta >= 0 && delta < earlySlop) return;
         if (delta < 0 && -delta < pastSlop) return;
@@ -2327,9 +2332,9 @@
           // 仅接受「同一目标仍偏早」；越过片尾停帧的不吞
           return;
         }
-        const keepPlaying = !vbbVideo.paused;
+        const keepPlaying = !holding;
         // 先停再 seek：播放越过片尾时若带着 keepPlaying 改 currentTime，会多画几帧
-        if (keepPlaying) {
+        if (keepPlaying && !vbbVideo.paused) {
           try {
             vbbVideo.pause();
           } catch (_) {}
