@@ -415,6 +415,9 @@
   let ffmpegPickerQuietUntil = 0;
   /** 编辑等交互优先时中断进行中的引擎下载（wasm compile 前） */
   let ffmpegLoadAbort = null;
+  /** load() 尚未返回的实例。terminate 后 Worker 可能永远不回 LOAD，超时要能杀掉它。 */
+  let ffmpegLoadingInstance = null;
+  const FFMPEG_LOAD_TIMEOUT_MS = 45000;
 
   function loadFfmpegMods() {
     if (!ffmpegModsPromise) {
@@ -921,6 +924,78 @@
     if (ffmpegLoadAbort === ac) ffmpegLoadAbort = null;
   }
 
+  /**
+   * ffmpeg.load 只在 Worker 回 LOAD 时结束。手机上 terminate 后重建经常永远不回。
+   * 超时则 terminate，把挂起的 Promise 拒绝掉，调用方才能继续。
+   */
+  async function loadFfmpegWithTimeout(ffmpeg, config, ms) {
+    let timer = 0;
+    let settled = false;
+    const loadPromise = ffmpeg.load(config).then(
+      (value) => {
+        settled = true;
+        return value;
+      },
+      (err) => {
+        settled = true;
+        throw err;
+      }
+    );
+    try {
+      return await Promise.race([
+        loadPromise,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("FFmpeg 引擎加载超时")), Math.max(1000, Number(ms) || FFMPEG_LOAD_TIMEOUT_MS));
+        }),
+      ]);
+    } catch (err) {
+      if (!settled) {
+        try {
+          ffmpeg.terminate();
+        } catch (_) {
+          /* ignore */
+        }
+        // terminate 之后 LOAD 经常永远不回。再 await 会把批量停在「重建编码器」后面。
+        const linger = loadPromise.catch(() => {});
+        await Promise.race([
+          linger,
+          new Promise((resolve) => setTimeout(resolve, 1200)),
+        ]);
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  /** 丢掉进行中的预热 load，避免 ffmpegWarmPromise 永远挂着、下一条批量不再开始。 */
+  function abandonFfmpegWarmLoad() {
+    ffmpegEngineEpoch += 1;
+    try {
+      ffmpegLoadAbort?.abort();
+    } catch (_) {
+      /* ignore */
+    }
+    ffmpegLoadAbort = null;
+    const loading = ffmpegLoadingInstance;
+    ffmpegLoadingInstance = null;
+    if (loading) {
+      try {
+        loading.terminate();
+      } catch (_) {
+        /* ignore */
+      }
+      if (ffmpegInstance === loading) ffmpegInstance = null;
+    }
+    ffmpegWarmPromise = null;
+    if (ffmpegWarmState === "warming") ffmpegWarmState = "idle";
+    try {
+      paintFfmpegWarmHint();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
   async function getFfmpegInstance(onProgress) {
     ffmpegSkipAutoPrewarm = false;
     if (ffmpegInstance?.loaded) return ffmpegInstance;
@@ -928,6 +1003,7 @@
     const ac = beginFfmpegLoadAbort();
     const signal = ac?.signal;
     onProgress?.(0.02, "加载 FFmpeg 模块…");
+    let loading = null;
     try {
       const { FFmpeg } = await loadFfmpegMods();
       if (signal?.aborted || epoch !== ffmpegEngineEpoch) throw new Error("已取消");
@@ -936,41 +1012,52 @@
       onProgress?.(0.19, "初始化 FFmpeg Worker…");
       if (signal?.aborted || epoch !== ffmpegEngineEpoch) throw new Error("已取消");
       const ffmpeg = new FFmpeg();
+      loading = ffmpeg;
+      ffmpegLoadingInstance = ffmpeg;
       try {
-        await ffmpeg.load({
-          classWorkerURL: assets.workerURL,
-          coreURL: assets.coreBlob,
-          wasmURL: assets.wasmBlob,
-        });
+        await loadFfmpegWithTimeout(
+          ffmpeg,
+          {
+            classWorkerURL: assets.workerURL,
+            coreURL: assets.coreBlob,
+            wasmURL: assets.wasmBlob,
+          },
+          FFMPEG_LOAD_TIMEOUT_MS
+        );
       } catch (err) {
         try {
           ffmpeg.terminate();
         } catch (_) {
           /* ignore */
         }
-        terminateFfmpegInstance({ revokeAssets: false });
+        // epoch 已变：调用方已放弃这次加载，可能正在建下一只 Worker，不能把单例拆掉。
+        if (epoch === ffmpegEngineEpoch && (!ffmpegInstance || ffmpegInstance === ffmpeg)) {
+          terminateFfmpegInstance({ revokeAssets: false });
+        }
         const msg = err?.message || String(err);
         if (/已取消|AbortError/i.test(msg)) throw new Error("已取消");
+        if (/加载超时/.test(msg)) throw new Error("FFmpeg 引擎加载超时");
         throw new Error(
           /NetworkError|Failed to fetch|Aborted/i.test(msg)
             ? `FFmpeg 引擎加载失败（多为手机网络中断或内存不足，可换 Wi‑Fi / 缩短片段后重试）：${msg}`
             : `FFmpeg 引擎加载失败：${msg}`
         );
       }
-      ffmpegInstance = ffmpeg;
-      ffmpegWarmState = "ready";
-      ffmpegWarmError = "";
+      // 先认 epoch：过期成功绝不能盖掉新 Worker 的单例
       if (epoch !== ffmpegEngineEpoch || signal?.aborted) {
         try {
           ffmpeg.terminate();
         } catch (_) {}
-        ffmpegInstance = null;
         throw new Error("已取消");
       }
+      ffmpegInstance = ffmpeg;
+      ffmpegWarmState = "ready";
+      ffmpegWarmError = "";
       onProgress?.(0.22, "FFmpeg 就绪");
       paintFfmpegWarmHint();
       return ffmpeg;
     } finally {
+      if (loading && ffmpegLoadingInstance === loading) ffmpegLoadingInstance = null;
       endFfmpegLoadAbort(ac);
     }
   }
@@ -2120,7 +2207,7 @@
     clearFfmpegInputCache, openFfmpegIdb, idbGetAsset, idbPutAsset, deleteFfmpegIndexedDb,
     purgePersistedEngine, createEngineObjectURL, fetchArrayBufferProgress, loadEngineBuffer,
     ensureFfmpegAssets, getFfmpegInstance, createFfmpegInstance, destroyFfmpegInstance,
-    terminateFfmpegInstance, paintFfmpegWarmHint,
+    terminateFfmpegInstance, abandonFfmpegWarmLoad, paintFfmpegWarmHint,
     setFfmpegWarmProgress, injectFfmpegPreloadLinks, isGifmakerActive, prewarmFfmpegEngine,
     scheduleFfmpegPrewarm, pauseFfmpegAutoPrewarmForPicker, pauseFfmpegForInteractiveUi,
     armFfmpegPrewarmAfterPick, prefetchFfmpegAssets,

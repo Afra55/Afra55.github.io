@@ -71,6 +71,26 @@ function buildFile() {
   const r = api.sampleRangeForKeep(tl, 0, 5 / 24);
   assert.strictEqual(r.startF, 0);
   assert.strictEqual(r.endF, 5);
+
+  // 毫秒取整落在下一 CTS 前 ≤0.5ms：floor 会把片头算进上一帧
+  const tl30 = {
+    fps: 30,
+    ctsSec: Float64Array.from({ length: 40 }, (_, i) => i / 30),
+  };
+  const ms10 = Math.round((10 / 30) * 1000) / 1000;
+  assert.strictEqual(api.sampleIndexAtSec(tl30, ms10), 9, "裸 floor 在 0.333 是帧 9");
+  assert.strictEqual(api.inclusiveSampleAtSec(tl30, ms10), 10, "含缝起点吸到帧 10");
+  assert.strictEqual(api.sampleRangeForKeep(tl30, ms10, 1).startF, 10, "GIF 起点不含更早一帧");
+  assert.strictEqual(api.sampleRangeForKeep(tl30, 10 / 30, 1).startF, 10, "精确 CTS 仍含该帧");
+  assert.strictEqual(api.sampleRangeForKeep(tl30, 10 / 30 - 0.002, 1).startF, 9, "超过 0.5ms 不吸");
+  assert.strictEqual(api.sampleRangeForKeep(tl30, 0, 10 / 30).endF, 10, "片尾半开不因起点缝改");
+  const tl24 = {
+    fps: 24,
+    ctsSec: Float64Array.from({ length: 30 }, (_, i) => i / 24),
+  };
+  const ms2 = Math.round((2 / 24) * 1000) / 1000;
+  assert.strictEqual(api.sampleIndexAtSec(tl24, ms2), 1);
+  assert.strictEqual(api.sampleRangeForKeep(tl24, ms2, 1).startF, 2);
   assert.strictEqual(tl.firstPresentIdx, 0);
   assert.strictEqual(api.toDemuxFrameIndex(tl, 5), 5);
 

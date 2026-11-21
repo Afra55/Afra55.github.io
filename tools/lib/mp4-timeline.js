@@ -631,6 +631,21 @@
   }
 
   /**
+   * 半开起点（含）：floor(CTS<=t) 在下一 CTS 前 ≤0.5ms 时会落到上一帧。
+   * 毫秒取整 / 浮点缝就在这 0.5ms 里（如 10/30→0.333）。吸到下一采样，片头才不含更早的那一帧。
+   * 删中间闭区间仍用 sampleIndexAtSec，不要走这里。
+   */
+  function inclusiveSampleAtSec(timeline, sec) {
+    const idx = sampleIndexAtSec(timeline, sec);
+    const arr = timeline?.ctsSec;
+    if (!arr || idx + 1 >= arr.length) return idx;
+    const next = Number(arr[idx + 1]);
+    const t = Math.max(0, Number(sec) || 0);
+    if (Number.isFinite(next) && next > t && next - t <= 0.0005) return idx + 1;
+    return idx;
+  }
+
+  /**
    * 半开 [start,end) → [startF, endF) 采样下标（endF 为不含）。
    */
   function sampleRangeForKeep(timeline, startSec, endSec) {
@@ -638,7 +653,7 @@
     if (!(n > 0)) return null;
     const a = Math.max(0, Number(startSec) || 0);
     const b = Math.max(a, Number(endSec) || 0);
-    let startF = sampleIndexAtSec(timeline, a);
+    let startF = inclusiveSampleAtSec(timeline, a);
     // 半开 [a,b)：末帧 = CTS < b 的最后一帧；用半帧 ε 避免 b 恰落在帧 CTS 上算进区间
     const eps = 0.5 / Math.max(5, Number(timeline.fps) || 30);
     let endF = sampleIndexAtSec(timeline, Math.max(0, b - eps)) + 1;
@@ -673,6 +688,7 @@
   window.DevToolsMp4Timeline = {
     probeMp4VideoTimeline,
     sampleIndexAtSec,
+    inclusiveSampleAtSec,
     sampleRangeForKeep,
     toDemuxFrameIndex,
     frameSeekSec,

@@ -125,6 +125,8 @@
       let vbbEditOpenStartedAt = 0;
       let vbbPreviewWrap = null;
       let vbbScrubSeekWanted = null;
+      /** 拖进度最近一次目标秒；松手时 wanted 可能已被 pump 清掉，仍要用它进帧内 */
+      let vbbScrubLastSec = null;
       let vbbScrubSeekInflight = false;
       let vbbScrubSeekToken = 0;
       let vbbEditSkipBusy = false;
@@ -136,6 +138,8 @@
       let vbbEditEnforceAcceptUntil = 0;
       /** 最近已呈现 mediaTime；外预览截断跟已绘帧，不跟滞后 currentTime */
       let vbbLastPresentedMediaTime = NaN;
+      /** 末帧 PTS 不变，预约在半开上界切断，避免下一帧先露一闪或末帧被 seek 再画一次 */
+      let vbbEditEndCutTimer = 0;
       let vbbScrubRaf = 0;
       let abortVbb = false;
       /** 批处理并行 FFmpeg 实例；取消时必须一并 terminate，否则点取消无响应 */
@@ -214,10 +218,42 @@
         vbbScrub.value = String(vbbTimeToScrubValue(vbbMarkTime()));
       }
   
+      /**
+       * 把「这一时刻的采样」seek 进帧内。
+       * 裸 CTS / CTS+0.1ms 在 Android 上画出上一帧：编辑实时预览会比编辑内播放和 GIF 的 startF 早一帧。
+       */
+      function vbbDisplaySeekSec(sec) {
+        const t = Number(sec);
+        if (!Number.isFinite(t)) return 0;
+        // 不走 getActiveVbbEditItem：那条路径会在没有草稿时造出一份 edit。
+        let tl = null;
+        let fps = 0;
+        try {
+          if (isVbbBatchMode() && vbbEditBatchIdx >= 0 && vbbBatchFiles?.[vbbEditBatchIdx]) {
+            const item = vbbBatchFiles[vbbEditBatchIdx];
+            if (item?.timeline?.ctsSec?.length) tl = item.timeline;
+            fps = Number(item?.edit?.srcFps) || Number(item?.srcFps) || 0;
+          } else if (vbbSingleTimeline?.ctsSec?.length) {
+            tl = vbbSingleTimeline;
+            fps = Number(vbbSingleEdit?.srcFps) || Number(vbbSingleSrcFps) || 0;
+          }
+        } catch (_) {}
+        if (!(fps >= 5)) fps = Number(tl?.fps) || 0;
+        const fn = window.DevToolsVtrimEditor?.seekSecForTime;
+        if (tl?.ctsSec?.length && typeof fn === "function") {
+          const s = Number(fn(tl, t, fps));
+          if (Number.isFinite(s)) return Math.max(0, s);
+        }
+        return Math.max(0, t);
+      }
+
       function applyVbbSeek(sec, opts = {}) {
         if (!vbbVideo?.src) return;
         const d = vbbVideoDuration();
-        const t = Math.max(0, Math.min(d || 0, Number(sec) || 0));
+        const raw = Math.max(0, Math.min(d || 0, Number(sec) || 0));
+        // 拖进度跟手用原时刻；松手/编辑落点进帧内，避免片头停在上一帧
+        const shown = opts.fromScrub ? raw : vbbDisplaySeekSec(raw);
+        const t = Math.max(0, Math.min(d || 0, shown));
         if (!opts.keepPlaying) pauseVbbPreview();
         // 拖进度走 pumpVbbScrubSeek；其它跳转直接设 currentTime（勿密集 fastSeek）
         try {
@@ -268,6 +304,7 @@
       function scheduleVbbScrubSeek(sec) {
         pauseVbbPreview();
         vbbScrubSeekWanted = sec;
+        vbbScrubLastSec = sec;
         if (vbbScrubRaf) return;
         vbbScrubRaf = requestAnimationFrame(() => {
           vbbScrubRaf = 0;
@@ -282,10 +319,13 @@
         }
         vbbScrubSeekToken += 1;
         vbbScrubSeekInflight = false;
-        if (vbbScrubSeekWanted != null) {
-          const t = vbbScrubSeekWanted;
-          vbbScrubSeekWanted = null;
-          applyVbbSeek(t, { fromScrub: true });
+        const t = vbbScrubSeekWanted != null ? vbbScrubSeekWanted : vbbScrubLastSec;
+        vbbScrubSeekWanted = null;
+        // 用完即清：否则后续 keepPlaying 跳转会先被旧 lastSec 暂停掉
+        vbbScrubLastSec = null;
+        // 松手一律进帧内（勿 fromScrub 裸 CTS）；wanted 被 pump 清掉也用 lastSec
+        if (t != null && Number.isFinite(Number(t))) {
+          applyVbbSeek(t, { keepPlaying: false });
         }
       }
   
@@ -666,19 +706,60 @@
         const last = keeps[keeps.length - 1];
         const endEps = 0.0005;
         const startEps = 0.0005;
-        const playEndPad = Math.max(endEps, endKeep);
+        const headSeek = (k) => {
+          const start = Number(k?.start);
+          const frame = endKeep > 0 ? endKeep : 1 / 30;
+          const into = Math.min(frame * 0.45, Math.max(frame * 0.25, 0.0005));
+          return Math.max(0, start || 0) + into;
+        };
+        // 与 vtrim 一致：末帧播到半开上界再回绕；片头/接点进帧内，不贴裸 CTS
         for (let i = 0; i < keeps.length; i++) {
           const k = keeps[i];
-          const endLimit = paused ? k.end - endEps : k.end - playEndPad;
+          const endLimit = k.end - endEps;
           if (time >= k.start - startEps && time < endLimit) return null;
         }
-        if (time < first.start - startEps) return first.start;
+        if (time < first.start - startEps) return headSeek(first);
         for (let i = 0; i < keeps.length; i++) {
           const nxt = keeps[i + 1];
-          if (nxt && time < nxt.start) return nxt.start;
+          if (nxt && time < nxt.start) return headSeek(nxt);
         }
-        if (paused) return Math.max(last.start, last.end - endKeep);
-        return first.start;
+        if (paused) {
+          const ctsApprox = Math.max(last.start, last.end - endKeep);
+          const room = Math.max(0, last.end - endEps - ctsApprox);
+          const into = Math.min(room, Math.max(endEps * 4, endKeep * 0.25));
+          return ctsApprox + into;
+        }
+        return headSeek(first);
+      }
+
+      /**
+       * 外预览落在 keep 首帧内部（≡ GIF startF），不要停在裸 CTS。
+       * Android 上 currentTime=CTS 或 +0.1ms 会画出上一帧，片头比黄柄/GIF 早一帧。
+       */
+      function vbbKeepHeadSeekSec(keeps, timeline, fps) {
+        const start = Number(keeps?.[0]?.start);
+        const fallback = Number.isFinite(start) ? start : 0;
+        const api = window.DevToolsMp4Timeline;
+        const startF = Number(keeps?.[0]?.startF);
+        if (
+          timeline?.ctsSec?.length &&
+          Number.isFinite(startF) &&
+          typeof api?.frameSeekSec === "function"
+        ) {
+          const t = api.frameSeekSec(timeline, startF);
+          if (Number.isFinite(t)) return Math.max(0, t);
+        }
+        if (
+          timeline?.ctsSec?.length &&
+          typeof api?.inclusiveSampleAtSec === "function" &&
+          typeof api?.frameSeekSec === "function"
+        ) {
+          const t = api.frameSeekSec(timeline, api.inclusiveSampleAtSec(timeline, fallback));
+          if (Number.isFinite(t)) return Math.max(0, t);
+        }
+        const frame = 1 / Math.max(5, Number(fps) || Number(timeline?.fps) || 30);
+        const into = Math.min(frame * 0.45, Math.max(frame * 0.25, 0.0005));
+        return fallback + into;
       }
 
       function vbbKeepRangesFromEdit(edit, duration) {
@@ -994,6 +1075,10 @@
         ffmpegLease,
         timelineHint
       ) {
+        try {
+          const cutN = Array.isArray(edit?.cutouts) ? edit.cutouts.length : 0;
+          vbbLog(`[vbb] materialize begin · ${file?.name || ""} · cuts=${cutN}`);
+        } catch (_) {}
         // 校准可信 → ffmpeg frameRaw 快切；否则预览帧；再 ffmpeg 兜底
         if (!window.DevToolsVtrimEditor?.exportKeepByChromeDisplay) {
           await ensureVbbVtrimEditor().catch(() => null);
@@ -2009,15 +2094,17 @@
                 verified = false;
               }
             }
-            // 外预览落点与成片 keep 首帧一致（所见即所得）
+            // 外预览落点与成片 keep 首帧一致（所见即所得）：帧内点，勿裸 CTS
             const encodeKeeps = vbbKeepRangesForEncode(
               item.edit,
               item.duration,
               item.timeline || null,
               item.file || null
             );
-            const seekTo = Number(encodeKeeps[0]?.start);
-            applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
+            const seekTo = encodeKeeps.length
+              ? vbbKeepHeadSeekSec(encodeKeeps, item.timeline, item.edit?.srcFps || item.srcFps)
+              : Number(item.edit.trimStart) || 0;
+            applyVbbSeek(seekTo, {
               keepPlaying: false,
             });
             syncVbbEditPreview();
@@ -2197,28 +2284,41 @@
         if (!keeps.length) return;
         const clock = Number(vbbVideo.currentTime) || 0;
         // 根因同编辑器：currentTime 滞后于已绘帧；截断跟 max(clock, presented)，勿盲目减帧
-        const presented = Number.isFinite(mediaTime)
+        // 回绕后 rVFC 仍报片尾：currentTime 已在片头时丢掉它，否则会 seek 回末帧再画一次
+        let presented = Number.isFinite(mediaTime)
           ? mediaTime
           : Number.isFinite(vbbLastPresentedMediaTime)
             ? vbbLastPresentedMediaTime
             : clock;
-        const t = Math.max(clock, presented);
         const srcFps = Number(item.edit?.srcFps) || Number(item.srcFps) || 0;
+        const fps = Math.max(5, srcFps >= 5 && srcFps <= 240 ? srcFps : 30);
+        const frame = 1 / fps;
+        const exclusive = Number(keeps[keeps.length - 1]?.end);
+        if (
+          Number.isFinite(presented) &&
+          Number.isFinite(exclusive) &&
+          presented - clock > Math.max(0.12, frame * 3) &&
+          exclusive - clock > Math.max(0.12, frame * 3)
+        ) {
+          presented = clock;
+        }
+        const t = Math.max(clock, Number.isFinite(presented) ? presented : clock);
+        // 用户中途暂停才「停末帧」；文件 ended 仍算播放态 → 回绕并 play
+        const holding = Boolean(vbbVideo.paused) && !vbbVideo.ended;
         const next = vbbPreviewSeekForKeepRanges(keeps, t, {
-          paused: vbbVideo.paused,
+          paused: holding,
           edit: item.edit,
           srcFps,
+          timeline: item.timeline || null,
         });
         if (next == null || !Number.isFinite(next)) {
           vbbEditEnforceAcceptTarget = null;
           return;
         }
-        const fps = Math.max(5, srcFps >= 5 && srcFps <= 240 ? srcFps : 30);
-        const frame = 1 / fps;
         // 关键帧常「偏早到不了」；片尾越过目标必须拉回，否则外预览比编辑停帧多画几帧
         const earlySlop = Math.max(0.05, 2 * frame);
         // 越过停帧：禁止 pastSlop 吞掉（哪怕半帧也要拉回），否则外预览比片尾±所见多画
-        const pastSlop = vbbVideo.paused ? Math.max(0.012, 0.35 * frame) : 0;
+        const pastSlop = holding ? Math.max(0.012, 0.35 * frame) : 0;
         const delta = next - t; // >0 还需往后 seek；<0 已越过目标
         if (delta >= 0 && delta < earlySlop) return;
         if (delta < 0 && -delta < pastSlop) return;
@@ -2234,9 +2334,9 @@
           // 仅接受「同一目标仍偏早」；越过片尾停帧的不吞
           return;
         }
-        const keepPlaying = !vbbVideo.paused;
+        const keepPlaying = !holding;
         // 先停再 seek：播放越过片尾时若带着 keepPlaying 改 currentTime，会多画几帧
-        if (keepPlaying) {
+        if (keepPlaying && !vbbVideo.paused) {
           try {
             vbbVideo.pause();
           } catch (_) {}
@@ -2245,6 +2345,12 @@
         vbbEditEnforceAcceptTarget = next;
         vbbEditEnforceAcceptUntil = now + 650;
         lockVbbPlayUi(420);
+        if (vbbEditEndCutTimer) {
+          clearTimeout(vbbEditEndCutTimer);
+          vbbEditEndCutTimer = 0;
+        }
+        // 即将换点：丢掉片尾 mediaTime，避免 seeked/timeupdate 再把它当成「还在结尾」
+        vbbLastPresentedMediaTime = NaN;
         applyVbbSeek(next, { keepPlaying: false });
         const finish = () => {
           vbbVideo.removeEventListener("seeked", finish);
@@ -2256,14 +2362,63 @@
         vbbVideo.addEventListener("seeked", finish);
       }
 
+      /**
+       * 末帧的 mediaTime 停在该帧 CTS，不会自己走到半开上界。
+       * 已落在最后一枚保留采样上就预约（勿死卡 remain≤1/fps）；文件尾 ended 仍要切断。
+       */
+      function scheduleVbbEditEndCut(mt) {
+        if (vbbEditEndCutTimer || vbbEditSkipBusy || vbbBusy || !vbbVideo) return;
+        if (vbbVideo.paused && !vbbVideo.ended) return;
+        const item = getActiveVbbEditItem();
+        if (!item?.edit || !vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) return;
+        const keeps = vbbKeepRangesForEncode(
+          item.edit,
+          item.duration,
+          item.timeline || null,
+          item.file || null
+        );
+        const end = Number(keeps[keeps.length - 1]?.end);
+        const srcFps = Number(item.edit?.srcFps) || Number(item.srcFps) || 0;
+        const fps = Math.max(5, srcFps >= 5 && srcFps <= 240 ? srcFps : 30);
+        const step = 1 / fps;
+        const shave = Math.min(0.004, step * 0.2);
+        if (!Number.isFinite(mt) || !Number.isFinite(end) || !(mt < end - shave)) return;
+        const remain = end - shave - mt;
+        let onLastKept = remain <= step * 1.05;
+        if (!onLastKept && item.timeline?.ctsSec?.length) {
+          const api = window.DevToolsMp4Timeline;
+          const fr = api?.sampleRangeForKeep?.(
+            item.timeline,
+            Number(item.edit?.start) || 0,
+            Number(item.edit?.end) || end
+          );
+          if (fr && typeof api.sampleIndexAtSec === "function") {
+            const idx = api.sampleIndexAtSec(item.timeline, mt);
+            onLastKept = idx >= Math.round(Number(fr.endF) || 0) - 1;
+          }
+        }
+        if (!onLastKept || remain < 0) return;
+        const rate = Math.max(0.05, Number(vbbVideo.playbackRate) || 1);
+        const waitMs = Math.max(0, (remain / rate) * 1000);
+        vbbEditEndCutTimer = window.setTimeout(() => {
+          vbbEditEndCutTimer = 0;
+          if (!vbbVideo || vbbBusy || vbbEditSkipBusy) return;
+          const pastEnd =
+            Boolean(vbbVideo.ended) || (Number(vbbVideo.currentTime) || 0) >= end - shave;
+          if (vbbVideo.paused && !pastEnd) return;
+          enforceVbbEditPlaybackWindow(end);
+        }, waitMs);
+      }
+
       function armVbbEditFrameWatch() {
         if (typeof vbbVideo?.requestVideoFrameCallback !== "function") return;
         const onFrame = (_now, meta) => {
           if (!vbbVideo || vbbVideo.paused || vbbBusy) return;
           const mt = Number(meta?.mediaTime);
           if (Number.isFinite(mt)) vbbLastPresentedMediaTime = mt;
-          enforceVbbEditPlaybackWindow(mt);
+          enforceVbbEditPlaybackWindow(Number.isFinite(mt) ? mt : undefined);
           if (!vbbVideo.paused) {
+            if (Number.isFinite(mt)) scheduleVbbEditEndCut(mt);
             try {
               vbbVideo.requestVideoFrameCallback(onFrame);
             } catch (_) {}
@@ -2322,8 +2477,9 @@
             item.timeline,
             item.file
           );
-          seekTo = Number(encodeKeeps[0]?.start);
-          if (!Number.isFinite(seekTo)) seekTo = Number(edit.trimStart) || 0;
+          seekTo = encodeKeeps.length
+            ? vbbKeepHeadSeekSec(encodeKeeps, item.timeline, edit?.srcFps || item.srcFps)
+            : Number(edit.trimStart) || 0;
         }
         applyVbbSeek(seekTo, { keepPlaying: false });
         renderVbbBatchList({ keepSelection: true });
@@ -3296,17 +3452,51 @@
         }
         if (wait > 0) {
           await new Promise((r) => setTimeout(r, wait));
-          try {
-            if (typeof yieldToUi === "function") await yieldToUi();
-          } catch (_) {}
+          // rAF / scheduler.yield 在后台页可能永不回调，不能让整批停在这里
+          if (typeof yieldToUi === "function") await vbbAwaitWithCap(yieldToUi(), 2000);
         }
         const doPrewarm =
           prewarm != null ? Boolean(prewarm) : Boolean(doRecycle && serial && !lease && !abortVbb);
+        let prewarmHow = "skip";
         if (doPrewarm && serial && !lease && !abortVbb) {
+          // ffmpeg.load 在 terminate 后可能永远不回；超时必须放弃 Worker 再进下一条
+          prewarmHow = await vbbAwaitWithCap(prewarmFfmpegEngine(), 50000);
+          if (prewarmHow === "timeout" || prewarmHow === "err") {
+            // 失败的 load 若还占着单例，下一条 getFfmpegInstance 会接着挂
+            try {
+              window.DevToolsExtraMedia?.abandonFfmpegWarmLoad?.();
+            } catch (_) {}
+            try {
+              terminateFfmpegInstance({ revokeAssets: false });
+            } catch (_) {}
+            if (prewarmHow === "timeout") {
+              vbbLog("[vbb] prewarm timeout · 放弃本次重建，继续下一条");
+            }
+          }
+        }
+        if (label || prewarmHow === "timeout" || prewarmHow === "err") {
           try {
-            await prewarmFfmpegEngine().catch(() => {});
+            vbbLog(`[vbb] release heap done · prewarm=${prewarmHow}`);
           } catch (_) {}
         }
+      }
+
+      /** 等待 promise，到点就继续。挂死的 ffmpeg.load / rAF 不能拖住整批。 */
+      function vbbAwaitWithCap(promise, ms) {
+        return new Promise((resolve) => {
+          let done = false;
+          const finish = (how) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve(how);
+          };
+          const timer = setTimeout(() => finish("timeout"), Math.max(1, Number(ms) || 1));
+          Promise.resolve(promise).then(
+            () => finish("ok"),
+            (err) => finish(/超时/.test(String(err?.message || err)) ? "timeout" : "err")
+          );
+        });
       }
 
       /** 开始可取消长任务；返回 epoch，结束时交给 finishVbbJob */
@@ -5808,8 +5998,14 @@
             vbbSingleTimeline,
             pinned
           );
-          const seekTo = Number(encodeKeeps[0]?.start);
-          applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(vbbSingleEdit?.trimStart) || 0, {
+          const seekTo = encodeKeeps.length
+            ? vbbKeepHeadSeekSec(
+                encodeKeeps,
+                vbbSingleTimeline,
+                vbbSingleEdit?.srcFps || vbbSingleSrcFps
+              )
+            : Number(vbbSingleEdit?.trimStart) || 0;
+          applyVbbSeek(seekTo, {
             keepPlaying: false,
           });
           enforceVbbEditPlaybackWindow();
@@ -7070,6 +7266,10 @@
             }
             const job = jobs[i];
             const item = job.item;
+            try {
+              const cutN = Array.isArray(job.edit?.cutouts) ? job.edit.cutouts.length : 0;
+              vbbLog(`[vbb] #${i + 1} start ${item?.file?.name || ""} · cutouts=${cutN}`);
+            } catch (_) {}
             setVbbClipJob(i, {
               status: "running",
               progress: 0.02,
@@ -9292,8 +9492,10 @@
             item.timeline || null,
             item.file || null
           );
-          const seekTo = Number(encodeKeeps[0]?.start);
-          applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
+          const seekTo = encodeKeeps.length
+            ? vbbKeepHeadSeekSec(encodeKeeps, item.timeline, item.edit?.srcFps || item.srcFps)
+            : Number(item.edit.trimStart) || 0;
+          applyVbbSeek(seekTo, {
             keepPlaying: false,
           });
           syncVbbEditPreview();

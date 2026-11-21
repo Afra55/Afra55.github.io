@@ -19,9 +19,7 @@ function t(name, fn) {
 }
 
 function loadSeek() {
-  const p = vtrim.match(
-    /function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start \+ DISPLAY_SEEK_EPS;\s*\}/
-  );
+  const p = vtrim.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?\n  \}/);
   assert.ok(p);
   const box = {};
   vm.runInNewContext(
@@ -36,48 +34,104 @@ function loadSeek() {
   return box.fn;
 }
 
-t("停帧与播放截断同一点 end-1/fps", () => {
+t("末帧播完再回绕；暂停停在帧内而不是裸 CTS", () => {
   const seek = loadSeek();
   const keeps = [{ start: 1, end: 5 }];
   const ek = 1 / 30;
   const lastStart = 5 - ek;
   assert.strictEqual(seek(keeps, lastStart, { paused: true, endKeepSec: ek }), null);
-  // 播放到达停帧即循环（playEndPad = endKeep）
-  const atPark = seek(keeps, lastStart, { paused: false, endKeepSec: ek });
-  assert.ok(atPark != null && Math.abs(atPark - (1 + 1e-4)) < 1e-9);
-  // 停帧前仍可播
+  // 末帧 CTS 仍在半开窗内。在这里回绕会先闪这一帧，seek 再画一次
+  assert.strictEqual(seek(keeps, lastStart, { paused: false, endKeepSec: ek }), null);
+  assert.strictEqual(seek(keeps, lastStart + ek * 0.4, { paused: false, endKeepSec: ek }), null);
   assert.strictEqual(seek(keeps, lastStart - ek * 0.5, { paused: false, endKeepSec: ek }), null);
+  const atEnd = seek(keeps, 5, { paused: false, endKeepSec: ek });
+  const into = Math.min(ek * 0.45, Math.max(ek * 0.25, 0.0005));
+  // 回片头须进到首帧内部，不能停在 CTS+0.1ms（手机会画出上一帧）
+  assert.ok(atEnd != null && Math.abs(atEnd - (1 + into)) < 1e-9, `head=${atEnd}`);
+  assert.ok(into > 1e-4, "片头 inset 必须大于 0.1ms");
   const park = seek(keeps, 5, { paused: true, endKeepSec: ek });
-  assert.ok(park != null && Math.abs(park - (lastStart + 1e-4)) < 1e-9);
+  assert.ok(park != null && park > lastStart + ek * 0.15 && park < 5 - 1e-4);
 });
 
-t("clipPlayWindow 硬闸钉 endParkAtSec，不提前减帧", () => {
-  const fn = vtrim.slice(vtrim.indexOf("function clipPlayWindow"), vtrim.indexOf("function armFrameWatch"));
+t("有采样表时片头停进 startF 帧内，不把已在帧后段的手柄再推进下一帧", () => {
+  const p = vtrim.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?\n  \}/);
+  assert.ok(p);
+  const box = {
+    window: {
+      DevToolsMp4Timeline: {
+        frameSeekSec(tl, idx) {
+          const k = Math.max(0, Math.round(Number(idx) || 0));
+          const t0 = Number(tl.ctsSec[k]);
+          const t1 = Number(tl.ctsSec[Math.min(tl.ctsSec.length - 1, k + 1)]);
+          const span = t1 > t0 ? t1 - t0 : 0.04;
+          return t0 + span * 0.25;
+        },
+      },
+    },
+  };
+  vm.runInNewContext(
+    `
+    const DISPLAY_SEEK_EPS = 1e-4;
+    function resolveEndKeepSec() { return 1 / 25; }
+    ${p[0]}
+    this.fn = previewSeekForKeepRanges;
+    `,
+    box
+  );
+  const tl = { ctsSec: [0, 0.04, 0.08, 0.12], fps: 25 };
+  // 手柄在帧 0 的后段（0.03）。再加 1/4 帧会落到 0.04，那是下一帧。
+  const keeps = [{ start: 0.03, end: 0.12, startF: 0, endF: 3 }];
+  const head = box.fn(keeps, -1, { paused: false, endKeepSec: 0.04, timeline: tl });
+  assert.ok(Math.abs(head - 0.01) < 1e-9, `head interior=${head}`);
+  const tail = box.fn(keeps, 0.12, { paused: true, endKeepSec: 0.04, timeline: tl });
+  // endF-1 = 2 → CTS 0.08，帧内 0.09。不是 end-1/fps=0.08 再误进上一帧。
+  assert.ok(Math.abs(tail - 0.09) < 1e-9, `tail interior=${tail}`);
+});
+
+t("编辑拖动预览和外预览落点都走帧内 seek", () => {
+  const scrub = vtrim.slice(vtrim.indexOf("function pumpPreviewScrubSeek"), vtrim.indexOf("function endKeepStepSec"));
+  assert.ok(scrub.includes("seekSecForTime(sourceTimeline"));
+  assert.ok(scrub.includes("video.currentTime = seekT"));
+  assert.ok(!/video\.currentTime\s*=\s*t\s*;/.test(scrub));
+  const apply = vbb.slice(vbb.indexOf("function applyVbbSeek"), vbb.indexOf("function pumpVbbScrubSeek"));
+  assert.ok(apply.includes("vbbDisplaySeekSec"));
+  assert.ok(vbb.includes("function vbbDisplaySeekSec"));
+  assert.ok(vbb.includes("seekSecForTime"));
+});
+
+t("clipPlayWindow 在半开上界回绕，不在末帧 CTS 上截断", () => {
+  const fn = vtrim.slice(vtrim.indexOf("function mediaTimeForCut"), vtrim.indexOf("function armFrameWatch"));
   assert.ok(fn.includes("playCutParkSec()"));
-  assert.ok(fn.includes("cur >= park - 1e-4"));
+  assert.ok(fn.includes("exclusivePlayEndSec"));
+  assert.ok(!fn.includes("cur >= park - 1e-4"));
   assert.ok(!fn.includes("park - step +"));
   assert.ok(fn.includes("video.pause()"));
   assert.ok(!fn.includes("video.currentTime = park"));
   assert.ok(fn.includes("freezeClockSec"));
-  assert.ok(fn.includes("Math.max(clock, presented)"));
+  assert.ok(fn.includes("presented - clock"));
 });
 
-t("停帧记录 endParkAtSec；临近预约切断（不改 park）", () => {
+t("停帧记录 endParkAtSec；只在末帧这一格预约切断", () => {
   assert.ok(vtrim.includes("let endParkAtSec"));
   assert.ok(/endParkAtSec = (shown|Number\.isFinite)/.test(vtrim) || vtrim.includes("endParkAtSec ="));
   assert.ok(vtrim.includes("parkCutTimer"));
-  assert.ok(vtrim.includes("remain <= step * 2"));
+  assert.ok(vtrim.includes("remain <= step * 1.05"));
+  const arm = vtrim.slice(vtrim.indexOf("function armFrameWatch"), vtrim.indexOf("async function togglePlay"));
+  assert.ok(arm.includes("clipPlayWindow(exclusive)"));
+  assert.ok(!arm.includes("clipPlayWindow(park)"));
 });
 
-t("playEndPad 为 1×endKeep（与停帧对齐，不盲目减帧）", () => {
-  assert.ok(vtrim.includes("playEndPad = Math.max(endEps, endKeep)"));
+t("播放放到半开终点，暂停停进末帧内部（不贴裸 CTS，不提前整帧）", () => {
+  assert.ok(!vtrim.includes("playEndPad = Math.max(endEps, endKeep)"));
   assert.ok(!vtrim.includes("playEndPad = Math.max(endEps, endKeep * 2)"));
+  assert.ok(vtrim.includes("ctsApprox"));
   const fallback = vbb.slice(
     vbb.indexOf("function vbbPreviewSeekForKeepRanges"),
     vbb.indexOf("function vbbKeepRangesFromEdit")
   );
-  assert.ok(fallback.includes("Math.max(endEps, endKeep)"));
+  assert.ok(fallback.includes("ctsApprox"));
   assert.ok(!fallback.includes("endKeep * 2"));
+  assert.ok(!fallback.includes("k.end - playEndPad"));
 });
 
 t("seekEndPreviewExact 停成片 CTS，不改写 endSec（片尾+ 不被顶死）", () => {
@@ -92,13 +146,38 @@ t("seekEndPreviewExact 停成片 CTS，不改写 endSec（片尾+ 不被顶死�
   assert.ok(!fn.includes("shown + step"));
 });
 
-t("外预览播放态 pastSlop=0，不吞片尾越过", () => {
+t("外预览播放态 pastSlop=0，不吞片尾越过；ended 不算 holding", () => {
   const enforce = vbb.slice(
     vbb.indexOf("function enforceVbbEditPlaybackWindow"),
-    vbb.indexOf("function armVbbEditFrameWatch")
+    vbb.indexOf("function scheduleVbbEditEndCut")
   );
   assert.ok(enforce.includes("vbbLastPresentedMediaTime") || enforce.includes("presented"));
-  assert.ok(/pastSlop = vbbVideo\.paused \?/.test(enforce));
+  assert.ok(enforce.includes("holding") && enforce.includes("!vbbVideo.ended"));
+  assert.ok(/pastSlop = holding \?/.test(enforce));
+  assert.ok(enforce.includes("keepPlaying = !holding"));
+  assert.ok(enforce.includes("presented - clock"));
+  assert.ok(enforce.includes("vbbLastPresentedMediaTime = NaN"));
+});
+
+t("外预览松手用 lastSec 进帧内（wanted 被 pump 清掉也行）", () => {
+  assert.ok(vbb.includes("vbbScrubLastSec"));
+  const flush = vbb.slice(
+    vbb.indexOf("function flushVbbScrubSeek"),
+    vbb.indexOf("function scheduleVbbSeek")
+  );
+  assert.ok(flush.includes("vbbScrubLastSec"));
+  assert.ok(flush.includes("vbbScrubLastSec = null"));
+  assert.ok(flush.includes("applyVbbSeek(t, { keepPlaying: false })"));
+  assert.ok(!flush.includes("fromScrub: true"));
+});
+
+t("外预览只在末帧这一格预约切断", () => {
+  const fn = vbb.slice(
+    vbb.indexOf("function scheduleVbbEditEndCut"),
+    vbb.indexOf("function armVbbEditFrameWatch")
+  );
+  assert.ok(fn.includes("remain <= step * 1.05"));
+  assert.ok(fn.includes("enforceVbbEditPlaybackWindow(end)"));
 });
 
 console.log(`vbb-end-play-align.test.js: ${n} passed`);
