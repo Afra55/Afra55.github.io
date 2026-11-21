@@ -152,8 +152,9 @@ t("外预览播放态 pastSlop=0，不吞片尾越过；ended 不算 holding", (
     vbb.indexOf("function scheduleVbbEditEndCut")
   );
   assert.ok(enforce.includes("vbbLastPresentedMediaTime") || enforce.includes("presented"));
-  assert.ok(enforce.includes("holding") && /paused\s*&&\s*!vbbVideo\.ended/.test(enforce));
+  assert.ok(enforce.includes("holding") && enforce.includes("!vbbVideo.ended"));
   assert.ok(/pastSlop = holding \?/.test(enforce));
+  assert.ok(enforce.includes("keepPlaying = !holding"));
   assert.ok(enforce.includes("presented - clock"));
   assert.ok(enforce.includes("vbbLastPresentedMediaTime = NaN"));
 });
