@@ -1043,16 +1043,16 @@
             : `FFmpeg 引擎加载失败：${msg}`
         );
       }
-      ffmpegInstance = ffmpeg;
-      ffmpegWarmState = "ready";
-      ffmpegWarmError = "";
+      // 先认 epoch：过期成功绝不能盖掉新 Worker 的单例
       if (epoch !== ffmpegEngineEpoch || signal?.aborted) {
         try {
           ffmpeg.terminate();
         } catch (_) {}
-        ffmpegInstance = null;
         throw new Error("已取消");
       }
+      ffmpegInstance = ffmpeg;
+      ffmpegWarmState = "ready";
+      ffmpegWarmError = "";
       onProgress?.(0.22, "FFmpeg 就绪");
       paintFfmpegWarmHint();
       return ffmpeg;

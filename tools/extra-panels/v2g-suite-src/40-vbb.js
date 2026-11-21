@@ -319,7 +319,8 @@
         if (vbbScrubSeekWanted != null) {
           const t = vbbScrubSeekWanted;
           vbbScrubSeekWanted = null;
-          applyVbbSeek(t, { fromScrub: true });
+          // 松手落点进帧内（勿 fromScrub 裸 CTS），与编辑片头/GIF startF 同一画面
+          applyVbbSeek(t, { keepPlaying: false });
         }
       }
   
@@ -2356,10 +2357,11 @@
 
       /**
        * 末帧的 mediaTime 停在该帧 CTS，不会自己走到半开上界。
-       * 只在剩余 ≤1 源帧时预约切断；提前一整帧会把末帧截掉，解码器随后再补画一次。
+       * 已落在最后一枚保留采样上就预约（勿死卡 remain≤1/fps）；文件尾 ended 仍要切断。
        */
       function scheduleVbbEditEndCut(mt) {
-        if (vbbEditEndCutTimer || vbbEditSkipBusy || vbbBusy || !vbbVideo || vbbVideo.paused) return;
+        if (vbbEditEndCutTimer || vbbEditSkipBusy || vbbBusy || !vbbVideo) return;
+        if (vbbVideo.paused && !vbbVideo.ended) return;
         const item = getActiveVbbEditItem();
         if (!item?.edit || !vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) return;
         const keeps = vbbKeepRangesForEncode(
@@ -2375,12 +2377,28 @@
         const shave = Math.min(0.004, step * 0.2);
         if (!Number.isFinite(mt) || !Number.isFinite(end) || !(mt < end - shave)) return;
         const remain = end - shave - mt;
-        if (!(remain <= step * 1.05) || remain < 0) return;
+        let onLastKept = remain <= step * 1.05;
+        if (!onLastKept && item.timeline?.ctsSec?.length) {
+          const api = window.DevToolsMp4Timeline;
+          const fr = api?.sampleRangeForKeep?.(
+            item.timeline,
+            Number(item.edit?.start) || 0,
+            Number(item.edit?.end) || end
+          );
+          if (fr && typeof api.sampleIndexAtSec === "function") {
+            const idx = api.sampleIndexAtSec(item.timeline, mt);
+            onLastKept = idx >= Math.round(Number(fr.endF) || 0) - 1;
+          }
+        }
+        if (!onLastKept || remain < 0) return;
         const rate = Math.max(0.05, Number(vbbVideo.playbackRate) || 1);
         const waitMs = Math.max(0, (remain / rate) * 1000);
         vbbEditEndCutTimer = window.setTimeout(() => {
           vbbEditEndCutTimer = 0;
-          if (!vbbVideo || vbbVideo.paused || vbbBusy || vbbEditSkipBusy) return;
+          if (!vbbVideo || vbbBusy || vbbEditSkipBusy) return;
+          const pastEnd =
+            Boolean(vbbVideo.ended) || (Number(vbbVideo.currentTime) || 0) >= end - shave;
+          if (vbbVideo.paused && !pastEnd) return;
           enforceVbbEditPlaybackWindow(end);
         }, waitMs);
       }

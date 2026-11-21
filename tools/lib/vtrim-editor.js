@@ -1577,12 +1577,16 @@
      * 成片时钟吸附：优先吸到 MP4 采样 CTS（≡ ffmpeg 切点）；无时间轴再回退 fps 格。
      * 不用 ffmpeg 实时预览（太慢），吸到同一时间点即可。
      */
-    function snapToEncodeClock(t) {
+    function snapToEncodeClock(t, opts = {}) {
       const raw = clamp(t, 0, duration);
       const tl = sourceTimeline;
       const api = window.DevToolsMp4Timeline;
       if (tl?.ctsSec?.length && typeof api?.sampleIndexAtSec === "function") {
-        const idx = api.sampleIndexAtSec(tl, raw);
+        // 片头半开含缝：用 inclusive，避免 0.5ms 缝吸回上一帧（预览已是下一帧）
+        const idx =
+          opts.inclusive && typeof api.inclusiveSampleAtSec === "function"
+            ? api.inclusiveSampleAtSec(tl, raw)
+            : api.sampleIndexAtSec(tl, raw);
         const cts = Number(tl.ctsSec[Math.max(0, Math.min(tl.ctsSec.length - 1, idx))]);
         if (Number.isFinite(cts)) return clamp(cts, 0, duration);
       }
@@ -1595,7 +1599,7 @@
      */
     function rematchHandlesAfterCalibrate() {
       const beforeCuts = Array.isArray(cutouts) ? cutouts.length : 0;
-      startSec = snapToEncodeClock(startSec);
+      startSec = snapToEncodeClock(startSec, { inclusive: true });
       endSec = Math.max(startSec + MIN_SPAN, snapToEncodeClock(endSec));
       endParkAtSec = encodeParkSecForEdge("end");
       if (beforeCuts) {
@@ -1803,7 +1807,9 @@
     }
 
     function snapTrimHandle(t, which) {
-      return snapNearCutouts(snapEdgeOnly(snapToEncodeClock(t), which));
+      return snapNearCutouts(
+        snapEdgeOnly(snapToEncodeClock(t, { inclusive: which === "start" }), which)
+      );
     }
 
     /** 记录拖拽采样，供送手时回看抬手前稳定位置 */
@@ -2158,12 +2164,18 @@
     }
 
     function clipPlayWindow(mediaTime) {
-      if (closed || !duration || video.paused || playWindowLooping || drag) return false;
+      if (closed || !duration || playWindowLooping || drag) return false;
       const clock = Number(video.currentTime) || 0;
       const exclusive = exclusivePlayEndSec();
       const step = endKeepStepSec();
       // 只削掉下一采样前几毫秒，避免末帧 CTS 上就回绕（那一帧会先闪、seek 再出现一次）
       const shave = Math.min(0.004, step * 0.2);
+      // 文件尾 ended/paused 仍要回绕；勿因 paused 丢掉循环
+      const forceCut =
+        Boolean(video.ended) ||
+        clock >= exclusive - shave ||
+        (Number.isFinite(mediaTime) && mediaTime >= exclusive - shave);
+      if (video.paused && !forceCut) return false;
       const cur = mediaTimeForCut(clock, mediaTime, exclusive);
       const park = playCutParkSec();
       let jump = null;
@@ -2216,18 +2228,30 @@
         const mt = Number(meta?.mediaTime);
         if (Number.isFinite(mt)) lastPresentedMediaTime = mt;
         if (clipPlayWindow(Number.isFinite(mt) ? mt : undefined)) return;
-        // 末帧 PTS 不变，要等到半开上界再切。只在这一格内预约，提前一整帧会把末帧截掉后又被补画一次
+        // 末帧 PTS 不变，要等到半开上界再切。已落在最后一枚保留采样上就预约（勿死卡 remain≤1/fps）
         const exclusive = exclusivePlayEndSec();
         const step = endKeepStepSec();
         const shave = Math.min(0.004, step * 0.2);
-        if (Number.isFinite(mt) && mt < exclusive - shave) {
+        if (Number.isFinite(mt) && mt < exclusive - shave && !parkCutTimer) {
           const remain = exclusive - shave - mt;
-          if (remain <= step * 1.05 && !parkCutTimer) {
+          let onLastKept = remain <= step * 1.05;
+          if (!onLastKept && sourceTimeline?.ctsSec?.length) {
+            const api = window.DevToolsMp4Timeline;
+            const fr = api?.sampleRangeForKeep?.(sourceTimeline, startSec, endSec);
+            if (fr && typeof api.sampleIndexAtSec === "function") {
+              const idx = api.sampleIndexAtSec(sourceTimeline, mt);
+              onLastKept = idx >= Math.round(Number(fr.endF) || 0) - 1;
+            }
+          }
+          if (onLastKept && remain >= 0) {
             const rate = Math.max(0.05, Number(video.playbackRate) || 1);
             const waitMs = Math.max(0, (remain / rate) * 1000);
             parkCutTimer = window.setTimeout(() => {
               parkCutTimer = 0;
-              if (closed || gen !== playWindowGen || video.paused || playWindowLooping) return;
+              if (closed || gen !== playWindowGen || playWindowLooping) return;
+              const pastEnd =
+                Boolean(video.ended) || (Number(video.currentTime) || 0) >= exclusive - shave;
+              if (video.paused && !pastEnd) return;
               clipPlayWindow(exclusive);
             }, waitMs);
           }
