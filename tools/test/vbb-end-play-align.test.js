@@ -146,15 +146,27 @@ t("seekEndPreviewExact 停成片 CTS，不改写 endSec（片尾+ 不被顶死�
   assert.ok(!fn.includes("shown + step"));
 });
 
-t("外预览播放态 pastSlop=0，不吞片尾越过", () => {
+t("外预览播放态 pastSlop=0，不吞片尾越过；ended 不算 holding", () => {
   const enforce = vbb.slice(
     vbb.indexOf("function enforceVbbEditPlaybackWindow"),
     vbb.indexOf("function scheduleVbbEditEndCut")
   );
   assert.ok(enforce.includes("vbbLastPresentedMediaTime") || enforce.includes("presented"));
-  assert.ok(/pastSlop = vbbVideo\.paused \?/.test(enforce));
+  assert.ok(enforce.includes("holding") && /paused\s*&&\s*!vbbVideo\.ended/.test(enforce));
+  assert.ok(/pastSlop = holding \?/.test(enforce));
   assert.ok(enforce.includes("presented - clock"));
   assert.ok(enforce.includes("vbbLastPresentedMediaTime = NaN"));
+});
+
+t("外预览松手用 lastSec 进帧内（wanted 被 pump 清掉也行）", () => {
+  assert.ok(vbb.includes("vbbScrubLastSec"));
+  const flush = vbb.slice(
+    vbb.indexOf("function flushVbbScrubSeek"),
+    vbb.indexOf("function scheduleVbbSeek")
+  );
+  assert.ok(flush.includes("vbbScrubLastSec"));
+  assert.ok(flush.includes("applyVbbSeek(t, { keepPlaying: false })"));
+  assert.ok(!flush.includes("fromScrub: true"));
 });
 
 t("外预览只在末帧这一格预约切断", () => {
