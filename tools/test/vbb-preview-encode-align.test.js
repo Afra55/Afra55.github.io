@@ -129,8 +129,10 @@ t("外预览播放/落点走 vbbKeepRangesForEncode", () => {
     "enforce 须用当前 item 的 keep"
   );
   assert.ok(enforce.includes("item.timeline") || enforce.includes("item.file"), "须带本条 timeline/file");
-  assert.ok(enforce.includes("earlySlop"), "keep-seek 须容忍偏早关键帧，防播放按钮狂切");
+  assert.ok(!enforce.includes("earlySlop"), "勿用 2 帧 earlySlop 吞删段尾；与编辑内 1ms 准跳对齐");
+  assert.ok(/Math\.abs\(delta\) < 0\.001/.test(enforce), "已到位才放弃 seek");
   assert.ok(enforce.includes("pastSlop"), "越过片尾停帧必须拉回");
+  assert.ok(enforce.includes("vbbEditEnforceAcceptTarget"), "seek 后偏早靠 accept 防狂切");
 });
 
 t("多段删中间：预览≡成片；红柄闭区间；片尾=黄柄半开", () => {

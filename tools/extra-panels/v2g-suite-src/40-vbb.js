@@ -2315,12 +2315,11 @@
           vbbEditEnforceAcceptTarget = null;
           return;
         }
-        // 关键帧常「偏早到不了」；片尾越过目标必须拉回，否则外预览比编辑停帧多画几帧
-        const earlySlop = Math.max(0.05, 2 * frame);
-        // 越过停帧：禁止 pastSlop 吞掉（哪怕半帧也要拉回），否则外预览比片尾±所见多画
-        const pastSlop = holding ? Math.max(0.012, 0.35 * frame) : 0;
+        // 与编辑内 clipPlayWindow 对齐：已到位才放弃；勿用 2 帧 earlySlop 把删段尾当成「到了」
         const delta = next - t; // >0 还需往后 seek；<0 已越过目标
-        if (delta >= 0 && delta < earlySlop) return;
+        if (Math.abs(delta) < 0.001) return;
+        // 越过停帧：暂停态才给半帧 pastSlop；播放态越过必须拉回
+        const pastSlop = holding ? Math.max(0.012, 0.35 * frame) : 0;
         if (delta < 0 && -delta < pastSlop) return;
         const now =
           typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
@@ -2331,7 +2330,7 @@
           delta >= 0 &&
           delta < Math.max(0.75, 15 * frame)
         ) {
-          // 仅接受「同一目标仍偏早」；越过片尾停帧的不吞
+          // seek 后关键帧常偏早：650ms 内同目标不重入，防按钮狂切；不代替准跳
           return;
         }
         const keepPlaying = !holding;
@@ -2356,7 +2355,17 @@
           vbbVideo.removeEventListener("seeked", finish);
           window.clearTimeout(watch);
           vbbEditSkipBusy = false;
-          if (keepPlaying) vbbVideo.play().catch(() => {});
+          if (!keepPlaying) return;
+          // 仍落在 keep 窗外（seek 偏早到删段/片头外）→ 不 play，留给下次 enforce 准跳
+          const land = Number(vbbVideo.currentTime) || 0;
+          const again = vbbPreviewSeekForKeepRanges(keeps, land, {
+            paused: false,
+            edit: item.edit,
+            srcFps,
+            timeline: item.timeline || null,
+          });
+          if (again != null && Number.isFinite(again) && Math.abs(again - land) >= 0.001) return;
+          vbbVideo.play().catch(() => {});
         };
         const watch = window.setTimeout(finish, 360);
         vbbVideo.addEventListener("seeked", finish);
