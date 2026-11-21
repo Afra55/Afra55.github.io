@@ -9591,16 +9591,21 @@
         const last = keeps[keeps.length - 1];
         const endEps = 0.0005;
         const startEps = 0.0005;
-        // 与 vtrim 一致：末帧播到半开上界再回绕；暂停停进帧内，不贴裸 CTS
+        const headSeek = (start) => {
+          const frame = endKeep > 0 ? endKeep : 1 / 30;
+          const into = Math.min(frame * 0.45, Math.max(frame * 0.25, 0.0005));
+          return Math.max(0, Number(start) || 0) + into;
+        };
+        // 与 vtrim 一致：末帧播到半开上界再回绕；片头/接点进帧内，不贴裸 CTS
         for (let i = 0; i < keeps.length; i++) {
           const k = keeps[i];
           const endLimit = k.end - endEps;
           if (time >= k.start - startEps && time < endLimit) return null;
         }
-        if (time < first.start - startEps) return first.start;
+        if (time < first.start - startEps) return headSeek(first.start);
         for (let i = 0; i < keeps.length; i++) {
           const nxt = keeps[i + 1];
-          if (nxt && time < nxt.start) return nxt.start;
+          if (nxt && time < nxt.start) return headSeek(nxt.start);
         }
         if (paused) {
           const ctsApprox = Math.max(last.start, last.end - endKeep);
@@ -9608,7 +9613,37 @@
           const into = Math.min(room, Math.max(endEps * 4, endKeep * 0.25));
           return ctsApprox + into;
         }
-        return first.start;
+        return headSeek(first.start);
+      }
+
+      /**
+       * 外预览落在 keep 首帧内部（≡ GIF startF），不要停在裸 CTS。
+       * Android 上 currentTime=CTS 或 +0.1ms 会画出上一帧，片头比黄柄/GIF 早一帧。
+       */
+      function vbbKeepHeadSeekSec(keeps, timeline, fps) {
+        const start = Number(keeps?.[0]?.start);
+        const fallback = Number.isFinite(start) ? start : 0;
+        const api = window.DevToolsMp4Timeline;
+        const startF = Number(keeps?.[0]?.startF);
+        if (
+          timeline?.ctsSec?.length &&
+          Number.isFinite(startF) &&
+          typeof api?.frameSeekSec === "function"
+        ) {
+          const t = api.frameSeekSec(timeline, startF);
+          if (Number.isFinite(t)) return Math.max(0, t);
+        }
+        if (
+          timeline?.ctsSec?.length &&
+          typeof api?.inclusiveSampleAtSec === "function" &&
+          typeof api?.frameSeekSec === "function"
+        ) {
+          const t = api.frameSeekSec(timeline, api.inclusiveSampleAtSec(timeline, fallback));
+          if (Number.isFinite(t)) return Math.max(0, t);
+        }
+        const frame = 1 / Math.max(5, Number(fps) || Number(timeline?.fps) || 30);
+        const into = Math.min(frame * 0.45, Math.max(frame * 0.25, 0.0005));
+        return fallback + into;
       }
 
       function vbbKeepRangesFromEdit(edit, duration) {
@@ -10943,15 +10978,17 @@
                 verified = false;
               }
             }
-            // 外预览落点与成片 keep 首帧一致（所见即所得）
+            // 外预览落点与成片 keep 首帧一致（所见即所得）：帧内点，勿裸 CTS
             const encodeKeeps = vbbKeepRangesForEncode(
               item.edit,
               item.duration,
               item.timeline || null,
               item.file || null
             );
-            const seekTo = Number(encodeKeeps[0]?.start);
-            applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
+            const seekTo = encodeKeeps.length
+              ? vbbKeepHeadSeekSec(encodeKeeps, item.timeline, item.edit?.srcFps || item.srcFps)
+              : Number(item.edit.trimStart) || 0;
+            applyVbbSeek(seekTo, {
               keepPlaying: false,
             });
             syncVbbEditPreview();
@@ -11304,8 +11341,9 @@
             item.timeline,
             item.file
           );
-          seekTo = Number(encodeKeeps[0]?.start);
-          if (!Number.isFinite(seekTo)) seekTo = Number(edit.trimStart) || 0;
+          seekTo = encodeKeeps.length
+            ? vbbKeepHeadSeekSec(encodeKeeps, item.timeline, edit?.srcFps || item.srcFps)
+            : Number(edit.trimStart) || 0;
         }
         applyVbbSeek(seekTo, { keepPlaying: false });
         renderVbbBatchList({ keepSelection: true });
@@ -14821,8 +14859,14 @@
             vbbSingleTimeline,
             pinned
           );
-          const seekTo = Number(encodeKeeps[0]?.start);
-          applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(vbbSingleEdit?.trimStart) || 0, {
+          const seekTo = encodeKeeps.length
+            ? vbbKeepHeadSeekSec(
+                encodeKeeps,
+                vbbSingleTimeline,
+                vbbSingleEdit?.srcFps || vbbSingleSrcFps
+              )
+            : Number(vbbSingleEdit?.trimStart) || 0;
+          applyVbbSeek(seekTo, {
             keepPlaying: false,
           });
           enforceVbbEditPlaybackWindow();
@@ -18309,8 +18353,10 @@
             item.timeline || null,
             item.file || null
           );
-          const seekTo = Number(encodeKeeps[0]?.start);
-          applyVbbSeek(Number.isFinite(seekTo) ? seekTo : Number(item.edit.trimStart) || 0, {
+          const seekTo = encodeKeeps.length
+            ? vbbKeepHeadSeekSec(encodeKeeps, item.timeline, item.edit?.srcFps || item.srcFps)
+            : Number(item.edit.trimStart) || 0;
+          applyVbbSeek(seekTo, {
             keepPlaying: false,
           });
           syncVbbEditPreview();

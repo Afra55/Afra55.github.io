@@ -506,4 +506,19 @@ t("批量漏传 file 不得借用当前预览条；诊断 JSON 不写采样表",
   assert.ok(!ser.includes("...edit"));
 });
 
+t("片头拖拽预览走帧内 seek，不把裸 CTS 交给 currentTime", () => {
+  const setStart = vtrim.slice(vtrim.indexOf("function setStart("), vtrim.indexOf("function setEnd("));
+  assert.ok(setStart.includes("seekSecForTime(sourceTimeline, startSec, sourceFps)"));
+  assert.ok(!setStart.includes("previewSeek(startSec"));
+  assert.ok(vtrim.includes("inclusiveSampleAtSec"));
+});
+
+t("外预览片头落在 startF 帧内，不 seek 裸 keep.start", () => {
+  assert.ok(vbb.includes("function vbbKeepHeadSeekSec"));
+  assert.ok(vbb.includes("frameSeekSec(timeline, startF)"));
+  const done = vbb.slice(vbb.indexOf("外预览落点与成片 keep 首帧一致"), vbb.indexOf("syncVbbEditPreview();", vbb.indexOf("外预览落点与成片 keep 首帧一致")));
+  assert.ok(done.includes("vbbKeepHeadSeekSec"));
+  assert.ok(!/encodeKeeps\[0\]\?\.start/.test(done));
+});
+
 console.log(`vbb-preview-encode-align.test.js: ${n} passed`);

@@ -19,9 +19,7 @@ function t(name, fn) {
 }
 
 function loadSeek() {
-  const p = vtrim.match(
-    /function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?return first\.start \+ DISPLAY_SEEK_EPS;\s*\}/
-  );
+  const p = vtrim.match(/function previewSeekForKeepRanges\(keeps, t, opts\) \{[\s\S]*?\n  \}/);
   assert.ok(p);
   const box = {};
   vm.runInNewContext(
@@ -47,7 +45,10 @@ t("末帧播完再回绕；暂停停在帧内而不是裸 CTS", () => {
   assert.strictEqual(seek(keeps, lastStart + ek * 0.4, { paused: false, endKeepSec: ek }), null);
   assert.strictEqual(seek(keeps, lastStart - ek * 0.5, { paused: false, endKeepSec: ek }), null);
   const atEnd = seek(keeps, 5, { paused: false, endKeepSec: ek });
-  assert.ok(atEnd != null && Math.abs(atEnd - (1 + 1e-4)) < 1e-9);
+  const into = Math.min(ek * 0.45, Math.max(ek * 0.25, 0.0005));
+  // 回片头须进到首帧内部，不能停在 CTS+0.1ms（手机会画出上一帧）
+  assert.ok(atEnd != null && Math.abs(atEnd - (1 + into)) < 1e-9, `head=${atEnd}`);
+  assert.ok(into > 1e-4, "片头 inset 必须大于 0.1ms");
   const park = seek(keeps, 5, { paused: true, endKeepSec: ek });
   assert.ok(park != null && park > lastStart + ek * 0.15 && park < 5 - 1e-4);
 });

@@ -203,11 +203,14 @@
     return displaySeekSec(0, fps);
   }
 
-  /** 手柄/时刻 → Chrome seek 点（帧内） */
+  /** 手柄/时刻 → Chrome seek 点（帧内）。起点用含缝的 inclusive 下标，避免 0.5ms 缝画上一帧 */
   function seekSecForTime(timeline, sec, fps) {
     const api = window.DevToolsMp4Timeline;
     if (timeline?.ctsSec?.length && typeof api?.sampleIndexAtSec === "function") {
-      const idx = api.sampleIndexAtSec(timeline, sec);
+      const idx =
+        typeof api.inclusiveSampleAtSec === "function"
+          ? api.inclusiveSampleAtSec(timeline, sec)
+          : api.sampleIndexAtSec(timeline, sec);
       return seekSecForSample(timeline, idx, fps);
     }
     return displaySeekSec(sec, fps);
@@ -1859,7 +1862,8 @@
       }
       if (preview) {
         if (immediateSeek || !drag) void seekStartPreviewExact();
-        else previewSeek(startSec, { throttle: true });
+        // 拖拽跟手也停帧内：裸 CTS / +0.1ms 在手机上显示上一帧，片头会比 GIF 早一帧
+        else previewSeek(seekSecForTime(sourceTimeline, startSec, sourceFps), { throttle: true });
       }
       paintTimeline();
       updateLabels();
@@ -1882,7 +1886,7 @@
       if (preview) {
         // 拖拽中节流跟手；按钮/抬手用精确回拉，避免片尾预览多出几帧
         if (immediateSeek || !drag) void seekEndPreviewExact();
-        else previewSeek(endKeepSec(), { throttle: true });
+        else previewSeek(seekSecForTime(sourceTimeline, endKeepSec(), sourceFps), { throttle: true });
       }
       paintTimeline();
       updateLabels();
@@ -1895,7 +1899,7 @@
       startSec = nextStart;
       endSec = nextStart + span;
       endParkAtSec = endKeepSec();
-      previewSeek(startSec, { throttle: Boolean(drag) });
+      previewSeek(seekSecForTime(sourceTimeline, startSec, sourceFps), { throttle: Boolean(drag) });
       paintTimeline();
       updateLabels();
     }
@@ -3259,16 +3263,22 @@
       Number(opts?.endKeepSec) > 0
         ? Number(opts.endKeepSec)
         : resolveEndKeepSec(opts?.srcFps || opts?.edit || 0);
+    // 片头/接点：进到该帧约 1/4。CTS 或 +0.1ms 在 Android 上显示上一帧，片头会多带更早的一帧
+    const headSeek = (start) => {
+      const frame = endKeep > 0 ? endKeep : 1 / 30;
+      const into = Math.min(frame * 0.45, Math.max(frame * 0.25, 0.0005));
+      return Math.max(0, Number(start) || 0) + into;
+    };
     // 播放与暂停都留到半开上界；末帧 CTS（end-endKeep）仍在窗内，不要在那里回绕
     for (let i = 0; i < keeps.length; i++) {
       const k = keeps[i];
       const endLimit = k.end - endEps;
       if (time >= k.start - startEps && time < endLimit) return null;
     }
-    if (time < first.start - startEps) return first.start + DISPLAY_SEEK_EPS;
+    if (time < first.start - startEps) return headSeek(first.start);
     for (let i = 0; i < keeps.length; i++) {
       const nxt = keeps[i + 1];
-      if (nxt && time < nxt.start) return nxt.start + DISPLAY_SEEK_EPS;
+      if (nxt && time < nxt.start) return headSeek(nxt.start);
     }
     // 半开上界：暂停停在末帧内部。last.end - endKeep ≈ 末帧 CTS，再进约 1/4 帧长
     if (paused) {
@@ -3277,7 +3287,7 @@
       const into = Math.min(room, Math.max(endEps * 4, endKeep * 0.25));
       return ctsApprox + into;
     }
-    return first.start + DISPLAY_SEEK_EPS;
+    return headSeek(first.start);
   }
 
   function evenDim(n) {

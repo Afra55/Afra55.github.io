@@ -266,6 +266,17 @@ t("预裁后编码窗不得长于 keep（防 GIF 多帧）", () => {
   assert.ok(!/rep <= keep \* 1\.25/.test(vbb));
 });
 
+t("GIF 片头用 keep.startF 帧内点，不从裸 trim 秒再往前一帧", () => {
+  assert.ok(vbb.includes("function vbbKeepHeadSeekSec"));
+  assert.ok(vbb.includes("frameSeekSec(timeline, startF)"));
+  const mat = vbb.slice(
+    vbb.indexOf("async function materializeVbbKeepVideo"),
+    vbb.indexOf("function shouldPrecutVbbWindow")
+  );
+  assert.ok(mat.includes("keeps: matKeeps") || mat.includes("keeps: matKeeps,"), "快切用同一 startF");
+  assert.ok(!mat.includes("startF - 1") && !mat.includes("startF-1"));
+});
+
 t("时长标签为保留", () => {
   assert.ok(vtrim.includes("保留 ${formatClock(keepSpan)}") || /保留 \$\{formatClock\(keepSpan\)\}/.test(vtrim));
   assert.ok(!/成片 \$\{formatClock\(keepSpan\)\}/.test(vtrim));
