@@ -12067,12 +12067,20 @@
           if (patch.status === "done" || patch.status === "error") {
             if (c.jobStartedAt) {
               c.encodeMs = Math.max(0, Date.now() - c.jobStartedAt);
+              c.jobEndedAt = Date.now();
+              // 保留 jobStartedAt，诊断才能还原墙钟；勿清零
+            } else if (!c.jobEndedAt) {
+              c.jobEndedAt = Date.now();
             }
-            c.jobStartedAt = 0;
           }
           if (patch.status === "pending") {
             c.jobStartedAt = 0;
+            c.jobEndedAt = 0;
             c.encodeMs = 0;
+          }
+          if (patch.status === "running" && patch.stallHint) {
+            c.stallHintCount = (Number(c.stallHintCount) || 0) + 1;
+            c.lastStallStage = String(patch.text || c.jobText || "").slice(0, 80);
           }
         }
         if (patch.progress != null) c.jobProgress = Math.max(0, Math.min(1, Number(patch.progress) || 0));
@@ -12093,8 +12101,16 @@
           c.jobProgress = 0;
           c.jobText = "";
           c.jobStartedAt = 0;
+          c.jobEndedAt = 0;
           c.jobQueuedAt = 0;
           c.encodeMs = 0;
+          c.stallHintCount = 0;
+          c.lastStallStage = "";
+          c.seedAttempted = false;
+          c.seedDelivered = false;
+          c.encodePath = "";
+          c.schemeKey = "";
+          c.fallbackNote = "";
         });
       }
 
@@ -12853,7 +12869,19 @@
 
       function summarizeVbbDiagTimeline(tl) {
         if (!tl || typeof tl !== "object") return null;
-        const frames = Array.isArray(tl.frames) ? tl.frames.length : Number(tl.frameCount) || 0;
+        const ctsLen = Array.isArray(tl.ctsSec)
+          ? tl.ctsSec.length
+          : tl.ctsSec?.length
+            ? Number(tl.ctsSec.length) || 0
+            : 0;
+        const mediaCtsLen = Array.isArray(tl.mediaCtsSec)
+          ? tl.mediaCtsSec.length
+          : tl.mediaCtsSec?.length
+            ? Number(tl.mediaCtsSec.length) || 0
+            : 0;
+        const frames =
+          ctsLen ||
+          (Array.isArray(tl.frames) ? tl.frames.length : Number(tl.frameCount) || 0);
         let canFf = null;
         try {
           canFf = Boolean(window.DevToolsMp4Timeline?.canFfmpegFirst?.(tl));
@@ -12862,8 +12890,13 @@
         }
         return {
           frameCount: frames,
+          ctsLen,
+          mediaCtsLen,
           durationSec: Number(tl.durationSec) || Number(tl.duration) || 0,
           timescale: Number(tl.timescale) || 0,
+          calibrated: Boolean(tl.calibrated),
+          calibrateMethod: String(tl.calibrateMethod || ""),
+          chromeOffsetSec: Number(tl.chromeOffsetSec) || 0,
           canFfmpegFirst: canFf,
         };
       }
@@ -12900,6 +12933,11 @@
 
       function summarizeVbbDiagClip(c, idx) {
         if (!c) return null;
+        const gifBytes = c.gifBlob ? Number(c.gifBlob.size) || 0 : Number(c.gifBytes) || 0;
+        const budget =
+          typeof V2G_BLACKBOX_MAX_BYTES === "number" && V2G_BLACKBOX_MAX_BYTES > 0
+            ? V2G_BLACKBOX_MAX_BYTES
+            : 10 * 1024 * 1024;
         return {
           idx,
           start: Number(c.start) || 0,
@@ -12914,19 +12952,36 @@
           jobText: String(c.jobText || ""),
           jobQueuedAt: Number(c.jobQueuedAt) || 0,
           jobStartedAt: Number(c.jobStartedAt) || 0,
+          jobEndedAt: Number(c.jobEndedAt) || 0,
           encodeMs: Number(c.encodeMs) || 0,
+          stallHintCount: Number(c.stallHintCount) || 0,
+          lastStallStage: String(c.lastStallStage || ""),
           gifNote: String(c.gifNote || ""),
           gifDuration: Number(c.gifDuration) || 0,
           gifOutW: Number(c.gifOutW) || 0,
           gifOutH: Number(c.gifOutH) || 0,
+          /** 结果卡展示用目标档 fps */
           gifFps: Number(c.gifFps) || 0,
-          gifSpeed: Number(c.gifSpeed) || 0,
+          /** 编码选用的目标 fps（与 gifFps 通常相同；排查展示偏差时对照） */
+          encodeFps: Number(c.encodeFps) || Number(c.gifFps) || 0,
+          playbackFps: Number(c.playbackFps) || 0,
+          gifSpeed: Number(c.gifSpeed) || 1,
           gifskiQuality: Number(c.gifskiQuality) || 0,
           gifQualityLadder: Number(c.gifQualityLadder) || 0,
           gifMaxColors: Number(c.gifMaxColors) || 0,
           gifEngine: String(c.gifEngine || ""),
+          compressRounds: Number(c.compressRounds) || 0,
+          maxW: Number(c.maxW) || 0,
+          frameCount: Number(c.frameCount) || 0,
+          seedAttempted: Boolean(c.seedAttempted),
+          seedDelivered: Boolean(c.seedDelivered),
+          encodePath: String(c.encodePath || ""),
+          schemeKey: String(c.schemeKey || ""),
+          exportedEdit: Boolean(c.exportedEdit),
+          fallbackNote: String(c.fallbackNote || ""),
           hasGif: Boolean(c.gifBlob),
-          gifBytes: c.gifBlob ? Number(c.gifBlob.size) || 0 : 0,
+          gifBytes,
+          nearBudget: gifBytes > 0 ? gifBytes / budget >= 0.95 : false,
           error: String(c.error || ""),
         };
       }
@@ -13012,7 +13067,7 @@
         })();
         const logLines = typeof getVbbLogRing === "function" ? getVbbLogRing() : [];
         return {
-          v: 1,
+          v: 2,
           kind: "vbb-diag",
           at: Date.now(),
           atIso: new Date().toISOString(),
@@ -13031,6 +13086,10 @@
             autoCrop: typeof vbbAutoCropEnabled === "function" ? vbbAutoCropEnabled() : null,
             speedLimitSec: typeof vbbSpeedLimitSec === "function" ? vbbSpeedLimitSec() : null,
             debugLogToConsole: Boolean(VBB_DEBUG),
+            featureSchemeVer:
+              typeof VBB_FEATURE_SCHEME_VER === "number" ? VBB_FEATURE_SCHEME_VER : null,
+            schemeIdbLoaded:
+              typeof vbbSchemeIdbLoaded === "boolean" ? vbbSchemeIdbLoaded : null,
           },
           session: {
             busy: Boolean(vbbBusy),
@@ -13075,12 +13134,42 @@
           clips: Array.isArray(vbbClips) ? vbbClips.map((c, i) => summarizeVbbDiagClip(c, i)) : [],
           clipsSummary: (() => {
             const list = Array.isArray(vbbClips) ? vbbClips : [];
+            const budget =
+              typeof V2G_BLACKBOX_MAX_BYTES === "number" && V2G_BLACKBOX_MAX_BYTES > 0
+                ? V2G_BLACKBOX_MAX_BYTES
+                : 10 * 1024 * 1024;
+            const encodeMsSum = list.reduce((s, c) => s + (Number(c?.encodeMs) || 0), 0);
+            const engines = {};
+            const paths = {};
+            let nearBudget = 0;
+            let seedDelivered = 0;
+            let seedAttempted = 0;
+            let stallHints = 0;
+            for (const c of list) {
+              if (c?.seedDelivered) seedDelivered += 1;
+              if (c?.seedAttempted) seedAttempted += 1;
+              stallHints += Number(c?.stallHintCount) || 0;
+              const eng = String(c?.gifEngine || "").trim() || (c?.gifBlob ? "unknown" : "");
+              if (eng) engines[eng] = (engines[eng] || 0) + 1;
+              const path = String(c?.encodePath || "").trim();
+              if (path) paths[path] = (paths[path] || 0) + 1;
+              const bytes = c?.gifBlob ? Number(c.gifBlob.size) || 0 : 0;
+              if (bytes > 0 && bytes / budget >= 0.95) nearBudget += 1;
+            }
             return {
               total: list.length,
               done: list.filter((c) => c?.gifBlob).length,
               error: list.filter((c) => c?.error && !c?.gifBlob).length,
               pending: list.filter((c) => !c?.gifBlob && !c?.error).length,
               running: list.filter((c) => String(c?.jobStatus || "") === "running").length,
+              encodeMsSum,
+              encodeSecSum: Math.round(encodeMsSum / 1000),
+              seedAttempted,
+              seedDelivered,
+              nearBudget,
+              stallHints,
+              engines,
+              encodePaths: paths,
             };
           })(),
           analysis: vbbAnalysis
@@ -13102,16 +13191,25 @@
           },
           schemes: {
             count: schemeKeys.length,
-            /** 只给键+摘要，避免诊断文件过大；完整库用「备份编辑」 */
+            ver: typeof VBB_FEATURE_SCHEME_VER === "number" ? VBB_FEATURE_SCHEME_VER : null,
+            idbLoaded: typeof vbbSchemeIdbLoaded === "boolean" ? vbbSchemeIdbLoaded : null,
+            /** 只给键+摘要，避免诊断文件过大；完整库用「导出撞档库」 */
             sample: schemeKeys.slice(0, 40).map((k) => {
               const hit = schemes[k];
               return {
                 key: k,
+                ver: Number(hit?.ver) || 0,
                 fps: Number(hit?.fps) || 0,
                 maxW: Number(hit?.maxW) || 0,
                 at: Number(hit?.at) || 0,
                 srcFps: Number(hit?.srcFps) || 0,
+                srcW: Number(hit?.srcW) || 0,
+                srcH: Number(hit?.srcH) || 0,
+                effW: Number(hit?.effW) || 0,
+                effH: Number(hit?.effH) || 0,
                 fileBytes: Number(hit?.fileBytes) || 0,
+                qualityFirst: Boolean(hit?.qualityFirst),
+                compressRounds: Number(hit?.compressRounds) || 0,
               };
             }),
           },
@@ -13383,9 +13481,12 @@
         clip.gifOutH = Number(encoded.outH) || 0;
         // 结果卡跟编码目标 fps。GIF 厘秒会把 15 收成 ≈14.3，那不是另一档。
         const play = Number(encoded.playbackFps) || (typeof gifEffectivePlaybackFps === "function" ? gifEffectivePlaybackFps(encoded.fps) : 0);
+        const encodeFps = Number(encoded.fps) || 0;
+        clip.encodeFps = encodeFps;
+        clip.playbackFps = play || 0;
         clip.gifFps =
           (typeof blackboxDisplayFps === "function" ? blackboxDisplayFps(encoded) : 0) ||
-          Number(encoded.fps) ||
+          encodeFps ||
           play ||
           0;
         clip.gifSpeed = Math.max(1, Number(encoded.speed) || 1);
@@ -13396,6 +13497,37 @@
         clip.gifQualityLadder = Number(encoded.quality) > 0 ? Number(encoded.quality) : 0;
         clip.gifMaxColors = Number(encoded.maxColors) > 0 ? Number(encoded.maxColors) : 0;
         clip.gifEngine = String(encoded.engine || "");
+        clip.compressRounds = Number(encoded.compressRounds) || 0;
+        clip.maxW = Number(encoded.maxW) || 0;
+        clip.frameCount = Number(encoded.frameCount) || 0;
+        clip.seedDelivered = Boolean(encoded.seedDelivered);
+        if (!clip.encodePath) {
+          clip.encodePath = encoded.seedDelivered
+            ? "seed"
+            : clip.seedAttempted
+              ? "seed-miss-ladder"
+              : "ladder";
+        }
+        if (encoded.engine === "ffmpeg" && /回退|不足|fallback/i.test(String(encoded.note || encoded.vbbPickNote || ""))) {
+          clip.fallbackNote = String(encoded.note || encoded.vbbPickNote || "ffmpeg-fallback").slice(0, 120);
+        }
+      }
+
+      /** 编码前挂诊断线索：撞档键 / 是否尝试过 seed / 是否已 materialize */
+      function attachVbbEncodeDiagHints(clip, { span, speed, meta, seed, exportedEdit } = {}) {
+        if (!clip) return;
+        try {
+          clip.schemeKey =
+            typeof vbbSpanSchemeKey === "function" && meta
+              ? String(vbbSpanSchemeKey(span, speed, meta) || "")
+              : String(clip.schemeKey || "");
+        } catch (_) {
+          clip.schemeKey = String(clip.schemeKey || "");
+        }
+        clip.seedAttempted = Boolean(seed?.fps);
+        clip.exportedEdit = Boolean(exportedEdit);
+        clip.seedDelivered = false;
+        clip.encodePath = clip.seedAttempted ? "seed-pending" : "ladder";
       }
 
       /** 结果卡画质文案：优先字段，避免只靠 gifNote 被白名单滤掉 */
@@ -15892,6 +16024,7 @@
                   status: "running",
                   progress: Math.min(0.98, Math.max(0.02, 0.12 + Math.min(0.86, lastLocal) * 0.86)),
                   text: lastStage,
+                  stallHint: true,
                 });
                 vbbLog(`[vbb] #${i + 1} stall ${sec}s wall=${wall}s stage=${lastStage}`);
               }, 2000);
@@ -15949,6 +16082,13 @@
                 const speedFac = vbbSpeedFactorForSpan(prepared.span);
                 if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
                 const seedForItem = loadVbbSpanScheme(prepared.span, speedFac, itemMeta);
+                attachVbbEncodeDiagHints(vbbClips[i], {
+                  span: prepared.span,
+                  speed: speedFac,
+                  meta: itemMeta,
+                  seed: seedForItem,
+                  exportedEdit: prepared.exportedEdit,
+                });
                 const encoded = await encodeBlackboxClip({
                   file: prepared.file,
                   startSec: prepared.startSec,
@@ -16287,6 +16427,13 @@
           const speedFac = vbbSpeedFactorForSpan(prepared.span);
           if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
           const seedForSingle = loadVbbSpanScheme(prepared.span, speedFac, singleMeta);
+          attachVbbEncodeDiagHints(vbbClips[0], {
+            span: prepared.span,
+            speed: speedFac,
+            meta: singleMeta,
+            seed: seedForSingle,
+            exportedEdit: prepared.exportedEdit,
+          });
           const encoded = await encodeBlackboxClip({
             file: prepared.file,
             startSec: prepared.startSec,
