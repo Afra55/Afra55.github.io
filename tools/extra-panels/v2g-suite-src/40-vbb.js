@@ -2315,7 +2315,7 @@
           vbbEditEnforceAcceptTarget = null;
           return;
         }
-        // 与编辑内 clipPlayWindow 对齐：已到位才放弃；勿用 2 帧 earlySlop 把删段尾当成「到了」
+        // 与编辑内 clipPlayWindow 对齐：已到位才放弃；勿用 2 帧偏早容忍把删段尾当成「到了」
         const delta = next - t; // >0 还需往后 seek；<0 已越过目标
         if (Math.abs(delta) < 0.001) return;
         // 越过停帧：暂停态才给半帧 pastSlop；播放态越过必须拉回
