@@ -2351,12 +2351,18 @@
         // 即将换点：丢掉片尾 mediaTime，避免 seeked/timeupdate 再把它当成「还在结尾」
         vbbLastPresentedMediaTime = NaN;
         applyVbbSeek(next, { keepPlaying: false });
+        let watch = 0;
         const finish = () => {
+          // seek 未落稳：再等，勿把中间态当成窗外停播
+          if (vbbVideo.seeking) {
+            window.clearTimeout(watch);
+            watch = window.setTimeout(finish, 360);
+            return;
+          }
           vbbVideo.removeEventListener("seeked", finish);
           window.clearTimeout(watch);
           vbbEditSkipBusy = false;
           if (!keepPlaying) return;
-          // 仍落在 keep 窗外（seek 偏早到删段/片头外）→ 不 play，留给下次 enforce 准跳
           const land = Number(vbbVideo.currentTime) || 0;
           const again = vbbPreviewSeekForKeepRanges(keeps, land, {
             paused: false,
@@ -2364,10 +2370,25 @@
             srcFps,
             timeline: item.timeline || null,
           });
-          if (again != null && Number.isFinite(again) && Math.abs(again - land) >= 0.001) return;
+          const gap = Number(again) - land;
+          // 关键帧偏早落在下一段 start 前：按本次偏差再推一次（≤0.5s），勿停在接点上
+          if (again != null && Number.isFinite(again) && Math.abs(gap) >= 0.001) {
+            if (!finish._bumped && gap > 0 && gap <= 0.5) {
+              finish._bumped = true;
+              vbbEditSkipBusy = true;
+              vbbEditEnforceAcceptTarget = null;
+              vbbEditEnforceAcceptUntil = 0;
+              lockVbbPlayUi(650);
+              applyVbbSeek(again + gap, { keepPlaying: false });
+              watch = window.setTimeout(finish, 360);
+              vbbVideo.addEventListener("seeked", finish);
+              return;
+            }
+            return;
+          }
           vbbVideo.play().catch(() => {});
         };
-        const watch = window.setTimeout(finish, 360);
+        watch = window.setTimeout(finish, 360);
         vbbVideo.addEventListener("seeked", finish);
       }
 
