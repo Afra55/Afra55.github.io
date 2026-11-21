@@ -11238,12 +11238,11 @@
           vbbEditEnforceAcceptTarget = null;
           return;
         }
-        // 关键帧常「偏早到不了」；片尾越过目标必须拉回，否则外预览比编辑停帧多画几帧
-        const earlySlop = Math.max(0.05, 2 * frame);
-        // 越过停帧：禁止 pastSlop 吞掉（哪怕半帧也要拉回），否则外预览比片尾±所见多画
-        const pastSlop = holding ? Math.max(0.012, 0.35 * frame) : 0;
+        // 与编辑内 clipPlayWindow 对齐：已到位才放弃；勿用 2 帧偏早容忍把删段尾当成「到了」
         const delta = next - t; // >0 还需往后 seek；<0 已越过目标
-        if (delta >= 0 && delta < earlySlop) return;
+        if (Math.abs(delta) < 0.001) return;
+        // 越过停帧：暂停态才给半帧 pastSlop；播放态越过必须拉回
+        const pastSlop = holding ? Math.max(0.012, 0.35 * frame) : 0;
         if (delta < 0 && -delta < pastSlop) return;
         const now =
           typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
@@ -11254,7 +11253,7 @@
           delta >= 0 &&
           delta < Math.max(0.75, 15 * frame)
         ) {
-          // 仅接受「同一目标仍偏早」；越过片尾停帧的不吞
+          // seek 后关键帧常偏早：650ms 内同目标不重入，防按钮狂切；不代替准跳
           return;
         }
         const keepPlaying = !holding;
@@ -11275,13 +11274,50 @@
         // 即将换点：丢掉片尾 mediaTime，避免 seeked/timeupdate 再把它当成「还在结尾」
         vbbLastPresentedMediaTime = NaN;
         applyVbbSeek(next, { keepPlaying: false });
+        let watch = 0;
         const finish = () => {
+          // seek 未落稳：再等，勿把中间态当成窗外停播
+          if (vbbVideo.seeking) {
+            window.clearTimeout(watch);
+            watch = window.setTimeout(finish, 360);
+            return;
+          }
           vbbVideo.removeEventListener("seeked", finish);
           window.clearTimeout(watch);
           vbbEditSkipBusy = false;
-          if (keepPlaying) vbbVideo.play().catch(() => {});
+          if (!keepPlaying) return;
+          const land = Number(vbbVideo.currentTime) || 0;
+          const again = vbbPreviewSeekForKeepRanges(keeps, land, {
+            paused: false,
+            edit: item.edit,
+            srcFps,
+            timeline: item.timeline || null,
+          });
+          const gap = Number(again) - land;
+          // 关键帧偏早落在下一段 start 前：按本次偏差再推一次（≤0.5s），勿停在接点上
+          if (again != null && Number.isFinite(again) && Math.abs(gap) >= 0.001) {
+            if (!finish._bumped && gap > 0 && gap <= 0.5) {
+              finish._bumped = true;
+              vbbEditSkipBusy = true;
+              vbbEditEnforceAcceptTarget = null;
+              vbbEditEnforceAcceptUntil = 0;
+              lockVbbPlayUi(650);
+              // 勿走 applyVbbSeek/displaySeek：帧内吸附会抵消 again+gap 的偏早补偿
+              const bumpTo = again + gap;
+              const dur = vbbVideoDuration();
+              try {
+                vbbVideo.currentTime =
+                  dur > 0 ? Math.min(dur, Math.max(0, bumpTo)) : Math.max(0, bumpTo);
+              } catch (_) {}
+              watch = window.setTimeout(finish, 360);
+              vbbVideo.addEventListener("seeked", finish);
+              return;
+            }
+            return;
+          }
+          vbbVideo.play().catch(() => {});
         };
-        const watch = window.setTimeout(finish, 360);
+        watch = window.setTimeout(finish, 360);
         vbbVideo.addEventListener("seeked", finish);
       }
 
