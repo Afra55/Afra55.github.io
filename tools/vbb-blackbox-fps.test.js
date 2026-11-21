@@ -126,6 +126,17 @@ assert(
   const vbbUi = fs.readFileSync(path.join(__dirname, "extra-panels/v2g-suite-src/40-vbb.js"), "utf8");
   assert(/devtools-vbb-quality-first/.test(vbbUi), "黑盒面板须记住画质优先");
   assert(/qualityFirst:\s*vbbQualityFirstOn\(\)/.test(vbbUi), "黑盒编码须传入画质优先");
+  assert(/function vbbEncodeUsedSeed/.test(vbbUi), "沿用标签须看 seed 是否真正交付");
+  assert(!/const usedSeed = Boolean\(seedFor/.test(vbbUi), "不得把「有 seed」当成沿用成功");
+  assert(/blackboxDisplayFps\(encoded\)/.test(vbbUi), "结果卡 fps 用编码目标档");
+  {
+    const m = vbbUi.match(/function vbbEncodeUsedSeed\(encoded\) \{[\s\S]*?\n      \}/);
+    assert(m, "须能抽出 vbbEncodeUsedSeed");
+    const used = new Function(`${m[0]}; return vbbEncodeUsedSeed;`)();
+    assert(used({ seedDelivered: true, fps: 15 }) === true, "进预算才沿用");
+    assert(used({ fps: 24 }) === false, "seed 超限掉进阶梯不算沿用");
+    assert(used(null) === false, "无成片不算沿用");
+  }
   const vtrimEd = fs.readFileSync(path.join(__dirname, "lib/vtrim-editor.js"), "utf8");
   assert(/END_KEEP_SEC\s*=\s*1\s*\/\s*25/.test(vtrimEd), "编辑预览片尾半开兜底 1/25s");
   assert(/半开上界|last\.end - endKeep/.test(vtrimEd), "暂停须停在 exclusive end 前一源帧");
@@ -233,7 +244,26 @@ assert(
     "批量条间须释放/重建堆（手机 recycle）"
   );
   assert(/沿用帧率/.test(src), "seed 须只沿用帧率");
-  assert(/忽略缓存宽/.test(src), "seed 不得直接从上次加宽后的宽度起编");
+  assert(/忽略缓存宽/.test(src), "桌面 seed 仍忽略缓存宽，不得从上次加宽逐档降");
+  assert(/isLikelyMobileBrowser\(\)/.test(src), "缓存宽试枪仅手机");
+  assert(/不从缓存宽往下啃/.test(src), "手机超限须退回 420，不得往下啃缓存宽");
+  assert(/seedDelivered:\s*true/.test(src), "seed 进预算才打沿用标记");
+  assert(/方案超限 · 完整阶梯/.test(src), "seed 超限须明示改走完整阶梯");
+  assert(/function blackboxDisplayFps/.test(src), "便签 fps 须跟编码目标档");
+  assert(/fps\/maxW 取本次成片目标档/.test(src), "撞档须保存阶梯落地后的 fps");
+  {
+    const disp = src.match(/function blackboxDisplayFps\(c\) \{[\s\S]*?\n      \}/);
+    const lab = src.match(/function formatBlackboxFpsLabel\(c\) \{[\s\S]*?\n      \}/);
+    assert(disp && lab, "须能抽出 blackboxDisplayFps / formatBlackboxFpsLabel");
+    const fns = new Function(
+      `${disp[0]}\n${lab[0]}\nreturn { blackboxDisplayFps, formatBlackboxFpsLabel };`
+    )();
+    assert(fns.blackboxDisplayFps({ fps: 15, playbackFps: 14.3 }) === 15, "15 档不得显示 14.3");
+    assert(fns.formatBlackboxFpsLabel({ fps: 15, playbackFps: 14.3 }) === "15FPS", "便签写 15FPS");
+    assert(fns.formatBlackboxFpsLabel({ fps: 12.5, playbackFps: 12.5 }) === "12.5FPS", "12.5 保持一位小数");
+    assert(fns.blackboxDisplayFps({ fps: 24, playbackFps: 25 }) === 24, "展示跟阶梯目标而不是厘秒 25");
+    assert(fns.formatBlackboxFpsLabel({ playbackFps: 14.3 }) === "14.3FPS", "没有目标 fps 才用有效播放");
+  }
   assert(/VBB_FEATURE_SCHEME_VER\s*=\s*3/.test(src), "改 seed 特征策略须 bump 缓存版本");
   assert(/vbbSeedFitsMeta|vbbSchemeSizeBucket|vbbSrcFpsBucket/.test(src), "沿用须校验分辨率/帧率");
   assert(/devtools-vbb-scheme/.test(src), "撞档须走 IndexedDB");

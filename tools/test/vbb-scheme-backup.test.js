@@ -58,7 +58,7 @@ function loadSchemeApi() {
     },
   };
   vm.runInNewContext(
-    `${shared.slice(start, end)}\nthis.api = {\n  exportMap: exportVbbFeatureSchemesMap,\n  merge: mergeVbbFeatureSchemes,\n  load: loadVbbFeatureSchemes,\n  persist: persistVbbFeatureSchemes,\n  key: VBB_FEATURE_SCHEME_KEY,\n  quotaDrop: VBB_FEATURE_SCHEME_QUOTA_DROP,\n  ver: VBB_FEATURE_SCHEME_VER,\n  canon: vbbCanonicalSchemeKey,\n  schemeKey: vbbSpanSchemeKey,\n  fits: vbbSeedFitsMeta,\n  adjust: adjustVbbSeedForQuality,\n};`,
+    `${shared.slice(start, end)}\nthis.api = {\n  exportMap: exportVbbFeatureSchemesMap,\n  merge: mergeVbbFeatureSchemes,\n  load: loadVbbFeatureSchemes,\n  persist: persistVbbFeatureSchemes,\n  key: VBB_FEATURE_SCHEME_KEY,\n  quotaDrop: VBB_FEATURE_SCHEME_QUOTA_DROP,\n  ver: VBB_FEATURE_SCHEME_VER,\n  canon: vbbCanonicalSchemeKey,\n  schemeKey: vbbSpanSchemeKey,\n  fits: vbbSeedFitsMeta,\n  adjust: adjustVbbSeedForQuality,\n  saveSpan: saveVbbSpanScheme,\n  loadSpan: loadVbbSpanScheme,\n};`,
     box
   );
   return { api: box.api, store, box };
@@ -189,6 +189,33 @@ t("键不含加速/画质；撞档后可按画质调 fps", () => {
   assert.equal(adj.fps, 12); // 长片开画质：15→更低一档
   const adjShort = api.adjust(seed, metaQf, 8, 1);
   assert.equal(adjShort.fps, 15); // ≤10s 不挪
+});
+
+t("成片 fps 写回后下次命中该档，不是失败的高帧", () => {
+  const { api } = loadSchemeApi();
+  const meta = {
+    srcW: 1280,
+    srcH: 720,
+    srcFps: 24,
+    fileBytes: 9 * 1024 * 1024,
+    qualityFirst: true,
+  };
+  api.saveSpan(
+    18,
+    {
+      fps: 15,
+      maxW: 480,
+      compressRounds: 1,
+      usedFallback: false,
+      speed: 1,
+      ...meta,
+    },
+    "blackbox"
+  );
+  const hit = api.loadSpan(18, 1, meta);
+  assert.equal(hit.fps, 15);
+  assert.equal(hit.qualityFirst, true);
+  assert.ok(hit.maxW >= 420);
 });
 
 t("无 IDB 时 persist 仍写进同步内存", () => {

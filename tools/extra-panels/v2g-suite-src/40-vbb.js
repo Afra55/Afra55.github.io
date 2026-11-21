@@ -2893,6 +2893,7 @@
           if (q) bits.push(`画质${q[1]}`);
           return bits.join(" · ");
         }
+        if (/完整阶梯/.test(t)) return "②试档";
         if (/^沿用帧率/.test(t) || /^沿用方案/.test(t)) return `②沿用方案`;
         if ((m = t.match(/^沿用后超限降宽\s*·\s*(\d+)/i))) return `②方案超限 · 降宽${m[1]}`;
         if (/抬质/.test(t)) return "②试档 · 抬画质";
@@ -3004,6 +3005,25 @@
         return line || (pct != null ? `${pct}%` : "");
       }
   
+      /** 进度「沿用」只代表还在走 seed；编码器报完整阶梯后关掉 */
+      function vbbTrackSeedReuse(fromCache) {
+        let on = Boolean(fromCache);
+        return {
+          on() {
+            return on;
+          },
+          see(text) {
+            if (/完整阶梯/.test(String(text || ""))) on = false;
+            return on;
+          },
+        };
+      }
+
+      /** 结果「沿用方案」：seed 在预算内交付才算，掉进完整阶梯不算 */
+      function vbbEncodeUsedSeed(encoded) {
+        return Boolean(encoded && encoded.seedDelivered);
+      }
+
       function vbbClipProgressLine(i, total, { reuse = false } = {}) {
         const bits = [`${i + 1}/${total}`];
         if (reuse) bits.push("沿用");
@@ -4438,9 +4458,13 @@
         if (!clip || !encoded) return;
         clip.gifOutW = Number(encoded.outW) || 0;
         clip.gifOutH = Number(encoded.outH) || 0;
-        // UI 帧率用成片有效播放 fps（GIF 厘秒量化后）
+        // 结果卡跟编码目标 fps。GIF 厘秒会把 15 收成 ≈14.3，那不是另一档。
         const play = Number(encoded.playbackFps) || (typeof gifEffectivePlaybackFps === "function" ? gifEffectivePlaybackFps(encoded.fps) : 0);
-        clip.gifFps = play || Number(encoded.fps) || 0;
+        clip.gifFps =
+          (typeof blackboxDisplayFps === "function" ? blackboxDisplayFps(encoded) : 0) ||
+          Number(encoded.fps) ||
+          play ||
+          0;
         clip.gifSpeed = Math.max(1, Number(encoded.speed) || 1);
         clip.gifDuration = vbbEncodedGifDurationSec(encoded);
         // 画质独立挂字段：桥 ffmpeg-palette 时 engine≠gifski，但仍带 gifskiQuality
@@ -5748,9 +5772,9 @@
               vbbSpeedFactorForSpan(r.span),
               singleMeta
             );
-            const followTip = reuse.fromCache ? " · 沿用方案" : "";
+            const seedReuse = vbbTrackSeedReuse(reuse.fromCache);
             setVbbClipJob(i, { status: "running", progress: 0.02, text: formatVbbJobStage("准备编码…") });
-            setVbbProgress(true, i / ranges.length, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), {
+            setVbbProgress(true, i / ranges.length, vbbClipProgressLine(i, ranges.length, { reuse: seedReuse.on() }), {
               sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`,
               busy: true,
             });
@@ -5770,7 +5794,7 @@
                   const p = (i + Math.min(0.12, Number(local) || 0) * 0.12) / ranges.length;
                   const stage = bumpVbbEncodeProgress(
                     p,
-                    vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }),
+                    vbbClipProgressLine(i, ranges.length, { reuse: seedReuse.on() }),
                     text || "按预览对齐…"
                   );
                   setVbbClipJob(i, {
@@ -5803,8 +5827,9 @@
               segmentSpans: prepared.segmentSpans,
               srcFps: singleSrcFps,
               onProgress: (local, text) => {
+                seedReuse.see(text);
                 const p = (i + Math.min(0.98, 0.12 + Math.min(0.86, Number(local) || 0) * 0.86)) / ranges.length;
-                const stage = bumpVbbEncodeProgress(p, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), text);
+                const stage = bumpVbbEncodeProgress(p, vbbClipProgressLine(i, ranges.length, { reuse: seedReuse.on() }), text);
                 setVbbClipJob(i, {
                   status: "running",
                   progress: Math.min(0.98, 0.12 + Math.min(0.86, Number(local) || 0) * 0.86),
@@ -5817,7 +5842,7 @@
               vbbClips[i],
               encoded,
               [
-                ...(reuse.fromCache ? ["沿用方案"] : []),
+                ...(vbbEncodeUsedSeed(encoded) ? ["沿用方案"] : []),
                 ...(prepared.cutNote ? [prepared.cutNote] : []),
                 ...(vbbCrop ? ["去色边"] : []),
               ].filter(Boolean)
@@ -7001,7 +7026,6 @@
                 const speedFac = vbbSpeedFactorForSpan(prepared.span);
                 if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
                 const seedForItem = loadVbbSpanScheme(prepared.span, speedFac, itemMeta);
-                const usedSeed = Boolean(seedForItem);
                 const encoded = await encodeBlackboxClip({
                   file: prepared.file,
                   startSec: prepared.startSec,
@@ -7043,6 +7067,7 @@
                   },
                 });
                 if (abortVbb) throw new Error("已取消");
+                const usedSeed = vbbEncodeUsedSeed(encoded);
                 applyVbbClipEncoded(
                   vbbClips[i],
                   encoded,
@@ -7339,7 +7364,6 @@
           const speedFac = vbbSpeedFactorForSpan(prepared.span);
           if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
           const seedForSingle = loadVbbSpanScheme(prepared.span, speedFac, singleMeta);
-          const usedSeed = Boolean(seedForSingle);
           const encoded = await encodeBlackboxClip({
             file: prepared.file,
             startSec: prepared.startSec,
@@ -7368,6 +7392,7 @@
             },
           });
           if (abortVbb) throw new Error("已取消");
+          const usedSeed = vbbEncodeUsedSeed(encoded);
           applyVbbClipEncoded(vbbClips[0], encoded, usedSeed ? ["沿用方案"] : []);
           if (encoded?.fps && vbbClips[0]?.gifBlob) {
             try {
@@ -7678,12 +7703,13 @@
               execMeta
             );
             const reuseSeed = reuse.seed;
+            const seedReuse = vbbTrackSeedReuse(reuse.fromCache);
             const activeEncode = reuse.fromCache && reuse.encode ? reuse.encode : plan.encode;
             const isWide = activeEncode === "clarity" || activeEncode === "sharp";
             const encodeTag = activeEncode === "sharp" ? "锐度" : activeEncode === "clarity" ? "清晰" : "";
             const clipLine = (extra = {}) =>
               vbbClipProgressLine(i, plan.ranges.length, {
-                reuse: Boolean(reuse.fromCache),
+                reuse: seedReuse.on(),
                 ...extra,
               });
             const timeRange = `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`;
@@ -7800,6 +7826,7 @@
                     crop: vbbCrop,
                     ...encAlign,
                     onProgress: (local, text) => {
+                      seedReuse.see(text);
                       const p = 0.8 + Math.min(0.18, local) * 0.18;
                       const stage = vbbTickerLine(text) || "压缩";
                       setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text: stage });
@@ -7822,6 +7849,7 @@
                   crop: vbbCrop,
                   ...encAlign,
                   onProgress: (local, text) => {
+                    seedReuse.see(text);
                     const p = Math.min(0.98, 0.12 + Math.min(0.86, Number(local) || 0) * 0.86);
                     const stage = vbbTickerLine(text) || "编码…";
                     setVbbClipJob(i, { status: "running", progress: p, text: stage });
@@ -7837,7 +7865,11 @@
               }
               // 与整段/批量同一套：挂 meta + gifNote（含画质），勿手写漏掉 gifskiQuality
               const extraBits = [];
-              if (reuse.fromCache) extraBits.push("沿用方案");
+              // 黑盒：只有 seedDelivered。清晰/锐度直出且没掉进黑盒阶梯，才仍算沿用。
+              const heldScheme =
+                vbbEncodeUsedSeed(encoded) ||
+                (Boolean(reuse.fromCache) && isWide && !usedFallback);
+              if (heldScheme) extraBits.push("沿用方案");
               if (prepared.cutNote) extraBits.push(prepared.cutNote);
               if (usedFallback) extraBits.push("超限");
               else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) {

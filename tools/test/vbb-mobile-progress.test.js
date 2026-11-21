@@ -68,6 +68,8 @@ t("阶段映射：FPS·宽·q 保留帧率宽画质", () => {
   assert.strictEqual(stage("15FPS·宽420·q3"), "②试档 · 15帧/秒 · 宽420 · 画质3");
   assert.strictEqual(stage("尝试 12FPS·宽380"), "②试档 · 12帧/秒 · 宽380");
   assert.strictEqual(stage("黑盒编码 · 15FPS"), "②试档 · 15帧/秒");
+  assert.strictEqual(stage("方案超限 · 完整阶梯"), "②试档");
+  assert.strictEqual(stage("沿用方案"), "②沿用方案");
 });
 
 t("手机 CSS：进度 hint 两行 clamp", () => {

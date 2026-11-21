@@ -29,7 +29,7 @@
 3. **有时间编辑时先 materialize 编辑片，再带 `exportedEdit` / `exactKeepFrames` 转 GIF**
 
 差帧先查时钟域与 keeps 是否同窗，**不要**改黑盒试档阶梯「碰运气」。  
-撞档库（IndexedDB）只沿用 **fps seed**，**不**改 keep / materialize / 对齐开关。
+撞档库（IndexedDB）只沿用试档起点（fps；手机可再试一次夹紧后的缓存宽），**不**改 keep / materialize / 对齐开关。
 
 ---
 
@@ -154,7 +154,7 @@ edit 有时间编辑？（vbbEditNeedsExport）
 | 键：时长 + 分辨率 + 源帧率（VER≥3） | keep / timeline / frameRaw |
 | 命中后可按画质微调 **一档 fps** | materialize / exportedEdit |
 | IndexedDB `devtools-vbb-scheme` | 不读写撞档 |
-| 只影响试档**起点 fps** | 超限仍走完整阶梯 |
+| 只影响试档起点（fps；手机可再试一枪夹紧的缓存宽，超了退回 420） | 超限仍走完整阶梯 |
 
 改撞档：**只** bump `VBB_FEATURE_SCHEME_VER`；**禁止**顺手改 `exportedEdit` / `canFfmpegFirst` / keep 公式。  
 改对齐：**禁止**顺手改 fps 阶梯或撞档键。
