@@ -30,8 +30,12 @@ t("enforce 准跳 keep：1ms 到位 + accept 防狂切，无 earlySlop", () => {
   assert.ok(enforce.includes("lockVbbPlayUi"));
   // seek 偏早落在下一段前：再推一次并续播，勿停在接点
   assert.ok(enforce.includes("finish._bumped"));
-  assert.ok(enforce.includes("again + gap"));
+  assert.ok(enforce.includes("bumpTo = again + gap"));
+  assert.ok(enforce.includes("vbbVideo.currentTime"));
   assert.ok(enforce.includes("vbbVideo.seeking"));
+  // 补偿点必须裸写 currentTime，不能再走 displaySeek 吸附
+  const bumpBlock = enforce.slice(enforce.indexOf("finish._bumped"), enforce.indexOf("vbbVideo.play()"));
+  assert.ok(!bumpBlock.includes("applyVbbSeek(again"));
 });
 
 t("play/pause 事件在 UiLock 下不改按钮文案", () => {

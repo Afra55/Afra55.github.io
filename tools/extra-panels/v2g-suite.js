@@ -11302,7 +11302,13 @@
               vbbEditEnforceAcceptTarget = null;
               vbbEditEnforceAcceptUntil = 0;
               lockVbbPlayUi(650);
-              applyVbbSeek(again + gap, { keepPlaying: false });
+              // 勿走 applyVbbSeek/displaySeek：帧内吸附会抵消 again+gap 的偏早补偿
+              const bumpTo = again + gap;
+              const dur = vbbVideoDuration();
+              try {
+                vbbVideo.currentTime =
+                  dur > 0 ? Math.min(dur, Math.max(0, bumpTo)) : Math.max(0, bumpTo);
+              } catch (_) {}
               watch = window.setTimeout(finish, 360);
               vbbVideo.addEventListener("seeked", finish);
               return;
