@@ -50,6 +50,25 @@ t("打开编辑先 pause FFmpeg，且不提前锁 body 滚动", () => {
   assert.ok(suite.includes("pauseFfmpegForInteractiveUi"));
 });
 
+t("ffmpeg.load 有超时，挂死的预热可以被放弃", () => {
+  assert.ok(media.includes("function loadFfmpegWithTimeout"));
+  assert.ok(media.includes("FFmpeg 引擎加载超时"));
+  assert.ok(media.includes("function abandonFfmpegWarmLoad"));
+  assert.ok(media.includes("ffmpegLoadingInstance"));
+  assert.ok(media.includes("FFMPEG_LOAD_TIMEOUT_MS = 45000"));
+  assert.ok(media.includes("abandonFfmpegWarmLoad"));
+});
+
+t("批量释放预热超时后继续下一条，并记下一条与 materialize", () => {
+  assert.ok(vbb.includes("function vbbAwaitWithCap"));
+  assert.ok(vbb.includes("release heap done · prewarm="));
+  assert.ok(vbb.includes("prewarm timeout · 放弃本次重建，继续下一条"));
+  assert.ok(vbb.includes("abandonFfmpegWarmLoad"));
+  assert.ok(vbb.includes("materialize begin"));
+  assert.ok(vbb.includes("#${i + 1} start"));
+  assert.ok(vbb.includes("cutouts=${cutN}"));
+});
+
 t("编辑打开有超时解锁与加载超时，避免卡死无反应", () => {
   assert.ok(vbb.includes("resetStaleVbbEditOpening"));
   assert.ok(vbb.includes("编辑器加载超时"));

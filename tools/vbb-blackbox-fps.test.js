@@ -214,10 +214,12 @@ assert(
     const early = ks[1].start - 0.015;
     assert(Math.abs(seekFn(ks, early, { paused: false, ...ek }) - (ks[1].start + eps)) < 1e-6, "下一段前 15ms 仍须跳，勿少删");
     assert(Math.abs(seekFn(ks, ks[1].end, { paused: false, ...ek }) - (ks[0].start + eps)) < 1e-6, "末段后播放须循环到首段");
+    assert(seekFn(ks, ks[1].end - 1 / 25, { paused: false, ...ek }) == null, "末帧 CTS 仍在半开窗内，播放不回绕");
     const pausedAtEnd = seekFn(ks, ks[1].end, { paused: true, ...ek });
+    const endCts = ks[1].end - 1 / 25;
     assert(
-      pausedAtEnd != null && Math.abs(pausedAtEnd - (ks[1].end - 1 / 25 + eps)) < 1e-6,
-      "暂停停在 exclusive end 前一源帧(+eps)"
+      pausedAtEnd != null && pausedAtEnd > endCts + (1 / 25) * 0.15 && pausedAtEnd < ks[1].end,
+      "暂停停在末帧内部，不贴裸 CTS"
     );
   }
   assert(/previewSeekForKeepRanges/.test(vbbUi) && /is-edit-crop/.test(vbbUi), "外预览须跳 cutouts 并套 crop");

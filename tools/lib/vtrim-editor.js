@@ -1195,10 +1195,52 @@
       }
     }
 
-    /** 播放截断点 ≡ 片尾停帧画面（优先 endParkAtSec） */
+    /** 片尾停帧身份 ≡ 成片末帧 CTS（优先 endParkAtSec）。不是播放回绕时刻。 */
     function playCutParkSec() {
       if (Number.isFinite(endParkAtSec)) return Math.max(startSec, endParkAtSec);
       return endKeepSec();
+    }
+
+    /**
+     * 播放回绕时刻 = 半开上界（第一帧不进成片的 CTS，无表则 endSec）。
+     * 末帧要完整出现一次；在它自己的 CTS 上就回绕，解码器会再吐出同一帧。
+     */
+    function exclusivePlayEndSec() {
+      const hard = Number(endSec);
+      const tl = sourceTimeline;
+      const api = window.DevToolsMp4Timeline;
+      if (!(tl?.ctsSec?.length && api?.sampleRangeForKeep) || !Number.isFinite(hard)) return hard;
+      const fr = api.sampleRangeForKeep(tl, startSec, hard);
+      if (!fr) return hard;
+      const n = tl.ctsSec.length;
+      const endF = Math.max(0, Math.min(n, Math.round(Number(fr.endF) || 0)));
+      if (!(endF < n)) return hard;
+      const t = Number(tl.ctsSec[endF]);
+      if (!Number.isFinite(t)) return hard;
+      return Math.min(hard, Math.max(Number(startSec) + 1e-3, t));
+    }
+
+    /**
+     * 正向播放：呈现时间略超 currentTime，要认。
+     * 回绕后 rVFC 仍报片尾：currentTime 已在片头、呈现时间却在片尾，认它会把末帧再截一次。
+     */
+    function mediaTimeForCut(clock, mediaTime, exclusive) {
+      const step = endKeepStepSec();
+      let presented = Number.isFinite(mediaTime)
+        ? mediaTime
+        : Number.isFinite(lastPresentedMediaTime)
+          ? lastPresentedMediaTime
+          : clock;
+      if (!Number.isFinite(presented)) return clock;
+      if (
+        Number.isFinite(clock) &&
+        Number.isFinite(exclusive) &&
+        presented - clock > Math.max(0.12, step * 3) &&
+        exclusive - clock > Math.max(0.12, step * 3)
+      ) {
+        return clock;
+      }
+      return Math.max(clock, presented);
     }
 
     /**
@@ -2110,18 +2152,14 @@
     function clipPlayWindow(mediaTime) {
       if (closed || !duration || video.paused || playWindowLooping || drag) return false;
       const clock = Number(video.currentTime) || 0;
-      // 根因：播放时 currentTime 常滞后于已呈现帧；只用 currentTime 会在画面已过 park 后才切
-      const presented = Number.isFinite(mediaTime)
-        ? mediaTime
-        : Number.isFinite(lastPresentedMediaTime)
-          ? lastPresentedMediaTime
-          : clock;
-      const cur = Math.max(clock, presented);
-      const park = playCutParkSec();
+      const exclusive = exclusivePlayEndSec();
       const step = endKeepStepSec();
-      // 硬闸钉停帧 shown（endParkAtSec）；并封顶 exclusive end，防止多出约 0.1s
+      // 只削掉下一采样前几毫秒，避免末帧 CTS 上就回绕（那一帧会先闪、seek 再出现一次）
+      const shave = Math.min(0.004, step * 0.2);
+      const cur = mediaTimeForCut(clock, mediaTime, exclusive);
+      const park = playCutParkSec();
       let jump = null;
-      if (cur >= park - 1e-4 || cur >= endSec - 1e-4) {
+      if (cur >= exclusive - shave || cur >= endSec - 1e-4) {
         jump = startSec;
       } else {
         jump = previewSeekForKeepRanges(keepRangesLocal(), cur, {
@@ -2169,18 +2207,19 @@
         const mt = Number(meta?.mediaTime);
         if (Number.isFinite(mt)) lastPresentedMediaTime = mt;
         if (clipPlayWindow(Number.isFinite(mt) ? mt : undefined)) return;
-        // 距停帧 < 2 源帧：按剩余媒体时间预约切断（对冲 rVFC/currentTime 采样间隔，不改 park）
-        const park = playCutParkSec();
-        if (Number.isFinite(mt) && mt < park - 1e-4) {
-          const remain = park - mt;
-          const step = endKeepStepSec();
-          if (remain <= step * 2 && !parkCutTimer) {
+        // 末帧 PTS 不变，要等到半开上界再切。只在这一格内预约，提前一整帧会把末帧截掉后又被补画一次
+        const exclusive = exclusivePlayEndSec();
+        const step = endKeepStepSec();
+        const shave = Math.min(0.004, step * 0.2);
+        if (Number.isFinite(mt) && mt < exclusive - shave) {
+          const remain = exclusive - shave - mt;
+          if (remain <= step * 1.05 && !parkCutTimer) {
             const rate = Math.max(0.05, Number(video.playbackRate) || 1);
-            const waitMs = Math.max(0, (remain / rate) * 1000 - 4);
+            const waitMs = Math.max(0, (remain / rate) * 1000);
             parkCutTimer = window.setTimeout(() => {
               parkCutTimer = 0;
               if (closed || gen !== playWindowGen || video.paused || playWindowLooping) return;
-              clipPlayWindow(park);
+              clipPlayWindow(exclusive);
             }, waitMs);
           }
         }
@@ -3198,8 +3237,9 @@
 
   /**
    * 外预览 / 编辑内播放：源时间若落在 keep 外（删中间 / 片头片尾外），返回应 seek 到的时间；否则 null。
-   * keep 为半开 [start,end)；暂停停在末段最后一源帧（end - 1/fps）。
-   * 播放与暂停同一停帧（end-1/fps）：点片尾±所见 = 播放最后一帧。
+   * keep 为半开 [start,end)。末帧从约 end-1/fps 显示到 end：播放必须播完这一格再回绕。
+   * 在末帧 CTS 就回绕会先闪该帧，紧接着的 seek 再把它画一次（编辑预览片尾重复）。
+   * 暂停停在末帧内部（约 1/4 帧），勿贴裸 CTS——Android 上 currentTime=CTS 会先闪上一帧再回到同一帧。
    * 调用方须先 pause 再 seek，避免解码器在 seek 前继续吐帧。
    * @param {{start:number,end:number}[]} keeps
    * @param {number} t
@@ -3219,11 +3259,10 @@
       Number(opts?.endKeepSec) > 0
         ? Number(opts.endKeepSec)
         : resolveEndKeepSec(opts?.srcFps || opts?.edit || 0);
-    // 播放截断点 = 停帧（end-1/fps）；勿再提前整帧，否则片尾±预览与播放末帧错位
-    const playEndPad = Math.max(endEps, endKeep);
+    // 播放与暂停都留到半开上界；末帧 CTS（end-endKeep）仍在窗内，不要在那里回绕
     for (let i = 0; i < keeps.length; i++) {
       const k = keeps[i];
-      const endLimit = paused ? k.end - endEps : k.end - playEndPad;
+      const endLimit = k.end - endEps;
       if (time >= k.start - startEps && time < endLimit) return null;
     }
     if (time < first.start - startEps) return first.start + DISPLAY_SEEK_EPS;
@@ -3231,8 +3270,13 @@
       const nxt = keeps[i + 1];
       if (nxt && time < nxt.start) return nxt.start + DISPLAY_SEEK_EPS;
     }
-    // 半开上界：暂停停在末帧起点，勿贴到 exclusive end（那一帧已不进 GIF）
-    if (paused) return Math.max(last.start, last.end - endKeep) + DISPLAY_SEEK_EPS;
+    // 半开上界：暂停停在末帧内部。last.end - endKeep ≈ 末帧 CTS，再进约 1/4 帧长
+    if (paused) {
+      const ctsApprox = Math.max(last.start, last.end - endKeep);
+      const room = Math.max(0, last.end - endEps - ctsApprox);
+      const into = Math.min(room, Math.max(endEps * 4, endKeep * 0.25));
+      return ctsApprox + into;
+    }
     return first.start + DISPLAY_SEEK_EPS;
   }
 
