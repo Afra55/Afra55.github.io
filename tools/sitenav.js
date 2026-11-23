@@ -95,6 +95,13 @@
       tags: ["ai", "逆向", "mcp", "agent", "github"],
     },
     {
+      id: "craft-anything",
+      title: "Craft Anything",
+      desc: "看懂任意网站/应用/游戏怎么做的，再让 AI 用净室方式做出你自己的版本：真实探测工具取证 → Agent 新建工程 → 对照原作打分迭代（开源，纯 Rust 引擎）。",
+      url: "https://github.com/storytold/craft-anything",
+      tags: ["ai", "逆向", "agent", "rust", "github"],
+    },
+    {
       id: "codebase-memory-mcp",
       title: "Codebase Memory MCP",
       desc: "本地代码智能引擎（原生可执行文件）：tree-sitter 建知识图谱，函数/调用链/路由/死代码/语义搜索等 15 个 MCP 工具；100% 本地、无需 API key，支持多个编码 Agent。",
