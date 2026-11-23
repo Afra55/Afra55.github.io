@@ -131,6 +131,43 @@ t("倍速预切仍只在大文件/非片头触发 wantSeg（避免小文件多�
   assert.ok(shared.includes("accurate: speed > 1.01 || Boolean(opts.forceAccurateCut)"));
 });
 
+t("压缩时长：入口一次整段加速物化，梯子 speed=1（非切前 N 秒）", () => {
+  assert.ok(shared.includes("async function materializeBlackboxSpeedBake"));
+  assert.ok(shared.includes("function applyBlackboxSpeedBakeMeta"));
+  assert.ok(shared.includes("梯子改吃加速片"));
+  assert.ok(shared.includes("倍速物化失败，回退逐档 setpts"));
+  // 物化滤镜走与导出同一套 hard trim + setpts/speed，且不在此 fps=
+  const bakeStart = shared.indexOf("async function materializeBlackboxSpeedBake");
+  const bakeEnd = shared.indexOf("async function encodeBlackboxClip", bakeStart);
+  const bake = shared.slice(bakeStart, bakeEnd > 0 ? bakeEnd : undefined);
+  assert.ok(bake.includes("vbbEncodeHardTrimFilters(speed, span, startSec"));
+  assert.ok(bake.includes("format=yuv420p"));
+  assert.ok(!/fps=/.test(bake.split("vbbEncodeHardTrimFilters")[1]?.slice(0, 800) || ""), "物化勿提前 fps=");
+  assert.ok(bake.includes('"-bf"') && bake.includes('"-g"'), "全 I 帧防后续 copy 多尾");
+  // wantSeg / 租约在已物化时跳过
+  assert.ok(shared.includes("!opts.speedBaked"));
+  assert.ok(shared.includes("!clipOpts.speedBaked"));
+  // O3/硬闸编码侧强制 speed=1
+  assert.ok(shared.includes("clipOpts.speedBaked"));
+  assert.ok(shared.includes("applyBlackboxSpeedBakeMeta(result, clipOpts)"));
+});
+
+t("applyBlackboxSpeedBakeMeta：元数据写回用户倍速，不改 blob", () => {
+  const m = shared.match(/function applyBlackboxSpeedBakeMeta\([\s\S]*?\n      \}/);
+  assert.ok(m, "missing applyBlackboxSpeedBakeMeta");
+  const box = {};
+  vm.runInNewContext(`${m[0]}\nthis.fn = applyBlackboxSpeedBakeMeta;`, box);
+  const out = box.fn(
+    { blob: { size: 1 }, speed: 1, fps: 15 },
+    { speedBakeMeta: { speed: 2.067, capped: false, limitSec: 30, sourceSpan: 62 } }
+  );
+  assert.ok(Math.abs(out.speed - 2.067) < 0.001);
+  assert.strictEqual(out.speedLimitSec, 30);
+  assert.strictEqual(out.speedBaked, true);
+  assert.strictEqual(out.fps, 15);
+  assert.strictEqual(box.fn({ speed: 1 }, null)?.speed, 1);
+});
+
 t("无倍速大文件预切仍可用 copy（行为与改前一致）", () => {
   // accurate 仅 speed>1.01；startSec≈0 且无倍速 → copy
   const fn = loadFn(shared, "buildVbbSegmentCutArgs");

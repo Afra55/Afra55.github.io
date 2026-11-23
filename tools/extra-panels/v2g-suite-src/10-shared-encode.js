@@ -1303,7 +1303,9 @@
           // 大文件、或非片头窗：先按段切出（失败则仍用原片+ss）
           // 倍速时若走到预切，accurate 已强制 libx264；勿因倍速对小文件一律预切（手机易多吃一趟重编码）
           // 黑盒试档：优先复用 segLease（同窗只切一次）；租约失败再逐次抽
+          // speedBaked：入口已整段加速物化，禁止再抽源窗
           const wantSeg =
+            !opts.speedBaked &&
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
             (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
@@ -2526,7 +2528,9 @@
 
           // 大文件、或非片头窗：先按段切出（失败则仍用原片+ss）
           // 黑盒试档：优先复用 segLease；租约失败再逐次抽（日志含「抽片段」便于对照次数）
+          // speedBaked：入口已整段加速物化，禁止再抽源窗
           const wantSeg =
+            !opts.speedBaked &&
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
             (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
@@ -4182,6 +4186,121 @@
           srcFps: Number(o.srcFps) || Number(srcFps) || 0,
           // 同一次出片复用预切短片；原生桥不走此字段
           segLease: o.segLease || undefined,
+          // 入口已整段加速物化：试档勿再 wantSeg / 二次 setpts
+          speedBaked: Boolean(o.speedBaked),
+        };
+      }
+
+      /**
+       * 压缩时长：整段倍速物化成约目标秒数的中间片（不删内容、不切成「前 N 秒」）。
+       * 滤镜时钟与导出一致：vbbEncodeHardTrimFilters（先 trim 源窗，再 setpts/speed；此处不 fps=）。
+       * 全 I 帧，避免后续误 copy 多尾帧。失败则抛错，由调用方回退旧「每档 setpts」。
+       */
+      async function materializeBlackboxSpeedBake(clipOpts, speedPlan) {
+        const file = clipOpts?.file;
+        if (!file) throw new Error("无片源");
+        const startSec = Math.max(0, Number(clipOpts.startSec) || 0);
+        const span = Math.max(0.05, Number(clipOpts.span) || 0.05);
+        const speed = Math.max(1, Number(speedPlan?.speed) || 1);
+        if (!(speed > 1.01)) throw new Error("无需倍速物化");
+        const onProgress = clipOpts.onProgress || (() => {});
+        const aborted = () => Boolean(clipOpts.isAborted?.() || abortV2g);
+        if (aborted()) throw new Error("已取消");
+        onProgress(0.02, "压缩时长：整段加速物化…");
+        const t0 = performance.now();
+        const ffmpeg =
+          clipOpts.ffmpeg ||
+          (await getFfmpegInstance((ratio, text) => {
+            onProgress(0.02 + Math.min(0.04, (ratio || 0) * 0.04), text || "加载编码器…");
+          }));
+        if (aborted()) throw new Error("已取消");
+        const ext = typeof v2gSourceExt === "function" ? v2gSourceExt(file) : "mp4";
+        const inName = await ensureFfmpegInputWritten(ffmpeg, file, () => {
+          onProgress(0.05, "载入片源…");
+        });
+        if (aborted()) throw new Error("已取消");
+        const outName = `speed-bake-${Date.now().toString(36)}.mp4`;
+        // 与 GIF 导出同一套硬切+倍速；禁止在此 fps=/scale（留给梯子）
+        const trimPrefix = vbbEncodeHardTrimFilters(speed, span, startSec, {
+          exportedEdit: Boolean(clipOpts.exportedEdit),
+          exactKeepFrames: Boolean(clipOpts.exactKeepFrames || clipOpts.exportedEdit),
+        });
+        const args = [
+          "-i",
+          inName,
+          "-an",
+          "-vf",
+          `${trimPrefix}format=yuv420p`,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-crf",
+          "18",
+          "-bf",
+          "0",
+          "-g",
+          "1",
+          "-keyint_min",
+          "1",
+          "-sc_threshold",
+          "0",
+          "-pix_fmt",
+          "yuv420p",
+          "-vsync",
+          "vfr",
+          "-movflags",
+          "+faststart",
+          "-y",
+          outName,
+        ];
+        const code = await ffmpeg.exec(args);
+        if (aborted()) throw new Error("已取消");
+        if (code !== 0) {
+          try {
+            await ffmpeg.deleteFile(outName);
+          } catch (_) {}
+          throw new Error(`倍速物化失败 code=${code}`);
+        }
+        let data;
+        try {
+          data = await ffmpeg.readFile(outName);
+        } finally {
+          try {
+            await ffmpeg.deleteFile(outName);
+          } catch (_) {}
+        }
+        const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+        if (!(raw.byteLength > 1024)) throw new Error("倍速物化输出过小");
+        const bytes = new Uint8Array(raw.byteLength);
+        bytes.set(raw);
+        let outFile = new File(
+          [bytes],
+          String(file.name || "clip").replace(/\.[^.]+$/, "") + "-spd.mp4",
+          { type: "video/mp4", lastModified: Date.now() }
+        );
+        try {
+          if (typeof pinLocalMediaFile === "function") {
+            outFile = await pinLocalMediaFile(outFile, () => {});
+          }
+        } catch (_) {}
+        const eff = Math.max(0.05, Number(speedPlan.effSpan) || span / speed);
+        vbbLog(
+          `[vbb-phase] 倍速物化 ${Math.round(performance.now() - t0)}ms · ×${speed.toFixed(2)} · ${span.toFixed(1)}s→${eff.toFixed(1)}s · ${(outFile.size / 1048576).toFixed(1)}MB`
+        );
+        return { file: outFile, ffmpeg, effSpan: eff, speed };
+      }
+
+      /** 成片元数据写回「用户感知倍速」；编码过程必须保持 speed=1（已物化） */
+      function applyBlackboxSpeedBakeMeta(result, clipOpts) {
+        const m = clipOpts?.speedBakeMeta;
+        if (!result || !m) return result;
+        return {
+          ...result,
+          speed: Math.max(1, Number(m.speed) || 1),
+          speedCapped: Boolean(m.capped),
+          speedLimitSec: Math.max(0, Number(m.limitSec) || 0),
+          speedBaked: true,
         };
       }
 
@@ -4196,7 +4315,58 @@
         /** @type {ReturnType<typeof createBlackboxSegLease>|null} */
         let segLease = null;
         try {
+        // 压缩时长：先整段加速物化一次，梯子只吃短片且 speed=1（失败则回退每档 setpts）
+        {
+          const span0 = Number(clipOpts.span);
+          const plan0 = resolveBlackboxSpeed(span0, clipOpts.speedLimitSec);
+          if (
+            !clipOpts.speedBaked &&
+            plan0.speed > 1.01 &&
+            clipOpts.file &&
+            Number.isFinite(span0) &&
+            span0 > 0.05
+          ) {
+            try {
+              const baked = await materializeBlackboxSpeedBake(clipOpts, plan0);
+              if (baked?.file) {
+                const spd = plan0.speed;
+                const segs = Array.isArray(clipOpts.segmentSpans)
+                  ? clipOpts.segmentSpans.map((s) =>
+                      Math.max(0.05, (Number(s) || 0.05) / spd)
+                    )
+                  : clipOpts.segmentSpans;
+                clipOpts = {
+                  ...clipOpts,
+                  file: baked.file,
+                  ffmpeg: baked.ffmpeg || clipOpts.ffmpeg || null,
+                  startSec: 0,
+                  span: Math.max(0.05, Number(plan0.effSpan) || span0 / spd),
+                  speedLimitSec: 0,
+                  speedBaked: true,
+                  speedBakeMeta: {
+                    speed: plan0.speed,
+                    capped: plan0.capped,
+                    limitSec: Math.max(0, Number(clipOpts.speedLimitSec) || 0),
+                    sourceSpan: span0,
+                  },
+                  segmentSpans: segs,
+                  // 中间片时间轴 ≡ 成片时间轴；禁止再叠源窗垫 / 二次倍速
+                  exactKeepFrames: true,
+                  exportedEdit: true,
+                  forceAccurateCut: false,
+                  segLease: undefined,
+                };
+                vbbLog(
+                  `[vbb-phase] 梯子改吃加速片 · span=${Number(clipOpts.span).toFixed(1)}s · speed=1（元数据仍 ×${plan0.speed.toFixed(2)}）`
+                );
+              }
+            } catch (err) {
+              vbbLog(`[vbb-phase] 倍速物化失败，回退逐档 setpts：${err?.message || err}`);
+            }
+          }
+        }
         // 仅「会 wantSeg」且非导出编辑片时建租约；懒切，原生成功则整次不切
+        // 已 speedBaked：短片即窗，勿再建源窗租约
         {
           const file = clipOpts.file;
           const startSec = Number(clipOpts.startSec);
@@ -4208,6 +4378,7 @@
           // 片头 copy 分支按 span 切会因 GOP/B 帧多吐尾帧，伤预览≡导出。
           const canLease =
             Boolean(file) &&
+            !clipOpts.speedBaked &&
             !clipOpts.exportedEdit &&
             !clipOpts.exactKeepFrames &&
             !(Array.isArray(clipOpts.segmentSpans) && clipOpts.segmentSpans.length > 1) &&
@@ -4227,7 +4398,9 @@
           }
         }
         let result = await encodeBlackboxClipCore(clipOpts);
-        if (!result?.blob || !(result.blob.size > 0)) return result;
+        if (!result?.blob || !(result.blob.size > 0)) {
+          return applyBlackboxSpeedBakeMeta(result, clipOpts);
+        }
         // O3 加宽会换成新对象；沿用标记只表示核心没掉进完整阶梯，后处理须保留
         const seedDelivered = Boolean(result.seedDelivered);
 
@@ -4265,7 +4438,10 @@
           let curW = Math.max(64, Number(result.maxW) || Number(result.outW) || V2G_BLACKBOX_BASE_W);
           const fps = Number(result.fps) || 15;
           // 必须沿用核心阶段的加速倍率：clipOpts 只有 speedLimitSec，直接展开会丢掉 speed → 缩时长失效
-          const speed = Math.max(1, Number(result.speed) || 1);
+          // 已倍速物化：编码必须 speed=1，禁止再 setpts（元数据倍速在出口写回）
+          const speed = clipOpts.speedBaked
+            ? 1
+            : Math.max(1, Number(result.speed) || 1);
           const effSpan = Math.max(0.05, Number(clipOpts.span) || 0) / speed;
           // 与 finishBlackbox 一致：仅 ≤10s 激进 O3 后加宽；18s 用默认探次
           const isShortFill = effSpan <= V2G_BLACKBOX_KEEP_Q_MAX_SPAN_SEC + 0.01;
@@ -4425,7 +4601,8 @@
         } catch (_) {}
 
         if (seedDelivered && result) result = { ...result, seedDelivered: true };
-        return await enforceBlackboxMaxBytes(result, clipOpts);
+        result = await enforceBlackboxMaxBytes(result, clipOpts);
+        return applyBlackboxSpeedBakeMeta(result, clipOpts);
         } finally {
           try {
             if (segLease) await segLease.release();
@@ -4443,7 +4620,10 @@
         if (result.blob.size <= V2G_BLACKBOX_MAX_BYTES) return result;
         const onProgress = clipOpts?.onProgress || (() => {});
         const isAborted = clipOpts?.isAborted || (() => abortV2g);
-        const speed = Math.max(1, Number(result.speed) || 1);
+        // 已倍速物化：硬闸重编也必须 speed=1
+        const speed = clipOpts?.speedBaked
+          ? 1
+          : Math.max(1, Number(result.speed) || 1);
         let best = result;
 
         // 1) gifsicle 硬压（含缩放档）；默认摄影友好（晚减色），避免画质标签高但调色板崩
@@ -4612,6 +4792,7 @@
           allowWide: true, // 一键黑盒允许超过 720px（预算用不完时换清晰度）
           chunkCount: clipOpts.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
           ffmpeg: clipOpts.ffmpeg || null,
+          speedBaked: Boolean(clipOpts.speedBaked),
           ...vbbKeepFrameEncodeOpts(clipOpts, speed, srcFps),
         };
 
