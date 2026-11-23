@@ -114,15 +114,18 @@ t("结果卡会提示加速达上限", () => {
 });
 
 t("无倍速不强制对准目标秒数（避免均匀 delay 被拆成 60/70 顿挫）", () => {
-  assert.ok(shared.includes("forceAlignSpan = speed > 1.01 && chunkTargetRequested > 0.05"));
+  assert.ok(shared.includes("forceAlignSpan = alignSpeed && chunkTargetRequested > 0.05"));
   assert.ok(shared.includes("仍用均匀，保流畅"));
   assert.ok(shared.includes("buildUniformGifDurationsMs(encodedFrames, fps)"));
 });
 
 t("压缩时长按请求份额对准目标（少帧不按实际比例缩短目标）", () => {
   assert.ok(shared.includes("chunkTargetRequested"));
-  assert.ok(shared.includes("speed > 1.01 ? chunkTargetRequested : chunkTargetActual"));
-  assert.ok(shared.includes("speed > 1.01 || frameRatio >= 0.9"));
+  assert.ok(shared.includes("alignSpeed ? chunkTargetRequested : chunkTargetActual"));
+  assert.ok(shared.includes("speed > 1.01 || bakeAlign || frameRatio >= 0.9"));
+  // 物化后滤镜 speed=1，仍靠 speedBakeMeta 对准目标秒
+  assert.ok(shared.includes("opts.speedBakeMeta?.speed"));
+  assert.ok(shared.includes("opts.speedBaked && bakeSpd > 1.01"));
 });
 
 t("倍速预切仍只在大文件/非片头触发 wantSeg（避免小文件多一趟重编码）", () => {
@@ -134,11 +137,12 @@ t("倍速预切仍只在大文件/非片头触发 wantSeg（避免小文件多�
 t("压缩时长：入口一次整段加速物化，梯子 speed=1（非切前 N 秒）", () => {
   assert.ok(shared.includes("async function materializeBlackboxSpeedBake"));
   assert.ok(shared.includes("function applyBlackboxSpeedBakeMeta"));
+  assert.ok(shared.includes("function shouldBlackboxSpeedBake"));
   assert.ok(shared.includes("梯子改吃加速片"));
   assert.ok(shared.includes("倍速物化失败，回退逐档 setpts"));
   // 物化滤镜走与导出同一套 hard trim + setpts/speed，且不在此 fps=
   const bakeStart = shared.indexOf("async function materializeBlackboxSpeedBake");
-  const bakeEnd = shared.indexOf("async function encodeBlackboxClip", bakeStart);
+  const bakeEnd = shared.indexOf("function applyBlackboxSpeedBakeMeta", bakeStart);
   const bake = shared.slice(bakeStart, bakeEnd > 0 ? bakeEnd : undefined);
   assert.ok(bake.includes("vbbEncodeHardTrimFilters(speed, span, startSec"));
   assert.ok(bake.includes("format=yuv420p"));
@@ -150,6 +154,42 @@ t("压缩时长：入口一次整段加速物化，梯子 speed=1（非切前 N 
   // O3/硬闸编码侧强制 speed=1
   assert.ok(shared.includes("clipOpts.speedBaked"));
   assert.ok(shared.includes("applyBlackboxSpeedBakeMeta(result, clipOpts)"));
+  // 勿升格 exportedEdit（入口保持原旗标）
+  const entry = shared.slice(
+    shared.indexOf("// 压缩时长：先整段加速物化"),
+    shared.indexOf("// 仅「会 wantSeg」且非导出编辑片时建租约")
+  );
+  assert.ok(!/exportedEdit:\s*true/.test(entry), "物化后勿强行 exportedEdit:true");
+  assert.ok(entry.includes("保持进入时的 exportedEdit/exactKeepFrames"));
+  assert.ok(entry.includes("probeNativeGifski"));
+});
+
+t("shouldBlackboxSpeedBake：多段/小文件/非 exact 跳过", () => {
+  const m = shared.match(/function shouldBlackboxSpeedBake\([\s\S]*?\n      \}/);
+  assert.ok(m, "missing shouldBlackboxSpeedBake");
+  const box = {};
+  vm.runInNewContext(
+    `const FFMPEG_SEG_FILE_BYTES = 48 * 1024 * 1024;\n${m[0]}\nthis.fn = shouldBlackboxSpeedBake;`,
+    box
+  );
+  const fn = box.fn;
+  const big = { size: 60 * 1024 * 1024 };
+  const plan = { speed: 2, effSpan: 30 };
+  assert.strictEqual(fn({ file: big, span: 60, startSec: 0, exactKeepFrames: true }, plan).ok, true);
+  assert.strictEqual(
+    fn({ file: big, span: 60, startSec: 0, exactKeepFrames: true, segmentSpans: [20, 20, 20] }, plan).reason,
+    "multi-seg"
+  );
+  assert.strictEqual(
+    fn({ file: { size: 10 * 1024 * 1024 }, span: 60, startSec: 0, exactKeepFrames: true }, plan).reason,
+    "small-file"
+  );
+  assert.strictEqual(
+    fn({ file: big, span: 60, startSec: 1, exactKeepFrames: true }, plan).reason,
+    "need-exact-head"
+  );
+  assert.strictEqual(fn({ file: big, span: 60, startSec: 0 }, plan).reason, "need-exact-head");
+  assert.strictEqual(fn({ file: big, span: 60, startSec: 0, exactKeepFrames: true, speedBaked: true }, plan).reason, "already");
 });
 
 t("applyBlackboxSpeedBakeMeta：元数据写回用户倍速，不改 blob", () => {

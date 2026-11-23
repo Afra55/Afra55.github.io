@@ -2890,9 +2890,11 @@
               chunkFrames > 0
                 ? effSpanForMerge * (n / Math.max(1, chunkFrames))
                 : effSpanForMerge;
-            const chunkTarget =
-              speed > 1.01 ? chunkTargetRequested : chunkTargetActual;
-            const forceAlignSpan = speed > 1.01 && chunkTargetRequested > 0.05;
+            // 已倍速物化时滤镜 speed=1，仍按用户压缩时长对准目标秒数（读 speedBakeMeta）
+            const bakeSpd = Math.max(1, Number(opts.speedBakeMeta?.speed) || 1);
+            const alignSpeed = speed > 1.01 || (opts.speedBaked && bakeSpd > 1.01);
+            const chunkTarget = alignSpeed ? chunkTargetRequested : chunkTargetActual;
+            const forceAlignSpan = alignSpeed && chunkTargetRequested > 0.05;
             if (allowStillMerge) {
               try {
                 const merged = mergeStaticFramesInPlace(view, n, stride, fps);
@@ -3003,13 +3005,17 @@
           const playbackFps = gifEffectivePlaybackFps(fps);
           const frameRatio = frameCount > 0 ? actualFrames / frameCount : 1;
           // 压缩时长：delay 已按请求份额拉到目标 → 报 effSpan；无倍速少帧按比例如实报
+          // 已物化时滤镜 speed=1，仍按 speedBakeMeta 视作压缩时长
+          const bakeAlign =
+            Boolean(opts.speedBaked) &&
+            Math.max(1, Number(opts.speedBakeMeta?.speed) || 1) > 1.01;
           const outSpan =
-            speed > 1.01 || frameRatio >= 0.9
+            speed > 1.01 || bakeAlign || frameRatio >= 0.9
               ? effSpan
               : Math.max(0.05, effSpan * Math.max(0.05, frameRatio));
           if (frameRatio < 0.9) {
             vbbLog(
-              speed > 1.01
+              speed > 1.01 || bakeAlign
                 ? `[vbb-phase] gifski 少帧 ${actualFrames}/${frameCount} → delay 已按目标 ${effSpan.toFixed(1)}s 对准（内容可能不全，时长对齐）`
                 : `[vbb-phase] gifski 少帧 ${actualFrames}/${frameCount} → 成片按 ${outSpan.toFixed(1)}s 计（目标 ${effSpan.toFixed(1)}s）`
             );
@@ -4268,7 +4274,31 @@
           segLease: o.segLease || undefined,
           // 入口已整段加速物化：试档勿再 wantSeg / 二次 setpts
           speedBaked: Boolean(o.speedBaked),
+          speedBakeMeta: o.speedBakeMeta || undefined,
         };
+      }
+
+      /**
+       * 是否走「先整段加速物化」：只在能对齐导出时钟、且确实能省掉每档 accurate 抽段时启用。
+       * 多段 / 非 exact / 非片头 / 小文件 / 原生桥 → 仍逐档 setpts，保编辑预览成片一致。
+       */
+      function shouldBlackboxSpeedBake(clipOpts, speedPlan) {
+        const o = clipOpts || {};
+        const plan = speedPlan || {};
+        if (o.speedBaked) return { ok: false, reason: "already" };
+        if (!(Number(plan.speed) > 1.01)) return { ok: false, reason: "no-speed" };
+        if (!o.file) return { ok: false, reason: "no-file" };
+        const span = Number(o.span);
+        if (!(Number.isFinite(span) && span > 0.05)) return { ok: false, reason: "bad-span" };
+        const startSec = Math.max(0, Number(o.startSec) || 0);
+        const exact = Boolean(o.exportedEdit || o.exactKeepFrames);
+        if (!exact || startSec > 0.0005) return { ok: false, reason: "need-exact-head" };
+        if (Array.isArray(o.segmentSpans) && o.segmentSpans.length > 1) {
+          return { ok: false, reason: "multi-seg" };
+        }
+        const bytes = Number(o.file.size) || 0;
+        if (!(bytes >= FFMPEG_SEG_FILE_BYTES)) return { ok: false, reason: "small-file" };
+        return { ok: true, reason: "ok" };
       }
 
       /**
@@ -4395,32 +4425,43 @@
         /** @type {ReturnType<typeof createBlackboxSegLease>|null} */
         let segLease = null;
         try {
-        // 压缩时长：先整段加速物化一次，梯子只吃短片且 speed=1（失败则回退每档 setpts）
+        // 压缩时长：先整段加速物化一次，梯子只吃短片且 speed=1（失败/未达门则回退每档 setpts）
         {
           const span0 = Number(clipOpts.span);
           const plan0 = resolveBlackboxSpeed(span0, clipOpts.speedLimitSec);
-          if (
-            !clipOpts.speedBaked &&
-            plan0.speed > 1.01 &&
-            clipOpts.file &&
-            Number.isFinite(span0) &&
-            span0 > 0.05
-          ) {
+          const gate = shouldBlackboxSpeedBake(clipOpts, plan0);
+          let skipReason = gate.ok ? "" : gate.reason;
+          if (gate.ok) {
             try {
+              const native = await probeNativeGifski();
+              if (native?.ok || native?.nativeEncode) {
+                skipReason = "native-bridge";
+              }
+            } catch (_) {}
+          }
+          if (gate.ok && !skipReason) {
+            try {
+              // 换文件前钉死源帧率，避免物化片名义 fps×speed 选错整除档
+              let srcFpsKeep = Number(clipOpts.srcFps) || 0;
+              if (!(srcFpsKeep >= 5 && srcFpsKeep <= 240)) {
+                try {
+                  const probed = await detectSourceFps(clipOpts.file);
+                  if (probed >= 5 && probed <= 240) srcFpsKeep = probed;
+                } catch (_) {}
+              }
               const baked = await materializeBlackboxSpeedBake(clipOpts, plan0);
               if (baked?.file) {
                 const spd = plan0.speed;
-                const segs = Array.isArray(clipOpts.segmentSpans)
-                  ? clipOpts.segmentSpans.map((s) =>
-                      Math.max(0.05, (Number(s) || 0.05) / spd)
-                    )
-                  : clipOpts.segmentSpans;
+                const eff = Math.max(0.05, Number(plan0.effSpan) || span0 / spd);
+                // 仅单段接点改写为成片轴；多段已在门控跳过
+                let segs = clipOpts.segmentSpans;
+                if (Array.isArray(segs) && segs.length === 1) segs = [eff];
                 clipOpts = {
                   ...clipOpts,
                   file: baked.file,
                   ffmpeg: baked.ffmpeg || clipOpts.ffmpeg || null,
                   startSec: 0,
-                  span: Math.max(0.05, Number(plan0.effSpan) || span0 / spd),
+                  span: eff,
                   speedLimitSec: 0,
                   speedBaked: true,
                   speedBakeMeta: {
@@ -4430,10 +4471,8 @@
                     sourceSpan: span0,
                   },
                   segmentSpans: segs,
-                  // 中间片时间轴 ≡ 成片时间轴；禁止再叠源窗垫 / 二次倍速
-                  exactKeepFrames: true,
-                  exportedEdit: true,
-                  forceAccurateCut: false,
+                  // 保持进入时的 exportedEdit/exactKeepFrames，勿升格清掉片尾垫语义
+                  srcFps: srcFpsKeep >= 5 ? srcFpsKeep : clipOpts.srcFps,
                   segLease: undefined,
                 };
                 vbbLog(
@@ -4443,6 +4482,8 @@
             } catch (err) {
               vbbLog(`[vbb-phase] 倍速物化失败，回退逐档 setpts：${err?.message || err}`);
             }
+          } else if (plan0.speed > 1.01 && skipReason && skipReason !== "no-speed" && skipReason !== "already") {
+            vbbLog(`[vbb-phase] 跳过倍速物化（${skipReason}）· 逐档 setpts`);
           }
         }
         // 仅「会 wantSeg」且非导出编辑片时建租约；懒切，原生成功则整次不切

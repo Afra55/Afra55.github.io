@@ -117,4 +117,22 @@ t("编码片头用 PTS trim（勿 demux -ss 落到下一帧）", () => {
   assert.ok(!/if \(ss > 0\.001\) baseArgs\.push\("-ss"/.test(shared));
 });
 
+t("倍速物化只在 encodeBlackboxClip；keep/预裁仍只复位 PTS", () => {
+  assert.ok(shared.includes("materializeBlackboxSpeedBake"));
+  const keep = vbb.slice(
+    vbb.indexOf("async function materializeVbbKeepVideo"),
+    vbb.indexOf("async function materializeVbbTrimClip")
+  );
+  const trim = vbb.slice(
+    vbb.indexOf("async function materializeVbbTrimClip"),
+    vbb.indexOf("async function prepareVbbEncodeSource")
+  );
+  assert.ok(!keep.includes("materializeBlackboxSpeedBake"));
+  assert.ok(!trim.includes("materializeBlackboxSpeedBake"));
+  assert.ok(!/setpts=\(PTS-STARTPTS\)\/\$\{?speed/.test(keep));
+  assert.ok(!/setpts=\(PTS-STARTPTS\)\/\$\{?speed/.test(trim));
+  assert.ok(shared.includes("shouldBlackboxSpeedBake"));
+  assert.ok(shared.includes("multi-seg"));
+});
+
 console.log(`vbb-edit-speed-align.test.js: ${n} passed`);
