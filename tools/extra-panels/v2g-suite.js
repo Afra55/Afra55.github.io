@@ -295,8 +295,25 @@
         } else {
           return null;
         }
+        // 轻压会再占一块 GIF + gifsicle 内存；粗指针先丢掉试档 RGBA，避免和压缩叠峰
+        if (isCoarsePointer()) clearVbbRgbaTrialCache();
+        vbbLog(
+          `[vbb-phase] 抬质轻压开始 ${formatKb(enc.blob.size)} · q${Number(enc.quality) || "?"}/gq${
+            Number(enc.gifskiQuality) || "?"
+          } · ${plans.length}轮`
+        );
         let best = enc.blob;
         let rounds = 0;
+        const boostWall0 = Date.now();
+        const tPerfBoost = performance.now();
+        const boostHb = window.setInterval(() => {
+          if (aborted()) return;
+          const wallMs = Date.now() - boostWall0;
+          const monoMs = Math.round(performance.now() - tPerfBoost);
+          vbbLog(
+            `[vbb-phase] 抬质轻压心跳 · wall ${wallMs}ms · mono ${monoMs}ms · 已 ${Math.round(wallMs / 1000)}s`
+          );
+        }, 15000);
         try {
           for (let i = 0; i < plans.length; i++) {
             if (aborted()) throw new Error("已取消");
@@ -339,6 +356,8 @@
           );
         } catch (err) {
           if (String(err && err.message) === "已取消") throw err;
+        } finally {
+          window.clearInterval(boostHb);
         }
         return null;
       }
@@ -2389,7 +2408,8 @@
 
       /**
        * 同宽多画质试档：按块复用已导出 RGBA（key 不含画质；换 q 只重跑 gifski）。
-       * 分块/手机也缓存单块（≤32MB），总预算约 96MB，避免 18s 每档重抽 4 段。
+       * 单块 ≤32MB，总预算约 96MB，避免桌面 18s 每档重抽多段。
+       * 粗指针在 gifski / 抬质轻压前会清空，成功后再放回当前块，避免和 wasm 叠峰。
        * @type {Map<string, { frames: Uint8Array, n: number, stride: number, outW: number, outH: number, at: number }>}
        */
       const vbbRgbaTrialCacheMap = new Map();
@@ -2737,16 +2757,28 @@
 
             let view;
             let n;
+            /** 合并前原始帧。编码成功后才 put；粗指针在 gifski 期间尽量只留这一份。 */
+            let rgbaPreMerge = null;
+            const effSpanForMerge =
+              Math.max(0.05, Number(opts.span) || 0) / Math.max(1, Number(opts.speed) || 1);
+            const allowStillMerge =
+              fps < 18 - 0.01 && effSpanForMerge > V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
             const rgbaHit = canUseRgbaCache ? getVbbRgbaTrialCache(rgbaKey) : null;
             if (rgbaHit?.frames?.length >= 2 * stride) {
               report(0.62, `${stageLabel}复用 RGBA 帧…`);
               vbbLog(`[vbb-phase] RGBA 缓存命中 · ${rgbaHit.n}帧 ${outW}×${outH}`);
-              // 拷贝一份再 merge/encode，避免静止帧合并改坏缓存
               const cached = rgbaHit.frames;
-              const copy = new Uint8Array(cached.byteLength);
-              copy.set(cached);
               n = rgbaHit.n;
-              view = copy;
+              // 粗指针且不会改帧：直接编缓存这一份。要合并时再拷贝，避免改坏预合并帧。
+              if (isCoarsePointer() && !allowStillMerge) {
+                view = cached;
+                rgbaPreMerge = cached;
+              } else {
+                const copy = new Uint8Array(cached.byteLength);
+                copy.set(cached);
+                view = copy;
+                if (isCoarsePointer()) rgbaPreMerge = cached;
+              }
             } else {
             const baseArgs = ["-i", encodeInput];
             baseArgs.push("-t", String(ptsStart > 0.001 ? ptsStart + dur + 0.05 : dur));
@@ -2848,7 +2880,7 @@
             } finally {
               window.clearInterval(readHb);
             }
-            const frames = data instanceof Uint8Array ? data : new Uint8Array(data);
+            let frames = data instanceof Uint8Array ? data : new Uint8Array(data);
             // 先释放 ffmpeg 侧文件，降低 gifski 拷贝帧时的峰值内存
             try {
               await ffmpeg.deleteFile(rawName);
@@ -2859,28 +2891,44 @@
             view = n * stride === frames.length ? frames : frames.subarray(0, n * stride);
             if (canUseRgbaCache && view && n >= 2) {
               try {
-                const store = new Uint8Array(n * stride);
-                store.set(view.subarray(0, n * stride));
-                putVbbRgbaTrialCache(rgbaKey, {
-                  frames: store,
-                  n,
-                  stride,
-                  outW,
-                  outH,
-                });
+                const ownsExact =
+                  view.byteOffset === 0 &&
+                  view.byteLength === n * stride &&
+                  view.buffer.byteLength === n * stride;
+                const coarse = isCoarsePointer();
+                if (coarse && ownsExact) {
+                  // 已经是紧凑一份：先别再拷。要合并时在 else 结束后再拆工作缓冲。
+                  rgbaPreMerge = view;
+                } else {
+                  const store = new Uint8Array(n * stride);
+                  store.set(view.subarray(0, n * stride));
+                  rgbaPreMerge = store;
+                  // 粗指针：拷完后编码走 store，马上松开 FFmpeg 视图，避免双份一起进 gifski
+                  if (coarse) {
+                    view = store;
+                    frames = null;
+                    data = null;
+                  }
+                }
               } catch (_) {
-                /* 配额/拷贝失败则本块不缓存 */
+                rgbaPreMerge = null;
               }
             }
             }
             // 静止帧合并：可变长 delay 在连续动作里易「一顿一顿」。
             // ≥18fps 一律均匀 delay；短片（≤16s）即使 15/12 也不合并，优先跟手不卡。
+            // 粗指针要合并且目前只有一份：先拆出工作缓冲，预合并帧留给成功后的缓存。
+            if (isCoarsePointer() && allowStillMerge && rgbaPreMerge && view === rgbaPreMerge) {
+              try {
+                const work = new Uint8Array(rgbaPreMerge.byteLength);
+                work.set(rgbaPreMerge);
+                view = work;
+              } catch (_) {
+                rgbaPreMerge = null;
+              }
+            }
             let encodedFrames = n;
             let durations = null;
-            const effSpanForMerge =
-              Math.max(0.05, Number(opts.span) || 0) / Math.max(1, Number(opts.speed) || 1);
-            const allowStillMerge =
-              fps < 18 - 0.01 && effSpanForMerge > V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
             // 无倍速：按实际抽到的帧占比计目标（少帧如实变短）
             // 压缩时长：按「本段应占的目标秒数」拉 delay（少帧也凑满目标，避免 46→30 却播成 ~21）
             const chunkShare =
@@ -2905,6 +2953,9 @@
                       ? scaleGifDurationsToTargetMs(merged.durations, chunkTarget)
                       : merged.durations;
                   vbbLog(`[vbb-phase] gifski 静止帧合并 ${n} → ${merged.count} 帧（省 ${merged.saved} 帧）`);
+                } else if (isCoarsePointer() && rgbaPreMerge && view !== rgbaPreMerge) {
+                  // 没合并掉帧：丢掉工作副本，编码只留预合并这一份
+                  view = rgbaPreMerge;
                 }
               } catch (_) {}
             }
@@ -2935,8 +2986,11 @@
             const canPassFps = gifskiWasmDurationsAreUniform(durations) && Math.abs(fps - fpsInt) < 0.01;
             const wasmDurations = canPassFps ? undefined : durationsForGifskiWasmPts(durations);
             const tSki = Date.now();
+            const tPerf = performance.now();
             // 编码前再刷一次文案；同步 wasm 期间定时器也会停，完成后立刻报完成
             report(0.74, `${stageLabel}gifski 编码 ${encodedFrames}帧…`);
+            // 粗指针：同步 wasm 前清掉其它试档 RGBA（含本键）。成功后再 put 预合并帧。
+            if (isCoarsePointer()) clearVbbRgbaTrialCache();
             await yieldToUi();
             const gifBytes = await withGifskiEncodeLock(() =>
               mod.encode(
@@ -2950,9 +3004,24 @@
               )
             );
             vbbLog(
-              `[vbb-phase] gifski wasm ${encodedFrames}帧 ${Math.round(Date.now() - tSki)}ms`
+              `[vbb-phase] gifski wasm ${encodedFrames}帧 ${Math.round(Date.now() - tSki)}ms · mono ${Math.round(
+                performance.now() - tPerf
+              )}ms · ${typeof document !== "undefined" ? document.visibilityState : ""}`
             );
             if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
+            if (rgbaPreMerge && canUseRgbaCache) {
+              try {
+                putVbbRgbaTrialCache(rgbaKey, {
+                  frames: rgbaPreMerge,
+                  n,
+                  stride,
+                  outW,
+                  outH,
+                });
+              } catch (_) {
+                /* 配额失败则本块不缓存 */
+              }
+            }
             report(0.95, `${stageLabel}gifski 完成`);
             return { blob: new Blob([gifBytes], { type: "image/gif" }), n, mergedOut: encodedFrames };
           };
