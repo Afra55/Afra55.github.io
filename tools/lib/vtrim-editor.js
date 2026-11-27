@@ -2248,6 +2248,8 @@
         video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
+      // 等待期间用户已开始拖柄/滑画面：不要再把播放头拉回片头
+      if (drag || previewScrub) return target;
       if ((Number(video.currentTime) || 0) < startSec - 0.001) {
         try {
           video.currentTime = seekSecForTime(sourceTimeline, startSec, sourceFps);
@@ -2311,6 +2313,11 @@
       seekPlayheadExact(startSec)
         .then(async () => {
           if (closed || gen !== playWindowGen) return;
+          // 拖柄/滑画面/微调已接手：不要把停掉的循环又播起来（不靠抬 gen）
+          if (parkHoldPause || drag || previewScrub) {
+            freezeClockSec = NaN;
+            return;
+          }
           parkHoldPause = false;
           freezeClockSec = NaN;
           await video.play().catch(() => {});
@@ -2324,7 +2331,7 @@
     }
 
     function clipPlayWindow(mediaTime) {
-      if (closed || !duration || playWindowLooping || drag) return false;
+      if (closed || !duration || playWindowLooping || drag || previewScrub) return false;
       const clock = Number(video.currentTime) || 0;
       const exclusive = exclusivePlayEndSec();
       const step = endKeepStepSec();
@@ -2369,6 +2376,10 @@
         try {
           await seekPlayheadExact(jump);
           if (closed || gen !== playWindowGen) return;
+          if (parkHoldPause || drag || previewScrub) {
+            freezeClockSec = NaN;
+            return;
+          }
           freezeClockSec = NaN;
           parkHoldPause = false;
           await video.play().catch(() => {});
@@ -2763,6 +2774,12 @@
       window.removeEventListener("pointermove", onCropPointerMove);
       window.removeEventListener("pointerup", onCropPointerUp);
       window.removeEventListener("pointercancel", onCropPointerUp);
+      window.removeEventListener("pointermove", onTimelinePointerMove, true);
+      window.removeEventListener("pointerup", onTimelinePointerUp, true);
+      window.removeEventListener("pointercancel", onTimelinePointerUp, true);
+      window.removeEventListener("pointermove", onPreviewPointerMove, true);
+      window.removeEventListener("pointerup", onPreviewPointerUp, true);
+      window.removeEventListener("pointercancel", onPreviewPointerUp, true);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", onResize);
     }
@@ -2983,6 +3000,8 @@
           toast(err?.message || String(err) || "微调失败");
         }
       });
+      // 长按出系统菜单会 pointercancel，连发还没开始就被掐掉
+      btn.addEventListener("contextmenu", (e) => e.preventDefault());
     }
     bindNudgeHold(
       nudgeStartM,
@@ -3036,6 +3055,13 @@
       downloadEditedVideo().catch((err) => toast(err?.message || String(err) || "导出失败"));
     });
 
+    /** 按下后极短的 pointercancel：安卓 setPointerCapture 的假取消，手势还在 */
+    function spuriousPointerCancel(e, armedAt) {
+      if (!e || e.type !== "pointercancel") return false;
+      const now = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+      return now - (Number(armedAt) || 0) < 180;
+    }
+
     function onTimelinePointerDown(e) {
       if (!duration) return;
       // 拖柄前只解冻，勿抬 playWindowGen（否则易卡死后续交互）
@@ -3050,14 +3076,15 @@
       const t = ratio * duration;
       const hit = hitKind(ratio, e.target);
       const kind = hit.kind;
+      const armedAt = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
       timeline?.classList.add("is-dragging");
       if (kind === "start") {
-        drag = { kind: "start", pointerId: e.pointerId, samples: [] };
+        drag = { kind: "start", pointerId: e.pointerId, samples: [], armedAt };
         handleStart?.setPointerCapture?.(e.pointerId);
         pushDragSample(t);
         setStart(t);
       } else if (kind === "end") {
-        drag = { kind: "end", pointerId: e.pointerId, samples: [] };
+        drag = { kind: "end", pointerId: e.pointerId, samples: [], armedAt };
         handleEnd?.setPointerCapture?.(e.pointerId);
         pushDragSample(t);
         setEnd(t);
@@ -3069,6 +3096,7 @@
           originStart: startSec,
           originEnd: endSec,
           samples: [],
+          armedAt,
         };
         timeline?.classList.add("is-dragging-window");
         windowEl?.setPointerCapture?.(e.pointerId);
@@ -3083,13 +3111,13 @@
         selectedCutout = Number(hit.cutIndex) || 0;
         cutJoinVisit = 0;
         syncCutoutUi();
-        drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout, samples: [] };
+        drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout, samples: [], armedAt };
         timeline?.setPointerCapture?.(e.pointerId);
         pushDragSample(t);
         setCutoutEdge(selectedCutout, kind === "cut-end" ? "end" : "start", t);
       } else {
         previewSeek(clamp(t, startSec, endKeepSec()));
-        drag = { kind: "seek", pointerId: e.pointerId, samples: [] };
+        drag = { kind: "seek", pointerId: e.pointerId, samples: [], armedAt };
       }
       e.preventDefault();
     }
@@ -3130,6 +3158,7 @@
     }
     function onTimelinePointerUp(e) {
       if (!drag || drag.pointerId !== e.pointerId) return;
+      if (spuriousPointerCancel(e, drag.armedAt)) return;
       const finishing = finishTrimDrag();
       timeline?.classList.remove("is-dragging-window", "is-dragging");
       drag = null;
@@ -3138,9 +3167,10 @@
       Promise.resolve(finishing).catch(() => {});
     }
     timeline?.addEventListener("pointerdown", onTimelinePointerDown);
-    timeline?.addEventListener("pointermove", onTimelinePointerMove);
-    timeline?.addEventListener("pointerup", onTimelinePointerUp);
-    timeline?.addEventListener("pointercancel", onTimelinePointerUp);
+    // 捕获阶段跟指针：capture 被安卓丢掉、手指滑出时间轴时仍能拖
+    window.addEventListener("pointermove", onTimelinePointerMove, true);
+    window.addEventListener("pointerup", onTimelinePointerUp, true);
+    window.addEventListener("pointercancel", onTimelinePointerUp, true);
     timeline?.addEventListener("animationend", () => timeline.classList.remove("is-pulse"));
 
     function onCropPointerDown(e) {
@@ -3155,6 +3185,7 @@
         startY: e.clientY,
         box: { ...d },
         geom,
+        armedAt: typeof performance !== "undefined" && performance.now ? performance.now() : Date.now(),
       };
       cropBox.setPointerCapture?.(e.pointerId);
       previewWrap?.classList.add("is-dragging");
@@ -3208,6 +3239,7 @@
     }
     function onCropPointerUp(e) {
       if (!cropDrag || cropDrag.pointerId !== e.pointerId) return;
+      if (spuriousPointerCancel(e, cropDrag.armedAt)) return;
       cropDrag = null;
       previewWrap?.classList.remove("is-dragging");
     }
@@ -3221,7 +3253,7 @@
     window.addEventListener("pointerup", onCropPointerUp);
     window.addEventListener("pointercancel", onCropPointerUp);
 
-    previewWrap?.addEventListener("pointerdown", (e) => {
+    function onPreviewPointerDown(e) {
       // 预览左右滑 scrub；播放/暂停只用底部按钮（轻点不播放）
       if (!duration || e.target?.closest?.(".vtrim-crop-box")) return;
       const startT = Number.isFinite(freezeClockSec)
@@ -3239,10 +3271,12 @@
         startX: e.clientX,
         startT: clamp(startT, startSec, endKeepSec()),
         moved: false,
+        armedAt: typeof performance !== "undefined" && performance.now ? performance.now() : Date.now(),
       };
+      // 尽力 capture；丢掉时靠 window 捕获阶段继续跟
       previewWrap.setPointerCapture?.(e.pointerId);
-    });
-    previewWrap?.addEventListener("pointermove", (e) => {
+    }
+    function onPreviewPointerMove(e) {
       if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
       const dx = e.clientX - previewScrub.startX;
       // 阈值略降：长按后微移也要跟手（原 8px 在部分机上像「长按没反应」）
@@ -3261,15 +3295,17 @@
       const target = clamp(previewScrub.startT + delta, startSec, endKeepSec());
       scrubSeekWanted = target;
       pumpPreviewScrubSeek();
-    });
-    previewWrap?.addEventListener("pointerup", (e) => {
+    }
+    function onPreviewPointerUp(e) {
       if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
+      if (spuriousPointerCancel(e, previewScrub.armedAt)) return;
       previewScrub = null;
       // 轻点画面不 toggle 播放——与「只点底部播放」一致
-    });
-    previewWrap?.addEventListener("pointercancel", () => {
-      previewScrub = null;
-    });
+    }
+    previewWrap?.addEventListener("pointerdown", onPreviewPointerDown);
+    window.addEventListener("pointermove", onPreviewPointerMove, true);
+    window.addEventListener("pointerup", onPreviewPointerUp, true);
+    window.addEventListener("pointercancel", onPreviewPointerUp, true);
 
     function tickPlayhead() {
       if (closed) {

@@ -45,11 +45,25 @@ t("手机送手防抖：抬手前采样 + 成片时钟吸附 + 反馈", () => {
 
 t("预览轻点不 toggle 播放（只用底部按钮）", () => {
   const block = vtrim.slice(
-    vtrim.indexOf("previewWrap?.addEventListener(\"pointerup\""),
-    vtrim.indexOf("previewWrap?.addEventListener(\"pointercancel\"")
+    vtrim.indexOf("function onPreviewPointerUp"),
+    vtrim.indexOf("previewWrap?.addEventListener(\"pointerdown\", onPreviewPointerDown)")
   );
   assert.ok(block.includes("不 toggle") || block.includes("不 toggle 播放"));
   assert.ok(!block.includes("togglePlay"));
+});
+
+t("拖拽/滑画面：window 跟指针，忽略按下瞬间的假 pointercancel", () => {
+  assert.ok(vtrim.includes("function spuriousPointerCancel"));
+  const up = vtrim.slice(
+    vtrim.indexOf("function onTimelinePointerUp"),
+    vtrim.indexOf("timeline?.addEventListener(\"pointerdown\"")
+  );
+  assert.ok(up.includes("spuriousPointerCancel"));
+  assert.ok(vtrim.includes('window.addEventListener("pointermove", onTimelinePointerMove, true)'));
+  assert.ok(vtrim.includes('window.addEventListener("pointermove", onPreviewPointerMove, true)'));
+  assert.ok(vtrim.includes("if (parkHoldPause || drag || previewScrub)"));
+  const cssNudge = css.slice(css.indexOf(".vtrim-nudge {"), css.indexOf(".vtrim-nudge {") + 280);
+  assert.ok(/touch-action:\s*none/.test(cssNudge), "微调长按不要被滚动抢走");
 });
 
 t("删中间「跳到接点」只 seek、不 video.play；起始/结尾交替", () => {

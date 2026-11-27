@@ -154,7 +154,8 @@
   gap: 0.35rem;
   width: 100%;
   margin: 0.28rem 0 0;
-  touch-action: manipulation;
+  /* none：父级滚动不要把长按连发抢走（manipulation 会 pointercancel） */
+  touch-action: none;
   user-select: none;
 }
 .vtrim-nudge .ghost-btn {
