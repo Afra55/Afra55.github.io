@@ -111,6 +111,29 @@ t("clipPlayWindow 在半开上界回绕，不在末帧 CTS 上截断", () => {
   assert.ok(fn.includes("presented - clock"));
 });
 
+t("微调停帧禁止 clipPlayWindow 误续播（parkHoldPause）", () => {
+  assert.ok(vtrim.includes("parkHoldPause"));
+  const clip = vtrim.slice(
+    vtrim.indexOf("function clipPlayWindow"),
+    vtrim.indexOf("function armFrameWatch")
+  );
+  // 暂停 + 用户停帧 → 直接 return，勿因 clock≥exclusive 强制 play
+  assert.ok(clip.includes("parkHoldPause"));
+  assert.ok(clip.includes("if (!video.ended) return false") || clip.includes("if (!video.ended) return false;"));
+  assert.ok(!/clock\s*>=\s*exclusive\s*-\s*shave/.test(clip) || clip.includes("禁止再用 clock"));
+  const seekEnd = vtrim.slice(
+    vtrim.indexOf("async function seekEndPreviewExact"),
+    vtrim.indexOf("async function seekStartPreviewExact")
+  );
+  assert.ok(seekEnd.includes("parkHoldPause = true"));
+  const bindStart = vtrim.indexOf("function bindNudgeHold");
+  const bind = vtrim.slice(bindStart, vtrim.indexOf("nudgeStartM,", bindStart));
+  assert.ok(bind.includes("parkHoldPause = true"));
+  assert.ok(bind.includes("stopPropagation"));
+  const toggle = vtrim.slice(vtrim.indexOf("async function togglePlay"), vtrim.indexOf("function getEditState"));
+  assert.ok(toggle.includes("parkHoldPause = false"));
+});
+
 t("停帧记录 endParkAtSec；只在末帧这一格预约切断", () => {
   assert.ok(vtrim.includes("let endParkAtSec"));
   assert.ok(/endParkAtSec = (shown|Number\.isFinite)/.test(vtrim) || vtrim.includes("endParkAtSec ="));

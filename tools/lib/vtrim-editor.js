@@ -606,6 +606,12 @@
     let playheadRaf = 0;
     let playWindowGen = 0;
     let playWindowLooping = false;
+    /**
+     * 用户点微调/拖柄/seek 主动停帧后置位：禁止 clipPlayWindow 在 paused 态因
+     * clock≥exclusive 或 ended 误 video.play()（表现为「点片头/片尾就开播」）。
+     * 点底部播放键开播时清除。根因：41e2f7ee 的 forceCut 把编辑停帧当成循环续播。
+     */
+    let parkHoldPause = false;
     /** 最近一帧 rVFC 已呈现的 mediaTime；currentTime 常滞后于画面，截断必须跟已绘帧 */
     let lastPresentedMediaTime = NaN;
     /**
@@ -1361,6 +1367,10 @@
       }
       scrubSeekInflight = false;
       freezeClockSec = NaN;
+      // 先钉住暂停意图，再 seek（seek 可能 ended / 越过半开上界）
+      parkHoldPause = true;
+      playWindowGen += 1;
+      clearParkCutTimer();
       try {
         video.pause();
       } catch (_) {}
@@ -1386,6 +1396,9 @@
         dragSeekTimer = 0;
       }
       scrubSeekInflight = false;
+      parkHoldPause = true;
+      playWindowGen += 1;
+      clearParkCutTimer();
       try {
         video.pause();
       } catch (_) {}
@@ -2189,6 +2202,9 @@
         dragSeekTimer = 0;
       }
       scrubSeekInflight = false;
+      parkHoldPause = true;
+      playWindowGen += 1;
+      clearParkCutTimer();
       try {
         video.pause();
       } catch (_) {}
@@ -2217,6 +2233,7 @@
         clearTimeout(dragSeekTimer);
         dragSeekTimer = 0;
       }
+      // 播放路径会先 seek 再 play：此处勿钉 parkHoldPause（由 togglePlay / clip 清）
       try {
         video.pause();
       } catch (_) {}
@@ -2280,12 +2297,14 @@
       lastPresentedMediaTime = NaN;
       freezeClockSec = NaN;
       clearParkCutTimer();
+      parkHoldPause = false;
       try {
         video.pause();
       } catch (_) {}
       seekPlayheadExact(startSec)
         .then(async () => {
           if (closed || gen !== playWindowGen) return;
+          parkHoldPause = false;
           await video.play().catch(() => {});
           if (!closed && gen === playWindowGen && !video.paused) armFrameWatch();
         })
@@ -2302,12 +2321,14 @@
       const step = endKeepStepSec();
       // 只削掉下一采样前几毫秒，避免末帧 CTS 上就回绕（那一帧会先闪、seek 再出现一次）
       const shave = Math.min(0.004, step * 0.2);
-      // 文件尾 ended/paused 仍要回绕；勿因 paused 丢掉循环
-      const forceCut =
-        Boolean(video.ended) ||
-        clock >= exclusive - shave ||
-        (Number.isFinite(mediaTime) && mediaTime >= exclusive - shave);
-      if (video.paused && !forceCut) return false;
+      // 暂停态：
+      // - 微调/拖柄停帧（parkHoldPause）→ 绝不续播（修「点片尾就开播」）
+      // - 仅自然播到文件尾 ended 才允许暂停态回绕续播（41e2f7ee 本意）
+      // 禁止再用 clock≥exclusive 当 forceCut：编辑停在末帧内部也会误触发
+      if (video.paused) {
+        if (parkHoldPause) return false;
+        if (!video.ended) return false;
+      }
       const cur = mediaTimeForCut(clock, mediaTime, exclusive);
       const park = playCutParkSec();
       let jump = null;
@@ -2333,11 +2354,13 @@
       playWindowLooping = true;
       const gen = ++playWindowGen;
       lastPresentedMediaTime = NaN;
+      parkHoldPause = false;
       void (async () => {
         try {
           await seekPlayheadExact(jump);
           if (closed || gen !== playWindowGen) return;
           freezeClockSec = NaN;
+          parkHoldPause = false;
           await video.play().catch(() => {});
           if (closed || gen !== playWindowGen || video.paused) return;
           armFrameWatch();
@@ -2406,11 +2429,15 @@
         lastPresentedMediaTime = NaN;
         freezeClockSec = NaN;
         clearParkCutTimer();
+        // 用户显式点播放：允许循环回绕；并清掉微调停帧抑制
+        parkHoldPause = false;
         const hitCut = cutoutAtTime(cur);
         if (hitCut) {
           // 停在红柄/删段内：按端点开播，终点侧不要被拉去起点
+          // seekRawExact 会再钉 parkHoldPause——开播前必须清掉
           const from = playFromWhenInsideCut(hitCut);
           await seekRawExact(from);
+          parkHoldPause = false;
         } else {
           const needStart = cur < startSec - 0.01 || cur >= keep - 0.001 || Math.abs(cur - startSec) < 0.02;
           // 刚拖完片头时 currentTime≈startSec，仍强制精确 seek 再播，锁住用户拖到的位置
@@ -2419,6 +2446,7 @@
         await video.play().catch(() => {});
       } else {
         playWindowGen += 1;
+        parkHoldPause = true;
         video.pause();
       }
     }
@@ -2899,6 +2927,14 @@
         if (e.button != null && e.button !== 0) return;
         if (btn.disabled) return;
         e.preventDefault();
+        e.stopPropagation();
+        // 微调即停帧意图：抢在异步 seek/timeupdate 前钉住，避免误续播
+        parkHoldPause = true;
+        playWindowGen += 1;
+        clearParkCutTimer();
+        try {
+          video.pause();
+        } catch (_) {}
         // 不用 setPointerCapture：部分安卓会立刻 lostpointercapture，短按像没点到
         armed = true;
         pointerId = e.pointerId;
