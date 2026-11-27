@@ -113,6 +113,14 @@ t("clipPlayWindow 在半开上界回绕，不在末帧 CTS 上截断", () => {
 
 t("微调停帧禁止 clipPlayWindow 误续播（parkHoldPause）", () => {
   assert.ok(vtrim.includes("parkHoldPause"));
+  assert.ok(vtrim.includes("function armParkHoldPause"));
+  const arm = vtrim.slice(
+    vtrim.indexOf("function armParkHoldPause"),
+    vtrim.indexOf("function armParkHoldPause") + 350
+  );
+  // 抬 gen 时必须解冻 + 清 looping，否则拖拽/长按画面卡死
+  assert.ok(arm.includes("freezeClockSec = NaN"));
+  assert.ok(arm.includes("playWindowLooping = false"));
   const clip = vtrim.slice(
     vtrim.indexOf("function clipPlayWindow"),
     vtrim.indexOf("function armFrameWatch")
@@ -120,16 +128,17 @@ t("微调停帧禁止 clipPlayWindow 误续播（parkHoldPause）", () => {
   // 暂停 + 用户停帧 → 直接 return，勿因 clock≥exclusive 强制 play
   assert.ok(clip.includes("parkHoldPause"));
   assert.ok(clip.includes("if (!video.ended) return false") || clip.includes("if (!video.ended) return false;"));
-  assert.ok(!/clock\s*>=\s*exclusive\s*-\s*shave/.test(clip) || clip.includes("禁止再用 clock"));
+  assert.ok(clip.includes("freezeClockSec === freezeAt") || clip.includes("freezeAt"));
   const seekEnd = vtrim.slice(
     vtrim.indexOf("async function seekEndPreviewExact"),
     vtrim.indexOf("async function seekStartPreviewExact")
   );
-  assert.ok(seekEnd.includes("parkHoldPause = true"));
+  assert.ok(seekEnd.includes("armParkHoldPause()"));
   const bindStart = vtrim.indexOf("function bindNudgeHold");
   const bind = vtrim.slice(bindStart, vtrim.indexOf("nudgeStartM,", bindStart));
-  assert.ok(bind.includes("parkHoldPause = true"));
+  assert.ok(bind.includes("armParkHoldPause()"));
   assert.ok(bind.includes("stopPropagation"));
+  assert.ok(bind.includes("isRepeat") || bind.includes("fire(true)"));
   const toggle = vtrim.slice(vtrim.indexOf("async function togglePlay"), vtrim.indexOf("function getEditState"));
   assert.ok(toggle.includes("parkHoldPause = false"));
 });

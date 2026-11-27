@@ -610,8 +610,18 @@
      * 用户点微调/拖柄/seek 主动停帧后置位：禁止 clipPlayWindow 在 paused 态因
      * clock≥exclusive 或 ended 误 video.play()（表现为「点片头/片尾就开播」）。
      * 点底部播放键开播时清除。根因：41e2f7ee 的 forceCut 把编辑停帧当成循环续播。
+     *
+     * 注意：抬 gen 会取消 in-flight 循环异步；必须同时清 freezeClockSec +
+     * playWindowLooping，否则时钟冻住、拖拽/长按像「没反应」（#716 副作用）。
      */
     let parkHoldPause = false;
+    function armParkHoldPause() {
+      parkHoldPause = true;
+      playWindowGen += 1;
+      playWindowLooping = false;
+      freezeClockSec = NaN;
+      clearParkCutTimer();
+    }
     /** 最近一帧 rVFC 已呈现的 mediaTime；currentTime 常滞后于画面，截断必须跟已绘帧 */
     let lastPresentedMediaTime = NaN;
     /**
@@ -1001,8 +1011,9 @@
       updateLabels();
     }
 
-    function setCutoutEdge(index, edge, t) {
+    function setCutoutEdge(index, edge, t, opts = {}) {
       if (index < 0 || index >= cutouts.length) return;
+      const soft = Boolean(opts.soft);
       const c = { ...cutouts[index] };
       if (edge === "start") {
         // 多段时勿越过上一段终点（否则 normalize 合并，看起来像 +/− 乱跳）
@@ -1028,12 +1039,12 @@
         edge === "start"
           ? Number(cutouts[selectedCutout]?.start) || c.start
           : Number(cutouts[selectedCutout]?.end) || c.end;
-      if (drag) {
-        // 拖红柄：节流 preview 即可
+      if (drag || soft) {
+        // 拖红柄 / 长按连发：节流 preview，避免堆叠 seekRawExact
         previewSeek(park, { throttle: true });
         return;
       }
-      // 起点+/终点+：必须能停在删段端点。previewSeek 会被 keep 重映射/inflight 卡住 → 进度「没反应」
+      // 短按：必须能停在删段端点。previewSeek 会被 keep 重映射/inflight 卡住 → 进度「没反应」
       scrubSeekWanted = null;
       if (dragSeekTimer) {
         clearTimeout(dragSeekTimer);
@@ -1044,13 +1055,14 @@
     }
 
     /** 对选中红段端点做 ± 步进（闭区间 CTS；与 keepRanges 删帧同一套） */
-    function nudgeSelectedCutout(edge, dirOrDelta) {
+    function nudgeSelectedCutout(edge, dirOrDelta, opts = {}) {
       if (!ensureSelectedCutout()) return false;
       if (selectedCutout < 0 || selectedCutout >= cutouts.length) {
         toast("先点选一条红段");
         return false;
       }
       const kind = edge === "end" ? "end" : "start";
+      const soft = Boolean(opts.soft);
       const c = cutouts[selectedCutout];
       const cur = kind === "end" ? Number(c.end) || 0 : Number(c.start) || 0;
       const dir = Number(dirOrDelta);
@@ -1067,7 +1079,7 @@
         }
       }
       const before = cur;
-      setCutoutEdge(selectedCutout, kind, quantizeTrimSec(next));
+      setCutoutEdge(selectedCutout, kind, quantizeTrimSec(next), { soft });
       const after =
         kind === "end"
           ? Number(cutouts[selectedCutout]?.end) || before
@@ -1076,7 +1088,7 @@
       if (Math.abs(after - before) < 1e-6) {
         hapticLight();
         toast(kind === "end" ? "终点已到边界" : "起点已到边界");
-        void seekRawExact(after);
+        if (!soft) void seekRawExact(after);
       }
       return true;
     }
@@ -1368,9 +1380,7 @@
       scrubSeekInflight = false;
       freezeClockSec = NaN;
       // 先钉住暂停意图，再 seek（seek 可能 ended / 越过半开上界）
-      parkHoldPause = true;
-      playWindowGen += 1;
-      clearParkCutTimer();
+      armParkHoldPause();
       try {
         video.pause();
       } catch (_) {}
@@ -1396,9 +1406,7 @@
         dragSeekTimer = 0;
       }
       scrubSeekInflight = false;
-      parkHoldPause = true;
-      playWindowGen += 1;
-      clearParkCutTimer();
+      armParkHoldPause();
       try {
         video.pause();
       } catch (_) {}
@@ -2009,8 +2017,9 @@
         hapticLight();
       }
       if (preview) {
-        if (immediateSeek || !drag) void seekStartPreviewExact();
-        // 拖拽跟手也停帧内：裸 CTS / +0.1ms 在手机上显示上一帧，片头会比 GIF 早一帧
+        // 长按连发/拖拽：节流 previewSeek，避免堆叠 seekExact 卡死画面
+        // 短按：immediateSeek → 精确帧内
+        if (immediateSeek) void seekStartPreviewExact();
         else previewSeek(seekSecForTime(sourceTimeline, startSec, sourceFps), { throttle: true });
       }
       paintTimeline();
@@ -2020,8 +2029,8 @@
     function setEnd(t, { preview = true, immediateSeek = false } = {}) {
       const prev = endSec;
       endSec = clamp(t, startSec + MIN_SPAN, duration);
-      // 拖拽中尚未停帧：先跟理论 park，抬手 seekEndPreviewExact 再钉 shown
-      if (!(immediateSeek || !drag)) endParkAtSec = endKeepSec();
+      // 拖拽中 / 长按连发：先跟理论 park，抬手/短按 seekEndPreviewExact 再钉 shown
+      if (!immediateSeek) endParkAtSec = endKeepSec();
       activeHandle = "end";
       syncActiveHandleUi();
       clipCutoutsToWindow();
@@ -2032,9 +2041,12 @@
         hapticLight();
       }
       if (preview) {
-        // 拖拽中节流跟手；按钮/抬手用精确回拉，避免片尾预览多出几帧
-        if (immediateSeek || !drag) void seekEndPreviewExact();
-        else previewSeek(seekSecForTime(sourceTimeline, endKeepSec(), sourceFps), { throttle: true });
+        if (immediateSeek) void seekEndPreviewExact();
+        else {
+          previewSeek(seekSecForTime(sourceTimeline, endKeepSec(), sourceFps), {
+            throttle: true,
+          });
+        }
       }
       paintTimeline();
       updateLabels();
@@ -2202,9 +2214,7 @@
         dragSeekTimer = 0;
       }
       scrubSeekInflight = false;
-      parkHoldPause = true;
-      playWindowGen += 1;
-      clearParkCutTimer();
+      armParkHoldPause();
       try {
         video.pause();
       } catch (_) {}
@@ -2305,12 +2315,14 @@
         .then(async () => {
           if (closed || gen !== playWindowGen) return;
           parkHoldPause = false;
+          freezeClockSec = NaN;
           await video.play().catch(() => {});
           if (!closed && gen === playWindowGen && !video.paused) armFrameWatch();
         })
         .catch(() => {})
         .finally(() => {
           if (gen === playWindowGen) playWindowLooping = false;
+          else freezeClockSec = NaN;
         });
     }
 
@@ -2345,7 +2357,8 @@
       if (Math.abs(jump - cur) < 0.001) return false;
       clearParkCutTimer();
       // 先冻时钟再 pause：避免 UI 把越过停帧的 currentTime 刷成多 0.1s
-      freezeClockSec = park;
+      const freezeAt = park;
+      freezeClockSec = freezeAt;
       try {
         video.pause();
       } catch (_) {}
@@ -2366,10 +2379,14 @@
           armFrameWatch();
           if (!playheadRaf) playheadRaf = requestAnimationFrame(tickPlayhead);
         } catch (_) {
-          /* finally 清 looping */
+          /* finally 清 looping / 冻时钟 */
         } finally {
-          // 须在 play + arm 之后才放行，避免空窗期靠滞后 currentTime 漏切
-          if (gen === playWindowGen) playWindowLooping = false;
+          if (gen === playWindowGen) {
+            playWindowLooping = false;
+          } else if (freezeClockSec === freezeAt) {
+            // 被 armParkHoldPause / 新一轮循环取消：必须解冻，否则拖拽/长按画面永久卡死
+            freezeClockSec = NaN;
+          }
         }
       })();
       return true;
@@ -2445,8 +2462,7 @@
         }
         await video.play().catch(() => {});
       } else {
-        playWindowGen += 1;
-        parkHoldPause = true;
+        armParkHoldPause();
         video.pause();
       }
     }
@@ -2905,9 +2921,9 @@
           holdRepeat = 0;
         }
       };
-      const fire = () => {
+      const fire = (isRepeat) => {
         nudgeSnapKind = resolveKind();
-        stepFn();
+        stepFn(Boolean(isRepeat));
       };
       const onRelease = (e) => {
         if (!armed) return;
@@ -2928,10 +2944,8 @@
         if (btn.disabled) return;
         e.preventDefault();
         e.stopPropagation();
-        // 微调即停帧意图：抢在异步 seek/timeupdate 前钉住，避免误续播
-        parkHoldPause = true;
-        playWindowGen += 1;
-        clearParkCutTimer();
+        // 微调即停帧：解冻 + 禁误续播（勿只抬 gen 而留下 freezeClockSec）
+        armParkHoldPause();
         try {
           video.pause();
         } catch (_) {}
@@ -2939,7 +2953,7 @@
         armed = true;
         pointerId = e.pointerId;
         stopRepeat();
-        fire();
+        fire(false);
         window.addEventListener("pointerup", onRelease, true);
         window.addEventListener("pointercancel", onRelease, true);
         holdTimer = window.setTimeout(() => {
@@ -2947,7 +2961,7 @@
           if (!armed) return;
           holdRepeat = window.setInterval(() => {
             if (!armed) return;
-            fire();
+            fire(true);
           }, 70);
         }, 280);
       });
@@ -2956,33 +2970,33 @@
     }
     bindNudgeHold(
       nudgeStartM,
-      () => {
-        if (editMode === "cut") nudgeSelectedCutout("start", -1);
-        else setStart(nudgeTrimEdgeSec("start", -1), { immediateSeek: true });
+      (isRepeat) => {
+        if (editMode === "cut") nudgeSelectedCutout("start", -1, { soft: isRepeat });
+        else setStart(nudgeTrimEdgeSec("start", -1), { immediateSeek: !isRepeat });
       },
       () => (editMode === "cut" ? "cut-start" : "start")
     );
     bindNudgeHold(
       nudgeStartP,
-      () => {
-        if (editMode === "cut") nudgeSelectedCutout("start", 1);
-        else setStart(nudgeTrimEdgeSec("start", 1), { immediateSeek: true });
+      (isRepeat) => {
+        if (editMode === "cut") nudgeSelectedCutout("start", 1, { soft: isRepeat });
+        else setStart(nudgeTrimEdgeSec("start", 1), { immediateSeek: !isRepeat });
       },
       () => (editMode === "cut" ? "cut-start" : "start")
     );
     bindNudgeHold(
       nudgeEndM,
-      () => {
-        if (editMode === "cut") nudgeSelectedCutout("end", -1);
-        else setEnd(nudgeTrimEdgeSec("end", -1), { immediateSeek: true });
+      (isRepeat) => {
+        if (editMode === "cut") nudgeSelectedCutout("end", -1, { soft: isRepeat });
+        else setEnd(nudgeTrimEdgeSec("end", -1), { immediateSeek: !isRepeat });
       },
       () => (editMode === "cut" ? "cut-end" : "end")
     );
     bindNudgeHold(
       nudgeEndP,
-      () => {
-        if (editMode === "cut") nudgeSelectedCutout("end", 1);
-        else setEnd(nudgeTrimEdgeSec("end", 1), { immediateSeek: true });
+      (isRepeat) => {
+        if (editMode === "cut") nudgeSelectedCutout("end", 1, { soft: isRepeat });
+        else setEnd(nudgeTrimEdgeSec("end", 1), { immediateSeek: !isRepeat });
       },
       () => (editMode === "cut" ? "cut-end" : "end")
     );
@@ -3008,6 +3022,8 @@
 
     function onTimelinePointerDown(e) {
       if (!duration) return;
+      // 拖柄前解冻：避免上一轮循环留下的 freezeClockSec 让时钟/画面像拖不动
+      armParkHoldPause();
       try {
         video.pause();
       } catch (_) {}
@@ -3187,12 +3203,20 @@
     window.addEventListener("pointercancel", onCropPointerUp);
 
     previewWrap?.addEventListener("pointerdown", (e) => {
-      // 预览只负责左右滑 scrub；播放/暂停只用底部按钮（手机误触点画面不再开播）
+      // 预览左右滑 scrub；播放/暂停只用底部按钮（轻点不播放）
       if (!duration || e.target?.closest?.(".vtrim-crop-box")) return;
+      // 若上一轮循环冻住了时钟，scrub 起点用冻值，再解冻
+      const startT = Number.isFinite(freezeClockSec)
+        ? freezeClockSec
+        : Number(video.currentTime) || startSec;
+      armParkHoldPause();
+      try {
+        video.pause();
+      } catch (_) {}
       previewScrub = {
         pointerId: e.pointerId,
         startX: e.clientX,
-        startT: video.currentTime || startSec,
+        startT: clamp(startT, startSec, endKeepSec()),
         moved: false,
       };
       previewWrap.setPointerCapture?.(e.pointerId);
@@ -3200,7 +3224,8 @@
     previewWrap?.addEventListener("pointermove", (e) => {
       if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
       const dx = e.clientX - previewScrub.startX;
-      if (Math.abs(dx) > 8) {
+      // 阈值略降：长按后微移也要跟手（原 8px 在部分机上像「长按没反应」）
+      if (Math.abs(dx) > 4) {
         if (!previewScrub.moved) {
           previewScrub.moved = true;
           try {
