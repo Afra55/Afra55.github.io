@@ -52,6 +52,12 @@ t("预览轻点不 toggle 播放（只用底部按钮）", () => {
   assert.ok(!block.includes("togglePlay"));
 });
 
+t("编辑器按 BUILD 覆盖旧 open（防粘坏版本）", () => {
+  assert.ok(vtrim.includes("EDITOR_REV"));
+  assert.ok(vtrim.includes("__rev"));
+  assert.ok(vtrim.includes("DevToolsVtrimEditor.__rev === EDITOR_REV") || vtrim.includes("__rev === EDITOR_REV"));
+});
+
 t("拖拽/滑画面：window 跟指针，忽略按下瞬间的假 pointercancel", () => {
   assert.ok(vtrim.includes("function spuriousPointerCancel"));
   const up = vtrim.slice(

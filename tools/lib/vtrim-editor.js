@@ -5,7 +5,15 @@
    * 可挂载的视频修剪/裁画面编辑器（复用 #vtrim 交互：胶片黄框 + 绿裁剪框）。
    * 供黑盒 GIF 等工具以全屏层打开；不含导出/旋转/翻转。
    */
-  if (window.DevToolsVtrimEditor?.open) return;
+  const EDITOR_REV = String(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
+  // 同 BUILD 才跳过；BUILD 变了必须覆盖旧 open（否则 SW/预取会粘住坏版本）
+  if (
+    window.DevToolsVtrimEditor?.open &&
+    EDITOR_REV &&
+    window.DevToolsVtrimEditor.__rev === EDITOR_REV
+  ) {
+    return;
+  }
 
   const MIN_SPAN = 0.5;
   /** 删中间段最小长度 */
@@ -644,7 +652,11 @@
     let resolveOpen = null;
 
     const fileName = String(opts.title || file.name || "视频");
-    if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
+    if (titleEl) {
+      titleEl.textContent = `编辑 · ${fileName}`;
+      const rev = EDITOR_REV || window.TOOLS_BUILD || "";
+      if (rev) titleEl.title = `编辑器 ${rev}`;
+    }
     if (subEl) {
       subEl.textContent = "";
       subEl.hidden = true;
@@ -4271,6 +4283,7 @@
   }
 
   window.DevToolsVtrimEditor = {
+    __rev: EDITOR_REV,
     open: openEditor,
     ensureCss: ensureVtrimCss,
     normalizeCutouts,
