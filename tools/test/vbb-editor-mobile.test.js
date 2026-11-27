@@ -58,6 +58,20 @@ t("编辑器按 BUILD 覆盖旧 open（防粘坏版本）", () => {
   assert.ok(vtrim.includes("DevToolsVtrimEditor.__rev === EDITOR_REV") || vtrim.includes("__rev === EDITOR_REV"));
 });
 
+t("后台校准勿在拖/点时 rematch 黄柄", () => {
+  const rematch = vtrim.slice(
+    vtrim.indexOf("function rematchHandlesAfterCalibrate"),
+    vtrim.indexOf("async function calibrateSourceTimelineToEditorVideo")
+  );
+  assert.ok(rematch.includes("parkHoldPause"), "用户微调中禁止 rematch");
+  assert.ok(rematch.includes("drag") && rematch.includes("previewScrub"));
+  const calib = vtrim.slice(
+    vtrim.indexOf("async function calibrateSourceTimelineToEditorVideo"),
+    vtrim.indexOf("async function detectAndApplySourceTimeline")
+  );
+  assert.ok(calib.includes("parkHoldPause") || calib.includes("if (drag"));
+});
+
 t("黄柄按下先改位置，setPointerCapture 抛错不能跳过 setStart", () => {
   assert.ok(vtrim.includes("function tryPointerCapture"));
   const down = vtrim.slice(
