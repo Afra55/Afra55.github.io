@@ -74,7 +74,7 @@ t("删中间起点+/终点+：非拖拽走 seekRawExact，避免进度卡住", (
   );
   assert.ok(fn.includes("seekRawExact"));
   assert.ok(fn.includes("scrubSeekInflight = false"));
-  assert.ok(fn.includes("if (drag)"));
+  assert.ok(fn.includes("if (drag") || fn.includes("if (drag || soft)"), "拖/长按走 soft preview");
   assert.ok(vtrim.includes("ensureSelectedCutout"), "± 须能自动选红段");
   const sync = vtrim.slice(vtrim.indexOf("function syncCutoutUi"), vtrim.indexOf("function ensureSelectedCutout"));
   assert.ok(!/btn\.disabled\s*=\s*!hasSel/.test(sync), "± 勿因未选中 disabled");

@@ -545,9 +545,14 @@ body.vtrim-editor-open {
   z-index: 9200;
   display: grid;
   place-items: stretch;
+  /* 显式可点：避免祖先/boot 残留 pointer-events:none 把整层编辑交互吃掉 */
+  pointer-events: auto;
   background: color-mix(in srgb, var(--bg-0, #0b1220) 72%, transparent);
   padding: max(0.5rem, env(safe-area-inset-top)) max(0.5rem, env(safe-area-inset-right))
     max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
+}
+.vtrim-editor-overlay .vtrim-editor-sheet {
+  pointer-events: auto;
 }
 .vtrim-editor-sheet {
   display: grid;
