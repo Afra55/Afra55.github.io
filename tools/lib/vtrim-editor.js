@@ -105,6 +105,53 @@
     if (Number.isFinite(nxt) && Math.abs(nxt - t) <= 0.0005) return nxt;
     return Math.round(t * 1000) / 1000;
   }
+
+  /**
+   * 半开片尾：包含全部视频采样的 exclusive 上界。
+   * Chrome duration 常比片源轨多出音轨/空尾巴；黄柄若钉在 duration，
+   * 「片尾−」会一次跳到 lastCts（数秒～十几秒），看起来像坏了。
+   */
+  function contentExclusiveEndSec(timeline, fallbackDuration) {
+    const arr = timeline?.ctsSec;
+    const n = arr?.length || 0;
+    const dur = Math.max(0, Number(fallbackDuration) || 0);
+    if (!(n > 0)) return dur;
+    const last = Number(arr[n - 1]);
+    if (!Number.isFinite(last)) return dur;
+    const fps = Math.max(5, Number(timeline.fps) || DEFAULT_FRAME_FPS);
+    const eps = 0.5 / fps;
+    // 与 sampleRangeForKeep 一致：endF=n 需要 b >= last + eps
+    const tight = last + Math.max(eps * 2, 1e-4);
+    if (!(dur > 0)) return Math.max(0, tight);
+    // duration 只比末采样多 ≤2.5 帧：视为无空尾，保留容器时长
+    if (dur <= last + 2.5 / fps + 1e-6) return dur;
+    return Math.min(dur, Math.max(tight, last + 1 / fps));
+  }
+
+  /**
+   * 半开 exclusive 上界 → 采样边界。
+   * 返回「第一帧被排除」的 CTS；已含全部采样则 contentExclusiveEndSec。
+   * 切勿吸成 lastCts（那会少掉最后一帧）。
+   */
+  function snapExclusiveEndSec(timeline, endSec, fallbackDuration, sampleIndexAtSec) {
+    const arr = timeline?.ctsSec;
+    const n = arr?.length || 0;
+    const raw = Math.max(0, Number(endSec) || 0);
+    const dur = Math.max(0, Number(fallbackDuration) || 0);
+    const contentEnd = contentExclusiveEndSec(timeline, dur || raw);
+    if (!(n > 0) || typeof sampleIndexAtSec !== "function") {
+      return Math.min(raw, dur > 0 ? dur : raw);
+    }
+    const fps = Math.max(5, Number(timeline.fps) || DEFAULT_FRAME_FPS);
+    const eps = 0.5 / fps;
+    const endF = Math.min(n, sampleIndexAtSec(timeline, Math.max(0, raw - eps)) + 1);
+    if (endF >= n) return contentEnd;
+    const t = Number(arr[endF]);
+    if (!Number.isFinite(t)) return contentEnd;
+    // 空尾巴上的 duration：收到片源轨末，勿吸成 last inclusive CTS
+    if (dur > 0 && raw >= dur - 1e-3 && contentEnd < dur - 1.5 / fps) return contentEnd;
+    return Math.min(dur > 0 ? dur : t, Math.max(0, t));
+  }
   /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
   const DRAG_SEEK_MS = 72;
   /** 半开片尾兜底（约 1 帧 @25fps）；有片源 fps 时用 1/fps */
@@ -666,27 +713,48 @@
       const sign = dir < 0 ? -1 : 1;
       const tl = sourceTimeline;
       const api = window.DevToolsMp4Timeline;
+      const fps = Math.max(5, Number(tl?.fps) || sourceFps || DEFAULT_FRAME_FPS);
+      const cur = edge === "end" ? endSec : startSec;
+      const cap =
+        edge === "end"
+          ? clamp(cur + sign * (1 / fps), startSec + MIN_SPAN, duration)
+          : clamp(cur + sign * (1 / fps), 0, endSec - MIN_SPAN);
       if (tl?.ctsSec?.length && typeof api?.sampleRangeForKeep === "function") {
         const n = tl.ctsSec.length;
-        const fr = api.sampleRangeForKeep(tl, startSec, endSec);
+        const contentEnd = contentExclusiveEndSec(tl, duration);
+        // 黄柄还在音轨/空尾巴上：先收到片源轨末（不丢视频帧），禁止一次跳十几秒
+        if (edge === "end" && sign < 0 && endSec > contentEnd + 1.5 / fps) {
+          return clamp(contentEnd, startSec + MIN_SPAN, duration);
+        }
+        const rangeEnd = Math.min(endSec, Math.max(contentEnd, startSec + MIN_SPAN));
+        const fr = api.sampleRangeForKeep(tl, startSec, rangeEnd);
         if (fr) {
+          let next = NaN;
           if (edge === "end") {
             let endF = Math.round(Number(fr.endF) || 0);
             const minF = Math.round(Number(fr.startF) || 0) + 1;
             endF = Math.max(minF, Math.min(n, endF + sign));
-            if (endF >= n) return duration;
-            const t = Number(tl.ctsSec[endF]);
-            if (Number.isFinite(t)) return clamp(t, startSec + MIN_SPAN, duration);
+            if (endF >= n) next = contentEnd;
+            else {
+              const t = Number(tl.ctsSec[endF]);
+              if (Number.isFinite(t)) next = clamp(t, startSec + MIN_SPAN, duration);
+            }
           } else {
             let startF = Math.round(Number(fr.startF) || 0);
             const maxF = Math.max(0, Math.round(Number(fr.endF) || 1) - 1);
             startF = Math.max(0, Math.min(maxF, startF + sign));
             const t = Number(tl.ctsSec[startF]);
-            if (Number.isFinite(t)) return clamp(t, 0, endSec - MIN_SPAN);
+            if (Number.isFinite(t)) next = clamp(t, 0, endSec - MIN_SPAN);
+          }
+          if (Number.isFinite(next)) {
+            // 采样间距异常大（坏表/超长静帧）：单步最多按 ~2.5 源帧时间挪
+            const maxStep = Math.max(2.5 / fps, 0.12);
+            if (Math.abs(next - cur) > maxStep) return cap;
+            return next;
           }
         }
       }
-      return nudgeEncodeSec(edge === "end" ? endSec : startSec, sign);
+      return nudgeEncodeSec(cur, sign);
     }
 
     /** 同一排按钮：修剪=片头/片尾；删中间=红段起点/终点 */
@@ -1576,12 +1644,17 @@
     /**
      * 成片时钟吸附：优先吸到 MP4 采样 CTS（≡ ffmpeg 切点）；无时间轴再回退 fps 格。
      * 不用 ffmpeg 实时预览（太慢），吸到同一时间点即可。
+     * @param {{ inclusive?: boolean, exclusive?: boolean }} [opts]
+     *   inclusive：片头半开含缝；exclusive：片尾半开上界（勿吸成 last inclusive CTS）
      */
     function snapToEncodeClock(t, opts = {}) {
       const raw = clamp(t, 0, duration);
       const tl = sourceTimeline;
       const api = window.DevToolsMp4Timeline;
       if (tl?.ctsSec?.length && typeof api?.sampleIndexAtSec === "function") {
+        if (opts.exclusive) {
+          return clamp(snapExclusiveEndSec(tl, raw, duration, api.sampleIndexAtSec), 0, duration);
+        }
         // 片头半开含缝：用 inclusive，避免 0.5ms 缝吸回上一帧（预览已是下一帧）
         const idx =
           opts.inclusive && typeof api.inclusiveSampleAtSec === "function"
@@ -1593,6 +1666,20 @@
       return snapToFrameGrid(raw);
     }
 
+    /** 片源轨到位后：去掉容器空尾巴，避免片尾−一次跳数秒 */
+    function tightenTrimToContentTimeline() {
+      if (!sourceTimeline?.ctsSec?.length) return false;
+      const fps = Math.max(5, Number(sourceTimeline.fps) || sourceFps || DEFAULT_FRAME_FPS);
+      const ce = contentExclusiveEndSec(sourceTimeline, duration);
+      let changed = false;
+      if (endSec > ce + 0.5 / fps) {
+        endSec = Math.max(startSec + MIN_SPAN, ce);
+        changed = true;
+      }
+      if (changed) endParkAtSec = encodeParkSecForEdge("end");
+      return changed;
+    }
+
     /**
      * 校准后黄柄 + 红段一起吸到成片时钟，再 clip。
      * 只吸黄柄会导致 cutouts 落在窗外，完成/落盘时被 normalize 静默清空 → 下次只剩片头片尾。
@@ -1600,7 +1687,9 @@
     function rematchHandlesAfterCalibrate() {
       const beforeCuts = Array.isArray(cutouts) ? cutouts.length : 0;
       startSec = snapToEncodeClock(startSec, { inclusive: true });
-      endSec = Math.max(startSec + MIN_SPAN, snapToEncodeClock(endSec));
+      // 片尾是半开 exclusive：必须 exclusive 吸附，禁止 snap 成 lastCts（会少最后一帧）
+      endSec = Math.max(startSec + MIN_SPAN, snapToEncodeClock(endSec, { exclusive: true }));
+      tightenTrimToContentTimeline();
       endParkAtSec = encodeParkSecForEdge("end");
       if (beforeCuts) {
         cutouts = cutouts.map((c) => {
@@ -1668,6 +1757,14 @@
         };
         if (Number(shared.fps) >= 5) applySourceFps(shared.fps);
         if (!trusted) await calibrateSourceTimelineToEditorVideo();
+        else {
+          try {
+            if (tightenTrimToContentTimeline()) {
+              paintTimeline();
+              updateLabels();
+            }
+          } catch (_) {}
+        }
         return;
       }
       if (!srcFile) return;
@@ -1679,6 +1776,12 @@
         sourceTimeline = tl;
         applySourceFps(tl.fps);
         await calibrateSourceTimelineToEditorVideo();
+        try {
+          if (tightenTrimToContentTimeline()) {
+            paintTimeline();
+            updateLabels();
+          }
+        } catch (_) {}
       } catch (_) {}
     }
 
@@ -1808,7 +1911,13 @@
 
     function snapTrimHandle(t, which) {
       return snapNearCutouts(
-        snapEdgeOnly(snapToEncodeClock(t, { inclusive: which === "start" }), which)
+        snapEdgeOnly(
+          snapToEncodeClock(t, {
+            inclusive: which === "start",
+            exclusive: which === "end",
+          }),
+          which
+        )
       );
     }
 
@@ -4033,6 +4142,8 @@
     frameSnapSecFromFps,
     timelineCalibrationTrusted,
     alignTrimSecToSamples,
+    contentExclusiveEndSec,
+    snapExclusiveEndSec,
     resolveKeepFps,
     secToFrame,
     frameToSec,

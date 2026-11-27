@@ -69,7 +69,12 @@ t("snapToFrameGrid 走可变 frameSnapSec；snapToEncodeClock 优先 CTS", () =>
   assert.ok(!/FRAME_SNAP_SEC\s*\)/.test(fn) || fn.includes("frameSnapSec > 0 ? frameSnapSec"));
   assert.ok(fn.includes("function snapToEncodeClock"));
   assert.ok(fn.includes("sampleIndexAtSec"));
-  assert.ok(vtrim.includes("snapToEncodeClock(t)") || /snapEdgeOnly\(snapToEncodeClock/.test(vtrim));
+  assert.ok(
+    vtrim.includes("snapToEncodeClock(t)") ||
+      /snapEdgeOnly\(\s*snapToEncodeClock/.test(vtrim) ||
+      vtrim.includes("exclusive: which === \"end\"") ||
+      vtrim.includes("exclusive: which === 'end'")
+  );
 });
 
 t("底部微调按 keep 采样 ±1（片尾 exclusive 点一下必变帧）", () => {
