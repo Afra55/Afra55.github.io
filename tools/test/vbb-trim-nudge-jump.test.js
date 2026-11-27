@@ -148,6 +148,12 @@ t("微调 pointerdown 钉 parkHoldPause，禁止一点就播放", () => {
   const bind = vtrim.slice(bindStart, vtrim.indexOf("nudgeStartM,", bindStart));
   assert.ok(bind.includes("armParkHoldPause()"));
   assert.ok(bind.includes("video.pause()"));
+  assert.ok(!bind.includes("e.stopPropagation"));
+  const arm = vtrim.slice(
+    vtrim.indexOf("function armParkHoldPause"),
+    vtrim.indexOf("function armParkHoldPause") + 400
+  );
+  assert.ok(!arm.includes("playWindowGen +="));
   const clip = vtrim.slice(vtrim.indexOf("function clipPlayWindow"), vtrim.indexOf("function armFrameWatch"));
   assert.ok(clip.includes("if (parkHoldPause) return false") || clip.includes("parkHoldPause) return false"));
 });
@@ -159,6 +165,11 @@ t("长按连发走 soft/previewSeek，松手再精确钉帧", () => {
   assert.ok(bind.includes("soft: isRepeat") || bind.includes("soft:isRepeat"));
   assert.ok(vtrim.includes("armParkHoldPause()"));
   assert.ok(vtrim.includes("freezeClockSec = NaN"));
+});
+
+t("编辑层显式 pointer-events:auto，避免整层点不动", () => {
+  const css = fs.readFileSync(path.join(__dirname, "..", "styles", "panels", "vtrim.css"), "utf8");
+  assert.ok(css.includes(".vtrim-editor-overlay") && /pointer-events:\s*auto/.test(css));
 });
 
 t("rematch 红柄默认 sampleIndexAtSec，黄柄片尾仍 exclusive", () => {

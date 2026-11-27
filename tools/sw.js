@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20261127-205932";
+const SHELL_CACHE = "devtools-shell-20261127-210742";
 const PRECACHE = [
   "./",
   "./index.html",

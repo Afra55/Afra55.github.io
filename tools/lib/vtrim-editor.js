@@ -606,22 +606,6 @@
     let playheadRaf = 0;
     let playWindowGen = 0;
     let playWindowLooping = false;
-    /**
-     * 用户点微调/拖柄/seek 主动停帧后置位：禁止 clipPlayWindow 在 paused 态因
-     * clock≥exclusive 或 ended 误 video.play()（表现为「点片头/片尾就开播」）。
-     * 点底部播放键开播时清除。根因：41e2f7ee 的 forceCut 把编辑停帧当成循环续播。
-     *
-     * 注意：抬 gen 会取消 in-flight 循环异步；必须同时清 freezeClockSec +
-     * playWindowLooping，否则时钟冻住、拖拽/长按像「没反应」（#716 副作用）。
-     */
-    let parkHoldPause = false;
-    function armParkHoldPause() {
-      parkHoldPause = true;
-      playWindowGen += 1;
-      playWindowLooping = false;
-      freezeClockSec = NaN;
-      clearParkCutTimer();
-    }
     /** 最近一帧 rVFC 已呈现的 mediaTime；currentTime 常滞后于画面，截断必须跟已绘帧 */
     let lastPresentedMediaTime = NaN;
     /**
@@ -633,6 +617,25 @@
     let freezeClockSec = NaN;
     /** 按 rVFC 剩余时间预约 pause，弥补采样间隔导致的晚切 */
     let parkCutTimer = 0;
+    /**
+     * 用户主动停帧（微调/拖柄/seek）：禁止 clipPlayWindow 在 paused 态误 play。
+     * 勿在每次 pointerdown 抬 playWindowGen——会取消循环异步却留下冻时钟，
+     * 表现为按钮/黄柄全无反应（#716/#717 回归）。
+     */
+    let parkHoldPause = false;
+    function clearParkCutTimer() {
+      if (parkCutTimer) {
+        clearTimeout(parkCutTimer);
+        parkCutTimer = 0;
+      }
+    }
+    /** 仅钉停帧意图 + 解冻；不抬 gen（拖拽/按钮热路径必须保持轻量） */
+    function armParkHoldPause() {
+      parkHoldPause = true;
+      playWindowLooping = false;
+      freezeClockSec = NaN;
+      clearParkCutTimer();
+    }
     let cropLiveRaf = 0;
     let filmGen = 0;
     let closed = false;
@@ -1287,12 +1290,6 @@
 
     /** 片尾停帧世代：按钮按下与松手可能连续触发，只保留最后一次 */
     let endParkGen = 0;
-    function clearParkCutTimer() {
-      if (parkCutTimer) {
-        clearTimeout(parkCutTimer);
-        parkCutTimer = 0;
-      }
-    }
 
     /** 片尾停帧身份 ≡ 成片末帧 CTS（优先 endParkAtSec）。不是播放回绕时刻。 */
     function playCutParkSec() {
@@ -2943,8 +2940,7 @@
         if (e.button != null && e.button !== 0) return;
         if (btn.disabled) return;
         e.preventDefault();
-        e.stopPropagation();
-        // 微调即停帧：解冻 + 禁误续播（勿只抬 gen 而留下 freezeClockSec）
+        // 勿 stopPropagation：部分 WebKit 上会让后续手势/黄柄像失灵
         armParkHoldPause();
         try {
           video.pause();
@@ -2953,7 +2949,11 @@
         armed = true;
         pointerId = e.pointerId;
         stopRepeat();
-        fire(false);
+        try {
+          fire(false);
+        } catch (err) {
+          toast(err?.message || String(err) || "微调失败");
+        }
         window.addEventListener("pointerup", onRelease, true);
         window.addEventListener("pointercancel", onRelease, true);
         holdTimer = window.setTimeout(() => {
@@ -2961,12 +2961,28 @@
           if (!armed) return;
           holdRepeat = window.setInterval(() => {
             if (!armed) return;
-            fire(true);
+            try {
+              fire(true);
+            } catch (_) {}
           }, 70);
         }, 280);
       });
-      // 避免 click 再触发一次
-      btn.addEventListener("click", (e) => e.preventDefault());
+      // 兜底：若环境几乎不发 pointerdown，click 仍步进一次
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (armed) return;
+        armParkHoldPause();
+        try {
+          fire(false);
+          if (nudgeSnapKind) {
+            const k = nudgeSnapKind;
+            nudgeSnapKind = null;
+            void snapNudgeToShown(k);
+          }
+        } catch (err) {
+          toast(err?.message || String(err) || "微调失败");
+        }
+      });
     }
     bindNudgeHold(
       nudgeStartM,
@@ -3022,8 +3038,11 @@
 
     function onTimelinePointerDown(e) {
       if (!duration) return;
-      // 拖柄前解冻：避免上一轮循环留下的 freezeClockSec 让时钟/画面像拖不动
-      armParkHoldPause();
+      // 拖柄前只解冻，勿抬 playWindowGen（否则易卡死后续交互）
+      freezeClockSec = NaN;
+      playWindowLooping = false;
+      parkHoldPause = true;
+      clearParkCutTimer();
       try {
         video.pause();
       } catch (_) {}
@@ -3205,11 +3224,13 @@
     previewWrap?.addEventListener("pointerdown", (e) => {
       // 预览左右滑 scrub；播放/暂停只用底部按钮（轻点不播放）
       if (!duration || e.target?.closest?.(".vtrim-crop-box")) return;
-      // 若上一轮循环冻住了时钟，scrub 起点用冻值，再解冻
       const startT = Number.isFinite(freezeClockSec)
         ? freezeClockSec
         : Number(video.currentTime) || startSec;
-      armParkHoldPause();
+      freezeClockSec = NaN;
+      playWindowLooping = false;
+      parkHoldPause = true;
+      clearParkCutTimer();
       try {
         video.pause();
       } catch (_) {}
