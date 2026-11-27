@@ -11084,7 +11084,22 @@
       }
 
       async function ensureVbbVtrimEditor() {
-        if (window.DevToolsVtrimEditor?.open) return window.DevToolsVtrimEditor;
+        const want = String(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
+        if (
+          window.DevToolsVtrimEditor?.open &&
+          want &&
+          window.DevToolsVtrimEditor.__rev === want
+        ) {
+          return window.DevToolsVtrimEditor;
+        }
+        // BUILD 已变但内存仍是旧 open：清掉以便新脚本覆盖
+        if (window.DevToolsVtrimEditor?.open && window.DevToolsVtrimEditor.__rev !== want) {
+          try {
+            delete window.DevToolsVtrimEditor;
+          } catch (_) {
+            window.DevToolsVtrimEditor = undefined;
+          }
+        }
         const load = window.DevToolsLazy?.loadScript;
         if (typeof load !== "function") throw new Error("脚本加载器不可用");
         const loadP = Promise.resolve()
