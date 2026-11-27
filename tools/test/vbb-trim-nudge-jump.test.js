@@ -111,4 +111,46 @@ t("片尾− 在空尾巴上先收 contentEnd（源码契约）", () => {
   assert.ok(nudge.includes("return clamp(contentEnd"));
 });
 
+t("红柄拖/松手走 cut-start|cut-end，禁止复用黄柄 exclusive", () => {
+  const snap = vtrim.slice(
+    vtrim.indexOf("function snapTrimHandle"),
+    vtrim.indexOf("function snapTrimHandle") + 900
+  );
+  assert.ok(snap.includes('"cut-start"') || snap.includes("'cut-start'"));
+  assert.ok(snap.includes('"cut-end"') || snap.includes("'cut-end'"));
+  assert.ok(snap.includes("cutClosed"));
+  assert.ok(/exclusive:\s*which\s*===\s*["']end["']\s*&&\s*!cutClosed/.test(snap));
+  // 拖动中
+  assert.ok(vtrim.includes('snapTrimHandle(raw, "cut-start")') || vtrim.includes("snapTrimHandle(raw, 'cut-start')"));
+  assert.ok(vtrim.includes('snapTrimHandle(raw, "cut-end")') || vtrim.includes("snapTrimHandle(raw, 'cut-end')"));
+  // 松手 finish
+  const finish = vtrim.slice(
+    vtrim.indexOf("async function finishTrimDrag"),
+    vtrim.indexOf("function onTimelinePointerDown")
+  );
+  assert.ok(finish.includes('"cut-end"') || finish.includes("'cut-end'"));
+  assert.ok(finish.includes('"cut-start"') || finish.includes("'cut-start'"));
+});
+
+t("红柄 ± 步进有 maxStep 护栏", () => {
+  const cut = vtrim.slice(
+    vtrim.indexOf("function nudgeSelectedCutout"),
+    vtrim.indexOf("async function snapCutNudgeToShown")
+  );
+  assert.ok(cut.includes("maxStep"));
+  assert.ok(cut.includes("nudgeEncodeSec"));
+});
+
+t("rematch 红柄默认 sampleIndexAtSec，黄柄片尾仍 exclusive", () => {
+  const rematch = vtrim.slice(
+    vtrim.indexOf("function rematchHandlesAfterCalibrate"),
+    vtrim.indexOf("async function calibrateSourceTimelineToEditorVideo")
+  );
+  assert.ok(rematch.includes('snapToEncodeClock(endSec, { exclusive: true })'));
+  // 红柄两行不得带 exclusive/inclusive
+  const cutMap = rematch.slice(rematch.indexOf("cutouts = cutouts.map"), rematch.indexOf("clipCutoutsToWindow"));
+  assert.ok(!/snapToEncodeClock\([^)]*exclusive/.test(cutMap));
+  assert.ok(!/snapToEncodeClock\([^)]*inclusive/.test(cutMap));
+});
+
 console.log(`vbb-trim-nudge-jump.test.js: ${n} passed`);

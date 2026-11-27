@@ -491,6 +491,40 @@ t("外预览/编辑/GIF 同表同公式：非对齐 CTS 的删中间接点一致
   }
 });
 
+t("中间段红柄闭区间 + 黄柄半开：三联 keep 接点同公式", () => {
+  const api = mockTimeline25(200);
+  const tl = { fps: 25, ctsSec: api.ctsSec, mediaCtsSec: api.mediaCtsSec };
+  const { keepRangesFromEdit, keepRangesForEncode } = loadKeepFns(api);
+  // 片头 2.0 / 删中间 [4.0, 5.0] / 片尾 7.0（半开）
+  const edit = {
+    trimStart: 2.0,
+    trimEnd: 7.0,
+    srcFps: 25,
+    cutouts: [{ start: 4.0, end: 5.0 }],
+  };
+  const outer = keepRangesForEncode(edit, 8, tl);
+  const editor = keepRangesFromEdit(edit, 8, tl);
+  const gif = keepRangesForEncode(edit, 8, tl);
+  assert.strictEqual(outer.length, 2);
+  assert.strictEqual(editor.length, 2);
+  assert.strictEqual(gif.length, 2);
+  // 首 keep 止于红柄起点（闭区间起点）
+  assert.ok(Math.abs(outer[0].end - 4.0) < 1e-9, `keep0.end=${outer[0].end}`);
+  // 下一段从 cut end 下一 CTS
+  const resume = 5.0 + 1 / 25;
+  assert.ok(Math.abs(outer[1].start - resume) < 1e-9, `resume=${outer[1].start}`);
+  // 末 keep 止于黄柄半开 end
+  assert.ok(Math.abs(outer[1].end - 7.0) < 1e-9, `keep1.end=${outer[1].end}`);
+  for (let i = 0; i < 2; i++) {
+    assert.strictEqual(outer[i].start, editor[i].start);
+    assert.strictEqual(outer[i].end, editor[i].end);
+    assert.strictEqual(gif[i].start, editor[i].start);
+    assert.strictEqual(gif[i].end, editor[i].end);
+    assert.strictEqual(outer[i].startF, editor[i].startF);
+    assert.strictEqual(gif[i].endF, editor[i].endF);
+  }
+});
+
 t("批量漏传 file 不得借用当前预览条；诊断 JSON 不写采样表", () => {
   const resolve = vbb.slice(
     vbb.indexOf("function resolveVbbTimelineForFile"),

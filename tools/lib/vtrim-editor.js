@@ -1037,7 +1037,7 @@
       void seekRawExact(park);
     }
 
-    /** 对选中红段端点做 ± 步进（成片 CTS；与预览/导出同一套） */
+    /** 对选中红段端点做 ± 步进（闭区间 CTS；与 keepRanges 删帧同一套） */
     function nudgeSelectedCutout(edge, dirOrDelta) {
       if (!ensureSelectedCutout()) return false;
       if (selectedCutout < 0 || selectedCutout >= cutouts.length) {
@@ -1048,10 +1048,18 @@
       const c = cutouts[selectedCutout];
       const cur = kind === "end" ? Number(c.end) || 0 : Number(c.start) || 0;
       const dir = Number(dirOrDelta);
-      const next =
+      const fps = Math.max(5, Number(sourceTimeline?.fps) || sourceFps || DEFAULT_FRAME_FPS);
+      let next =
         dir === 1 || dir === -1
           ? nudgeEncodeSec(cur, dir)
           : quantizeTrimSec(cur + dir);
+      // 红柄闭区间：单步过大（坏表/超长静帧）则按 1 源帧时间挪，避免一次跳数秒
+      if (dir === 1 || dir === -1) {
+        const maxStep = Math.max(2.5 / fps, 0.12);
+        if (Math.abs(next - cur) > maxStep) {
+          next = clamp(cur + (dir < 0 ? -1 : 1) / fps, startSec, endSec);
+        }
+      }
       const before = cur;
       setCutoutEdge(selectedCutout, kind, quantizeTrimSec(next));
       const after =
@@ -1693,6 +1701,7 @@
       endParkAtSec = encodeParkSecForEdge("end");
       if (beforeCuts) {
         cutouts = cutouts.map((c) => {
+          // 红柄闭区间：默认 sampleIndexAtSec；禁止黄柄 inclusive/exclusive
           let a = snapToEncodeClock(Number(c.start) || 0);
           let b = snapToEncodeClock(Number(c.end) || 0);
           if (b < a + MIN_CUTOUT) b = a + MIN_CUTOUT;
@@ -1909,14 +1918,23 @@
       return best;
     }
 
+    /**
+     * @param {"start"|"end"|"cut-start"|"cut-end"} which
+     * 黄柄 start = inclusive 半开缝；黄柄 end = exclusive；
+     * 红柄起/终点 = 闭区间默认 sampleIndexAtSec（勿 inclusive/exclusive）。
+     */
     function snapTrimHandle(t, which) {
+      const edge = which === "cut-end" || which === "end" ? "end" : "start";
+      const cutClosed = which === "cut-start" || which === "cut-end";
       return snapNearCutouts(
         snapEdgeOnly(
           snapToEncodeClock(t, {
-            inclusive: which === "start",
-            exclusive: which === "end",
+            // 仅黄柄片头走 inclusiveSampleAtSec（0.5ms 缝）；红柄闭区间禁走
+            inclusive: which === "start" && !cutClosed,
+            // 仅黄柄片尾 exclusive；红柄终点闭区间勿走（会吸到下一采样）
+            exclusive: which === "end" && !cutClosed,
           }),
-          which
+          edge
         )
       );
     }
@@ -2090,8 +2108,12 @@
         if (idx >= 0 && idx < cutouts.length) {
           const c = cutouts[idx];
           const live = kind === "cut-end" ? c.end : c.start;
+          // 红柄闭区间：cut-start / cut-end 均 inclusive，禁止复用黄柄 exclusive
           const preLift = quantizeTrimSec(
-            snapTrimHandle(dragSecBeforeLift(live), kind === "cut-end" ? "end" : "start")
+            snapTrimHandle(
+              dragSecBeforeLift(live),
+              kind === "cut-end" ? "cut-end" : "cut-start"
+            )
           );
           setCutoutEdge(idx, kind === "cut-end" ? "end" : "start", preLift);
           try {
@@ -2107,6 +2129,7 @@
             kind === "cut-end"
               ? Number(cutouts[idx]?.end) || preLift
               : Number(cutouts[idx]?.start) || preLift;
+          // 红柄停在闭区间端点 CTS；勿黄柄 inclusive/exclusive
           await seekRawExact(snapToEncodeClock(parkT));
           flashSnapFeedback(
             kind === "cut-end" ? "end" : "start",
@@ -3016,8 +3039,9 @@
       let t = raw;
       if (drag.kind === "start") t = snapTrimHandle(raw, "start");
       else if (drag.kind === "end") t = snapTrimHandle(raw, "end");
-      else if (drag.kind === "cut-start") t = snapTrimHandle(raw, "start");
-      else if (drag.kind === "cut-end") t = snapTrimHandle(raw, "end");
+      // 红柄闭区间：勿复用黄柄 "end"（exclusive 会吸到下一采样）
+      else if (drag.kind === "cut-start") t = snapTrimHandle(raw, "cut-start");
+      else if (drag.kind === "cut-end") t = snapTrimHandle(raw, "cut-end");
       if (Math.abs(t - raw) > 0.0005 && Math.abs(t - raw) <= SNAP_EDGE_SEC) {
         if (!drag._magnetAt || Math.abs(drag._magnetAt - t) > 0.001) {
           drag._magnetAt = t;
