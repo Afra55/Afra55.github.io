@@ -141,6 +141,8 @@ edit 有时间编辑？（vbbEditNeedsExport）
 
 - 红柄 **闭区间**删：上一段止于 `cut.start`；下一段从 **下一源采样**起  
 - `nextStartAfterCutEnd` = `ctsSec[sampleIndexAtSec(cutEnd)+1]`；缺表才退 `1/fps`（接点会差帧）  
+- 红柄吸附 / rematch / 拖松手：`snapTrimHandle("cut-start"|"cut-end")` 走默认 `sampleIndexAtSec`；**禁止**复用黄柄 `inclusive`（片头缝）或 `exclusive`（片尾半开）  
+- 红柄 ±1 步进：`nudgeEncodeSec` + `maxStep` 护栏（坏表/超长静帧勿一次跳数秒）  
 - 手柄已在采样 CTS 上：`alignTrimSecToSamples` **保留全精度**；毫秒取整会让 `sampleIndexAtSec` 退上一帧  
 - `matKeeps` 只算一次；多段 `segmentSpans` 供按段信息  
 - 批量：取表/回写必须带 `file`；有 cutouts 时 materialize **串行**（防第二路僵死）
