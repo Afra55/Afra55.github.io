@@ -1734,6 +1734,8 @@
      * 只吸黄柄会导致 cutouts 落在窗外，完成/落盘时被 normalize 静默清空 → 下次只剩片头片尾。
      */
     function rematchHandlesAfterCalibrate() {
+      // 用户正在拖柄/微调/滑画面：禁止后台校准把黄柄吸回去（表现为「点了/拖了没反应」）
+      if (drag || previewScrub || parkHoldPause) return;
       const beforeCuts = Array.isArray(cutouts) ? cutouts.length : 0;
       startSec = snapToEncodeClock(startSec, { inclusive: true });
       // 片尾是半开 exclusive：必须 exclusive 吸附，禁止 snap 成 lastCts（会少最后一帧）
@@ -1775,6 +1777,8 @@
         sourceTimeline.calibrated = false;
         await calibrate(sourceTimeline, video);
       } catch (_) {}
+      // 校准 await 期间用户可能已开始拖/点：勿再 rematch 覆盖
+      if (drag || previewScrub || parkHoldPause) return;
       if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
         try {
           rematchHandlesAfterCalibrate();
@@ -1857,6 +1861,7 @@
         // mid-check-fail / 未标 method：允许再跑；calibrate 对已 calibrated 会早退
         sourceTimeline.calibrated = false;
         await calibrate(sourceTimeline, video);
+        if (drag || previewScrub || parkHoldPause) return;
         if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
           try {
             rematchHandlesAfterCalibrate();
@@ -1883,6 +1888,8 @@
         }
       } else if (video && typeof video.requestVideoFrameCallback === "function") {
         // 无共用探测时才用编辑器 video 轻量估（会短暂 play，结束后停并回到黄柄）
+        // 用户已在拖/点：禁止 play 抢预览（否则像按钮失灵）
+        if (drag || previewScrub || parkHoldPause) return;
         try {
           const times = [];
           const wasMuted = video.muted;
@@ -1890,7 +1897,7 @@
           await new Promise((resolve) => {
             const to = setTimeout(resolve, 1800);
             const onFrame = (_now, meta) => {
-              if (closed) {
+              if (closed || drag || previewScrub || parkHoldPause) {
                 clearTimeout(to);
                 resolve();
                 return;
@@ -2030,11 +2037,13 @@
       activeHandle = "start";
       syncActiveHandleUi();
       clipCutoutsToWindow();
+      const moved = Math.abs(prev - startSec) > 0.0005;
       const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
       timeline?.classList.toggle("is-min-span", atMin);
-      if (atMin && Math.abs(prev - startSec) > 0.001) {
+      // 任意有效挪动都脉冲一下，避免「数值变了但用户以为没反应」
+      if (moved) {
         timeline?.classList.add("is-pulse");
-        hapticLight();
+        if (atMin) hapticLight();
       }
       if (preview) {
         // 长按连发/拖拽：节流 previewSeek，避免堆叠 seekExact 卡死画面
@@ -2054,11 +2063,12 @@
       activeHandle = "end";
       syncActiveHandleUi();
       clipCutoutsToWindow();
+      const moved = Math.abs(prev - endSec) > 0.0005;
       const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
       timeline?.classList.toggle("is-min-span", atMin);
-      if (atMin && Math.abs(prev - endSec) > 0.001) {
+      if (moved) {
         timeline?.classList.add("is-pulse");
-        hapticLight();
+        if (atMin) hapticLight();
       }
       if (preview) {
         if (immediateSeek) void seekEndPreviewExact();
