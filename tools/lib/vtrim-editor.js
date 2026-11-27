@@ -322,6 +322,59 @@
   }
 
   /**
+   * 部分安卓/iOS：paused 下改 currentTime 后 seeked 了，但合成层仍显示旧帧
+   * （用户看到「时间变了、画面不动」）。等一帧 rVFC，不行再极短 play/pause 踢一脚。
+   * 调用方应已钉 parkHoldPause，避免踢脚触发续播。
+   */
+  async function forcePreviewFrame(videoEl, opts = {}) {
+    if (!videoEl || videoEl.readyState < 1) return;
+    const keepPark = opts.keepPark !== false;
+    try {
+      if (typeof videoEl.requestVideoFrameCallback === "function") {
+        let painted = false;
+        await new Promise((resolve) => {
+          const finish = () => {
+            if (painted) return;
+            painted = true;
+            resolve();
+          };
+          try {
+            videoEl.requestVideoFrameCallback(() => finish());
+          } catch (_) {
+            finish();
+            return;
+          }
+          setTimeout(finish, 140);
+        });
+        if (painted) return;
+      }
+    } catch (_) {}
+    if (keepPark && typeof opts.armPark === "function") {
+      try {
+        opts.armPark();
+      } catch (_) {}
+    }
+    try {
+      const p = videoEl.play();
+      if (p && typeof p.then === "function") await p.catch(() => {});
+      await new Promise((r) => {
+        requestAnimationFrame(() => requestAnimationFrame(r));
+      });
+    } catch (_) {
+      /* ignore */
+    } finally {
+      try {
+        videoEl.pause();
+      } catch (_) {}
+      if (keepPark && typeof opts.armPark === "function") {
+        try {
+          opts.armPark();
+        } catch (_) {}
+      }
+    }
+  }
+
+  /**
    * setPointerCapture 在安卓 / 非活跃 pointerId 上会抛 NotFoundError。
    * 抛出点若在 setStart/setEnd 之前，整段 pointerdown 中断，黄柄像拖不动。
    */
@@ -654,6 +707,10 @@
       playWindowLooping = false;
       freezeClockSec = NaN;
       clearParkCutTimer();
+    }
+    /** seek 后强制刷一帧预览（修「时间变了画面不动」） */
+    function kickPreviewPaint() {
+      return forcePreviewFrame(video, { armPark: armParkHoldPause, keepPark: true });
     }
     let cropLiveRaf = 0;
     let filmGen = 0;
@@ -1289,6 +1346,13 @@
       } catch (_) {
         finish();
       }
+      // finish 后另踢一脚画面（不等待，避免拖拽卡顿）
+      const paintAfter = () => {
+        if (closed) return;
+        void kickPreviewPaint();
+      };
+      video.addEventListener("seeked", paintAfter, { once: true });
+      window.setTimeout(paintAfter, 360);
     }
 
     /**
@@ -1409,6 +1473,7 @@
       } catch (_) {}
       await waitSeek(video);
       if (gen !== endParkGen || closed) return target;
+      await kickPreviewPaint();
       // 钉停帧记「成片时钟」CTS，不记 Chrome 帧内偏置点，避免播放截断漂半帧
       endParkAtSec = target;
       paintTimeline();
@@ -1430,11 +1495,14 @@
       try {
         video.pause();
       } catch (_) {}
-      const target = encodeParkSecForEdge("start");
+      // 跟黄柄同一时刻：优先 startSec，encodePark 仅作采样对齐
+      const parked = encodeParkSecForEdge("start");
+      const target = Number.isFinite(parked) ? parked : startSec;
       try {
         video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
+      await kickPreviewPaint();
       paintTimeline();
       updateLabels();
       return target;
@@ -2223,7 +2291,8 @@
       if (target === windowEl || target?.classList?.contains("vtrim-window")) return { kind: "window" };
       const startR = startSec / duration;
       const endR = endSec / duration;
-      const pxPad = 0.045;
+      // 粗指针加大命中：否则点到胶片空白像「黄柄拖不动」
+      const pxPad = coarseUi() ? 0.09 : 0.045;
       if (Math.abs(ratio - startR) <= pxPad) return { kind: "start" };
       if (Math.abs(ratio - endR) <= pxPad) return { kind: "end" };
       if (ratio < startR) return { kind: "start" };
@@ -2252,6 +2321,7 @@
         video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
+      await kickPreviewPaint();
       paintTimeline();
       updateLabels();
       return target;
