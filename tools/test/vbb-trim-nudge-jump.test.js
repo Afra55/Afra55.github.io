@@ -141,6 +141,16 @@ t("红柄 ± 步进有 maxStep 护栏", () => {
   assert.ok(cut.includes("nudgeEncodeSec"));
 });
 
+t("微调 pointerdown 钉 parkHoldPause，禁止一点就播放", () => {
+  assert.ok(vtrim.includes("parkHoldPause"));
+  const bindStart = vtrim.indexOf("function bindNudgeHold");
+  const bind = vtrim.slice(bindStart, vtrim.indexOf("nudgeStartM,", bindStart));
+  assert.ok(bind.includes("parkHoldPause = true"));
+  assert.ok(bind.includes("video.pause()"));
+  const clip = vtrim.slice(vtrim.indexOf("function clipPlayWindow"), vtrim.indexOf("function armFrameWatch"));
+  assert.ok(clip.includes("if (parkHoldPause) return false") || clip.includes("parkHoldPause) return false"));
+});
+
 t("rematch 红柄默认 sampleIndexAtSec，黄柄片尾仍 exclusive", () => {
   const rematch = vtrim.slice(
     vtrim.indexOf("function rematchHandlesAfterCalibrate"),
