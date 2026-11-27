@@ -45,6 +45,9 @@ t("手机送手防抖：抬手前采样 + 成片时钟吸附 + 反馈", () => {
     vtrim.indexOf("function ratioFromClientX")
   );
   assert.ok(finish.includes("dragSecBeforeLift"));
+  assert.ok(finish.includes("coarseUi()"), "粗指针松手不走 55ms 回看");
+  assert.ok(finish.includes("samples[samples.length - 1]"), "粗指针用 live 松手采样");
+  assert.ok(finish.includes("55ms"));
   assert.ok(finish.includes("snapTrimHandle") || finish.includes("snapToEncodeClock"));
   assert.ok(finish.includes("成片时钟吸附") || finish.includes("flashSnapFeedback"));
   assert.ok(finish.includes("flashSnapFeedback"));
@@ -57,6 +60,14 @@ t("预览轻点不 toggle 播放（只用底部按钮）", () => {
   );
   assert.ok(block.includes("不 toggle") || block.includes("不 toggle 播放"));
   assert.ok(!block.includes("togglePlay"));
+});
+
+t("编辑标题区可见 BUILD 戳", () => {
+  assert.ok(vtrim.includes("vtrim-editor-build"));
+  assert.ok(vtrim.includes("BUILD ${EDITOR_REV}") || vtrim.includes("BUILD ${"));
+  assert.ok(vtrim.includes("buildEl.textContent"));
+  assert.ok(css.includes(".vtrim-editor-build"));
+  assert.ok(!/\.vtrim-editor-build\s*\{[^}]*display:\s*none/.test(css));
 });
 
 t("编辑器按 BUILD 覆盖旧 open（防粘坏版本）", () => {
@@ -79,11 +90,14 @@ t("后台校准勿在拖/点时 rematch 黄柄", () => {
   assert.ok(calib.includes("parkHoldPause") || calib.includes("if (drag"));
 });
 
-t("paused seek 的 rVFC 超时不能当成已经画出", () => {
+t("每次 seek 后短 play/pause 踢帧，rVFC 成功也不提前返回", () => {
   const fn = vtrim.slice(vtrim.indexOf("async function forcePreviewFrame"), vtrim.indexOf("function tryPointerCapture"));
-  assert.ok(fn.includes("fromRvfc"), "超时和真正的 rVFC 要分开");
-  assert.ok(fn.includes("if (fromRvfc) return"));
-  assert.ok(fn.includes("videoEl.play()"), "rVFC 不来时要短 play 踢帧");
+  assert.ok(fn.includes("videoEl.play()"), "每次都要短 play");
+  assert.ok(fn.includes("videoEl.pause()"), "踢完必须 pause");
+  assert.ok(fn.includes("parkHoldPause") || fn.includes("armPark"), "踢帧保持 parkHoldPause");
+  assert.ok(!fn.includes("if (fromRvfc) return"), "不能只靠 rVFC");
+  const kick = vtrim.slice(vtrim.indexOf("function kickPreviewPaint"), vtrim.indexOf("let cropLiveRaf"));
+  assert.ok(!kick.includes("drag || previewScrub"), "拖拽中的 seek 也要踢帧");
 });
 
 t("片头片尾接受触摸 button=-1，metadata 错过时仍读 duration", () => {
@@ -92,6 +106,13 @@ t("片头片尾接受触摸 button=-1，metadata 错过时仍读 duration", () =
   assert.ok(bind.includes("e.button > 0"), "只忽略右键；button=-1 仍要步进");
   assert.ok(!bind.includes("e.button !== 0"));
   assert.ok(vtrim.includes("if (video.readyState >= 1) onMeta()"));
+  assert.ok(vtrim.includes("duration 仍是 0"), "duration 还是 0 时不能摘掉 metadata 监听");
+  assert.ok(vtrim.includes('addEventListener("durationchange", onMeta)'));
+  const up = vtrim.slice(
+    vtrim.indexOf("function onTimelinePointerUp"),
+    vtrim.indexOf('timeline?.addEventListener("pointerdown"')
+  );
+  assert.ok(up.includes("commitCoarseRelease"), "松手先写入 live 坐标");
   const down = vtrim.slice(
     vtrim.indexOf("function onTimelinePointerDown"),
     vtrim.indexOf("function onTimelinePointerMove")
