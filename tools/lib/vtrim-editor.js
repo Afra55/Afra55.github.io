@@ -321,59 +321,66 @@
     });
   }
 
+  /** 取消进行中的踢帧，避免 finally 里的 pause 把用户刚点的播放掐掉 */
+  let previewKickGen = 0;
+  function cancelPreviewKick() {
+    previewKickGen += 1;
+  }
+
   /**
-   * 部分安卓/iOS：paused 下改 currentTime 后 seeked 了，但合成层仍显示旧帧
-   * （用户看到「时间变了、画面不动」）。等一帧 rVFC，不行再极短 play/pause 踢一脚。
-   * 调用方应已钉 parkHoldPause，避免踢脚触发续播。
+   * 部分安卓/iOS：paused 下改 currentTime 后 seeked 了，合成层仍停在旧帧
+   * （时间变了、画面不动）。rVFC 可能回调旧帧或根本不来，不能拿它当「已经画出」。
+   * 每次都短 play/pause 踢一脚；keepPark 时钉住 parkHoldPause，踢完即停。
    */
   async function forcePreviewFrame(videoEl, opts = {}) {
     if (!videoEl || videoEl.readyState < 1) return;
+    const gen = ++previewKickGen;
     const keepPark = opts.keepPark !== false;
-    try {
-      if (typeof videoEl.requestVideoFrameCallback === "function") {
-        let fromRvfc = false;
-        let settled = false;
-        await new Promise((resolve) => {
-          const finish = (ok) => {
-            if (settled) return;
-            settled = true;
-            fromRvfc = ok === true;
-            resolve();
-          };
-          try {
-            videoEl.requestVideoFrameCallback(() => finish(true));
-          } catch (_) {
-            finish(false);
-            return;
-          }
-          // 超时不算「已画出」。paused seek 在部分机型上 rVFC 根本不来，必须接着 play 踢帧。
-          setTimeout(() => finish(false), 140);
-        });
-        if (fromRvfc) return;
-      }
-    } catch (_) {}
-    if (keepPark && typeof opts.armPark === "function") {
-      try {
-        opts.armPark();
-      } catch (_) {}
-    }
-    try {
-      const p = videoEl.play();
-      if (p && typeof p.then === "function") await p.catch(() => {});
-      await new Promise((r) => {
-        requestAnimationFrame(() => requestAnimationFrame(r));
-      });
-    } catch (_) {
-      /* ignore */
-    } finally {
-      try {
-        videoEl.pause();
-      } catch (_) {}
+    const arm = () => {
+      if (gen !== previewKickGen) return;
       if (keepPark && typeof opts.armPark === "function") {
         try {
           opts.armPark();
         } catch (_) {}
       }
+    };
+    const wasMuted = videoEl.muted;
+    let touchedMute = false;
+    if (gen !== previewKickGen) return;
+    arm();
+    try {
+      if (gen !== previewKickGen) return;
+      if (!videoEl.muted) {
+        videoEl.muted = true;
+        touchedMute = true;
+      }
+      const p = videoEl.play();
+      // play() 一完成就停。再 seek 回去会在「paused seek 不换帧」的机型上把刚踢出的画面盖掉。
+      if (p && typeof p.then === "function") {
+        await Promise.race([p.catch(() => {}), new Promise((r) => setTimeout(r, 40))]);
+      }
+      if (gen !== previewKickGen) return;
+      try {
+        videoEl.pause();
+      } catch (_) {}
+    } catch (_) {
+      /* ignore */
+    } finally {
+      if (touchedMute && gen !== previewKickGen) {
+        try {
+          videoEl.muted = wasMuted;
+        } catch (_) {}
+      }
+      if (gen !== previewKickGen) return;
+      try {
+        videoEl.pause();
+      } catch (_) {}
+      if (touchedMute) {
+        try {
+          videoEl.muted = wasMuted;
+        } catch (_) {}
+      }
+      arm();
     }
   }
 
@@ -421,6 +428,7 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
+      <p class="vtrim-editor-build mono" id="${p("build")}">BUILD ${EDITOR_REV}</p>
     </header>
     <div class="vtrim-editor-body">
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
@@ -711,11 +719,34 @@
       freezeClockSec = NaN;
       clearParkCutTimer();
     }
-    /** seek 后强制刷一帧预览（修「时间变了画面不动」） */
+    /** seek 后强制刷一帧预览（修「时间变了画面不动」）。拖拽中也踢，只靠 rVFC 换不了合成层。 */
+    let kickPaintLock = false;
+    let kickPaintDirty = false;
     function kickPreviewPaint() {
-      // 拖拽中不要 play 踢帧，否则手势被播放打断，松手像弹回
-      if (closed || drag || previewScrub) return;
-      return forcePreviewFrame(video, { armPark: armParkHoldPause, keepPark: true });
+      if (closed || !video) return Promise.resolve();
+      kickPaintDirty = true;
+      if (kickPaintLock) return Promise.resolve();
+      kickPaintLock = true;
+      const loop = () => {
+        if (closed) {
+          kickPaintLock = false;
+          kickPaintDirty = false;
+          return Promise.resolve();
+        }
+        if (video.seeking || scrubSeekInflight) {
+          kickPaintLock = false;
+          return Promise.resolve();
+        }
+        if (!kickPaintDirty) {
+          kickPaintLock = false;
+          return Promise.resolve();
+        }
+        kickPaintDirty = false;
+        return Promise.resolve(
+          forcePreviewFrame(video, { armPark: armParkHoldPause, keepPark: true })
+        ).then(loop, loop);
+      };
+      return loop();
     }
     let cropLiveRaf = 0;
     let filmGen = 0;
@@ -725,11 +756,13 @@
     let resolveOpen = null;
 
     const fileName = String(opts.title || file.name || "视频");
+    const rev = EDITOR_REV || window.TOOLS_BUILD || window.TOOLS_VERSION || "";
     if (titleEl) {
       titleEl.textContent = `编辑 · ${fileName}`;
-      const rev = EDITOR_REV || window.TOOLS_BUILD || "";
       if (rev) titleEl.title = `编辑器 ${rev}`;
     }
+    const buildEl = $("build");
+    if (buildEl) buildEl.textContent = `BUILD ${rev || "?"}`;
     if (subEl) {
       subEl.textContent = "";
       subEl.hidden = true;
@@ -1021,7 +1054,7 @@
         ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.4)
         : Math.max(startSec, a - 0.4);
       // 勿用 previewSeek：inflight 卡住会导致随后「起点+/终点+」进度不动
-      void seekPlayheadExact(joinAt);
+      void seekPlayheadExact(joinAt).then(() => kickPreviewPaint());
       hapticLight();
       toast(
         coarseUi()
@@ -1329,6 +1362,8 @@
       if (Math.abs((Number(video.currentTime) || 0) - seekT) < nearEps && !video.seeking) {
         paintTimeline();
         updateLabels();
+        // 时间已经在目标上，合成层仍可能停在旧帧
+        void kickPreviewPaint();
         return;
       }
       scrubSeekInflight = true;
@@ -1616,25 +1651,37 @@
 
     async function ensureFilmProbe() {
       if (!objectUrl) return false;
-      if (filmVideo.src === objectUrl && filmVideo.readyState >= 1) return true;
+      if (filmVideo.src === objectUrl && filmVideo.readyState >= 1 && Number(filmVideo.duration) > 0) return true;
       try {
-        filmVideo.src = objectUrl;
         await new Promise((resolve, reject) => {
+          let settled = false;
+          const timer = setTimeout(() => fail(), 8000);
+          const cleanup = () => {
+            clearTimeout(timer);
+            filmVideo.removeEventListener("loadedmetadata", ok);
+            filmVideo.removeEventListener("error", fail);
+          };
           const ok = () => {
+            if (settled) return;
+            settled = true;
             cleanup();
             resolve();
           };
           const fail = () => {
+            if (settled) return;
+            settled = true;
             cleanup();
             reject(new Error("film probe"));
           };
-          const cleanup = () => {
-            filmVideo.removeEventListener("loadedmetadata", ok);
-            filmVideo.removeEventListener("error", fail);
-          };
           filmVideo.addEventListener("loadedmetadata", ok);
           filmVideo.addEventListener("error", fail);
-          setTimeout(fail, 8000);
+          if (filmVideo.src !== objectUrl) filmVideo.src = objectUrl;
+          else if (filmVideo.readyState < 1) {
+            try {
+              filmVideo.load();
+            } catch (_) {}
+          }
+          if (filmVideo.readyState >= 1) ok();
         });
         return true;
       } catch (_) {
@@ -2014,6 +2061,7 @@
           }
           try {
             await seekPlayheadExact(startSec);
+            await kickPreviewPaint();
           } catch (_) {
             previewSeek(startSec);
           }
@@ -2182,11 +2230,20 @@
       if (!drag) return;
       const kind = drag.kind;
       const cutIndex = drag.cutIndex;
+      // 粗指针：松手点就是最后一次采样。55ms 回看会把快拖弹回，像拖不动。
+      const releaseSec = (fallback) => {
+        if (coarseUi()) {
+          const samples = drag?.samples;
+          const live = Array.isArray(samples) && samples.length ? Number(samples[samples.length - 1].t) : NaN;
+          return Number.isFinite(live) ? live : fallback;
+        }
+        return dragSecBeforeLift(fallback);
+      };
       // 抬手：去送手抖动 → 成片时钟吸附 → 预览停 CTS（不按 Chrome 停帧改写黄柄）
       if (kind === "start") {
         const before = startSec;
         const want = quantizeTrimSec(
-          clamp(snapTrimHandle(dragSecBeforeLift(startSec), "start"), 0, endSec - MIN_SPAN)
+          clamp(snapTrimHandle(releaseSec(startSec), "start"), 0, endSec - MIN_SPAN)
         );
         startSec = want;
         try {
@@ -2205,7 +2262,7 @@
       } else if (kind === "end") {
         const before = endSec;
         const want = quantizeTrimSec(
-          clamp(snapTrimHandle(dragSecBeforeLift(endSec), "end"), startSec + MIN_SPAN, duration)
+          clamp(snapTrimHandle(releaseSec(endSec), "end"), startSec + MIN_SPAN, duration)
         );
         setEnd(want, {
           preview: false,
@@ -2227,7 +2284,7 @@
       } else if (kind === "window") {
         const beforeStart = startSec;
         const span = Math.max(MIN_SPAN, endSec - startSec);
-        const liftStart = dragSecBeforeLift(startSec);
+        const liftStart = releaseSec(startSec);
         startSec = quantizeTrimSec(
           clamp(snapTrimHandle(liftStart, "start"), 0, duration - span)
         );
@@ -2239,6 +2296,7 @@
         endParkAtSec = endKeepSec();
         clipCutoutsToWindow();
         await seekPlayheadExact(encodeParkSecForEdge("start"));
+        await kickPreviewPaint();
         paintTimeline();
         updateLabels();
         flashSnapFeedback("window", Math.abs(beforeStart - startSec) > frameSnapSec * 0.35);
@@ -2250,7 +2308,7 @@
           // 红柄闭区间：cut-start / cut-end 均 inclusive，禁止复用黄柄 exclusive
           const preLift = quantizeTrimSec(
             snapTrimHandle(
-              dragSecBeforeLift(live),
+              releaseSec(live),
               kind === "cut-end" ? "cut-end" : "cut-start"
             )
           );
@@ -2425,6 +2483,7 @@
       lastPresentedMediaTime = NaN;
       freezeClockSec = NaN;
       clearParkCutTimer();
+      cancelPreviewKick();
       parkHoldPause = false;
       try {
         video.pause();
@@ -2437,6 +2496,7 @@
             freezeClockSec = NaN;
             return;
           }
+          cancelPreviewKick();
           parkHoldPause = false;
           freezeClockSec = NaN;
           await video.play().catch(() => {});
@@ -2451,6 +2511,8 @@
 
     function clipPlayWindow(mediaTime) {
       if (closed || !duration || playWindowLooping || drag || previewScrub) return false;
+      // 踢帧的短 play 也钉着 parkHoldPause：播放中同样不能回绕续播
+      if (parkHoldPause) return false;
       const clock = Number(video.currentTime) || 0;
       const exclusive = exclusivePlayEndSec();
       const step = endKeepStepSec();
@@ -2490,6 +2552,7 @@
       playWindowLooping = true;
       const gen = ++playWindowGen;
       lastPresentedMediaTime = NaN;
+      cancelPreviewKick();
       parkHoldPause = false;
       void (async () => {
         try {
@@ -2500,6 +2563,7 @@
             return;
           }
           freezeClockSec = NaN;
+          cancelPreviewKick();
           parkHoldPause = false;
           await video.play().catch(() => {});
           if (closed || gen !== playWindowGen || video.paused) return;
@@ -2566,6 +2630,7 @@
 
     async function togglePlay() {
       if (!video.src) return;
+      cancelPreviewKick();
       if (video.paused) {
         const cur = Number(video.currentTime) || 0;
         const keep = playCutParkSec();
@@ -2587,8 +2652,11 @@
           // 刚拖完片头时 currentTime≈startSec，仍强制精确 seek 再播，锁住用户拖到的位置
           await seekPlayheadExact(needStart ? startSec : cur);
         }
+        cancelPreviewKick();
+        parkHoldPause = false;
         await video.play().catch(() => {});
       } else {
+        cancelPreviewKick();
         armParkHoldPause();
         video.pause();
       }
@@ -3299,9 +3367,29 @@
         setCutoutEdge(drag.cutIndex, drag.kind === "cut-end" ? "end" : "start", t);
       } else previewSeek(clamp(t, startSec, endKeepSec()));
     }
+    function commitCoarseRelease(e) {
+      if (!drag || !timeline || !coarseUi()) return;
+      if (drag.kind === "window") {
+        const rect = timeline.getBoundingClientRect();
+        const deltaSec = ((e.clientX - drag.originX) / Math.max(1, rect.width)) * duration;
+        const span = Math.max(MIN_SPAN, drag.originEnd - drag.originStart);
+        const nextStart = clamp(drag.originStart + deltaSec, 0, Math.max(0, duration - span));
+        pushDragSample(nextStart);
+        return;
+      }
+      const raw = ratioFromClientX(e.clientX) * duration;
+      let t = raw;
+      if (drag.kind === "start") t = snapTrimHandle(raw, "start");
+      else if (drag.kind === "end") t = snapTrimHandle(raw, "end");
+      else if (drag.kind === "cut-start") t = snapTrimHandle(raw, "cut-start");
+      else if (drag.kind === "cut-end") t = snapTrimHandle(raw, "cut-end");
+      else t = clamp(raw, 0, duration);
+      pushDragSample(t);
+    }
     function onTimelinePointerUp(e) {
       if (!drag || drag.pointerId !== e.pointerId) return;
       if (spuriousPointerCancel(e, drag.armedAt)) return;
+      if (coarseUi()) commitCoarseRelease(e);
       const finishing = finishTrimDrag();
       timeline?.classList.remove("is-dragging-window", "is-dragging");
       drag = null;
@@ -3483,6 +3571,8 @@
       paintTimeline();
     });
     video.addEventListener("play", () => {
+      // 踢帧短 play 已钉 parkHoldPause：不要切成「暂停」，也不要开循环
+      if (parkHoldPause) return;
       if (playBtn) playBtn.textContent = "暂停";
       previewWrap?.classList.add("is-playing");
       armFrameWatch();
@@ -3492,17 +3582,23 @@
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", onResize);
 
-    // load file
+    // load file — 先挂监听再设 src。blob 已在外预览解过时 loadedmetadata 会同步结束。
     objectUrl = URL.createObjectURL(file);
-    video.src = objectUrl;
     video.muted = true;
 
     return new Promise((resolve, reject) => {
       resolveOpen = resolve;
+      let metaReady = false;
       const onMeta = () => {
+        const d = Number(video.duration);
+        // readyState 先到、duration 仍是 0：不要摘监听，否则黄柄永远拖不动
+        if (!(d > 0) || !Number.isFinite(d)) return;
+        if (metaReady) return;
+        metaReady = true;
         video.removeEventListener("loadedmetadata", onMeta);
+        video.removeEventListener("durationchange", onMeta);
         video.removeEventListener("error", onErr);
-        duration = Number(video.duration) || 0;
+        duration = d;
         const srcW = video.videoWidth || 1;
         const srcH = video.videoHeight || 1;
         const initial = opts.initial || {};
@@ -3532,7 +3628,7 @@
         syncAspectUi();
         syncModeUi();
         // 首帧 = 黄柄所见 = GIF 首帧
-        seekPlayheadExact(startSec).catch(() => previewSeek(startSec));
+        seekPlayheadExact(startSec).then(() => kickPreviewPaint()).catch(() => previewSeek(startSec));
         paintTimeline();
         updateLabels();
         layoutCropBox();
@@ -3548,14 +3644,18 @@
         }
       };
       const onErr = () => {
+        if (metaReady) return;
         video.removeEventListener("loadedmetadata", onMeta);
+        video.removeEventListener("durationchange", onMeta);
         video.removeEventListener("error", onErr);
         cleanup();
         resolveOpen = null;
         reject(new Error("无法读取该视频"));
       };
       video.addEventListener("loadedmetadata", onMeta);
+      video.addEventListener("durationchange", onMeta);
       video.addEventListener("error", onErr);
+      video.src = objectUrl;
       // blob 已在外预览解过时，loadedmetadata 可能在监听挂上之前就结束，duration 会一直是 0，黄柄/按钮全无反应
       if (video.readyState >= 1) onMeta();
     });

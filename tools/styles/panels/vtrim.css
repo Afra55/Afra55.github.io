@@ -578,6 +578,15 @@ body.vtrim-editor-open {
   line-height: 1.3;
   word-break: break-word;
 }
+.vtrim-editor-build {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  color: var(--text, #d5deea);
+  opacity: 0.95;
+  user-select: all;
+  word-break: break-all;
+}
 .vtrim-editor-sub {
   margin: 0.15rem 0 0;
 }
