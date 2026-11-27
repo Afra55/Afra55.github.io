@@ -331,22 +331,25 @@
     const keepPark = opts.keepPark !== false;
     try {
       if (typeof videoEl.requestVideoFrameCallback === "function") {
-        let painted = false;
+        let fromRvfc = false;
+        let settled = false;
         await new Promise((resolve) => {
-          const finish = () => {
-            if (painted) return;
-            painted = true;
+          const finish = (ok) => {
+            if (settled) return;
+            settled = true;
+            fromRvfc = ok === true;
             resolve();
           };
           try {
-            videoEl.requestVideoFrameCallback(() => finish());
+            videoEl.requestVideoFrameCallback(() => finish(true));
           } catch (_) {
-            finish();
+            finish(false);
             return;
           }
-          setTimeout(finish, 140);
+          // 超时不算「已画出」。paused seek 在部分机型上 rVFC 根本不来，必须接着 play 踢帧。
+          setTimeout(() => finish(false), 140);
         });
-        if (painted) return;
+        if (fromRvfc) return;
       }
     } catch (_) {}
     if (keepPark && typeof opts.armPark === "function") {
@@ -710,6 +713,8 @@
     }
     /** seek 后强制刷一帧预览（修「时间变了画面不动」） */
     function kickPreviewPaint() {
+      // 拖拽中不要 play 踢帧，否则手势被播放打断，松手像弹回
+      if (closed || drag || previewScrub) return;
       return forcePreviewFrame(video, { armPark: armParkHoldPause, keepPark: true });
     }
     let cropLiveRaf = 0;
@@ -2072,10 +2077,21 @@
       if (!Array.isArray(samples) || !samples.length) return fallback;
       const now = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
       const targetAt = now - LIFT_LAG_MS;
+      let lagged = null;
       for (let i = samples.length - 1; i >= 0; i--) {
-        if (samples[i].at <= targetAt) return samples[i].t;
+        if (samples[i].at <= targetAt) {
+          lagged = samples[i].t;
+          break;
+        }
       }
-      return samples[0].t;
+      const live = Number(samples[samples.length - 1].t);
+      const pick = lagged == null ? live : Number(lagged);
+      // 回看窗里只有按下点、和松手差一截：那不是送手抖动。快拖必须停在松手处，否则黄柄弹回像拖不动。
+      const shown = Number(fallback);
+      if (Math.abs(pick - live) > 0.12 || (Number.isFinite(shown) && Math.abs(pick - shown) > 0.12)) {
+        return Number.isFinite(live) ? live : fallback;
+      }
+      return Number.isFinite(pick) ? pick : fallback;
     }
 
     /** 松手后短留时间戳，让人看清吸到哪一帧 */
@@ -3066,7 +3082,8 @@
         }
       };
       btn.addEventListener("pointerdown", (e) => {
-        if (e.button != null && e.button !== 0) return;
+        // 只丢掉右键/笔侧键。触摸在部分 WebView 上 pointerdown.button 为 -1，当成非 0 会让片头片尾完全不步进。
+        if (e.button != null && e.button > 0) return;
         if (btn.disabled) return;
         e.preventDefault();
         // 勿 stopPropagation：部分 WebKit 上会让后续手势/黄柄像失灵
@@ -3187,7 +3204,8 @@
     }
 
     function onTimelinePointerDown(e) {
-      if (!duration) return;
+      if (!(duration > 0)) duration = Number(video.duration) || 0;
+      if (!(duration > 0)) return;
       // 拖柄前只解冻，勿抬 playWindowGen（否则易卡死后续交互）
       freezeClockSec = NaN;
       playWindowLooping = false;
@@ -3538,6 +3556,8 @@
       };
       video.addEventListener("loadedmetadata", onMeta);
       video.addEventListener("error", onErr);
+      // blob 已在外预览解过时，loadedmetadata 可能在监听挂上之前就结束，duration 会一直是 0，黄柄/按钮全无反应
+      if (video.readyState >= 1) onMeta();
     });
   }
 

@@ -28,6 +28,13 @@ t("手机送手防抖：抬手前采样 + 成片时钟吸附 + 反馈", () => {
   assert.ok(vtrim.includes("FRAME_SNAP_SEC"));
   assert.ok(vtrim.includes("frameSnapSecFromFps") || vtrim.includes("DEFAULT_FRAME_FPS"));
   assert.ok(vtrim.includes("function dragSecBeforeLift"));
+  const lift = vtrim.slice(
+    vtrim.indexOf("function dragSecBeforeLift"),
+    vtrim.indexOf("function flashSnapFeedback")
+  );
+  assert.ok(lift.includes("samples[samples.length - 1]"), "短拖要用最近采样");
+  assert.ok(lift.includes("0.12"), "回看点离松手太远时不能弹回按下位置");
+  assert.ok(!lift.includes("return samples[0]"));
   assert.ok(vtrim.includes("function snapToFrameGrid"));
   assert.ok(vtrim.includes("function snapToEncodeClock"));
   assert.ok(vtrim.includes("function snapNearCutouts"));
@@ -70,6 +77,26 @@ t("后台校准勿在拖/点时 rematch 黄柄", () => {
     vtrim.indexOf("async function detectAndApplySourceTimeline")
   );
   assert.ok(calib.includes("parkHoldPause") || calib.includes("if (drag"));
+});
+
+t("paused seek 的 rVFC 超时不能当成已经画出", () => {
+  const fn = vtrim.slice(vtrim.indexOf("async function forcePreviewFrame"), vtrim.indexOf("function tryPointerCapture"));
+  assert.ok(fn.includes("fromRvfc"), "超时和真正的 rVFC 要分开");
+  assert.ok(fn.includes("if (fromRvfc) return"));
+  assert.ok(fn.includes("videoEl.play()"), "rVFC 不来时要短 play 踢帧");
+});
+
+t("片头片尾接受触摸 button=-1，metadata 错过时仍读 duration", () => {
+  const bindAt = vtrim.indexOf("function bindNudgeHold");
+  const bind = vtrim.slice(bindAt, vtrim.indexOf("bindNudgeHold(", bindAt + 24));
+  assert.ok(bind.includes("e.button > 0"), "只忽略右键；button=-1 仍要步进");
+  assert.ok(!bind.includes("e.button !== 0"));
+  assert.ok(vtrim.includes("if (video.readyState >= 1) onMeta()"));
+  const down = vtrim.slice(
+    vtrim.indexOf("function onTimelinePointerDown"),
+    vtrim.indexOf("function onTimelinePointerMove")
+  );
+  assert.ok(down.includes("Number(video.duration)"));
 });
 
 t("黄柄按下先改位置，setPointerCapture 抛错不能跳过 setStart", () => {
