@@ -58,6 +58,30 @@ t("编辑器按 BUILD 覆盖旧 open（防粘坏版本）", () => {
   assert.ok(vtrim.includes("DevToolsVtrimEditor.__rev === EDITOR_REV") || vtrim.includes("__rev === EDITOR_REV"));
 });
 
+t("黄柄按下先改位置，setPointerCapture 抛错不能跳过 setStart", () => {
+  assert.ok(vtrim.includes("function tryPointerCapture"));
+  const down = vtrim.slice(
+    vtrim.indexOf("function onTimelinePointerDown"),
+    vtrim.indexOf("function onTimelinePointerMove")
+  );
+  assert.ok(!down.includes(".setPointerCapture"), "pointerdown 里不要裸调 setPointerCapture");
+  assert.ok(down.includes("tryPointerCapture(handleStart"));
+  assert.ok(down.includes("tryPointerCapture(handleEnd"));
+  const startBlock = down.slice(down.indexOf('kind === "start"'), down.indexOf('kind === "end"'));
+  assert.ok(startBlock.indexOf("setStart(t)") < startBlock.indexOf("tryPointerCapture(handleStart"));
+  const endBlock = down.slice(down.indexOf('kind === "end"'), down.indexOf('kind === "window"'));
+  assert.ok(endBlock.indexOf("setEnd(t)") < endBlock.indexOf("tryPointerCapture(handleEnd"));
+  const helper = vtrim.slice(vtrim.indexOf("function tryPointerCapture"), vtrim.indexOf("function hapticLight"));
+  assert.ok(helper.includes("catch"));
+});
+
+t("微调 click 兜底不在 pointerdown 之后再步进一次", () => {
+  const bindStart = vtrim.indexOf("function bindNudgeHold");
+  const bind = vtrim.slice(bindStart, vtrim.indexOf("nudgeStartM", bindStart));
+  assert.ok(bind.includes("pointerStepped"));
+  assert.ok(bind.includes("if (armed || pointerStepped)"));
+});
+
 t("拖拽/滑画面：window 跟指针，忽略按下瞬间的假 pointercancel", () => {
   assert.ok(vtrim.includes("function spuriousPointerCancel"));
   const up = vtrim.slice(

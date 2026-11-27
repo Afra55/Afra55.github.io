@@ -321,6 +321,17 @@
     });
   }
 
+  /**
+   * setPointerCapture 在安卓 / 非活跃 pointerId 上会抛 NotFoundError。
+   * 抛出点若在 setStart/setEnd 之前，整段 pointerdown 中断，黄柄像拖不动。
+   */
+  function tryPointerCapture(el, pointerId) {
+    if (!el || pointerId == null || typeof el.setPointerCapture !== "function") return;
+    try {
+      el.setPointerCapture(pointerId);
+    } catch (_) {}
+  }
+
   function hapticLight() {
     try {
       if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
@@ -2936,6 +2947,9 @@
       let holdRepeat = 0;
       let armed = false;
       let pointerId = null;
+      /** pointerdown 已步进。click 在 pointerup 之后才到，那时 armed 已清，不能用 armed 挡第二次。 */
+      let pointerStepped = false;
+      let pointerSteppedTimer = 0;
       const resolveKind = typeof kindOrFn === "function" ? kindOrFn : () => kindOrFn;
       const stopRepeat = () => {
         if (holdTimer) {
@@ -2957,6 +2971,12 @@
         armed = false;
         pointerId = null;
         stopRepeat();
+        if (pointerSteppedTimer) clearTimeout(pointerSteppedTimer);
+        // click 紧跟 pointerup；留一点窗口吞掉这次 click，过后恢复「只有 click」的兜底
+        pointerSteppedTimer = window.setTimeout(() => {
+          pointerStepped = false;
+          pointerSteppedTimer = 0;
+        }, 450);
         window.removeEventListener("pointerup", onRelease, true);
         window.removeEventListener("pointercancel", onRelease, true);
         if (nudgeSnapKind) {
@@ -2977,6 +2997,11 @@
         // 不用 setPointerCapture：部分安卓会立刻 lostpointercapture，短按像没点到
         armed = true;
         pointerId = e.pointerId;
+        pointerStepped = true;
+        if (pointerSteppedTimer) {
+          clearTimeout(pointerSteppedTimer);
+          pointerSteppedTimer = 0;
+        }
         stopRepeat();
         try {
           fire(false);
@@ -2999,7 +3024,14 @@
       // 兜底：若环境几乎不发 pointerdown，click 仍步进一次
       btn.addEventListener("click", (e) => {
         e.preventDefault();
-        if (armed) return;
+        if (armed || pointerStepped) {
+          pointerStepped = false;
+          if (pointerSteppedTimer) {
+            clearTimeout(pointerSteppedTimer);
+            pointerSteppedTimer = 0;
+          }
+          return;
+        }
         armParkHoldPause();
         try {
           fire(false);
@@ -3092,14 +3124,15 @@
       timeline?.classList.add("is-dragging");
       if (kind === "start") {
         drag = { kind: "start", pointerId: e.pointerId, samples: [], armedAt };
-        handleStart?.setPointerCapture?.(e.pointerId);
+        // 先改黄柄再 capture：NotFoundError 不能把 setStart 跳过去
         pushDragSample(t);
         setStart(t);
+        tryPointerCapture(handleStart, e.pointerId);
       } else if (kind === "end") {
         drag = { kind: "end", pointerId: e.pointerId, samples: [], armedAt };
-        handleEnd?.setPointerCapture?.(e.pointerId);
         pushDragSample(t);
         setEnd(t);
+        tryPointerCapture(handleEnd, e.pointerId);
       } else if (kind === "window") {
         drag = {
           kind: "window",
@@ -3111,8 +3144,8 @@
           armedAt,
         };
         timeline?.classList.add("is-dragging-window");
-        windowEl?.setPointerCapture?.(e.pointerId);
         syncHandleTips();
+        tryPointerCapture(windowEl, e.pointerId);
       } else if (kind === "cut-select") {
         selectedCutout = Number(hit.cutIndex) || 0;
         cutJoinVisit = 0;
@@ -3124,9 +3157,9 @@
         cutJoinVisit = 0;
         syncCutoutUi();
         drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout, samples: [], armedAt };
-        timeline?.setPointerCapture?.(e.pointerId);
         pushDragSample(t);
         setCutoutEdge(selectedCutout, kind === "cut-end" ? "end" : "start", t);
+        tryPointerCapture(timeline, e.pointerId);
       } else {
         previewSeek(clamp(t, startSec, endKeepSec()));
         drag = { kind: "seek", pointerId: e.pointerId, samples: [], armedAt };
@@ -3199,8 +3232,8 @@
         geom,
         armedAt: typeof performance !== "undefined" && performance.now ? performance.now() : Date.now(),
       };
-      cropBox.setPointerCapture?.(e.pointerId);
       previewWrap?.classList.add("is-dragging");
+      tryPointerCapture(cropBox, e.pointerId);
       e.preventDefault();
       e.stopPropagation();
     }
@@ -3285,8 +3318,8 @@
         moved: false,
         armedAt: typeof performance !== "undefined" && performance.now ? performance.now() : Date.now(),
       };
-      // 尽力 capture；丢掉时靠 window 捕获阶段继续跟
-      previewWrap.setPointerCapture?.(e.pointerId);
+      // 尽力 capture；丢掉或抛错时靠 window 捕获阶段继续跟
+      tryPointerCapture(previewWrap, e.pointerId);
     }
     function onPreviewPointerMove(e) {
       if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
