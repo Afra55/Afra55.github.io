@@ -9360,6 +9360,7 @@
       /** 打开编辑开始时间；超时可强制解锁，避免「点了没反应」 */
       let vbbEditOpenStartedAt = 0;
       let vbbPreviewWrap = null;
+      let vbbPreviewHint = null;
       let vbbScrubSeekWanted = null;
       /** 拖进度最近一次目标秒；松手时 wanted 可能已被 pump 清掉，仍要用它进帧内 */
       let vbbScrubLastSec = null;
@@ -9435,6 +9436,22 @@
           vbbVideo?.pause?.();
         } catch (_) {}
         vbbPlaying = false;
+      }
+
+      /** 外预览播/停（双击画面或手动模式按钮）：与编辑 keep 窗同一套 enforce */
+      function toggleVbbPreviewPlayback() {
+        if (!vbbVideo?.src) return;
+        if (vbbVideo.paused) {
+          const d = vbbVideoDuration();
+          if (d >= VBB_LONG_VIDEO_SEC) toast("长视频播放较耗内存，建议拖动定位");
+          // 用户手势播放：清掉 accept，让 keep 窗重新校正一次
+          vbbEditEnforceAcceptTarget = null;
+          vbbEditEnforceAcceptUntil = 0;
+          vbbLastPresentedMediaTime = NaN;
+          vbbVideo.play().catch(() => {});
+        } else {
+          pauseVbbPreview();
+        }
       }
   
       function vbbScrubValueToTime(value) {
@@ -9673,20 +9690,27 @@
         if (vbbLongHint) vbbLongHint.hidden = !show;
       }
   
+      function syncVbbPreviewHint() {
+        if (!vbbPreviewHint) return;
+        const show = Boolean(vbbVideo?.src) && !vbbVideo.hidden;
+        vbbPreviewHint.hidden = !show;
+      }
+
       function paintVbbManualControls() {
         const manual = isVbbManualMode();
         if (vbbManualPanel) vbbManualPanel.hidden = !manual;
         if (vbbAdvanced) vbbAdvanced.hidden = manual || isVbbBatchMode();
         if (vbbVideo) {
-          if (manual && vbbVideo.src) {
-            vbbVideo.controls = false;
+          // 对齐编辑器：永不挂原生 controls（大居中播放钮）；播停靠双击 / 手动模式按钮
+          vbbVideo.controls = false;
+          if (vbbVideo.src) {
             vbbVideo.hidden = false;
             vbbVideo.preload = "metadata";
-          } else if (vbbVideo.src) {
-            vbbVideo.controls = true;
           }
         }
+        syncVbbPreviewHint();
         syncVbbLongHint();
+        syncVbbEditPreview();
         const canMark = manual && Boolean(vbbSourceFile && vbbVideo?.src) && !vbbBusy;
         if (vbbScrub) vbbScrub.disabled = !canMark;
         if (vbbPlay) vbbPlay.disabled = !canMark;
@@ -11844,8 +11868,10 @@
         await waitVideoMetadata(vbbVideo);
         if (vbbVideo) {
           vbbVideo.hidden = false;
-          vbbVideo.controls = !isVbbManualMode();
+          vbbVideo.controls = false;
         }
+        syncVbbPreviewHint();
+        syncVbbEditPreview();
         // 批量预览也要采样表：删中间接点与 GIF 同窗
         try {
           await ensureVbbSourceTimeline(item, vbbVideo);
@@ -15220,7 +15246,9 @@
           vbbVideo.removeAttribute("src");
           vbbVideo.load?.();
           vbbVideo.hidden = true;
+          vbbVideo.controls = false;
         }
+        syncVbbPreviewHint();
         clearVbbEditPreviewStyles();
         vbbEditSkipBusy = false;
         if (vbbFile) vbbFile.value = "";
@@ -18706,6 +18734,7 @@
         vbbJumpGo = $("#vbb-jump-go", root);
         vbbLongHint = $("#vbb-long-hint", root);
         vbbPreviewWrap = $("#vbb-preview-wrap", root);
+        vbbPreviewHint = $("#vbb-preview-hint", root);
         vbbFileEdit = $("#vbb-file-edit", root);
         vbbFileEditLabel = $("#vbb-file-edit-label", root);
         vbbEditOpen = $("#vbb-edit-open", root);
@@ -19048,18 +19077,13 @@
         if (e.key === "Enter") vbbJumpGo?.click();
       });
       vbbPlay?.addEventListener("click", () => {
-        if (!vbbVideo?.src) return;
-        if (vbbVideo.paused) {
-          const d = vbbVideoDuration();
-          if (d >= VBB_LONG_VIDEO_SEC) toast("长视频播放较耗内存，建议拖动定位");
-          // 用户手势播放：清掉 accept，让 keep 窗重新校正一次
-          vbbEditEnforceAcceptTarget = null;
-          vbbEditEnforceAcceptUntil = 0;
-          vbbLastPresentedMediaTime = NaN;
-          vbbVideo.play().catch(() => {});
-        } else {
-          pauseVbbPreview();
-        }
+        toggleVbbPreviewPlayback();
+      });
+      // 外预览：双击播 / 再双击停（对齐编辑器，无大居中播放钮）
+      vbbPreviewWrap?.addEventListener("dblclick", (e) => {
+        if (!vbbVideo?.src || vbbVideo.hidden) return;
+        e.preventDefault();
+        toggleVbbPreviewPlayback();
       });
       vbbVideo?.addEventListener("play", () => {
         vbbMediaPlaying = true;
