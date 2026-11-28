@@ -102,6 +102,9 @@ t("vbbMaterializedKeepDuration：缺上报/回退整段 → 用 keep 总和", ()
   assert.ok(Math.abs(fn(0, 64.7, 100) - 64.7) < 0.01, "缺 duration");
   assert.ok(Math.abs(fn(100, 64.7, 100) - 64.7) < 0.01, "误回退原片");
   assert.ok(Math.abs(fn(NaN, 50, 120) - 50) < 0.01);
+  // 帧数÷整片平均 fps（VFR 静帧）算短：530 帧 / 25fps = 21.2s，真实 keep 39.67s
+  assert.ok(Math.abs(fn(21.2, 39.67, 60) - 39.67) < 0.01, "上报明显偏短 → keep，GIF 窗不得截掉后几段");
+  assert.ok(Math.abs(fn(39.6, 39.67, 60) - 39.6) < 0.01, "差一两帧仍信上报");
 });
 
 t("三联时长：裁片头片尾+两段删中间后，压缩到 30s 按 keep 总和倍速", () => {

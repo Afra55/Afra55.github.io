@@ -2667,17 +2667,19 @@
 
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
           const DENOISE = "hqdn3d=1.5:1.5:6:6,";
-          const buildRawArgs = (denoise, sourceDurSec, maxFrames, ptsStart) => {
+          // 每块都先出「整窗」fps 网格（多段走分段采样），再按帧号取 [startFrame, startFrame+maxFrames)。
+          // 禁止块头按时间 trim=start：块起点前开始、仍在显示的那一帧会被整帧丢掉（VFR 静帧一丢几秒，GIF 比预览短且提前）
+          const buildRawArgs = (denoise, maxFrames, startFrame) => {
             const nMax = Math.max(2, Math.floor(Number(maxFrames) || 2));
+            const f0 = Math.max(0, Math.floor(Number(startFrame) || 0));
             const den = denoise ? DENOISE : "";
-            // 整片导出且多段：仅首块（ptsStart≈0 且 nMax≈总帧）走分段采样；分块路径仍用全局窗
-            const seg =
-              useSegmentedSk && ptsStart <= 0.001 && nMax >= frameCount - 1
-                ? vbbEncodeSegmentedFpsFilter(opts.segmentSpans, speed, fps, cropFilter)
-                : null;
+            const pick = f0 > 0 ? `trim=start_frame=${f0}:end_frame=${f0 + nMax},setpts=PTS-STARTPTS,` : "";
+            const seg = useSegmentedSk
+              ? vbbEncodeSegmentedFpsFilter(opts.segmentSpans, speed, fps, cropFilter)
+              : null;
             if (seg) {
               const tail =
-                `${den}scale=${outW}:${outH}:flags=lanczos${brightFilter},format=rgba`;
+                `${pick}${den}scale=${outW}:${outH}:flags=lanczos${brightFilter},format=rgba`;
               if (wmBytes && wmBytes.length) {
                 return [
                   "-filter_complex",
@@ -2689,10 +2691,10 @@
               }
               return ["-filter_complex", `${seg.fc};[vseg]${tail}[v]`, "-map", "[v]"];
             }
-            const timeFilter = vbbEncodeHardTrimFilters(speed, sourceDurSec, ptsStart, opts);
-            const outTrim = vbbEncodeOutTrimFilters(nMax / Math.max(8, fps), fps, opts);
+            const timeFilter = vbbEncodeHardTrimFilters(speed, encodeT, encodeSs, opts);
+            const outTrim = vbbEncodeOutTrimFilters(frameCount / Math.max(8, fps), fps, opts);
             const chain =
-              `${cropFilter}${timeFilter}fps=${fps}:round=up,${outTrim}select='lt(n\\,${nMax})',${den}` +
+              `${cropFilter}${timeFilter}fps=${fps}:round=up,${outTrim}${pick}select='lt(n\\,${nMax})',${den}` +
               `scale=${outW}:${outH}:flags=lanczos${brightFilter},format=rgba`;
             if (wmBytes && wmBytes.length) {
               return [
@@ -2838,7 +2840,7 @@
               } catch (_) {}
               code = await ffmpeg.exec([
                 ...baseArgs,
-                ...buildRawArgs(useDenoise, dur, chunkFrames, ptsStart),
+                ...buildRawArgs(useDenoise, chunkFrames, chunkStartFrame),
                 ...outArgs,
               ]);
               if (code !== 0 && useDenoise) {
@@ -2846,7 +2848,7 @@
                 lastChunkProgAt = Date.now();
                 code = await ffmpeg.exec([
                   ...baseArgs,
-                  ...buildRawArgs(false, dur, chunkFrames, ptsStart),
+                  ...buildRawArgs(false, chunkFrames, chunkStartFrame),
                   ...outArgs,
                 ]);
               }
@@ -10276,7 +10278,9 @@
         const rep = Number(reported);
         const full = Math.max(0, Number(fullDuration) || 0);
         // 编码窗不得超过 keep：预裁/拼接上报偏长时若用 rep，GIF 会比预览多几帧
-        if (rep > 0.05 && rep <= keep + 0.05) return rep;
+        // 也不得明显短于 keep：上报若按「帧数÷整片平均 fps」算短，GIF 窗会截掉后几段（宁可少出帧，不丢内容）
+        const shortTol = Math.max(0.25, keep * 0.02);
+        if (rep > 0.05 && rep <= keep + 0.05 && rep >= keep - shortTol) return rep;
         // 禁止：缺 duration / 回退成原片整段 → 倍速按长片算、短拼接片被压得过短
         if (full > 0 && Math.abs(rep - full) < 0.05 && keep < full * 0.9) return keep;
         return keep;
@@ -10422,9 +10426,13 @@
           if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === spanN) {
             segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
           }
+          const matDur = vbbMaterializedKeepDuration(out.duration, keepSpan, duration);
+          vbbLog(
+            `[vbb-mat] ${out.exportMethod || method} 上报${Number(out.duration).toFixed(3)}s · keep ${keepSpan.toFixed(3)}s → 用${matDur.toFixed(3)}s · ${segmentSpans.length}段`
+          );
           return {
             file: outFile,
-            duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
+            duration: matDur,
             srcW: out.srcW || srcW,
             srcH: out.srcH || srcH,
             materialized: true,
