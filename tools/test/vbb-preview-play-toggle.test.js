@@ -46,8 +46,19 @@ t("play/pause 事件在 UiLock 下不改按钮文案", () => {
 });
 
 t("用户点播放会清 accept，便于重新校正", () => {
-  const click = vbb.slice(vbb.indexOf("vbbPlay?.addEventListener(\"click\""), vbb.indexOf("vbbVideo?.addEventListener(\"play\""));
-  assert.ok(click.includes("vbbEditEnforceAcceptTarget = null"));
+  // #733：播停抽到 toggleVbbPreviewPlayback（按钮 click + 画面 dblclick 共用）
+  const toggle = vbb.slice(
+    vbb.indexOf("function toggleVbbPreviewPlayback"),
+    vbb.indexOf("function vbbScrubValueToTime")
+  );
+  assert.ok(toggle.includes("vbbEditEnforceAcceptTarget = null"));
+  assert.ok(toggle.includes("vbbEditEnforceAcceptUntil = 0"));
+  const bind = vbb.slice(
+    vbb.indexOf("vbbPlay?.addEventListener(\"click\""),
+    vbb.indexOf("vbbVideo?.addEventListener(\"play\"")
+  );
+  assert.ok(bind.includes("toggleVbbPreviewPlayback()"));
+  assert.ok(bind.includes("addEventListener(\"dblclick\""));
 });
 
 console.log(`vbb-preview-play-toggle.test.js: ${n} passed`);
