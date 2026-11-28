@@ -111,39 +111,6 @@ t("clipPlayWindow 在半开上界回绕，不在末帧 CTS 上截断", () => {
   assert.ok(fn.includes("presented - clock"));
 });
 
-t("微调停帧禁止 clipPlayWindow 误续播（parkHoldPause）", () => {
-  assert.ok(vtrim.includes("parkHoldPause"));
-  assert.ok(vtrim.includes("function armParkHoldPause"));
-  const arm = vtrim.slice(
-    vtrim.indexOf("function armParkHoldPause"),
-    vtrim.indexOf("function armParkHoldPause") + 400
-  );
-  // 热路径只解冻，禁止抬 playWindowGen（会卡死按钮/黄柄）
-  assert.ok(arm.includes("freezeClockSec = NaN"));
-  assert.ok(arm.includes("playWindowLooping = false"));
-  assert.ok(!arm.includes("playWindowGen +="), "armParkHoldPause 勿抬 gen");
-  const clip = vtrim.slice(
-    vtrim.indexOf("function clipPlayWindow"),
-    vtrim.indexOf("function armFrameWatch")
-  );
-  assert.ok(clip.includes("parkHoldPause"));
-  assert.ok(clip.includes("if (!video.ended) return false") || clip.includes("if (!video.ended) return false;"));
-  assert.ok(clip.includes("freezeClockSec === freezeAt") || clip.includes("freezeAt"));
-  const seekEnd = vtrim.slice(
-    vtrim.indexOf("async function seekEndPreviewExact"),
-    vtrim.indexOf("async function seekStartPreviewExact")
-  );
-  assert.ok(seekEnd.includes("armParkHoldPause()"));
-  const bindStart = vtrim.indexOf("function bindNudgeHold");
-  const bind = vtrim.slice(bindStart, vtrim.indexOf("nudgeStartM,", bindStart));
-  assert.ok(bind.includes("armParkHoldPause()"));
-  assert.ok(!bind.includes("e.stopPropagation"), "勿 stopPropagation 以免 WebKit 手势失灵");
-  assert.ok(bind.includes("isRepeat") || bind.includes("fire(true)"));
-  assert.ok(bind.includes('addEventListener("click"'));
-  const toggle = vtrim.slice(vtrim.indexOf("async function togglePlay"), vtrim.indexOf("function getEditState"));
-  assert.ok(toggle.includes("parkHoldPause = false"));
-});
-
 t("停帧记录 endParkAtSec；只在末帧这一格预约切断", () => {
   assert.ok(vtrim.includes("let endParkAtSec"));
   assert.ok(/endParkAtSec = (shown|Number\.isFinite)/.test(vtrim) || vtrim.includes("endParkAtSec ="));

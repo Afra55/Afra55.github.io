@@ -108,7 +108,9 @@ edit 有时间编辑？（vbbEditNeedsExport）
 - `keepRangesLocal()` ≡ `keepRangesForEncode(..., sourceTimeline)`  
 - 停帧目标：`encodeParkSecForEdge` → 采样 **CTS**  
 - seek：`seekSecForTime` / `frameSeekSec`（帧内点，勿裸 CTS）  
-- `endParkAtSec` 钉 **成片 CTS**，禁止记 Chrome 帧内偏置点（否则播放截断漂半帧）
+- `endParkAtSec` 钉 **成片 CTS**，禁止记 Chrome 帧内偏置点（否则播放截断漂半帧）  
+- 片头± / 片尾±：`nudgeKeepEdgeSec` —— 每点一下 keep 半开窗**换一个相邻真实采样**（startF±1 / endF±1），黄柄落在该采样 CTS。录屏 VFR 静帧照跳（≥0.5s 时 toast 提示），**禁止** `maxStep` / `1/fps` 时间步（时间在变、画面不变、预览≠GIF 时长）  
+- 打开即收空尾巴：容器比视频轨长（音轨尾）时 `tightenTrimToContentTimeline` 把片尾收到末采样之后；共用表在 `onMeta` 里同步装上，**必须**在黄柄初值之后再探表，否则收不到、首个片尾− 跳十几秒
 
 ### 外预览
 
@@ -142,7 +144,7 @@ edit 有时间编辑？（vbbEditNeedsExport）
 - 红柄 **闭区间**删：上一段止于 `cut.start`；下一段从 **下一源采样**起  
 - `nextStartAfterCutEnd` = `ctsSec[sampleIndexAtSec(cutEnd)+1]`；缺表才退 `1/fps`（接点会差帧）  
 - 红柄吸附 / rematch / 拖松手：`snapTrimHandle("cut-start"|"cut-end")` 走默认 `sampleIndexAtSec`；**禁止**复用黄柄 `inclusive`（片头缝）或 `exclusive`（片尾半开）  
-- 红柄 ±1 步进：`nudgeEncodeSec` + `maxStep` 护栏（坏表/超长静帧勿一次跳数秒）  
+- 红柄 ±1 步进：`nudgeEncodeSec` 跳到相邻真实采样（静帧照跳）；**无** `maxStep` 护栏  
 - 手柄已在采样 CTS 上：`alignTrimSecToSamples` **保留全精度**；毫秒取整会让 `sampleIndexAtSec` 退上一帧  
 - `matKeeps` 只算一次；多段 `segmentSpans` 供按段信息  
 - 批量：取表/回写必须带 `file`；有 cutouts 时 materialize **串行**（防第二路僵死）
@@ -173,7 +175,9 @@ edit 有时间编辑？（vbbEditNeedsExport）
 6. 分叉 `keepRangesForEncode` 与 `keepRangesFromEdit`（当前应恒等）  
 7. `endParkAtSec` 记 Chrome 帧内偏置点  
 8. `captureStream` 录预览当导出  
-9. 以为「撞档/IDB」会影响 keep 窗——不会；差帧仍查时钟与 keeps
+9. 以为「撞档/IDB」会影响 keep 窗——不会；差帧仍查时钟与 keeps  
+10. 微调 ±1 退成 `maxStep` / `1/fps` 时间步（VFR 静帧上时间变、画面不变）  
+11. 把解码序当帧号：`ctsSec` 必须 CTS 升序（B 帧片在 `buildTimelineFromTrack` 排序），否则二分 / `frameSeekSec` / 相邻帧错 1–3 帧，编辑停帧 ≠ GIF
 
 ---
 
@@ -184,6 +188,7 @@ node tools/test/vbb-preview-encode-align.test.js
 node tools/test/vbb-preview-gif-align.test.js
 node tools/test/vbb-precut-trim.test.js
 node tools/test/vbb-end-play-align.test.js
+node tools/test/vbb-trim-nudge-jump.test.js
 node tools/test/mp4-timeline.test.js
 node tools/vbb-blackbox-fps.test.js   # 含 exportedEdit 禁 lease + 阶梯硬约束
 node tools/scripts/build-v2g-suite.cjs
@@ -196,7 +201,8 @@ node tools/bump-version.cjs           # 功能改动必做
 | `vbb-preview-gif-align` | exportedEdit 垫=0、matKeeps、resolve by file、open timeline |
 | `vbb-precut-trim` | prepare 透传 flags；lease 禁建 |
 | `vbb-end-play-align` | 片尾停/播 |
-| `mp4-timeline` | `canFfmpegFirst` / 校准 |
+| `vbb-trim-nudge-jump` | ±1 = 相邻真实采样（VFR 静帧照跳）、打开收空尾、禁 maxStep |
+| `mp4-timeline` | `canFfmpegFirst` / 校准 / B 帧 CTS 升序 |
 | `vbb-blackbox-fps` | 阶梯硬约束 + exportedEdit 与 scheme VER 并列断言 |
 
 ---
