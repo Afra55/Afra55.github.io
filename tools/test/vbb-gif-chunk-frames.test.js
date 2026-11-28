@@ -43,14 +43,28 @@ const buildSrc = (() => {
 })();
 
 /** 在与 encode 闭包同名的变量环境里求 buildRawArgs */
-function makeBuild({ segmentSpans, exportedEdit, encodeSs, encodeT, fps = 15, speed = 1 }) {
+function makeBuild({
+  segmentSpans,
+  exportedEdit,
+  exactKeepFrames = false,
+  encodeSs,
+  encodeT,
+  fps = 15,
+  speed = 1,
+}) {
   const box = {};
-  const useSeg = encodeSs <= 0.001 && Array.isArray(segmentSpans) && segmentSpans.length > 1;
+  // 与 10-shared-encode encodeV2gGifGifski 一致：导出片不再分段采样
+  const useSeg =
+    encodeSs <= 0.001 &&
+    !exportedEdit &&
+    !exactKeepFrames &&
+    Array.isArray(segmentSpans) &&
+    segmentSpans.length > 1;
   const src = `
 ${fnSrc("vbbEncodeHardTrimFilters")}
 ${fnSrc("vbbEncodeOutTrimFilters")}
 ${fnSrc("vbbEncodeSegmentedFpsFilter")}
-const opts = ${JSON.stringify({ segmentSpans, exportedEdit })};
+const opts = ${JSON.stringify({ segmentSpans, exportedEdit, exactKeepFrames })};
 const speed = ${speed};
 const fps = ${fps};
 const cropFilter = "";
@@ -77,24 +91,50 @@ const graphOf = (args) => {
   return String(args[(i >= 0 ? i : args.indexOf("-vf")) + 1]);
 };
 
-t("多段导出片：每块都走同一分段采样，再按帧号取块（不再仅首块分段）", () => {
+t("多段导出片：走整窗全局 fps（禁止再按 segmentSpans 切，避免 concat 漂移）", () => {
   const { build, frameCount } = makeBuild({
     segmentSpans: [4, 6.9, 5.9, 6.9, 3.86],
     exportedEdit: true,
     encodeSs: 0,
     encodeT: 27.56,
   });
-  assert.strictEqual(frameCount, 60 + 104 + 89 + 104 + 58);
+  assert.strictEqual(frameCount, Math.ceil(27.56 * 15 - 1e-6));
   const whole = graphOf(build(false, frameCount, 0));
   const c5 = graphOf(build(false, 72, 288));
-  assert.ok(whole.includes("concat=n=5:v=1:a=0[vseg]"), whole);
-  assert.ok(!whole.includes("start_frame"), `整段勿取块：${whole}`);
-  const prefix = (g) => g.slice(0, g.indexOf(";[vseg]"));
-  assert.strictEqual(prefix(c5), prefix(whole), "分块与整段的分段采样前缀须逐字一致");
+  assert.ok(!whole.includes("concat="), `导出片勿再分段 concat：${whole}`);
+  assert.ok(!whole.includes("[vseg]"), whole);
+  assert.ok(!/trim=start=[0-9]/.test(c5.replace(/trim=start_frame/g, "TRIMFRAME")), `块头勿按时间切：${c5}`);
   assert.ok(
-    c5.includes("[vseg]trim=start_frame=288:end_frame=360,setpts=PTS-STARTPTS,"),
+    c5.includes("fps=15:round=up,") && c5.includes("trim=start_frame=288:end_frame=360,setpts=PTS-STARTPTS,"),
     `块须按全局帧号取：${c5}`
   );
+});
+
+t("未导出多段：仍可分段采样（源片按 span 切）", () => {
+  const { build, frameCount } = makeBuild({
+    segmentSpans: [4, 6.9, 5.9],
+    exportedEdit: false,
+    encodeSs: 0,
+    encodeT: 16.8,
+  });
+  assert.ok(frameCount >= 4 + 6.9 + 5.9);
+  const whole = graphOf(build(false, frameCount, 0));
+  assert.ok(whole.includes("concat=n=3:v=1:a=0[vseg]"), whole);
+});
+
+t("源码：导出片 useSegmentedSk / useSegmented 须排除 exportedEdit", () => {
+  assert.ok(shared.includes("!opts.exportedEdit"));
+  assert.ok(shared.includes("!opts.exactKeepFrames"));
+  const sk = shared.slice(
+    shared.indexOf("const useSegmentedSk ="),
+    shared.indexOf("const useSegmentedSk =") + 280
+  );
+  assert.ok(sk.includes("!opts.exportedEdit"), sk);
+  const ff = shared.slice(
+    shared.indexOf("const useSegmented ="),
+    shared.indexOf("const useSegmented =") + 320
+  );
+  assert.ok(ff.includes("!opts.exportedEdit"), ff);
 });
 
 t("单段导出片：整窗 fps 网格 → 帧号取块；块头禁止按时间 trim=start", () => {
@@ -132,9 +172,8 @@ t("encodeChunk 调用：传块起始帧号，不再传块起点时间", () => {
 });
 
 t("分块 demux -t 盖整窗尾（不能只盖到块尾）", () => {
-  assert.ok(shared.includes("encodeSs + encodeT + 0.05"));
   assert.ok(
-    shared.includes("必须盖到整窗尾") || shared.includes("盖到整窗尾"),
+    shared.includes("输入 -t 必须盖整窗") || shared.includes("必须盖到整窗尾") || shared.includes("盖到整窗尾"),
     "注释须写明根因"
   );
   // 旧写法：块尾 ptsStart+dur / 首块仅 dur → 后块 start_frame 超出已解帧
@@ -142,6 +181,8 @@ t("分块 demux -t 盖整窗尾（不能只盖到块尾）", () => {
     shared.indexOf("const encodeChunk = async"),
     shared.indexOf("let blob;\n          let actualFrames;")
   );
+  assert.ok(chunkBody.includes("inputLimitSec"));
+  assert.ok(chunkBody.includes('"-t", String(inputLimitSec)'));
   assert.ok(chunkBody.includes("encodeSs + encodeT + 0.05"));
   assert.ok(!/baseArgs\.push\(\s*"-t",\s*String\(ptsStart/.test(chunkBody));
 });
