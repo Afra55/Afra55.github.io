@@ -45,6 +45,11 @@ t("含编辑草稿保存/恢复/导出/清除", () => {
   assert.ok(panel.includes("导入备份"));
   assert.ok(panel.includes('id="vbb-clear-drafts"'));
   assert.ok(panel.includes("清除草稿"));
+  // 安卓：visually-hidden + label[for] 会静默没反应；须嵌套 file-btn（与选视频同款）
+  assert.ok(/class="ghost-btn file-btn"[^>]*>导入备份\s*<input[^>]*id="vbb-import-edits"/.test(panel));
+  assert.ok(/class="ghost-btn file-btn"[^>]*>导入撞档库\s*<input[^>]*id="vbb-import-schemes"/.test(panel));
+  assert.ok(!/for="vbb-import-edits"/.test(panel));
+  assert.ok(!/id="vbb-import-edits"[^>]*visually-hidden/.test(panel));
 });
 
 t("含 JSON 备份导入还原", () => {
@@ -56,6 +61,7 @@ t("含 JSON 备份导入还原", () => {
   assert.ok(src.includes("schemes"));
   assert.ok(panel.includes("撞档"));
   assert.ok(panel.includes("合并"));
+  assert.ok(src.includes("未匹配当前视频") || src.includes("先选对应视频可套上"));
 });
 
 t("批量可重跑失败且保留成功 GIF", () => {

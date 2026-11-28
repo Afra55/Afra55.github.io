@@ -4733,7 +4733,13 @@
         const bits = [];
         if (hasItems) {
           if (draftRestored > 0) bits.push(`编辑还原 ${draftRestored}`);
-          else bits.push(`编辑 ${data.items.length} 条已写入（重选对应视频可套上）`);
+          else if (vbbSourceFile || (isVbbBatchMode() && vbbBatchFiles.length)) {
+            bits.push(
+              `编辑 ${data.items.length} 条已存，未匹配当前视频（文件名/大小不一致时请重选同源片）`
+            );
+          } else {
+            bits.push(`编辑 ${data.items.length} 条已写入（先选对应视频可套上）`);
+          }
         }
         if (schemeMerge) {
           bits.push(
