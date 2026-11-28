@@ -115,6 +115,9 @@ t("编码器：非片头窗也允许 wantSeg（失败回退原片）；倍速靠
   assert.ok(shared.includes("Number(opts.startSec) > 0.05"));
   assert.ok(shared.includes("file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05"));
   assert.ok(shared.includes("accurate: speed > 1.01 || Boolean(opts.forceAccurateCut)"));
+  // 已导出编辑片禁止再抽：大文件+倍速 accurate 重编码会打乱多段 VFR 时间戳
+  assert.ok(shared.includes("!opts.exportedEdit"));
+  assert.ok(shared.includes("!opts.exactKeepFrames"));
 });
 
 t("段租约：同窗只切一次；导出编辑片不建租约；失败回退逐次抽", () => {
