@@ -111,7 +111,7 @@
    * Chrome duration 常比片源轨多出音轨/空尾巴；黄柄若钉在 duration，
    * 「片尾−」会一次跳到 lastCts（数秒～十几秒），看起来像坏了。
    */
-  function contentExclusiveEndSec(timeline, fallbackDuration) {
+  function contentExclusiveEndSec(timeline, fallbackDuration, api) {
     const arr = timeline?.ctsSec;
     const n = arr?.length || 0;
     const dur = Math.max(0, Number(fallbackDuration) || 0);
@@ -119,13 +119,13 @@
     const last = Number(arr[n - 1]);
     if (!Number.isFinite(last)) return dur;
     const fps = Math.max(5, Number(timeline.fps) || DEFAULT_FRAME_FPS);
-    const eps = 0.5 / fps;
-    // 与 sampleRangeForKeep 一致：endF=n 需要 b >= last + eps
-    const tight = last + Math.max(eps * 2, 1e-4);
+    // 末帧时长与 sampleRangeForKeep 判 endF=n 同一估计（本地帧距）；VFR 勿用 1/平均fps 把片尾拉长
+    const span = typeof api?.sampleSpanSec === "function" ? api.sampleSpanSec(timeline, n - 1) : 1 / fps;
+    const tight = last + Math.max(span, 1e-4);
     if (!(dur > 0)) return Math.max(0, tight);
     // duration 只比末采样多 ≤2.5 帧：视为无空尾，保留容器时长
     if (dur <= last + 2.5 / fps + 1e-6) return dur;
-    return Math.min(dur, Math.max(tight, last + 1 / fps));
+    return Math.min(dur, tight);
   }
 
   /**
@@ -133,18 +133,18 @@
    * 返回「第一帧被排除」的 CTS；已含全部采样则 contentExclusiveEndSec。
    * 切勿吸成 lastCts（那会少掉最后一帧）。
    */
-  function snapExclusiveEndSec(timeline, endSec, fallbackDuration, sampleIndexAtSec) {
+  function snapExclusiveEndSec(timeline, endSec, fallbackDuration, api) {
     const arr = timeline?.ctsSec;
     const n = arr?.length || 0;
     const raw = Math.max(0, Number(endSec) || 0);
     const dur = Math.max(0, Number(fallbackDuration) || 0);
-    const contentEnd = contentExclusiveEndSec(timeline, dur || raw);
-    if (!(n > 0) || typeof sampleIndexAtSec !== "function") {
+    const contentEnd = contentExclusiveEndSec(timeline, dur || raw, api);
+    if (!(n > 0) || typeof api?.exclusiveEndIndexAtSec !== "function") {
       return Math.min(raw, dur > 0 ? dur : raw);
     }
     const fps = Math.max(5, Number(timeline.fps) || DEFAULT_FRAME_FPS);
-    const eps = 0.5 / fps;
-    const endF = Math.min(n, sampleIndexAtSec(timeline, Math.max(0, raw - eps)) + 1);
+    // ≡ sampleRangeForKeep 的 endF：吸附与成片切点同一公式
+    const endF = Math.min(n, api.exclusiveEndIndexAtSec(timeline, raw));
     if (endF >= n) return contentEnd;
     const t = Number(arr[endF]);
     if (!Number.isFinite(t)) return contentEnd;
@@ -171,7 +171,7 @@
     const minSpan = Math.max(0, Number(st?.minSpan) || 0);
     const start = Math.max(0, Number(st?.startSec) || 0);
     const end = Math.max(start, Number(st?.endSec) || 0);
-    const contentEnd = contentExclusiveEndSec(timeline, dur);
+    const contentEnd = contentExclusiveEndSec(timeline, dur, api);
     const fr = api.sampleRangeForKeep(timeline, start, Math.min(end, Math.max(contentEnd, start + minSpan)));
     if (!fr) return NaN;
     const startF = Math.round(Number(fr.startF) || 0);
@@ -645,6 +645,10 @@
     let playheadRaf = 0;
     let playWindowGen = 0;
     let playWindowLooping = false;
+    /** 仅在 pause 监听同步调用 clipPlayWindow 期间为 true：播放中触底自停，允许暂停态回绕 */
+    let loopFromFileEnd = false;
+    /** keep 段末帧停帧中（keepBoundaryHold）：{ gen }。逻辑上仍在播放，按钮保持「暂停」 */
+    let boundaryHold = null;
     /** 最近一帧 rVFC 已呈现的 mediaTime；currentTime 常滞后于画面，截断必须跟已绘帧 */
     let lastPresentedMediaTime = NaN;
     /**
@@ -1679,7 +1683,7 @@
       const api = window.DevToolsMp4Timeline;
       if (tl?.ctsSec?.length && typeof api?.sampleIndexAtSec === "function") {
         if (opts.exclusive) {
-          return clamp(snapExclusiveEndSec(tl, raw, duration, api.sampleIndexAtSec), 0, duration);
+          return clamp(snapExclusiveEndSec(tl, raw, duration, api), 0, duration);
         }
         // 片头半开含缝：用 inclusive，避免 0.5ms 缝吸回上一帧（预览已是下一帧）
         const idx =
@@ -1696,7 +1700,7 @@
     function tightenTrimToContentTimeline() {
       if (!sourceTimeline?.ctsSec?.length) return false;
       const fps = Math.max(5, Number(sourceTimeline.fps) || sourceFps || DEFAULT_FRAME_FPS);
-      const ce = contentExclusiveEndSec(sourceTimeline, duration);
+      const ce = contentExclusiveEndSec(sourceTimeline, duration, window.DevToolsMp4Timeline);
       let changed = false;
       if (endSec > ce + 0.5 / fps) {
         endSec = Math.max(startSec + MIN_SPAN, ce);
@@ -2311,19 +2315,74 @@
         });
     }
 
+    /**
+     * rVFC 呈现到某段 keep 的最后一帧：就地停住，补足该帧剩余显示时长再跳下一段 / 回片头。
+     * 否则要等删段首帧 / 片尾外一帧真画出来才跳，预览比 GIF 多闪一帧。
+     */
+    function holdAtKeepBoundary(mt, meta) {
+      if (closed || drag || playWindowLooping || video.paused || !sourceTimeline?.ctsSec?.length) return false;
+      const hold = keepBoundaryHold(keepRangesLocal(), sourceTimeline, mt);
+      if (!hold) return false;
+      clearParkCutTimer();
+      const gen = ++playWindowGen;
+      playWindowLooping = true;
+      lastPresentedMediaTime = NaN;
+      boundaryHold = { gen };
+      try {
+        video.pause();
+      } catch (_) {}
+      const rate = Math.max(0.05, Number(video.playbackRate) || 1);
+      const shownAt = Number(meta?.expectedDisplayTime) || 0;
+      const lateMs = shownAt > 0 ? Math.max(0, performance.now() - shownAt) : 0;
+      const waitMs = Math.max(0, (hold.remainSec / rate) * 1000 - lateMs);
+      parkCutTimer = window.setTimeout(() => {
+        parkCutTimer = 0;
+        if (closed || boundaryHold?.gen !== gen) return;
+        boundaryHold = null;
+        void (async () => {
+          try {
+            const paint = armFramePainted(video);
+            await seekPlayheadExact(hold.loop ? startSec : hold.nextStart);
+            if (closed || gen !== playWindowGen) return;
+            await paint.wait(120);
+            if (closed || gen !== playWindowGen) return;
+            await video.play().catch(() => {});
+            if (closed || gen !== playWindowGen || video.paused) return;
+            armFrameWatch();
+            if (!playheadRaf) playheadRaf = requestAnimationFrame(tickPlayhead);
+          } catch (_) {
+            /* finally 清 looping */
+          } finally {
+            if (gen === playWindowGen) playWindowLooping = false;
+          }
+        })();
+      }, waitMs);
+      return true;
+    }
+
+    /** 停帧中用户拖/微调/点暂停：取消续播，按暂停态显示 */
+    function cancelBoundaryHold() {
+      if (!boundaryHold) return;
+      boundaryHold = null;
+      clearParkCutTimer();
+      playWindowGen += 1;
+      playWindowLooping = false;
+      if (playBtn) playBtn.textContent = "播放";
+      previewWrap?.classList.remove("is-playing");
+      paintTimeline();
+      updateLabels();
+    }
+
     function clipPlayWindow(mediaTime) {
       if (closed || !duration || playWindowLooping || drag) return false;
+      // 暂停态一律不动，只有 pause 监听里「播到文件尾自停」那一次放行。
+      // 停帧 / 片尾+ 到末帧也会 paused+ended（或 clock≥上界）：据此回绕 = 用户没点播放却从头播
+      if (video.paused && !loopFromFileEnd) return false;
       const clock = Number(video.currentTime) || 0;
       const exclusive = exclusivePlayEndSec();
       const step = endKeepStepSec();
       // 只削掉下一采样前几毫秒，避免末帧 CTS 上就回绕（那一帧会先闪、seek 再出现一次）
       const shave = Math.min(0.004, step * 0.2);
-      // 文件尾 ended/paused 仍要回绕；勿因 paused 丢掉循环
-      const forceCut =
-        Boolean(video.ended) ||
-        clock >= exclusive - shave ||
-        (Number.isFinite(mediaTime) && mediaTime >= exclusive - shave);
-      if (video.paused && !forceCut) return false;
       const cur = mediaTimeForCut(clock, mediaTime, exclusive);
       const park = playCutParkSec();
       let jump = null;
@@ -2376,7 +2435,8 @@
         const mt = Number(meta?.mediaTime);
         if (Number.isFinite(mt)) lastPresentedMediaTime = mt;
         if (clipPlayWindow(Number.isFinite(mt) ? mt : undefined)) return;
-        // 末帧 PTS 不变，要等到半开上界再切。已落在最后一枚保留采样上就预约（勿死卡 remain≤1/fps）
+        if (holdAtKeepBoundary(mt, meta)) return;
+        // 无采样表回退：末帧 PTS 不变，要等到半开上界再切。已落在最后一枚保留采样上就预约（勿死卡 remain≤1/fps）
         const exclusive = exclusivePlayEndSec();
         const step = endKeepStepSec();
         const shave = Math.min(0.004, step * 0.2);
@@ -2396,10 +2456,7 @@
             const waitMs = Math.max(0, (remain / rate) * 1000);
             parkCutTimer = window.setTimeout(() => {
               parkCutTimer = 0;
-              if (closed || gen !== playWindowGen || playWindowLooping) return;
-              const pastEnd =
-                Boolean(video.ended) || (Number(video.currentTime) || 0) >= exclusive - shave;
-              if (video.paused && !pastEnd) return;
+              if (closed || gen !== playWindowGen || playWindowLooping || video.paused) return;
               clipPlayWindow(exclusive);
             }, waitMs);
           }
@@ -2415,6 +2472,11 @@
 
     async function togglePlay() {
       if (!video.src) return;
+      if (boundaryHold) {
+        // 段末停帧中按钮仍是「暂停」：这一下就是暂停
+        cancelBoundaryHold();
+        return;
+      }
       if (video.paused) {
         const cur = Number(video.currentTime) || 0;
         const keep = playCutParkSec();
@@ -2706,6 +2768,7 @@
       filmGen += 1;
       playWindowGen += 1;
       playWindowLooping = false;
+      boundaryHold = null;
       freezeClockSec = NaN;
       clearParkCutTimer();
       if (tipHoldTimer) {
@@ -3229,7 +3292,13 @@
       }
       scheduleCropLive();
     });
+    video.addEventListener("seeking", () => {
+      // 停帧期间的 seek 都不是我们发的（续播 seek 前已清 boundaryHold）
+      if (boundaryHold) cancelBoundaryHold();
+    });
     video.addEventListener("pause", () => {
+      // 段末停帧：逻辑上仍在播放，勿把按钮刷成「播放」
+      if (boundaryHold) return;
       if (playBtn) playBtn.textContent = "播放";
       previewWrap?.classList.remove("is-playing");
       if (playheadRaf) {
@@ -3237,6 +3306,16 @@
         playheadRaf = 0;
       }
       paintTimeline();
+      // 播放中触底：浏览器自停时 ended=true（Chrome 先置 paused 再派 timeupdate，clipPlayWindow 那时已放过）。
+      // 暂停态 seek 到末帧只派 timeupdate/ended、不派 pause，所以这里不会误续播
+      if (video.ended && !closed) {
+        loopFromFileEnd = true;
+        try {
+          clipPlayWindow();
+        } finally {
+          loopFromFileEnd = false;
+        }
+      }
     });
     video.addEventListener("play", () => {
       if (playBtn) playBtn.textContent = "暂停";
@@ -3489,6 +3568,81 @@
     return headSeek(first);
   }
 
+  /**
+   * 播放中 rVFC 刚呈现 mediaTime 那一帧：若它是某段 keep 的最后一帧、下一帧不进成片（删段首帧 / 片尾外一帧），
+   * 返回 { seekSec, nextStart, remainSec, loop }：调用方立刻 pause（画面停在这帧），remainSec 后 seek 到
+   * seekSec（下一段首帧帧内；末段则回第一段）再播。
+   * 等下一帧真呈现再跳（旧做法）必闪一帧成片里没有的画面；预约计时也赛不过 rVFC 回调延迟。
+   * 无采样表 / keep 无帧号时返回 null（调用方走按时间回退）。
+   * @param {{start:number,end:number,startF?:number,endF?:number}[]} keeps
+   * @param {{ctsSec:Float64Array,fps?:number}} timeline
+   * @param {number} mediaTime
+   */
+  function keepBoundaryHold(keeps, timeline, mediaTime) {
+    const mp4 = typeof window !== "undefined" ? window.DevToolsMp4Timeline : null;
+    const arr = timeline?.ctsSec;
+    const mt = Number(mediaTime);
+    if (!arr?.length || !Array.isArray(keeps) || !keeps.length || !Number.isFinite(mt)) return null;
+    if (typeof mp4?.sampleIndexAtSec !== "function" || typeof mp4?.sampleSpanSec !== "function") return null;
+    // rVFC mediaTime 常比 CTS 少几 µs：加 1/4 帧再认帧号
+    const k0 = mp4.sampleIndexAtSec(timeline, mt);
+    const idx = mp4.sampleIndexAtSec(timeline, mt + 0.25 * mp4.sampleSpanSec(timeline, k0));
+    for (let i = 0; i < keeps.length; i++) {
+      const sF = Math.round(Number(keeps[i].startF));
+      const eF = Math.round(Number(keeps[i].endF));
+      if (!Number.isFinite(sF) || !Number.isFinite(eF)) return null;
+      if (idx !== eF - 1 || idx < sF) continue;
+      const nxt = keeps[i + 1] || null;
+      if (nxt && Math.round(Number(nxt.startF)) <= eF) return null;
+      const target = nxt || keeps[0];
+      const tStartF = Math.round(Number(target.startF));
+      let seekSec = Number(mp4.frameSeekSec?.(timeline, tStartF));
+      const cap = Number(target.end);
+      if (!Number.isFinite(seekSec)) seekSec = Number(target.start) || 0;
+      if (Number.isFinite(cap) && seekSec >= cap - 0.001) seekSec = Math.max(0, cap - 0.001);
+      const tNext = eF < arr.length ? Number(arr[eF]) : Number(keeps[i].end);
+      return {
+        seekSec,
+        nextStart: Number(target.start) || 0,
+        remainSec: Math.max(0, tNext - Math.max(mt, Number(arr[idx]))),
+        loop: !nxt,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * 换点 seek 之前调用：挂一次 rVFC，seek 落稳后 wait(ms) 等新帧真呈现了再 play（最多等 ms）。
+   * seeked 后立刻 play，下一段首帧常被当迟到帧丢掉——接点处预览比 GIF 少一帧。
+   * @param {HTMLVideoElement} videoEl
+   */
+  function armFramePainted(videoEl) {
+    let painted = typeof videoEl?.requestVideoFrameCallback !== "function";
+    let wake = null;
+    if (!painted) {
+      try {
+        videoEl.requestVideoFrameCallback(() => {
+          painted = true;
+          if (wake) wake();
+        });
+      } catch (_) {
+        painted = true;
+      }
+    }
+    return {
+      wait(ms) {
+        if (painted) return Promise.resolve();
+        return new Promise((resolve) => {
+          const to = setTimeout(resolve, Math.max(0, Number(ms) || 0));
+          wake = () => {
+            clearTimeout(to);
+            resolve();
+          };
+        });
+      },
+    };
+  }
+
   function evenDim(n) {
     return Math.max(2, Math.round((Number(n) || 2) / 2) * 2);
   }
@@ -3523,7 +3677,41 @@
 
     const keepFps = Math.max(5, Number(opts.keepFps) || 24);
     const timeline = opts.timeline || null;
-    const durUs = Math.round(1e6 / keepFps);
+    const keepFrameBounds = (k) => {
+      const startF = Number.isFinite(Number(k.startF))
+        ? Math.round(Number(k.startF))
+        : displayFrameAtSec(k.start, keepFps);
+      let endF = Number.isFinite(Number(k.endF)) ? Math.round(Number(k.endF)) : displayFrameAtSec(k.end, keepFps);
+      if (endF <= startF) endF = startF + 1;
+      return { startF, endF };
+    };
+    // raw H.264 封装只认 -r（无逐帧时间戳）：VFR 每个源帧按真实显示时长铺到 gridFps 网格（重复帧），
+    // 否则录屏静帧被压成 1/平均fps、密集段被拉慢，成片节奏 ≠ 预览。CFR：gridFps≡keepFps，每帧恰 1 次
+    const media = timeline?.ctsSec?.length
+      ? timeline.mediaCtsSec?.length === timeline.ctsSec.length
+        ? timeline.mediaCtsSec
+        : timeline.ctsSec
+      : null;
+    const realDurSec = (fi) => {
+      if (!media) return 1 / keepFps;
+      const k = Math.max(0, Math.min(media.length - 1, fi));
+      if (k + 1 < media.length) {
+        const d = Number(media[k + 1]) - Number(media[k]);
+        if (d > 1e-6) return d;
+      }
+      return Number(window.DevToolsMp4Timeline?.sampleSpanSec?.(timeline, k)) || 1 / keepFps;
+    };
+    let minFrameSec = Infinity;
+    if (media) {
+      for (const k of keeps) {
+        const { startF, endF } = keepFrameBounds(k);
+        for (let fi = startF; fi < endF; fi++) minFrameSec = Math.min(minFrameSec, realDurSec(fi));
+      }
+    }
+    const localFps = 1 / minFrameSec;
+    const gridFps =
+      Number.isFinite(localFps) && localFps > keepFps * 1.15 ? Math.min(60, Math.round(localFps)) : keepFps;
+    const durUs = Math.round(1e6 / gridFps);
     const wasMuted = videoEl.muted;
     const wasPaused = videoEl.paused;
     const resumeAt = Number(videoEl.currentTime) || 0;
@@ -3575,23 +3763,27 @@
         { codec: "avc1.42E01E", bitrate: 8_000_000 },
       ];
       let configured = false;
+      // 无硬编的桌面 / 虚拟机只支持软编：prefer-hardware 不通再 no-preference
       for (const cfg of tryConfigs) {
-        try {
-          const full = {
-            width: W,
-            height: H,
-            framerate: keepFps,
-            hardwareAcceleration: "prefer-hardware",
-            ...cfg,
-          };
-          if (typeof VideoEncoder.isConfigSupported === "function") {
-            const ok = await VideoEncoder.isConfigSupported(full).catch(() => null);
-            if (ok && ok.supported === false) continue;
-          }
-          encoder.configure(full);
-          configured = true;
-          break;
-        } catch (_) {}
+        for (const hardwareAcceleration of ["prefer-hardware", "no-preference"]) {
+          try {
+            const full = {
+              width: W,
+              height: H,
+              framerate: gridFps,
+              hardwareAcceleration,
+              ...cfg,
+            };
+            if (typeof VideoEncoder.isConfigSupported === "function") {
+              const ok = await VideoEncoder.isConfigSupported(full).catch(() => null);
+              if (ok && ok.supported === false) continue;
+            }
+            encoder.configure(full);
+            configured = true;
+            break;
+          } catch (_) {}
+        }
+        if (configured) break;
       }
       if (!configured) return null;
     } catch (_) {
@@ -3602,23 +3794,19 @@
     const segmentSpans = [];
     let outTs = 0;
     let outFrames = 0;
+    let srcFrames = 0;
+    /** 源帧真实显示时长累计（µs）；outTs 按网格追它 */
+    let srcClockUs = 0;
     const totalKeepFrames = keeps.reduce((s, k) => {
-      const a = Number.isFinite(Number(k.startF)) ? Number(k.startF) : displayFrameAtSec(k.start, keepFps);
-      const b = Number.isFinite(Number(k.endF)) ? Number(k.endF) : displayFrameAtSec(k.end, keepFps);
-      return s + Math.max(1, b - a);
+      const { startF, endF } = keepFrameBounds(k);
+      return s + (endF - startF);
     }, 0);
 
     try {
       for (let ki = 0; ki < keeps.length; ki++) {
         if (opts.isAborted?.()) throw new Error("已取消");
         const k = keeps[ki];
-        let startF = Number.isFinite(Number(k.startF))
-          ? Math.round(Number(k.startF))
-          : displayFrameAtSec(k.start, keepFps);
-        let endF = Number.isFinite(Number(k.endF))
-          ? Math.round(Number(k.endF))
-          : displayFrameAtSec(k.end, keepFps);
-        if (endF <= startF) endF = startF + 1;
+        const { startF, endF } = keepFrameBounds(k);
         const segStartTs = outTs;
         for (let fi = startF; fi < endF; fi++) {
           if (encoderError) throw encoderError;
@@ -3644,23 +3832,33 @@
             ctx.drawImage(videoEl, 0, 0, W, H);
             frame = new VideoFrame(c, { timestamp: outTs, duration: durUs });
           }
-          const keyFrame = outFrames % Math.max(1, Math.round(keepFps)) === 0;
+          srcClockUs += Math.round(realDurSec(fi) * 1e6);
           try {
-            while (encoder.encodeQueueSize > 4) {
-              await new Promise((r) => setTimeout(r, 8));
+            // 源帧比网格密（60 封顶）时这帧够不着下一格就跳过：保节奏，不把密集段拖慢
+            while (outTs + durUs / 2 <= srcClockUs || outFrames === 0) {
+              const keyFrame = outFrames % Math.max(1, Math.round(gridFps)) === 0;
+              while (encoder.encodeQueueSize > 4) {
+                await new Promise((r) => setTimeout(r, 8));
+              }
+              const copy = new VideoFrame(frame, { timestamp: outTs, duration: durUs });
+              try {
+                encoder.encode(copy, { keyFrame });
+              } finally {
+                copy.close();
+              }
+              outTs += durUs;
+              outFrames += 1;
             }
-            encoder.encode(frame, { keyFrame });
           } finally {
             try {
               frame.close();
             } catch (_) {}
           }
-          outTs += durUs;
-          outFrames += 1;
-          if (outFrames % 8 === 0 || outFrames === 1) {
+          srcFrames += 1;
+          if (srcFrames % 8 === 0 || srcFrames === 1) {
             onProgress(
-              0.08 + (outFrames / Math.max(1, totalKeepFrames)) * 0.75,
-              `对齐预览帧 ${outFrames}/${totalKeepFrames}`
+              0.08 + (srcFrames / Math.max(1, totalKeepFrames)) * 0.75,
+              `对齐预览帧 ${srcFrames}/${totalKeepFrames}`
             );
           }
         }
@@ -3700,7 +3898,7 @@
           "-f",
           "h264",
           "-r",
-          String(keepFps),
+          String(gridFps),
           "-i",
           h264Name,
           "-c",
@@ -3716,7 +3914,7 @@
         const code2 = await ffmpeg
           .exec([
             "-framerate",
-            String(keepFps),
+            String(gridFps),
             "-i",
             h264Name,
             "-c:v",
@@ -3760,6 +3958,7 @@
         keeps,
         sliceLog,
         keepFps,
+        gridFps,
         exportMethod: "chrome-VideoFrame",
         mp4Timeline: timeline
           ? {
@@ -3893,10 +4092,12 @@
         const off = Number(timeline.chromeOffsetSec) || 0;
         if (media && media.length) {
           let t0 = Number(media[Math.min(startF, media.length - 1)]);
+          const lastSpan =
+            Number(window.DevToolsMp4Timeline.sampleSpanSec?.(timeline, media.length - 1)) || 1 / keepFps;
           let t1 =
             endF < media.length
               ? Number(media[endF])
-              : Number(media[media.length - 1]) + 1 / keepFps;
+              : Number(media[media.length - 1]) + lastSpan;
           // 若误用了已平移数组且无 mediaCtsSec，回退减 offset
           if (!(timeline.mediaCtsSec && timeline.mediaCtsSec.length) && Math.abs(off) >= 0.002) {
             t0 -= off;
@@ -3978,7 +4179,9 @@
         const vf = [trim, tailVf].filter(Boolean).join(",");
         chains.push(`[0:v]${vf}[k${i}]`);
         labels.push(`[k${i}]`);
-        const spanSec = useFrame
+        // 段长 = 真实显示时长。有表时 b.dur 来自采样 CTS；帧数/平均fps 在 VFR 静帧段会偏短，
+        // materialize 认短的上报 → GIF 只编前一截（后半段整段丢）
+        const spanSec = useFrame && !preferSampleFrames
           ? (b.demuxEndF - b.demuxStartF) / keepFps
           : b.dur;
         spans.push(Math.max(0.05, spanSec));
@@ -4065,7 +4268,7 @@
         } catch (_) {
           return null;
         }
-        const spanSec = useFrame ? (b.endF - b.startF) / keepFps : b.dur;
+        const spanSec = useFrame && !preferSampleFrames ? (b.endF - b.startF) / keepFps : b.dur;
         return { out, spanSec, mode, startF: b.startF, endF: b.endF, start: b.start, end: b.end };
       };
       for (let i = 0; i < keeps.length; i++) {
@@ -4177,6 +4380,8 @@
     keepRangesFromEdit,
     keepRangesForEncode,
     previewSeekForKeepRanges,
+    keepBoundaryHold,
+    armFramePainted,
     exportKeepVideo,
     exportKeepByChromeDisplay,
     estimateFpsFromMediaTimes,

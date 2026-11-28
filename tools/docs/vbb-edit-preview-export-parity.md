@@ -6,6 +6,7 @@
 | 层次 | 文档 |
 |------|------|
 | **产品契约（本文）** | keep 窗、共享时间轴、materialize、encode 开关 |
+| **实现 / 禁改（改代码前必读）** | [`vbb-blackbox-implementation.md`](./vbb-blackbox-implementation.md)（函数地图、播放窗口、段末停帧、Chrome 行为实测、逐帧验收） |
 | **时钟根因** | [`vbb-preview-export-clock.md`](./vbb-preview-export-clock.md)（CTS vs Chrome、`frameRaw`、禁止拨开关） |
 | **体积 / 帧率试档** | [`vbb-blackbox-optimization.md`](./vbb-blackbox-optimization.md)（与 keep 对齐**正交**） |
 
@@ -116,7 +117,8 @@ edit 有时间编辑？（vbbEditNeedsExport）
 
 - `enforceVbbEditPlaybackWindow` → `vbbKeepRangesForEncode` + `previewSeekForKeepRanges`  
 - 与成片同一 keep，接点才不会少跳/多带帧  
-- rVFC `mediaTime` 对冲 `currentTime` 滞后
+- rVFC `mediaTime` 对冲 `currentTime` 滞后  
+- 播到段末帧：`holdVbbEditAtKeepBoundary`（≡ 编辑器 `holdAtKeepBoundary`）停帧补足时长再跳；暂停态（含暂停拖到文件尾）不续播
 
 ### 导出选帧
 
@@ -177,23 +179,26 @@ edit 有时间编辑？（vbbEditNeedsExport）
 8. `captureStream` 录预览当导出  
 9. 以为「撞档/IDB」会影响 keep 窗——不会；差帧仍查时钟与 keeps  
 10. 微调 ±1 退成 `maxStep` / `1/fps` 时间步（VFR 静帧上时间变、画面不变）  
-11. 把解码序当帧号：`ctsSec` 必须 CTS 升序（B 帧片在 `buildTimelineFromTrack` 排序），否则二分 / `frameSeekSec` / 相邻帧错 1–3 帧，编辑停帧 ≠ GIF
+11. 把解码序当帧号：`ctsSec` 必须 CTS 升序（B 帧片在 `buildTimelineFromTrack` 排序），否则二分 / `frameSeekSec` / 相邻帧错 1–3 帧，编辑停帧 ≠ GIF  
+12. 拿 `1/fps` / `0.5/fps` 当「一帧」或片尾容差：`timeline.fps` 是全片平均，录屏 VFR 密集段会一次跳几帧、片尾+ 倒退——只用 `sampleSpanSec` / `exclusiveEndIndexAtSec`  
+13. 暂停态因 `paused && ended` 回绕 / play（片尾+ 到末帧、暂停拖到末尾自己从头播）；回绕只认 `pause` 监听里的 `ended`  
+14. 播放等越界帧呈现了再跳（接点 / 回绕闪一帧）：段末一律 `keepBoundaryHold` 停帧补时长再跳，seek 前 `armFramePainted`  
+15. 有采样表时导出时长按 `帧数 / 平均fps`（VFR 静帧被截断，GIF 比预览短）
+
+细节与原因见 [`vbb-blackbox-implementation.md`](./vbb-blackbox-implementation.md) §5。
 
 ---
 
 ## 10. 相关测试（合入前）
 
 ```bash
-node tools/test/vbb-preview-encode-align.test.js
-node tools/test/vbb-preview-gif-align.test.js
-node tools/test/vbb-precut-trim.test.js
-node tools/test/vbb-end-play-align.test.js
-node tools/test/vbb-trim-nudge-jump.test.js
-node tools/test/mp4-timeline.test.js
-node tools/vbb-blackbox-fps.test.js   # 含 exportedEdit 禁 lease + 阶梯硬约束
+node tools/scripts/ci.cjs             # 自动跑全部 tools/test/vbb-*.test.js + mp4-timeline
+node tools/vbb-blackbox-fps.test.js   # 含 exportedEdit 禁 lease + 阶梯硬约束（ci 也跑）
 node tools/scripts/build-v2g-suite.cjs
 node tools/bump-version.cjs           # 功能改动必做
 ```
+
+改播放 / 导出还要做浏览器逐帧验收：[`vbb-blackbox-implementation.md`](./vbb-blackbox-implementation.md) §6.2。
 
 | 测试 | 覆盖 |
 |------|------|
@@ -201,7 +206,8 @@ node tools/bump-version.cjs           # 功能改动必做
 | `vbb-preview-gif-align` | exportedEdit 垫=0、matKeeps、resolve by file、open timeline |
 | `vbb-precut-trim` | prepare 透传 flags；lease 禁建 |
 | `vbb-end-play-align` | 片尾停/播 |
-| `vbb-trim-nudge-jump` | ±1 = 相邻真实采样（VFR 静帧照跳）、打开收空尾、禁 maxStep |
+| `vbb-trim-nudge-jump` | ±1 = 相邻真实采样（VFR 静帧照跳、低平均 fps）、打开收空尾、禁 maxStep、暂停不续播 |
+| `vbb-keep-boundary-hold` | 段末停帧、首帧呈现再播、文件尾暂停不续播、导出真实跨度、Chrome 网格 |
 | `mp4-timeline` | `canFfmpegFirst` / 校准 / B 帧 CTS 升序 |
 | `vbb-blackbox-fps` | 阶梯硬约束 + exportedEdit 与 scheme VER 并列断言 |
 
@@ -219,7 +225,7 @@ node tools/bump-version.cjs           # 功能改动必做
 
 ## 会话交接
 
-1. 先读本文 + [`vbb-preview-export-clock.md`](./vbb-preview-export-clock.md) + 最新诊断 JSON。  
+1. 先读本文 + [`vbb-blackbox-implementation.md`](./vbb-blackbox-implementation.md) + [`vbb-preview-export-clock.md`](./vbb-preview-export-clock.md) + 最新诊断 JSON。  
 2. 改 keep/timeline → 同步两套 align 测试 + `build-v2g-suite.cjs` + bump。  
 3. 改撞档 → 只动 scheme 块与 VER；对齐路径零改动。  
 4. 用户要「快」：默认 ffmpeg-first；chrome 是异常兜底，勿当常态。

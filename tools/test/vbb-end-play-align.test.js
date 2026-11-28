@@ -146,15 +146,16 @@ t("seekEndPreviewExact 停成片 CTS，不改写 endSec（片尾+ 不被顶死�
   assert.ok(!fn.includes("shown + step"));
 });
 
-t("外预览播放态 pastSlop=0，不吞片尾越过；ended 不算 holding", () => {
+t("外预览播放态 pastSlop=0，不吞片尾越过；暂停态只认 pause 监听判的「播完自停」才续播", () => {
   const enforce = vbb.slice(
     vbb.indexOf("function enforceVbbEditPlaybackWindow"),
     vbb.indexOf("function scheduleVbbEditEndCut")
   );
   assert.ok(enforce.includes("vbbLastPresentedMediaTime") || enforce.includes("presented"));
-  assert.ok(enforce.includes("holding") && enforce.includes("!vbbVideo.ended"));
+  assert.ok(enforce.includes("const holding = Boolean(vbbVideo.paused) && !vbbLoopFromFileEnd"));
+  assert.ok(!enforce.includes("!vbbVideo.ended"), "paused+ended 不能当播放态（暂停拖到末尾会自己开播）");
   assert.ok(/pastSlop = holding \?/.test(enforce));
-  assert.ok(enforce.includes("keepPlaying = !holding"));
+  assert.ok(/vbbEditSeekKeepTarget\(next, keeps, item, srcFps, !holding, now\)/.test(enforce));
   assert.ok(enforce.includes("presented - clock"));
   assert.ok(enforce.includes("vbbLastPresentedMediaTime = NaN"));
 });
