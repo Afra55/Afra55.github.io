@@ -306,6 +306,20 @@ select.meta-input.text-choice {
 .vbb-preview-wrap {
   position: relative;
   overflow: hidden;
+  cursor: pointer;
+  /* 对齐编辑器：不要原生大居中播放钮；播停靠双击 */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vbb-preview-wrap #vbb-video {
+  pointer-events: auto;
+}
+
+/* 若日后误加回 controls，仍藏掉大居中播放钮（WebKit） */
+.vbb-preview-wrap #vbb-video::-webkit-media-controls-overlay-play-button {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .vbb-preview-wrap.is-edit-preview {
