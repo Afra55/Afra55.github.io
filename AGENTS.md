@@ -125,6 +125,7 @@
 ## 勿重复造轮子（易踩坑）
 
 - **视频/黑盒分片**：改 `tools/extra-panels/v2g-suite-src/*` 后执行 `node tools/scripts/build-v2g-suite.cjs`；合入前 `node tools/scripts/verify-arch.cjs`
+- **改黑盒 GIF 任何代码前先读 `tools/docs/vbb-blackbox-implementation.md`**（代码地图 / 五条铁律 / 禁改清单 / 逐帧验收）：「一帧」只用 `sampleSpanSec`（`timeline.fps` 是全片平均），暂停态永不自动播，段末走 `keepBoundaryHold`，导出时长按真实 CTS 跨度
 - **VBB 编辑≡预览≡生成**：三者统一靠同 file 采样表 + 半开 keep + materialize/`exportedEdit`；产品契约全文 `tools/docs/vbb-edit-preview-export-parity.md`。差帧先查时钟域（`ctsSec` vs Chrome），勿在 chrome/ffmpeg-sec 间拨开关；时钟经验 `tools/docs/vbb-preview-export-clock.md`（快切=`frameRaw`+`canFfmpegFirst`，校准中点比 `VideoFrame.timestamp`）。撞档/IDB 只喂 fps seed，不改 keep 对齐
 - **ADB 镜像**：scrcpy-server v3.1，桥 ≥0.9.12；`scrcpy-ctrl.js` 须进 ZIP；勿默认 `i-frame-interval=1`
 - **备忘录滚动**：桌面滚动根是 `main.shell`（非 `window`）

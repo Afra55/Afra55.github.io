@@ -2,9 +2,17 @@
 "use strict";
 
 const { spawnSync } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
+
+/** 黑盒 GIF 编辑≡预览≡生成 回归（tools/docs/vbb-blackbox-implementation.md）：新加 vbb-*.test.js 自动纳入 */
+const VBB_TESTS = fs
+  .readdirSync(path.join(ROOT, "test"))
+  .filter((f) => /^(vbb-.+|mp4-timeline)\.test\.js$/.test(f))
+  .sort()
+  .map((f) => ({ name: f.replace(/\.test\.js$/, ""), cmd: "node", args: [`test/${f}`] }));
 
 const STEPS = [
   { name: "syntax app.js", cmd: "node", args: ["--check", "app.js"] },
@@ -26,6 +34,7 @@ const STEPS = [
   { name: "vbb plan tests", cmd: "node", args: ["vbb-plan.test.js"] },
   { name: "vbb blackbox fps", cmd: "node", args: ["vbb-blackbox-fps.test.js"] },
   { name: "vbb auto crop", cmd: "node", args: ["vbb-auto-crop.test.js"] },
+  ...VBB_TESTS,
   { name: "mdm smoke", cmd: "node", args: ["mdm-smoke.cjs"] },
   { name: "mdm tests", cmd: "node", args: ["test/mdm.test.js"] },
   { name: "mdm find-doc tests", cmd: "node", args: ["test/mdm-find-doc.test.js"] },

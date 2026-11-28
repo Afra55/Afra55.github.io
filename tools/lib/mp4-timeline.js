@@ -365,11 +365,29 @@
       const t1 = Number(arr[k + 1]);
       if (Number.isFinite(t1) && t1 > t0) span = t1 - t0;
     }
-    if (!(span > 1e-6)) {
-      const fps = Math.max(5, Number(timeline.fps) || 24);
-      span = 1 / fps;
-    }
+    // 末采样：按本地帧距估；1/平均fps 在静帧多的录屏上远大于真实末帧，停帧点会越过片尾被夹成 ended
+    if (!(span > 1e-6)) span = sampleSpanSec(timeline, k);
     return t0 + span * f;
+  }
+
+  /**
+   * 第 k 帧显示时长估计：本地帧距（末帧用上一间隔），上限 1/平均fps。
+   * 录屏 VFR 静帧多时平均 fps 很低，按平均帧距算会把密集段好几帧当成「一帧」。
+   * @param {{ctsSec:Float64Array,fps?:number}} timeline
+   * @param {number} sampleIdx
+   */
+  function sampleSpanSec(timeline, sampleIdx) {
+    const arr = timeline?.ctsSec;
+    const n = arr?.length || 0;
+    const cap = 1 / Math.max(5, Number(timeline?.fps) || 30);
+    if (!(n > 0)) return cap;
+    const k = Math.max(0, Math.min(n - 1, Math.round(Number(sampleIdx) || 0)));
+    const t0 = Number(arr[k]);
+    let span = NaN;
+    if (k + 1 < n) span = Number(arr[k + 1]) - t0;
+    else if (k > 0) span = t0 - Number(arr[k - 1]);
+    if (!(span > 1e-6)) return cap;
+    return Math.min(cap, span);
   }
 
   /**
@@ -649,6 +667,26 @@
   }
 
   /**
+   * 半开片尾 b → endF（不含）：CTS < b 的帧都留。
+   * b 只比第 k 帧 CTS 晚不到半个「该帧时长」（毫秒取整 / 帧格缝）时视为落在该 CTS 上，第 k 帧不留。
+   * 帧时长用 sampleSpanSec（本地帧距）：CFR 下 ≡ 旧的 0.5/fps；VFR 密集段不再一次吞掉 2–3 帧、
+   * 片尾+ 也不会反着退。编辑器片尾吸附 / 收空尾巴必须走同一函数。
+   * @param {{ctsSec:Float64Array,fps?:number}} timeline
+   * @param {number} endSec
+   */
+  function exclusiveEndIndexAtSec(timeline, endSec) {
+    const arr = timeline?.ctsSec;
+    const n = arr?.length || 0;
+    if (!(n > 0)) return 0;
+    const b = Math.max(0, Number(endSec) || 0);
+    const k = sampleIndexAtSec(timeline, b);
+    const tk = Number(arr[k]);
+    if (!Number.isFinite(tk) || tk > b + 1e-9) return k;
+    const half = 0.5 * sampleSpanSec(timeline, k);
+    return b - tk >= half - 1e-9 ? Math.min(n, k + 1) : k;
+  }
+
+  /**
    * 半开 [start,end) → [startF, endF) 采样下标（endF 为不含）。
    */
   function sampleRangeForKeep(timeline, startSec, endSec) {
@@ -657,9 +695,7 @@
     const a = Math.max(0, Number(startSec) || 0);
     const b = Math.max(a, Number(endSec) || 0);
     let startF = inclusiveSampleAtSec(timeline, a);
-    // 半开 [a,b)：末帧 = CTS < b 的最后一帧；用半帧 ε 避免 b 恰落在帧 CTS 上算进区间
-    const eps = 0.5 / Math.max(5, Number(timeline.fps) || 30);
-    let endF = sampleIndexAtSec(timeline, Math.max(0, b - eps)) + 1;
+    let endF = exclusiveEndIndexAtSec(timeline, b);
     if (endF <= startF) endF = Math.min(n, startF + 1);
     endF = Math.min(n, endF);
     startF = Math.min(startF, Math.max(0, n - 1));
@@ -692,6 +728,8 @@
     probeMp4VideoTimeline,
     sampleIndexAtSec,
     inclusiveSampleAtSec,
+    exclusiveEndIndexAtSec,
+    sampleSpanSec,
     sampleRangeForKeep,
     toDemuxFrameIndex,
     frameSeekSec,

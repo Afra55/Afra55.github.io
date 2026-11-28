@@ -140,6 +140,13 @@
       let vbbLastPresentedMediaTime = NaN;
       /** 末帧 PTS 不变，预约在半开上界切断，避免下一帧先露一闪或末帧被 seek 再画一次 */
       let vbbEditEndCutTimer = 0;
+      /** keep 段末帧停帧中（DevToolsVtrimEditor.keepBoundaryHold）：{ gen }；期间 enforce 让路 */
+      let vbbEditHold = null;
+      let vbbEditHoldGen = 0;
+      /** 只在 pause 监听里置位：播到文件尾自停 → 回绕续播 */
+      let vbbLoopFromFileEnd = false;
+      /** play 事件 → pause 监听收尾之间为 true。播到文件尾时 Chrome 先置 paused/ended，pause 事件晚到 */
+      let vbbMediaPlaying = false;
       let vbbScrubRaf = 0;
       let abortVbb = false;
       /** 批处理并行 FFmpeg 实例；取消时必须一并 terminate，否则点取消无响应 */
@@ -187,6 +194,7 @@
       }
   
       function pauseVbbPreview() {
+        cancelVbbEditHold();
         try {
           vbbVideo?.pause?.();
         } catch (_) {}
@@ -1307,13 +1315,15 @@
           const n = Math.max(0, Number(t) || 0);
           return (Math.round(n * 1e6) / 1e6).toFixed(6);
         };
-        const tryPart = async (start0, end0, out, mode) => {
-          let startF = toFrame(start0);
-          let endF = toFrame(end0);
-          if (endF <= startF) endF = startF + 1;
-          const dur = Math.max(0.05, end0 - start0);
+        const tryPart = async (start0, end0, out, mode, sampleFrames) => {
           const useGrid = mode === "frameGrid";
           const useFrame = mode === "frame" || mode === "frameRaw" || mode === "frameGrid";
+          // 有表 frameRaw：用 keep 的采样帧号（demux 计）；时间×平均fps 在 VFR 上会切到别的帧
+          const raw = useFrame && !useGrid && sampleFrames;
+          let startF = raw ? sampleFrames.startF : toFrame(start0);
+          let endF = raw ? sampleFrames.endF : toFrame(end0);
+          if (endF <= startF) endF = startF + 1;
+          const dur = Math.max(0.05, end0 - start0);
           const trimVf = useFrame
             ? `trim=start_frame=${startF}:end_frame=${endF},setpts=PTS-STARTPTS,`
             : mode === "sec"
@@ -1371,9 +1381,16 @@
           const modes = matTimeline?.ctsSec?.length
             ? ["frameRaw", "frameGrid", "sec", "ss"]
             : ["sec", "ss", "frameRaw", "frameGrid"];
+          const tlApi = window.DevToolsMp4Timeline;
+          const toDemux = (f) =>
+            typeof tlApi?.toDemuxFrameIndex === "function" ? tlApi.toDemuxFrameIndex(matTimeline, f) : f;
+          const sampleFrames =
+            matTimeline?.ctsSec?.length && Number.isFinite(Number(k.startF)) && Number.isFinite(Number(k.endF))
+              ? { startF: toDemux(Math.round(Number(k.startF))), endF: toDemux(Math.round(Number(k.endF))) }
+              : null;
           let ok = false;
           for (const mode of modes) {
-            ok = await tryPart(start0, end0, out, mode);
+            ok = await tryPart(start0, end0, out, mode, sampleFrames);
             if (ok) break;
           }
           if (!ok) throw new Error(`删中间切片失败（段 ${i + 1}/${keeps.length}）`);
@@ -2282,6 +2299,15 @@
           item.file || null
         );
         if (!keeps.length) return;
+        if (vbbVideo.paused && vbbVideo.ended && !vbbLoopFromFileEnd) {
+          // 播完自停：pause 事件还没到，交给 pause 监听回绕。
+          // 否则是暂停时拖到末尾（不派 pause，ended 事件也时有时无）：往下按暂停态停 keep 末帧，绝不续播
+          if (vbbMediaPlaying) return;
+          // 末帧已在 keep 里就不动：无音轨片 seek 进末帧 Chrome 也报 ended，再停一次会 seek↔ended 打转
+          const n = item.timeline?.ctsSec?.length || 0;
+          const lastKeep = keeps[keeps.length - 1];
+          if (n > 0 ? Number(lastKeep?.endF) >= n : Number(lastKeep?.end) >= vbbVideoDuration() - 0.001) return;
+        }
         const clock = Number(vbbVideo.currentTime) || 0;
         // 根因同编辑器：currentTime 滞后于已绘帧；截断跟 max(clock, presented)，勿盲目减帧
         // 回绕后 rVFC 仍报片尾：currentTime 已在片头时丢掉它，否则会 seek 回末帧再画一次
@@ -2303,8 +2329,8 @@
           presented = clock;
         }
         const t = Math.max(clock, Number.isFinite(presented) ? presented : clock);
-        // 用户中途暂停才「停末帧」；文件 ended 仍算播放态 → 回绕并 play
-        const holding = Boolean(vbbVideo.paused) && !vbbVideo.ended;
+        // 暂停态一律「停帧」不续播；只有 pause 监听认定的「播到文件尾自停」才回绕并 play
+        const holding = Boolean(vbbVideo.paused) && !vbbLoopFromFileEnd;
         const next = vbbPreviewSeekForKeepRanges(keeps, t, {
           paused: holding,
           edit: item.edit,
@@ -2318,8 +2344,15 @@
         // 与编辑内 clipPlayWindow 对齐：已到位才放弃；勿用 2 帧偏早容忍把删段尾当成「到了」
         const delta = next - t; // >0 还需往后 seek；<0 已越过目标
         if (Math.abs(delta) < 0.001) return;
-        // 越过停帧：暂停态才给半帧 pastSlop；播放态越过必须拉回
-        const pastSlop = holding ? Math.max(0.012, 0.35 * frame) : 0;
+        // 越过停帧：暂停态才给 pastSlop，且只到停帧那一帧的真实时长内（停帧点在帧内 25%，+35% 仍不出这帧）；
+        // 1/平均fps 在录屏 VFR 上能盖住密集段一两帧，暂停画面会停在 keep 外。播放态越过必须拉回
+        const tl = item.timeline;
+        const mp4 = window.DevToolsMp4Timeline;
+        const parkSpan =
+          tl?.ctsSec?.length && typeof mp4?.sampleSpanSec === "function"
+            ? mp4.sampleSpanSec(tl, mp4.sampleIndexAtSec(tl, next))
+            : frame;
+        const pastSlop = holding ? Math.max(0.012, 0.35 * parkSpan) : 0;
         if (delta < 0 && -delta < pastSlop) return;
         const now =
           typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
@@ -2333,7 +2366,11 @@
           // seek 后关键帧常偏早：650ms 内同目标不重入，防按钮狂切；不代替准跳
           return;
         }
-        const keepPlaying = !holding;
+        vbbEditSeekKeepTarget(next, keeps, item, srcFps, !holding, now);
+      }
+
+      /** 换到 keep 目标：先停再 seek；keepPlaying 时落稳再播（关键帧偏早落在接点前补推一次） */
+      function vbbEditSeekKeepTarget(next, keeps, item, srcFps, keepPlaying, now) {
         // 先停再 seek：播放越过片尾时若带着 keepPlaying 改 currentTime，会多画几帧
         if (keepPlaying && !vbbVideo.paused) {
           try {
@@ -2350,6 +2387,11 @@
         }
         // 即将换点：丢掉片尾 mediaTime，避免 seeked/timeupdate 再把它当成「还在结尾」
         vbbLastPresentedMediaTime = NaN;
+        const armPaint = () =>
+          keepPlaying && typeof window.DevToolsVtrimEditor?.armFramePainted === "function"
+            ? window.DevToolsVtrimEditor.armFramePainted(vbbVideo)
+            : null;
+        let paint = armPaint();
         applyVbbSeek(next, { keepPlaying: false });
         let watch = 0;
         const finish = () => {
@@ -2382,6 +2424,7 @@
               // 勿走 applyVbbSeek/displaySeek：帧内吸附会抵消 again+gap 的偏早补偿
               const bumpTo = again + gap;
               const dur = vbbVideoDuration();
+              paint = armPaint();
               try {
                 vbbVideo.currentTime =
                   dur > 0 ? Math.min(dur, Math.max(0, bumpTo)) : Math.max(0, bumpTo);
@@ -2392,7 +2435,17 @@
             }
             return;
           }
-          vbbVideo.play().catch(() => {});
+          if (!paint) {
+            vbbVideo.play().catch(() => {});
+            return;
+          }
+          // 等的这一下里用户拖进度 / 换片 / 又在换点：不续播
+          const resumeAt = land;
+          paint.wait(120).then(() => {
+            if (!vbbVideo || vbbBusy || !vbbVideo.paused || vbbEditSkipBusy || vbbEditHold) return;
+            if (Math.abs((Number(vbbVideo.currentTime) || 0) - resumeAt) > 0.001) return;
+            vbbVideo.play().catch(() => {});
+          });
         };
         watch = window.setTimeout(finish, 360);
         vbbVideo.addEventListener("seeked", finish);
@@ -2446,6 +2499,62 @@
         }, waitMs);
       }
 
+      /**
+       * 播到某段 keep 的最后一帧就地停住，补足该帧剩余显示时长再跳下一段 / 回片头（≡ 编辑器 holdAtKeepBoundary）。
+       * 等删段首帧 / 片尾外一帧呈现了再 enforce，外预览会比 GIF 多闪一帧。
+       */
+      function holdVbbEditAtKeepBoundary(mt, meta) {
+        if (isVbbManualMode() || vbbBusy || vbbEditSkipBusy || vbbEditHold || !vbbVideo?.src || vbbVideo.paused) {
+          return false;
+        }
+        const holdAt = window.DevToolsVtrimEditor?.keepBoundaryHold;
+        const item = getActiveVbbEditItem();
+        if (typeof holdAt !== "function" || !item?.edit || !item.timeline?.ctsSec?.length) return false;
+        if (!vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) return false;
+        const keeps = vbbKeepRangesForEncode(item.edit, item.duration, item.timeline, item.file || null);
+        const hold = holdAt(keeps, item.timeline, mt);
+        if (!hold) return false;
+        const srcFps = Number(item.edit?.srcFps) || Number(item.srcFps) || 0;
+        if (vbbEditEndCutTimer) {
+          clearTimeout(vbbEditEndCutTimer);
+          vbbEditEndCutTimer = 0;
+        }
+        const gen = ++vbbEditHoldGen;
+        vbbEditHold = { gen };
+        vbbEditSkipBusy = true;
+        vbbLastPresentedMediaTime = NaN;
+        const rate = Math.max(0.05, Number(vbbVideo.playbackRate) || 1);
+        const shownAt = Number(meta?.expectedDisplayTime) || 0;
+        const lateMs = shownAt > 0 ? Math.max(0, performance.now() - shownAt) : 0;
+        const waitMs = Math.max(0, (hold.remainSec / rate) * 1000 - lateMs);
+        lockVbbPlayUi(waitMs + 700);
+        try {
+          vbbVideo.pause();
+        } catch (_) {}
+        vbbEditEndCutTimer = window.setTimeout(() => {
+          vbbEditEndCutTimer = 0;
+          if (!vbbEditHold || vbbEditHold.gen !== gen) return;
+          vbbEditHold = null;
+          vbbEditSkipBusy = false;
+          if (!vbbVideo || vbbBusy || !vbbVideo.paused) return;
+          vbbEditSeekKeepTarget(hold.seekSec, keeps, item, srcFps, true, performance.now());
+        }, waitMs);
+        return true;
+      }
+
+      /** 停帧中被暂停 / 拖进度 / 手动播放 / 换片：取消自动续播 */
+      function cancelVbbEditHold() {
+        if (!vbbEditHold) return;
+        vbbEditHold = null;
+        vbbEditHoldGen += 1;
+        if (vbbEditEndCutTimer) {
+          clearTimeout(vbbEditEndCutTimer);
+          vbbEditEndCutTimer = 0;
+        }
+        vbbEditSkipBusy = false;
+        lockVbbPlayUi(80);
+      }
+
       function armVbbEditFrameWatch() {
         if (typeof vbbVideo?.requestVideoFrameCallback !== "function") return;
         const onFrame = (_now, meta) => {
@@ -2454,6 +2563,7 @@
           if (Number.isFinite(mt)) vbbLastPresentedMediaTime = mt;
           enforceVbbEditPlaybackWindow(Number.isFinite(mt) ? mt : undefined);
           if (!vbbVideo.paused) {
+            if (holdVbbEditAtKeepBoundary(mt, meta)) return;
             if (Number.isFinite(mt)) scheduleVbbEditEndCut(mt);
             try {
               vbbVideo.requestVideoFrameCallback(onFrame);
@@ -9671,16 +9781,38 @@
         }
       });
       vbbVideo?.addEventListener("play", () => {
+        vbbMediaPlaying = true;
+        // 停帧期间用户手动点播放：放弃自动续播（续播 play 前已清 vbbEditHold）
+        if (vbbEditHold) cancelVbbEditHold();
         if (!vbbPlayUiLock) {
           vbbPlaying = true;
           if (vbbPlay) vbbPlay.textContent = "暂停";
         }
         armVbbEditFrameWatch();
       });
+      vbbVideo?.addEventListener("seeking", () => {
+        // 停帧期间的 seek 都不是续播发的（续播 seek 前已清 vbbEditHold）
+        if (vbbEditHold) cancelVbbEditHold();
+      });
       vbbVideo?.addEventListener("pause", () => {
+        // 播到文件尾自停：Chrome 先置 paused/ended、派 timeupdate，最后才派 pause——只在这里回绕续播。
+        // 暂停时拖到末尾也会 ended，但不派 pause
+        if (vbbVideo.ended && !isVbbManualMode()) {
+          vbbLoopFromFileEnd = true;
+          try {
+            enforceVbbEditPlaybackWindow();
+          } finally {
+            vbbLoopFromFileEnd = false;
+          }
+        }
+        vbbMediaPlaying = false;
         if (vbbPlayUiLock) return;
         vbbPlaying = false;
         if (vbbPlay) vbbPlay.textContent = "播放";
+      });
+      vbbVideo?.addEventListener("emptied", () => {
+        // 换源时浏览器直接置 paused、不派 pause
+        vbbMediaPlaying = false;
       });
       vbbVideo?.addEventListener("timeupdate", () => {
         if (isVbbManualMode()) {
