@@ -183,8 +183,9 @@
   1. 每块都先出**整窗** fps 网格（多段走 `vbbEncodeSegmentedFpsFilter`，与一次性整段同一前缀）。
   2. 再按**全局帧号** `trim=start_frame=A:end_frame=A+N` 取本块。
   3. **禁止**块头按时间 `trim=start=块起点`：块起点前开始、仍在显示的那一帧会被整帧丢掉（VFR 静帧一丢几秒；手机长片≥18s 强压 ×72 时，删中间后 GIF 比预览短且后段提前）。
-  4. demux `-t` 仍盖到块尾；`encodeChunk` 传 `chunkStartFrame`，不再把块起点时间喂给滤镜。
-- 测试：`vbb-keep-boundary-hold`（导出段）、`vbb-gif-chunk-frames`（分块按帧号）、`vbb-trim-cutouts-speed`（物化短上报）、`vbb-preview-gif-align`、`vbb-precut-trim`、`vbb-blackbox-fps`。
+  4. demux `-t` 必须盖 **`encodeSs + encodeT` 整窗尾**（不能只盖到块尾：后块 `start_frame` 超出已解帧 → 出帧不足 → gifski 回退 ffmpeg；diag `125947` 块4=23帧）。
+  5. **已导出编辑片 / exactKeepFrames / speedBaked：禁止 `wantSeg` 再抽**。大文件+倍速会走 accurate libx264 重编码，打乱 `segmentSpans` 依赖的 VFR 时间戳 → 多段删中间后 GIF≠预览（与租约「导出片不建」同理）。
+- 测试：`vbb-keep-boundary-hold`（导出段）、`vbb-gif-chunk-frames`（分块按帧号 / `-t` 整窗 / 导出片禁 wantSeg）、`vbb-trim-cutouts-speed`（物化短上报）、`vbb-preview-gif-align`、`vbb-precut-trim`、`vbb-blackbox-fps`。
 
 ### 3.7 交互热路径
 
@@ -224,6 +225,8 @@
 9. 分叉 keep 公式（预览一套、导出一套），或 GIF 另算 keeps / 另 probe 表 / 批量漏 `file`。
 10. 差帧时拨导出路径（chrome ↔ ffmpeg-sec ↔ frameRaw）碰运气，或动撞档 / fps 阶梯（与对齐正交）。
 11. gifski 分块块头按时间 `trim=start=`，或「仅首块走分段采样、后续块用全局窗」（VFR 静帧在块界丢失；手机 ×72 强压必现）。
+12. 分块 demux `-t` 只盖到块尾（帧号取块时后块出帧不足，回退 ffmpeg）。
+13. 已导出编辑片仍 `wantSeg` + 倍速 accurate 重编码（打乱多段 VFR；日志连着「抽片段」+「gifski 回退 ffmpeg」时先查这条）。
 
 ---
 
@@ -239,7 +242,7 @@
 | `vbb-keep-boundary-hold` | 段末停帧、首帧呈现再播、文件尾暂停不续播、暂停容差、导出真实跨度、Chrome 网格、concat 帧号 |
 | `vbb-end-play-align` | 片尾停 / 播、外预览 pastSlop |
 | `vbb-preview-encode-align` / `vbb-preview-gif-align` | 同表同 keep、materialize、onepass 仅 frameRaw |
-| `vbb-gif-chunk-frames` | 分块 = 整窗网格 + 帧号取块；禁止块头时间 trim；物化打 `[vbb-mat]` |
+| `vbb-gif-chunk-frames` | 分块 = 整窗网格 + 帧号取块；`-t` 整窗；导出片禁 wantSeg；物化打 `[vbb-mat]` |
 | `vbb-trim-cutouts-speed` | 物化短上报 → keep；删中间后倍速按 keep 总和 |
 | `mp4-timeline` | 采样表、`exclusiveEndIndexAtSec` / `sampleSpanSec`、校准 |
 
@@ -272,5 +275,6 @@
 | 接点少一帧 | `armFramePainted` 是否在 seek **之前**挂上 |
 | GIF 比预览短（VFR） | §3.6：`spanSec` 是否按帧数 / 平均 fps；`vbbMaterializedKeepDuration` 是否放过偏短上报 |
 | GIF 删中间后比预览短 / 后段提前（手机分块） | §3.6 分块：是否又用块头 `trim=start=`；看日志块帧数是否满（旧 bug 第 5 块 56≠72） |
+| gifski「导出的 RGBA 帧不足」回退 ffmpeg，且 GIF≠预览 | §3.6：`-t` 是否整窗；导出片是否又 `抽片段`（禁止 wantSeg） |
 | GIF 首尾偏一帧 | parity 文档 §11、时钟文档 |
 | 按钮 / 拖柄没反应 | §3.7 + §5 第 8 条；对照 #724 |

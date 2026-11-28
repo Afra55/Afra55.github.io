@@ -131,6 +131,30 @@ t("encodeChunk 调用：传块起始帧号，不再传块起点时间", () => {
   assert.ok(!buildSrc.includes("nMax >= frameCount - 1"), "勿再「仅首块走分段」");
 });
 
+t("分块 demux -t 盖整窗尾（不能只盖到块尾）", () => {
+  assert.ok(shared.includes("encodeSs + encodeT + 0.05"));
+  assert.ok(
+    shared.includes("必须盖到整窗尾") || shared.includes("盖到整窗尾"),
+    "注释须写明根因"
+  );
+  // 旧写法：块尾 ptsStart+dur / 首块仅 dur → 后块 start_frame 超出已解帧
+  const chunkBody = shared.slice(
+    shared.indexOf("const encodeChunk = async"),
+    shared.indexOf("let blob;\n          let actualFrames;")
+  );
+  assert.ok(chunkBody.includes("encodeSs + encodeT + 0.05"));
+  assert.ok(!/baseArgs\.push\(\s*"-t",\s*String\(ptsStart/.test(chunkBody));
+});
+
+t("已导出编辑片：gifski/ffmpeg 两条路径都禁止 wantSeg 再抽", () => {
+  const hits = [...shared.matchAll(/const wantSeg =\s*([\s\S]*?);/g)];
+  assert.ok(hits.length >= 2, `wantSeg 定义数=${hits.length}`);
+  for (const m of hits) {
+    assert.ok(m[1].includes("!opts.exportedEdit"), m[1].slice(0, 200));
+    assert.ok(m[1].includes("!opts.exactKeepFrames"), m[1].slice(0, 200));
+  }
+});
+
 t("物化上报：记录方法/上报/采用时长，诊断可直接看出截短", () => {
   assert.ok(vbb.includes("[vbb-mat]"));
   const block = vbb.slice(vbb.indexOf("const finishMat = async"), vbb.indexOf("const ffFirst"));

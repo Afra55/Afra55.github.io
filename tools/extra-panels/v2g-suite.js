@@ -1402,9 +1402,12 @@
           // 大文件、或非片头窗：先按段切出（失败则仍用原片+ss）
           // 倍速时若走到预切，accurate 已强制 libx264；勿因倍速对小文件一律预切（手机易多吃一趟重编码）
           // 黑盒试档：优先复用 segLease（同窗只切一次）；租约失败再逐次抽
-          // speedBaked：入口已整段加速物化，禁止再抽源窗
+          // speedBaked / 已导出编辑片：输入即编码窗，禁止再抽（倍速 accurate 重编码会打乱
+          // segmentSpans 依赖的 VFR 时间戳 → 多段删中间后 GIF≠预览）
           const wantSeg =
             !opts.speedBaked &&
+            !opts.exportedEdit &&
+            !opts.exactKeepFrames &&
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
             (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
@@ -2628,9 +2631,11 @@
 
           // 大文件、或非片头窗：先按段切出（失败则仍用原片+ss）
           // 黑盒试档：优先复用 segLease；租约失败再逐次抽（日志含「抽片段」便于对照次数）
-          // speedBaked：入口已整段加速物化，禁止再抽源窗
+          // speedBaked / 已导出编辑片：输入即编码窗，禁止再抽（同上：accurate 重编码打乱多段时间戳）
           const wantSeg =
             !opts.speedBaked &&
+            !opts.exportedEdit &&
+            !opts.exactKeepFrames &&
             Number.isFinite(opts.startSec) &&
             Number.isFinite(opts.span) &&
             (file.size >= FFMPEG_SEG_FILE_BYTES || Number(opts.startSec) > 0.05);
@@ -2783,7 +2788,9 @@
               }
             } else {
             const baseArgs = ["-i", encodeInput];
-            baseArgs.push("-t", String(ptsStart > 0.001 ? ptsStart + dur + 0.05 : dur));
+            // 帧号取块从片头建整窗网格：-t 必须盖到整窗尾。
+            // 若只盖到块尾，后块 start_frame 超出已解帧 → 出帧不足 → gifski 回退 ffmpeg（diag 125947 块4=23帧）
+            baseArgs.push("-t", String(encodeSs + encodeT + 0.05));
             if (usedWm) baseArgs.push("-i", wmName);
             const outArgs = ["-frames:v", String(chunkFrames), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
             const tChunk = Date.now();
