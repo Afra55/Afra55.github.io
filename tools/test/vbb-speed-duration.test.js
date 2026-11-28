@@ -113,15 +113,27 @@ t("结果卡会提示加速达上限", () => {
   assert.ok(vbb.includes("加速达上限"));
 });
 
-t("无倍速不强制对准目标秒数（避免均匀 delay 被拆成 60/70 顿挫）", () => {
-  assert.ok(shared.includes("forceAlignSpan = alignSpeed && chunkTargetRequested > 0.05"));
-  assert.ok(shared.includes("仍用均匀，保流畅"));
+t("无倍速也对准 n/fps（70ms 厘秒均匀 delay 系统性 +5% 会与预览错位）", () => {
+  assert.ok(shared.includes("forceAlignSpan = chunkTarget > 0.05"));
+  assert.ok(shared.includes("chunkTargetSlots"));
+  assert.ok(shared.includes("<= 0.02"));
   assert.ok(shared.includes("buildUniformGifDurationsMs(encodedFrames, fps)"));
+  assert.ok(shared.includes("buildGifDurationsForTargetSpanMs(encodedFrames, chunkTarget)"));
+});
+
+t("已导出编辑片禁止静止帧合并（避免块界长 delay 膨胀）", () => {
+  const body = shared.slice(
+    shared.indexOf("const encodeChunk = async"),
+    shared.indexOf("let blob;\n          let actualFrames;")
+  );
+  assert.ok(body.includes("!opts.exportedEdit"));
+  assert.ok(body.includes("!opts.exactKeepFrames"));
+  assert.ok(body.includes("禁止静止合并") || body.includes("已导出编辑片：禁止静止合并"));
 });
 
 t("压缩时长按请求份额对准目标（少帧不按实际比例缩短目标）", () => {
   assert.ok(shared.includes("chunkTargetRequested"));
-  assert.ok(shared.includes("alignSpeed ? chunkTargetRequested : chunkTargetActual"));
+  assert.ok(shared.includes("alignSpeed ? chunkTargetRequested : chunkTargetSlots"));
   assert.ok(shared.includes("speed > 1.01 || bakeAlign || frameRatio >= 0.9"));
   // 物化后滤镜 speed=1，仍靠 speedBakeMeta 对准目标秒
   assert.ok(shared.includes("opts.speedBakeMeta?.speed"));

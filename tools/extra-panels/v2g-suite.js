@@ -2768,8 +2768,13 @@
             let rgbaPreMerge = null;
             const effSpanForMerge =
               Math.max(0.05, Number(opts.span) || 0) / Math.max(1, Number(opts.speed) || 1);
+            // 已导出编辑片：禁止静止合并。合并 + gifski 末帧 PTS quirk / 分块拼接
+            // 会让长静帧 delay 在块界膨胀，成片比 keep 长、同时刻和预览错位
             const allowStillMerge =
-              fps < 18 - 0.01 && effSpanForMerge > V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
+              !opts.exportedEdit &&
+              !opts.exactKeepFrames &&
+              fps < 18 - 0.01 &&
+              effSpanForMerge > V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
             const rgbaHit = canUseRgbaCache ? getVbbRgbaTrialCache(rgbaKey) : null;
             if (rgbaHit?.frames?.length >= 2 * stride) {
               report(0.62, `${stageLabel}复用 RGBA 帧…`);
@@ -2938,29 +2943,25 @@
             }
             let encodedFrames = n;
             let durations = null;
-            // 无倍速：按实际抽到的帧占比计目标（少帧如实变短）
             // 压缩时长：按「本段应占的目标秒数」拉 delay（少帧也凑满目标，避免 46→30 却播成 ~21）
+            // 无倍速：按实际出帧对准 n/fps。禁止直接用 round(100/fps)=70ms 均匀 delay——
+            // 相对真 66.7ms 系统性 +5%，10% 容差还会放过 → 成片偏长、和预览同时刻错位（e2e 118 处）
             const chunkShare =
               frameCount > 0 && chunkFrames > 0 ? chunkFrames / frameCount : 1;
             const chunkTargetRequested = Math.max(0.05, effSpanForMerge * chunkShare);
-            const chunkTargetActual =
-              chunkFrames > 0
-                ? effSpanForMerge * (n / Math.max(1, chunkFrames))
-                : effSpanForMerge;
-            // 已倍速物化时滤镜 speed=1，仍按用户压缩时长对准目标秒数（读 speedBakeMeta）
+            const chunkTargetSlots = Math.max(0.05, n / Math.max(8, fps));
             const bakeSpd = Math.max(1, Number(opts.speedBakeMeta?.speed) || 1);
             const alignSpeed = speed > 1.01 || (opts.speedBaked && bakeSpd > 1.01);
-            const chunkTarget = alignSpeed ? chunkTargetRequested : chunkTargetActual;
-            const forceAlignSpan = alignSpeed && chunkTargetRequested > 0.05;
+            const chunkTarget = alignSpeed ? chunkTargetRequested : chunkTargetSlots;
+            const forceAlignSpan = chunkTarget > 0.05;
             if (allowStillMerge) {
               try {
                 const merged = mergeStaticFramesInPlace(view, n, stride, fps);
                 if (merged && merged.count >= 2) {
                   encodedFrames = merged.count;
-                  durations =
-                    forceAlignSpan
-                      ? scaleGifDurationsToTargetMs(merged.durations, chunkTarget)
-                      : merged.durations;
+                  durations = forceAlignSpan
+                    ? scaleGifDurationsToTargetMs(merged.durations, chunkTarget)
+                    : merged.durations;
                   vbbLog(`[vbb-phase] gifski 静止帧合并 ${n} → ${merged.count} 帧（省 ${merged.saved} 帧）`);
                 } else if (isCoarsePointer() && rgbaPreMerge && view !== rgbaPreMerge) {
                   // 没合并掉帧：丢掉工作副本，编码只留预合并这一份
@@ -2975,8 +2976,8 @@
               } else {
                 const uniformSum = [...uniform].reduce((a, b) => a + b, 0);
                 const targetMs = chunkTarget * 1000;
-                // 均匀 delay 已接近目标：仍用均匀，保流畅；偏差大才按目标秒数重切 delay
-                if (Math.abs(uniformSum - targetMs) / Math.max(targetMs, 1) <= 0.1) {
+                // 仅当已对准（≤2%）才保留均匀 delay；5% 的 70ms vs 66.7ms 必须重切
+                if (Math.abs(uniformSum - targetMs) / Math.max(targetMs, 1) <= 0.02) {
                   durations = uniform;
                 } else {
                   durations = buildGifDurationsForTargetSpanMs(encodedFrames, chunkTarget);
