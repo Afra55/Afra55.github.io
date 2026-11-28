@@ -116,6 +116,13 @@
       tags: ["ai", "memory", "agent", "github"],
     },
     {
+      id: "mempalace",
+      title: "MemPalace",
+      desc: "本地优先的 AI 记忆：原文入库、可插拔向量后端（默认 ChromaDB）、语义检索；MCP / CLI，支持 Claude Code / Cursor 等自动存会话（Python，MIT）。",
+      url: "https://github.com/milla-jovovich/mempalace",
+      tags: ["ai", "memory", "mcp", "本地", "github"],
+    },
+    {
       id: "ponytail",
       title: "Ponytail",
       desc: "给 AI 编程 Agent 的「懒惰资深工程师」技能：让 agent 少造轮子、能不写就不写，专治过度工程（MIT）。",
