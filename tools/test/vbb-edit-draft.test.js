@@ -64,6 +64,14 @@ t("含 JSON 备份导入还原", () => {
   assert.ok(src.includes("未匹配当前视频") || src.includes("先选对应视频可套上"));
 });
 
+t("出片后备份仍收当前编辑（forBackup 绕过消费/完成门闩）", () => {
+  assert.ok(src.includes("forBackup"));
+  assert.ok(src.includes("collectVbbEditDraftItems({ forBackup: true })"));
+  assert.ok(src.includes("!forBackup && isVbbItemDraftConsumed"));
+  assert.ok(src.includes("!forBackup && isVbbFileEncodeFullyDone"));
+  assert.ok(src.includes("备份无编辑草稿") || src.includes("出片后重备"));
+});
+
 t("批量可重跑失败且保留成功 GIF", () => {
   assert.ok(src.includes("retryFailed"));
   assert.ok(src.includes("skipOk"));

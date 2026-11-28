@@ -128,7 +128,7 @@
           <button type="button" class="secondary-btn" id="vbb-merge-video" disabled title="把已选的多个视频按顺序拼成一个视频，然后当作一个视频走黑盒生成 GIF">拼接后转黑盒</button>
           <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF；宽高不一致会自动统一尺寸并补边；超限会自动压黑盒">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
-          <button type="button" class="ghost-btn" id="vbb-export-edits" title="下载 JSON：含未完成裁剪草稿 + 撞档库。撞档记在浏览器 IndexedDB；可交给别人导入合并">备份编辑</button>
+          <button type="button" class="ghost-btn" id="vbb-export-edits" title="下载 JSON：当前删段/裁剪方案 + 撞档库（出片后仍含当前编辑）。撞档在 IndexedDB；对方点「导入备份」合并">备份编辑</button>
           <button type="button" class="ghost-btn" id="vbb-export-schemes" title="只导出撞档库（IndexedDB）：成功出 GIF 的时长/分辨率/帧率方案，不含编辑草稿">导出撞档库</button>
           <button type="button" class="ghost-btn" id="vbb-export-diag" title="下载诊断 JSON（v2）：选片/编辑/时间轴校准、每条 seed 是否交付、编码路径与墙钟、撞档键、运行日志（不含视频本体）">导出诊断</button>
           <label class="ghost-btn file-btn" title="导入 JSON：还原编辑草稿；撞档库与本机按特征键合并（同键保留较新的），不会整库覆盖">导入备份<input id="vbb-import-edits" type="file" accept="application/json,.json" /></label>

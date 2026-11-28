@@ -13197,15 +13197,22 @@
       }
 
       /** 只收集「还没生成成功」且确有编辑内容的草稿；已成功 / 已清空的自动排除 */
-      function collectVbbEditDraftItems() {
+      /**
+       * 收集可写入草稿 / 备份的编辑项。
+       * @param {{ forBackup?: boolean }} [opts]
+       * - forBackup:true：忽略「已出片消费 / 已全部成功」门闩，仍导出当前删段/裁剪
+       *   （否则出片后「备份编辑」items 恒空，导入像没反应；用户备份 items:[]）
+       */
+      function collectVbbEditDraftItems(opts = {}) {
+        const forBackup = Boolean(opts.forBackup);
         /** @type {any[]} */
         const items = [];
         if (isVbbBatchMode() && vbbBatchFiles.length) {
           persistActiveVbbMarks();
           vbbBatchFiles.forEach((item) => {
             if (!item?.file) return;
-            if (isVbbItemDraftConsumed(item)) return;
-            if (isVbbFileEncodeFullyDone(item.file)) return;
+            if (!forBackup && isVbbItemDraftConsumed(item)) return;
+            if (!forBackup && isVbbFileEncodeFullyDone(item.file)) return;
             const marks = Array.isArray(item.marks)
               ? item.marks.map((m) => ({ start: Number(m.start) || 0, end: Number(m.end) || 0 }))
               : [];
@@ -13247,6 +13254,7 @@
           const draftStart =
             vbbDraftStart != null && Number.isFinite(Number(vbbDraftStart)) ? Number(vbbDraftStart) : null;
           if (
+            !forBackup &&
             isVbbItemDraftConsumed({
               file: vbbSourceFile,
               edit,
@@ -13256,7 +13264,7 @@
           ) {
             return items;
           }
-          if (isVbbFileEncodeFullyDone(vbbSourceFile)) return items;
+          if (!forBackup && isVbbFileEncodeFullyDone(vbbSourceFile)) return items;
           const duration = Number(vbbVideo?.duration) || 0;
           const srcW = Number(vbbVideo?.videoWidth) || 0;
           const srcH = Number(vbbVideo?.videoHeight) || 0;
@@ -13408,7 +13416,21 @@
       async function buildVbbBackupPayload() {
         saveVbbEditDraftsSync();
         if (typeof vbbEnsureSchemeReady === "function") await vbbEnsureSchemeReady();
-        const items = collectVbbEditDraftItems();
+        // 出片后 LS 可能已 prune；仍用 forBackup 收当前内存里的删段/裁剪
+        const fresh = collectVbbEditDraftItems({ forBackup: true });
+        const stored = readVbbEditDraftPayload()?.items || [];
+        const byKey = new Map();
+        for (const d of stored) {
+          const k = String(d?.key || "").trim() || vbbFileDraftSoftKey(d) || "";
+          if (k) byKey.set(k, d);
+          else byKey.set(`anon:${byKey.size}`, d);
+        }
+        for (const d of fresh) {
+          const k = String(d?.key || "").trim() || vbbFileDraftSoftKey(d) || "";
+          if (k) byKey.set(k, d);
+          else byKey.set(`fresh:${byKey.size}`, d);
+        }
+        const items = [...byKey.values()];
         const schemes = exportVbbFeatureSchemesMap();
         return {
           v: 2,
@@ -13933,12 +13955,21 @@
           const payload = { v: 1, at: Date.now(), items: data.items };
           localStorage.setItem(VBB_EDIT_DRAFT_LS_KEY, JSON.stringify(payload));
           if (isVbbBatchMode() && vbbBatchFiles.length) {
+            // 出片后 WeakMap 记了消费，导入须先解开才能继续改/再备份
+            try {
+              vbbBatchFiles.forEach((it) => {
+                if (it?.file && vbbDraftConsumed) vbbDraftConsumed.delete(it.file);
+              });
+            } catch (_) {}
             draftRestored = restoreVbbEditDrafts(vbbBatchFiles);
             renderVbbBatchList({ keepSelection: true });
             syncVbbBatchMeta();
             syncVbbEditUi();
             syncVbbEditPreview();
           } else if (vbbSourceFile) {
+            try {
+              if (vbbDraftConsumed) vbbDraftConsumed.delete(vbbSourceFile);
+            } catch (_) {}
             const probe = {
               file: vbbSourceFile,
               duration: Number(vbbVideo?.duration) || 0,
@@ -13976,6 +14007,8 @@
           } else {
             bits.push(`编辑 ${data.items.length} 条已写入（先选对应视频可套上）`);
           }
+        } else if (hasSchemes) {
+          bits.push("备份无编辑草稿（请用新版在出片后重备，或出片前备份）");
         }
         if (schemeMerge) {
           bits.push(
