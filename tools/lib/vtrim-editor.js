@@ -5,15 +5,7 @@
    * 可挂载的视频修剪/裁画面编辑器（复用 #vtrim 交互：胶片黄框 + 绿裁剪框）。
    * 供黑盒 GIF 等工具以全屏层打开；不含导出/旋转/翻转。
    */
-  const EDITOR_REV = String(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
-  // 同 BUILD 才跳过；BUILD 变了必须覆盖旧 open（否则 SW/预取会粘住坏版本）
-  if (
-    window.DevToolsVtrimEditor?.open &&
-    EDITOR_REV &&
-    window.DevToolsVtrimEditor.__rev === EDITOR_REV
-  ) {
-    return;
-  }
+  if (window.DevToolsVtrimEditor?.open) return;
 
   const MIN_SPAN = 0.5;
   /** 删中间段最小长度 */
@@ -160,6 +152,44 @@
     if (dur > 0 && raw >= dur - 1e-3 && contentEnd < dur - 1.5 / fps) return contentEnd;
     return Math.min(dur > 0 ? dur : t, Math.max(0, t));
   }
+
+  /**
+   * 黄柄片头/片尾 ±1：落到 keep 半开窗相邻的真实采样（≡ 预览/GIF 同一帧号）。
+   * 录屏 VFR 静帧时相邻采样可隔数秒，也必须照跳：退成 1/fps 时间步会让
+   * 时间在变、帧号和画面不变，GIF 首/末帧时长也对不上标签。
+   * @param {{ startSec: number, endSec: number, duration: number, minSpan: number }} st
+   * @param {"start"|"end"} edge
+   * @param {number} dir +1 / -1
+   * @returns {number} 新柄位；无采样表返回 NaN
+   */
+  function nudgeKeepEdgeSec(timeline, api, st, edge, dir) {
+    const arr = timeline?.ctsSec;
+    const n = arr?.length || 0;
+    if (!(n > 0) || typeof api?.sampleRangeForKeep !== "function") return NaN;
+    const sign = dir < 0 ? -1 : 1;
+    const dur = Math.max(0, Number(st?.duration) || 0);
+    const minSpan = Math.max(0, Number(st?.minSpan) || 0);
+    const start = Math.max(0, Number(st?.startSec) || 0);
+    const end = Math.max(start, Number(st?.endSec) || 0);
+    const contentEnd = contentExclusiveEndSec(timeline, dur);
+    const fr = api.sampleRangeForKeep(timeline, start, Math.min(end, Math.max(contentEnd, start + minSpan)));
+    if (!fr) return NaN;
+    const startF = Math.round(Number(fr.startF) || 0);
+    const endF = Math.round(Number(fr.endF) || 0);
+    const hiCap = dur > 0 ? dur : Infinity;
+    if (edge === "end") {
+      const nextF = Math.max(startF + 1, Math.min(n, endF + sign));
+      // 已含末采样：+ 不动（空尾巴上的柄勿往回拉）；− 会落到 n-1，正常退一帧
+      if (nextF >= n) return Math.min(hiCap, Math.max(end, contentEnd));
+      const t = Number(arr[nextF]);
+      if (!Number.isFinite(t)) return NaN;
+      return Math.min(hiCap, Math.max(start + minSpan, t));
+    }
+    const nextF = Math.max(0, Math.min(Math.max(0, endF - 1), startF + sign));
+    const t = Number(arr[nextF]);
+    if (!Number.isFinite(t)) return NaN;
+    return Math.max(0, Math.min(t, end - minSpan));
+  }
   /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
   const DRAG_SEEK_MS = 72;
   /** 半开片尾兜底（约 1 帧 @25fps）；有片源 fps 时用 1/fps */
@@ -292,13 +322,13 @@
   }
 
   function formatClock(sec) {
-    const s = Math.max(0, Number(sec) || 0);
-    const m = Math.floor(s / 60);
-    const r = s - m * 60;
-    const whole = Math.floor(r);
-    const frac = Math.round((r - whole) * 10);
-    if (frac > 0 && frac < 10) return `${m}:${String(whole).padStart(2, "0")}.${frac}`;
-    return `${m}:${String(whole).padStart(2, "0")}`;
+    // 先取整到 0.1s 再拆分：59.99s 要进位成 1:00，不能显示 0:59
+    const tenths = Math.round(Math.max(0, Number(sec) || 0) * 10);
+    const m = Math.floor(tenths / 600);
+    const whole = Math.floor((tenths % 600) / 10);
+    const frac = tenths % 10;
+    const base = `${m}:${String(whole).padStart(2, "0")}`;
+    return frac ? `${base}.${frac}` : base;
   }
 
   function parseAspect(aspect) {
@@ -319,80 +349,6 @@
       videoEl.addEventListener("seeked", done);
       setTimeout(done, 800);
     });
-  }
-
-  /** 取消进行中的踢帧，避免 finally 里的 pause 把用户刚点的播放掐掉 */
-  let previewKickGen = 0;
-  function cancelPreviewKick() {
-    previewKickGen += 1;
-  }
-
-  /**
-   * 部分安卓/iOS：paused 下改 currentTime 后 seeked 了，合成层仍停在旧帧
-   * （时间变了、画面不动）。rVFC 可能回调旧帧或根本不来，不能拿它当「已经画出」。
-   * 每次都短 play/pause 踢一脚；keepPark 时钉住 parkHoldPause，踢完即停。
-   */
-  async function forcePreviewFrame(videoEl, opts = {}) {
-    if (!videoEl || videoEl.readyState < 1) return;
-    const gen = ++previewKickGen;
-    const keepPark = opts.keepPark !== false;
-    const arm = () => {
-      if (gen !== previewKickGen) return;
-      if (keepPark && typeof opts.armPark === "function") {
-        try {
-          opts.armPark();
-        } catch (_) {}
-      }
-    };
-    const wasMuted = videoEl.muted;
-    let touchedMute = false;
-    if (gen !== previewKickGen) return;
-    arm();
-    try {
-      if (gen !== previewKickGen) return;
-      if (!videoEl.muted) {
-        videoEl.muted = true;
-        touchedMute = true;
-      }
-      const p = videoEl.play();
-      // play() 一完成就停。再 seek 回去会在「paused seek 不换帧」的机型上把刚踢出的画面盖掉。
-      if (p && typeof p.then === "function") {
-        await Promise.race([p.catch(() => {}), new Promise((r) => setTimeout(r, 40))]);
-      }
-      if (gen !== previewKickGen) return;
-      try {
-        videoEl.pause();
-      } catch (_) {}
-    } catch (_) {
-      /* ignore */
-    } finally {
-      if (touchedMute && gen !== previewKickGen) {
-        try {
-          videoEl.muted = wasMuted;
-        } catch (_) {}
-      }
-      if (gen !== previewKickGen) return;
-      try {
-        videoEl.pause();
-      } catch (_) {}
-      if (touchedMute) {
-        try {
-          videoEl.muted = wasMuted;
-        } catch (_) {}
-      }
-      arm();
-    }
-  }
-
-  /**
-   * setPointerCapture 在安卓 / 非活跃 pointerId 上会抛 NotFoundError。
-   * 抛出点若在 setStart/setEnd 之前，整段 pointerdown 中断，黄柄像拖不动。
-   */
-  function tryPointerCapture(el, pointerId) {
-    if (!el || pointerId == null || typeof el.setPointerCapture !== "function") return;
-    try {
-      el.setPointerCapture(pointerId);
-    } catch (_) {}
   }
 
   function hapticLight() {
@@ -428,7 +384,7 @@
   <div class="vtrim-editor-sheet">
     <header class="vtrim-editor-head">
       <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
-      <p class="vtrim-editor-build mono" id="${p("build")}">BUILD ${EDITOR_REV}</p>
+      <p class="vtrim-editor-build mono" id="${p("build")}" hidden></p>
     </header>
     <div class="vtrim-editor-body">
       <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
@@ -700,54 +656,6 @@
     let freezeClockSec = NaN;
     /** 按 rVFC 剩余时间预约 pause，弥补采样间隔导致的晚切 */
     let parkCutTimer = 0;
-    /**
-     * 用户主动停帧（微调/拖柄/seek）：禁止 clipPlayWindow 在 paused 态误 play。
-     * 勿在每次 pointerdown 抬 playWindowGen——会取消循环异步却留下冻时钟，
-     * 表现为按钮/黄柄全无反应（#716/#717 回归）。
-     */
-    let parkHoldPause = false;
-    function clearParkCutTimer() {
-      if (parkCutTimer) {
-        clearTimeout(parkCutTimer);
-        parkCutTimer = 0;
-      }
-    }
-    /** 仅钉停帧意图 + 解冻；不抬 gen（拖拽/按钮热路径必须保持轻量） */
-    function armParkHoldPause() {
-      parkHoldPause = true;
-      playWindowLooping = false;
-      freezeClockSec = NaN;
-      clearParkCutTimer();
-    }
-    /** seek 后强制刷一帧预览（修「时间变了画面不动」）。拖拽中也踢，只靠 rVFC 换不了合成层。 */
-    let kickPaintLock = false;
-    let kickPaintDirty = false;
-    function kickPreviewPaint() {
-      if (closed || !video) return Promise.resolve();
-      kickPaintDirty = true;
-      if (kickPaintLock) return Promise.resolve();
-      kickPaintLock = true;
-      const loop = () => {
-        if (closed) {
-          kickPaintLock = false;
-          kickPaintDirty = false;
-          return Promise.resolve();
-        }
-        if (video.seeking || scrubSeekInflight) {
-          kickPaintLock = false;
-          return Promise.resolve();
-        }
-        if (!kickPaintDirty) {
-          kickPaintLock = false;
-          return Promise.resolve();
-        }
-        kickPaintDirty = false;
-        return Promise.resolve(
-          forcePreviewFrame(video, { armPark: armParkHoldPause, keepPark: true })
-        ).then(loop, loop);
-      };
-      return loop();
-    }
     let cropLiveRaf = 0;
     let filmGen = 0;
     let closed = false;
@@ -756,13 +664,13 @@
     let resolveOpen = null;
 
     const fileName = String(opts.title || file.name || "视频");
-    const rev = EDITOR_REV || window.TOOLS_BUILD || window.TOOLS_VERSION || "";
-    if (titleEl) {
-      titleEl.textContent = `编辑 · ${fileName}`;
-      if (rev) titleEl.title = `编辑器 ${rev}`;
-    }
+    if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
     const buildEl = $("build");
-    if (buildEl) buildEl.textContent = `BUILD ${rev || "?"}`;
+    if (buildEl) {
+      const rev = String(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
+      buildEl.textContent = rev ? `BUILD ${rev}` : "";
+      buildEl.hidden = !rev;
+    }
     if (subEl) {
       subEl.textContent = "";
       subEl.hidden = true;
@@ -847,51 +755,30 @@
      * @param {number} dir +1 / -1
      */
     function nudgeTrimEdgeSec(edge, dir) {
-      const sign = dir < 0 ? -1 : 1;
-      const tl = sourceTimeline;
-      const api = window.DevToolsMp4Timeline;
-      const fps = Math.max(5, Number(tl?.fps) || sourceFps || DEFAULT_FRAME_FPS);
       const cur = edge === "end" ? endSec : startSec;
-      const cap =
-        edge === "end"
-          ? clamp(cur + sign * (1 / fps), startSec + MIN_SPAN, duration)
-          : clamp(cur + sign * (1 / fps), 0, endSec - MIN_SPAN);
-      if (tl?.ctsSec?.length && typeof api?.sampleRangeForKeep === "function") {
-        const n = tl.ctsSec.length;
-        const contentEnd = contentExclusiveEndSec(tl, duration);
-        // 黄柄还在音轨/空尾巴上：先收到片源轨末（不丢视频帧），禁止一次跳十几秒
-        if (edge === "end" && sign < 0 && endSec > contentEnd + 1.5 / fps) {
-          return clamp(contentEnd, startSec + MIN_SPAN, duration);
-        }
-        const rangeEnd = Math.min(endSec, Math.max(contentEnd, startSec + MIN_SPAN));
-        const fr = api.sampleRangeForKeep(tl, startSec, rangeEnd);
-        if (fr) {
-          let next = NaN;
-          if (edge === "end") {
-            let endF = Math.round(Number(fr.endF) || 0);
-            const minF = Math.round(Number(fr.startF) || 0) + 1;
-            endF = Math.max(minF, Math.min(n, endF + sign));
-            if (endF >= n) next = contentEnd;
-            else {
-              const t = Number(tl.ctsSec[endF]);
-              if (Number.isFinite(t)) next = clamp(t, startSec + MIN_SPAN, duration);
-            }
-          } else {
-            let startF = Math.round(Number(fr.startF) || 0);
-            const maxF = Math.max(0, Math.round(Number(fr.endF) || 1) - 1);
-            startF = Math.max(0, Math.min(maxF, startF + sign));
-            const t = Number(tl.ctsSec[startF]);
-            if (Number.isFinite(t)) next = clamp(t, 0, endSec - MIN_SPAN);
-          }
-          if (Number.isFinite(next)) {
-            // 采样间距异常大（坏表/超长静帧）：单步最多按 ~2.5 源帧时间挪
-            const maxStep = Math.max(2.5 / fps, 0.12);
-            if (Math.abs(next - cur) > maxStep) return cap;
-            return next;
-          }
-        }
+      const next = nudgeKeepEdgeSec(
+        sourceTimeline,
+        window.DevToolsMp4Timeline,
+        { startSec, endSec, duration, minSpan: MIN_SPAN },
+        edge,
+        dir
+      );
+      if (Number.isFinite(next)) {
+        noteStaticFrameJump(next - cur);
+        return next;
       }
-      return nudgeEncodeSec(cur, sign);
+      return nudgeEncodeSec(cur, dir < 0 ? -1 : 1);
+    }
+
+    /** 录屏静帧：±1 会跨过整段不变的画面，提示一句，免得以为跳错 */
+    let staticJumpToastAt = 0;
+    function noteStaticFrameJump(deltaSec) {
+      const d = Math.abs(Number(deltaSec) || 0);
+      if (d < 0.5) return;
+      const now = Date.now();
+      if (now - staticJumpToastAt < 2500) return;
+      staticJumpToastAt = now;
+      toast(`这段画面静止，已跳到相邻的真实帧（${deltaSec > 0 ? "+" : "−"}${d.toFixed(2)}s）`);
     }
 
     /** 同一排按钮：修剪=片头/片尾；删中间=红段起点/终点 */
@@ -1054,7 +941,7 @@
         ? Math.max(Number(prevKeep.start) || startSec, Number(prevKeep.end) - 0.4)
         : Math.max(startSec, a - 0.4);
       // 勿用 previewSeek：inflight 卡住会导致随后「起点+/终点+」进度不动
-      void seekPlayheadExact(joinAt).then(() => kickPreviewPaint());
+      void seekPlayheadExact(joinAt);
       hapticLight();
       toast(
         coarseUi()
@@ -1132,9 +1019,8 @@
       updateLabels();
     }
 
-    function setCutoutEdge(index, edge, t, opts = {}) {
+    function setCutoutEdge(index, edge, t) {
       if (index < 0 || index >= cutouts.length) return;
-      const soft = Boolean(opts.soft);
       const c = { ...cutouts[index] };
       if (edge === "start") {
         // 多段时勿越过上一段终点（否则 normalize 合并，看起来像 +/− 乱跳）
@@ -1160,12 +1046,12 @@
         edge === "start"
           ? Number(cutouts[selectedCutout]?.start) || c.start
           : Number(cutouts[selectedCutout]?.end) || c.end;
-      if (drag || soft) {
-        // 拖红柄 / 长按连发：节流 preview，避免堆叠 seekRawExact
+      if (drag) {
+        // 拖红柄：节流 preview 即可
         previewSeek(park, { throttle: true });
         return;
       }
-      // 短按：必须能停在删段端点。previewSeek 会被 keep 重映射/inflight 卡住 → 进度「没反应」
+      // 起点+/终点+：必须能停在删段端点。previewSeek 会被 keep 重映射/inflight 卡住 → 进度「没反应」
       scrubSeekWanted = null;
       if (dragSeekTimer) {
         clearTimeout(dragSeekTimer);
@@ -1176,31 +1062,24 @@
     }
 
     /** 对选中红段端点做 ± 步进（闭区间 CTS；与 keepRanges 删帧同一套） */
-    function nudgeSelectedCutout(edge, dirOrDelta, opts = {}) {
+    function nudgeSelectedCutout(edge, dirOrDelta) {
       if (!ensureSelectedCutout()) return false;
       if (selectedCutout < 0 || selectedCutout >= cutouts.length) {
         toast("先点选一条红段");
         return false;
       }
       const kind = edge === "end" ? "end" : "start";
-      const soft = Boolean(opts.soft);
       const c = cutouts[selectedCutout];
       const cur = kind === "end" ? Number(c.end) || 0 : Number(c.start) || 0;
       const dir = Number(dirOrDelta);
-      const fps = Math.max(5, Number(sourceTimeline?.fps) || sourceFps || DEFAULT_FRAME_FPS);
-      let next =
+      // 红柄闭区间：相邻真实采样；静帧隔数秒也照跳（同黄柄，勿退成 1/fps 时间步）
+      const next =
         dir === 1 || dir === -1
           ? nudgeEncodeSec(cur, dir)
           : quantizeTrimSec(cur + dir);
-      // 红柄闭区间：单步过大（坏表/超长静帧）则按 1 源帧时间挪，避免一次跳数秒
-      if (dir === 1 || dir === -1) {
-        const maxStep = Math.max(2.5 / fps, 0.12);
-        if (Math.abs(next - cur) > maxStep) {
-          next = clamp(cur + (dir < 0 ? -1 : 1) / fps, startSec, endSec);
-        }
-      }
+      if (dir === 1 || dir === -1) noteStaticFrameJump(next - cur);
       const before = cur;
-      setCutoutEdge(selectedCutout, kind, quantizeTrimSec(next), { soft });
+      setCutoutEdge(selectedCutout, kind, quantizeTrimSec(next));
       const after =
         kind === "end"
           ? Number(cutouts[selectedCutout]?.end) || before
@@ -1209,7 +1088,7 @@
       if (Math.abs(after - before) < 1e-6) {
         hapticLight();
         toast(kind === "end" ? "终点已到边界" : "起点已到边界");
-        if (!soft) void seekRawExact(after);
+        void seekRawExact(after);
       }
       return true;
     }
@@ -1362,8 +1241,6 @@
       if (Math.abs((Number(video.currentTime) || 0) - seekT) < nearEps && !video.seeking) {
         paintTimeline();
         updateLabels();
-        // 时间已经在目标上，合成层仍可能停在旧帧
-        void kickPreviewPaint();
         return;
       }
       scrubSeekInflight = true;
@@ -1386,13 +1263,6 @@
       } catch (_) {
         finish();
       }
-      // finish 后另踢一脚画面（不等待，避免拖拽卡顿）
-      const paintAfter = () => {
-        if (closed) return;
-        void kickPreviewPaint();
-      };
-      video.addEventListener("seeked", paintAfter, { once: true });
-      window.setTimeout(paintAfter, 360);
     }
 
     /**
@@ -1417,6 +1287,12 @@
 
     /** 片尾停帧世代：按钮按下与松手可能连续触发，只保留最后一次 */
     let endParkGen = 0;
+    function clearParkCutTimer() {
+      if (parkCutTimer) {
+        clearTimeout(parkCutTimer);
+        parkCutTimer = 0;
+      }
+    }
 
     /** 片尾停帧身份 ≡ 成片末帧 CTS（优先 endParkAtSec）。不是播放回绕时刻。 */
     function playCutParkSec() {
@@ -1503,8 +1379,6 @@
       }
       scrubSeekInflight = false;
       freezeClockSec = NaN;
-      // 先钉住暂停意图，再 seek（seek 可能 ended / 越过半开上界）
-      armParkHoldPause();
       try {
         video.pause();
       } catch (_) {}
@@ -1513,7 +1387,6 @@
       } catch (_) {}
       await waitSeek(video);
       if (gen !== endParkGen || closed) return target;
-      await kickPreviewPaint();
       // 钉停帧记「成片时钟」CTS，不记 Chrome 帧内偏置点，避免播放截断漂半帧
       endParkAtSec = target;
       paintTimeline();
@@ -1531,18 +1404,14 @@
         dragSeekTimer = 0;
       }
       scrubSeekInflight = false;
-      armParkHoldPause();
       try {
         video.pause();
       } catch (_) {}
-      // 跟黄柄同一时刻：优先 startSec，encodePark 仅作采样对齐
-      const parked = encodeParkSecForEdge("start");
-      const target = Number.isFinite(parked) ? parked : startSec;
+      const target = encodeParkSecForEdge("start");
       try {
         video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
-      await kickPreviewPaint();
       paintTimeline();
       updateLabels();
       return target;
@@ -1651,37 +1520,25 @@
 
     async function ensureFilmProbe() {
       if (!objectUrl) return false;
-      if (filmVideo.src === objectUrl && filmVideo.readyState >= 1 && Number(filmVideo.duration) > 0) return true;
+      if (filmVideo.src === objectUrl && filmVideo.readyState >= 1) return true;
       try {
+        filmVideo.src = objectUrl;
         await new Promise((resolve, reject) => {
-          let settled = false;
-          const timer = setTimeout(() => fail(), 8000);
-          const cleanup = () => {
-            clearTimeout(timer);
-            filmVideo.removeEventListener("loadedmetadata", ok);
-            filmVideo.removeEventListener("error", fail);
-          };
           const ok = () => {
-            if (settled) return;
-            settled = true;
             cleanup();
             resolve();
           };
           const fail = () => {
-            if (settled) return;
-            settled = true;
             cleanup();
             reject(new Error("film probe"));
           };
+          const cleanup = () => {
+            filmVideo.removeEventListener("loadedmetadata", ok);
+            filmVideo.removeEventListener("error", fail);
+          };
           filmVideo.addEventListener("loadedmetadata", ok);
           filmVideo.addEventListener("error", fail);
-          if (filmVideo.src !== objectUrl) filmVideo.src = objectUrl;
-          else if (filmVideo.readyState < 1) {
-            try {
-              filmVideo.load();
-            } catch (_) {}
-          }
-          if (filmVideo.readyState >= 1) ok();
+          setTimeout(fail, 8000);
         });
         return true;
       } catch (_) {
@@ -1854,8 +1711,6 @@
      * 只吸黄柄会导致 cutouts 落在窗外，完成/落盘时被 normalize 静默清空 → 下次只剩片头片尾。
      */
     function rematchHandlesAfterCalibrate() {
-      // 用户正在拖柄/微调/滑画面：禁止后台校准把黄柄吸回去（表现为「点了/拖了没反应」）
-      if (drag || previewScrub || parkHoldPause) return;
       const beforeCuts = Array.isArray(cutouts) ? cutouts.length : 0;
       startSec = snapToEncodeClock(startSec, { inclusive: true });
       // 片尾是半开 exclusive：必须 exclusive 吸附，禁止 snap 成 lastCts（会少最后一帧）
@@ -1897,8 +1752,6 @@
         sourceTimeline.calibrated = false;
         await calibrate(sourceTimeline, video);
       } catch (_) {}
-      // 校准 await 期间用户可能已开始拖/点：勿再 rematch 覆盖
-      if (drag || previewScrub || parkHoldPause) return;
       if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
         try {
           rematchHandlesAfterCalibrate();
@@ -1930,15 +1783,9 @@
           calibrated: trusted ? true : false,
         };
         if (Number(shared.fps) >= 5) applySourceFps(shared.fps);
+        // 校准只平移几毫秒，空尾巴先收；未校准的表等 rematch 再吸一次
+        tightenTrimAndRepaint();
         if (!trusted) await calibrateSourceTimelineToEditorVideo();
-        else {
-          try {
-            if (tightenTrimToContentTimeline()) {
-              paintTimeline();
-              updateLabels();
-            }
-          } catch (_) {}
-        }
         return;
       }
       if (!srcFile) return;
@@ -1949,13 +1796,17 @@
         if (closed || !tl?.ok || !(tl.fps >= 5)) return;
         sourceTimeline = tl;
         applySourceFps(tl.fps);
+        tightenTrimAndRepaint();
         await calibrateSourceTimelineToEditorVideo();
-        try {
-          if (tightenTrimToContentTimeline()) {
-            paintTimeline();
-            updateLabels();
-          }
-        } catch (_) {}
+      } catch (_) {}
+    }
+
+    function tightenTrimAndRepaint() {
+      try {
+        if (tightenTrimToContentTimeline()) {
+          paintTimeline();
+          updateLabels();
+        }
       } catch (_) {}
     }
 
@@ -1981,7 +1832,6 @@
         // mid-check-fail / 未标 method：允许再跑；calibrate 对已 calibrated 会早退
         sourceTimeline.calibrated = false;
         await calibrate(sourceTimeline, video);
-        if (drag || previewScrub || parkHoldPause) return;
         if (sourceTimeline?.calibrated || Math.abs(Number(sourceTimeline?.chromeOffsetSec) || 0) >= 0.002) {
           try {
             rematchHandlesAfterCalibrate();
@@ -2008,8 +1858,6 @@
         }
       } else if (video && typeof video.requestVideoFrameCallback === "function") {
         // 无共用探测时才用编辑器 video 轻量估（会短暂 play，结束后停并回到黄柄）
-        // 用户已在拖/点：禁止 play 抢预览（否则像按钮失灵）
-        if (drag || previewScrub || parkHoldPause) return;
         try {
           const times = [];
           const wasMuted = video.muted;
@@ -2017,7 +1865,7 @@
           await new Promise((resolve) => {
             const to = setTimeout(resolve, 1800);
             const onFrame = (_now, meta) => {
-              if (closed || drag || previewScrub || parkHoldPause) {
+              if (closed) {
                 clearTimeout(to);
                 resolve();
                 return;
@@ -2061,7 +1909,6 @@
           }
           try {
             await seekPlayheadExact(startSec);
-            await kickPreviewPaint();
           } catch (_) {
             previewSeek(startSec);
           }
@@ -2125,21 +1972,10 @@
       if (!Array.isArray(samples) || !samples.length) return fallback;
       const now = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
       const targetAt = now - LIFT_LAG_MS;
-      let lagged = null;
       for (let i = samples.length - 1; i >= 0; i--) {
-        if (samples[i].at <= targetAt) {
-          lagged = samples[i].t;
-          break;
-        }
+        if (samples[i].at <= targetAt) return samples[i].t;
       }
-      const live = Number(samples[samples.length - 1].t);
-      const pick = lagged == null ? live : Number(lagged);
-      // 回看窗里只有按下点、和松手差一截：那不是送手抖动。快拖必须停在松手处，否则黄柄弹回像拖不动。
-      const shown = Number(fallback);
-      if (Math.abs(pick - live) > 0.12 || (Number.isFinite(shown) && Math.abs(pick - shown) > 0.12)) {
-        return Number.isFinite(live) ? live : fallback;
-      }
-      return Number.isFinite(pick) ? pick : fallback;
+      return samples[0].t;
     }
 
     /** 松手后短留时间戳，让人看清吸到哪一帧 */
@@ -2169,18 +2005,15 @@
       activeHandle = "start";
       syncActiveHandleUi();
       clipCutoutsToWindow();
-      const moved = Math.abs(prev - startSec) > 0.0005;
       const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
       timeline?.classList.toggle("is-min-span", atMin);
-      // 任意有效挪动都脉冲一下，避免「数值变了但用户以为没反应」
-      if (moved) {
+      if (atMin && Math.abs(prev - startSec) > 0.001) {
         timeline?.classList.add("is-pulse");
-        if (atMin) hapticLight();
+        hapticLight();
       }
       if (preview) {
-        // 长按连发/拖拽：节流 previewSeek，避免堆叠 seekExact 卡死画面
-        // 短按：immediateSeek → 精确帧内
-        if (immediateSeek) void seekStartPreviewExact();
+        if (immediateSeek || !drag) void seekStartPreviewExact();
+        // 拖拽跟手也停帧内：裸 CTS / +0.1ms 在手机上显示上一帧，片头会比 GIF 早一帧
         else previewSeek(seekSecForTime(sourceTimeline, startSec, sourceFps), { throttle: true });
       }
       paintTimeline();
@@ -2190,25 +2023,21 @@
     function setEnd(t, { preview = true, immediateSeek = false } = {}) {
       const prev = endSec;
       endSec = clamp(t, startSec + MIN_SPAN, duration);
-      // 拖拽中 / 长按连发：先跟理论 park，抬手/短按 seekEndPreviewExact 再钉 shown
-      if (!immediateSeek) endParkAtSec = endKeepSec();
+      // 拖拽中尚未停帧：先跟理论 park，抬手 seekEndPreviewExact 再钉 shown
+      if (!(immediateSeek || !drag)) endParkAtSec = endKeepSec();
       activeHandle = "end";
       syncActiveHandleUi();
       clipCutoutsToWindow();
-      const moved = Math.abs(prev - endSec) > 0.0005;
       const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
       timeline?.classList.toggle("is-min-span", atMin);
-      if (moved) {
+      if (atMin && Math.abs(prev - endSec) > 0.001) {
         timeline?.classList.add("is-pulse");
-        if (atMin) hapticLight();
+        hapticLight();
       }
       if (preview) {
-        if (immediateSeek) void seekEndPreviewExact();
-        else {
-          previewSeek(seekSecForTime(sourceTimeline, endKeepSec(), sourceFps), {
-            throttle: true,
-          });
-        }
+        // 拖拽中节流跟手；按钮/抬手用精确回拉，避免片尾预览多出几帧
+        if (immediateSeek || !drag) void seekEndPreviewExact();
+        else previewSeek(seekSecForTime(sourceTimeline, endKeepSec(), sourceFps), { throttle: true });
       }
       paintTimeline();
       updateLabels();
@@ -2230,20 +2059,11 @@
       if (!drag) return;
       const kind = drag.kind;
       const cutIndex = drag.cutIndex;
-      // 粗指针：松手点就是最后一次采样。55ms 回看会把快拖弹回，像拖不动。
-      const releaseSec = (fallback) => {
-        if (coarseUi()) {
-          const samples = drag?.samples;
-          const live = Array.isArray(samples) && samples.length ? Number(samples[samples.length - 1].t) : NaN;
-          return Number.isFinite(live) ? live : fallback;
-        }
-        return dragSecBeforeLift(fallback);
-      };
       // 抬手：去送手抖动 → 成片时钟吸附 → 预览停 CTS（不按 Chrome 停帧改写黄柄）
       if (kind === "start") {
         const before = startSec;
         const want = quantizeTrimSec(
-          clamp(snapTrimHandle(releaseSec(startSec), "start"), 0, endSec - MIN_SPAN)
+          clamp(snapTrimHandle(dragSecBeforeLift(startSec), "start"), 0, endSec - MIN_SPAN)
         );
         startSec = want;
         try {
@@ -2262,7 +2082,7 @@
       } else if (kind === "end") {
         const before = endSec;
         const want = quantizeTrimSec(
-          clamp(snapTrimHandle(releaseSec(endSec), "end"), startSec + MIN_SPAN, duration)
+          clamp(snapTrimHandle(dragSecBeforeLift(endSec), "end"), startSec + MIN_SPAN, duration)
         );
         setEnd(want, {
           preview: false,
@@ -2284,7 +2104,7 @@
       } else if (kind === "window") {
         const beforeStart = startSec;
         const span = Math.max(MIN_SPAN, endSec - startSec);
-        const liftStart = releaseSec(startSec);
+        const liftStart = dragSecBeforeLift(startSec);
         startSec = quantizeTrimSec(
           clamp(snapTrimHandle(liftStart, "start"), 0, duration - span)
         );
@@ -2296,7 +2116,6 @@
         endParkAtSec = endKeepSec();
         clipCutoutsToWindow();
         await seekPlayheadExact(encodeParkSecForEdge("start"));
-        await kickPreviewPaint();
         paintTimeline();
         updateLabels();
         flashSnapFeedback("window", Math.abs(beforeStart - startSec) > frameSnapSec * 0.35);
@@ -2308,7 +2127,7 @@
           // 红柄闭区间：cut-start / cut-end 均 inclusive，禁止复用黄柄 exclusive
           const preLift = quantizeTrimSec(
             snapTrimHandle(
-              releaseSec(live),
+              dragSecBeforeLift(live),
               kind === "cut-end" ? "cut-end" : "cut-start"
             )
           );
@@ -2365,8 +2184,7 @@
       if (target === windowEl || target?.classList?.contains("vtrim-window")) return { kind: "window" };
       const startR = startSec / duration;
       const endR = endSec / duration;
-      // 粗指针加大命中：否则点到胶片空白像「黄柄拖不动」
-      const pxPad = coarseUi() ? 0.09 : 0.045;
+      const pxPad = 0.045;
       if (Math.abs(ratio - startR) <= pxPad) return { kind: "start" };
       if (Math.abs(ratio - endR) <= pxPad) return { kind: "end" };
       if (ratio < startR) return { kind: "start" };
@@ -2387,7 +2205,6 @@
         dragSeekTimer = 0;
       }
       scrubSeekInflight = false;
-      armParkHoldPause();
       try {
         video.pause();
       } catch (_) {}
@@ -2395,7 +2212,6 @@
         video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
-      await kickPreviewPaint();
       paintTimeline();
       updateLabels();
       return target;
@@ -2417,7 +2233,6 @@
         clearTimeout(dragSeekTimer);
         dragSeekTimer = 0;
       }
-      // 播放路径会先 seek 再 play：此处勿钉 parkHoldPause（由 togglePlay / clip 清）
       try {
         video.pause();
       } catch (_) {}
@@ -2425,8 +2240,6 @@
         video.currentTime = seekSecForTime(sourceTimeline, target, sourceFps);
       } catch (_) {}
       await waitSeek(video);
-      // 等待期间用户已开始拖柄/滑画面：不要再把播放头拉回片头
-      if (drag || previewScrub) return target;
       if ((Number(video.currentTime) || 0) < startSec - 0.001) {
         try {
           video.currentTime = seekSecForTime(sourceTimeline, startSec, sourceFps);
@@ -2483,49 +2296,34 @@
       lastPresentedMediaTime = NaN;
       freezeClockSec = NaN;
       clearParkCutTimer();
-      cancelPreviewKick();
-      parkHoldPause = false;
       try {
         video.pause();
       } catch (_) {}
       seekPlayheadExact(startSec)
         .then(async () => {
           if (closed || gen !== playWindowGen) return;
-          // 拖柄/滑画面/微调已接手：不要把停掉的循环又播起来（不靠抬 gen）
-          if (parkHoldPause || drag || previewScrub) {
-            freezeClockSec = NaN;
-            return;
-          }
-          cancelPreviewKick();
-          parkHoldPause = false;
-          freezeClockSec = NaN;
           await video.play().catch(() => {});
           if (!closed && gen === playWindowGen && !video.paused) armFrameWatch();
         })
         .catch(() => {})
         .finally(() => {
           if (gen === playWindowGen) playWindowLooping = false;
-          else freezeClockSec = NaN;
         });
     }
 
     function clipPlayWindow(mediaTime) {
-      if (closed || !duration || playWindowLooping || drag || previewScrub) return false;
-      // 踢帧的短 play 也钉着 parkHoldPause：播放中同样不能回绕续播
-      if (parkHoldPause) return false;
+      if (closed || !duration || playWindowLooping || drag) return false;
       const clock = Number(video.currentTime) || 0;
       const exclusive = exclusivePlayEndSec();
       const step = endKeepStepSec();
       // 只削掉下一采样前几毫秒，避免末帧 CTS 上就回绕（那一帧会先闪、seek 再出现一次）
       const shave = Math.min(0.004, step * 0.2);
-      // 暂停态：
-      // - 微调/拖柄停帧（parkHoldPause）→ 绝不续播（修「点片尾就开播」）
-      // - 仅自然播到文件尾 ended 才允许暂停态回绕续播（41e2f7ee 本意）
-      // 禁止再用 clock≥exclusive 当 forceCut：编辑停在末帧内部也会误触发
-      if (video.paused) {
-        if (parkHoldPause) return false;
-        if (!video.ended) return false;
-      }
+      // 文件尾 ended/paused 仍要回绕；勿因 paused 丢掉循环
+      const forceCut =
+        Boolean(video.ended) ||
+        clock >= exclusive - shave ||
+        (Number.isFinite(mediaTime) && mediaTime >= exclusive - shave);
+      if (video.paused && !forceCut) return false;
       const cur = mediaTimeForCut(clock, mediaTime, exclusive);
       const park = playCutParkSec();
       let jump = null;
@@ -2542,8 +2340,7 @@
       if (Math.abs(jump - cur) < 0.001) return false;
       clearParkCutTimer();
       // 先冻时钟再 pause：避免 UI 把越过停帧的 currentTime 刷成多 0.1s
-      const freezeAt = park;
-      freezeClockSec = freezeAt;
+      freezeClockSec = park;
       try {
         video.pause();
       } catch (_) {}
@@ -2552,32 +2349,20 @@
       playWindowLooping = true;
       const gen = ++playWindowGen;
       lastPresentedMediaTime = NaN;
-      cancelPreviewKick();
-      parkHoldPause = false;
       void (async () => {
         try {
           await seekPlayheadExact(jump);
           if (closed || gen !== playWindowGen) return;
-          if (parkHoldPause || drag || previewScrub) {
-            freezeClockSec = NaN;
-            return;
-          }
           freezeClockSec = NaN;
-          cancelPreviewKick();
-          parkHoldPause = false;
           await video.play().catch(() => {});
           if (closed || gen !== playWindowGen || video.paused) return;
           armFrameWatch();
           if (!playheadRaf) playheadRaf = requestAnimationFrame(tickPlayhead);
         } catch (_) {
-          /* finally 清 looping / 冻时钟 */
+          /* finally 清 looping */
         } finally {
-          if (gen === playWindowGen) {
-            playWindowLooping = false;
-          } else if (freezeClockSec === freezeAt) {
-            // 被 armParkHoldPause / 新一轮循环取消：必须解冻，否则拖拽/长按画面永久卡死
-            freezeClockSec = NaN;
-          }
+          // 须在 play + arm 之后才放行，避免空窗期靠滞后 currentTime 漏切
+          if (gen === playWindowGen) playWindowLooping = false;
         }
       })();
       return true;
@@ -2630,7 +2415,6 @@
 
     async function togglePlay() {
       if (!video.src) return;
-      cancelPreviewKick();
       if (video.paused) {
         const cur = Number(video.currentTime) || 0;
         const keep = playCutParkSec();
@@ -2638,26 +2422,19 @@
         lastPresentedMediaTime = NaN;
         freezeClockSec = NaN;
         clearParkCutTimer();
-        // 用户显式点播放：允许循环回绕；并清掉微调停帧抑制
-        parkHoldPause = false;
         const hitCut = cutoutAtTime(cur);
         if (hitCut) {
           // 停在红柄/删段内：按端点开播，终点侧不要被拉去起点
-          // seekRawExact 会再钉 parkHoldPause——开播前必须清掉
           const from = playFromWhenInsideCut(hitCut);
           await seekRawExact(from);
-          parkHoldPause = false;
         } else {
           const needStart = cur < startSec - 0.01 || cur >= keep - 0.001 || Math.abs(cur - startSec) < 0.02;
           // 刚拖完片头时 currentTime≈startSec，仍强制精确 seek 再播，锁住用户拖到的位置
           await seekPlayheadExact(needStart ? startSec : cur);
         }
-        cancelPreviewKick();
-        parkHoldPause = false;
         await video.play().catch(() => {});
       } else {
-        cancelPreviewKick();
-        armParkHoldPause();
+        playWindowGen += 1;
         video.pause();
       }
     }
@@ -2961,12 +2738,6 @@
       window.removeEventListener("pointermove", onCropPointerMove);
       window.removeEventListener("pointerup", onCropPointerUp);
       window.removeEventListener("pointercancel", onCropPointerUp);
-      window.removeEventListener("pointermove", onTimelinePointerMove, true);
-      window.removeEventListener("pointerup", onTimelinePointerUp, true);
-      window.removeEventListener("pointercancel", onTimelinePointerUp, true);
-      window.removeEventListener("pointermove", onPreviewPointerMove, true);
-      window.removeEventListener("pointerup", onPreviewPointerUp, true);
-      window.removeEventListener("pointercancel", onPreviewPointerUp, true);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", onResize);
     }
@@ -3111,9 +2882,6 @@
       let holdRepeat = 0;
       let armed = false;
       let pointerId = null;
-      /** pointerdown 已步进。click 在 pointerup 之后才到，那时 armed 已清，不能用 armed 挡第二次。 */
-      let pointerStepped = false;
-      let pointerSteppedTimer = 0;
       const resolveKind = typeof kindOrFn === "function" ? kindOrFn : () => kindOrFn;
       const stopRepeat = () => {
         if (holdTimer) {
@@ -3125,9 +2893,9 @@
           holdRepeat = 0;
         }
       };
-      const fire = (isRepeat) => {
+      const fire = () => {
         nudgeSnapKind = resolveKind();
-        stepFn(Boolean(isRepeat));
+        stepFn();
       };
       const onRelease = (e) => {
         if (!armed) return;
@@ -3135,12 +2903,6 @@
         armed = false;
         pointerId = null;
         stopRepeat();
-        if (pointerSteppedTimer) clearTimeout(pointerSteppedTimer);
-        // click 紧跟 pointerup；留一点窗口吞掉这次 click，过后恢复「只有 click」的兜底
-        pointerSteppedTimer = window.setTimeout(() => {
-          pointerStepped = false;
-          pointerSteppedTimer = 0;
-        }, 450);
         window.removeEventListener("pointerup", onRelease, true);
         window.removeEventListener("pointercancel", onRelease, true);
         if (nudgeSnapKind) {
@@ -3150,29 +2912,15 @@
         }
       };
       btn.addEventListener("pointerdown", (e) => {
-        // 只丢掉右键/笔侧键。触摸在部分 WebView 上 pointerdown.button 为 -1，当成非 0 会让片头片尾完全不步进。
+        // 只忽略右键等；个别触摸实现报 button=-1
         if (e.button != null && e.button > 0) return;
         if (btn.disabled) return;
         e.preventDefault();
-        // 勿 stopPropagation：部分 WebKit 上会让后续手势/黄柄像失灵
-        armParkHoldPause();
-        try {
-          video.pause();
-        } catch (_) {}
         // 不用 setPointerCapture：部分安卓会立刻 lostpointercapture，短按像没点到
         armed = true;
         pointerId = e.pointerId;
-        pointerStepped = true;
-        if (pointerSteppedTimer) {
-          clearTimeout(pointerSteppedTimer);
-          pointerSteppedTimer = 0;
-        }
         stopRepeat();
-        try {
-          fire(false);
-        } catch (err) {
-          toast(err?.message || String(err) || "微调失败");
-        }
+        fire();
         window.addEventListener("pointerup", onRelease, true);
         window.addEventListener("pointercancel", onRelease, true);
         holdTimer = window.setTimeout(() => {
@@ -3180,67 +2928,42 @@
           if (!armed) return;
           holdRepeat = window.setInterval(() => {
             if (!armed) return;
-            try {
-              fire(true);
-            } catch (_) {}
+            fire();
           }, 70);
         }, 280);
       });
-      // 兜底：若环境几乎不发 pointerdown，click 仍步进一次
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        if (armed || pointerStepped) {
-          pointerStepped = false;
-          if (pointerSteppedTimer) {
-            clearTimeout(pointerSteppedTimer);
-            pointerSteppedTimer = 0;
-          }
-          return;
-        }
-        armParkHoldPause();
-        try {
-          fire(false);
-          if (nudgeSnapKind) {
-            const k = nudgeSnapKind;
-            nudgeSnapKind = null;
-            void snapNudgeToShown(k);
-          }
-        } catch (err) {
-          toast(err?.message || String(err) || "微调失败");
-        }
-      });
-      // 长按出系统菜单会 pointercancel，连发还没开始就被掐掉
-      btn.addEventListener("contextmenu", (e) => e.preventDefault());
+      // 避免 click 再触发一次
+      btn.addEventListener("click", (e) => e.preventDefault());
     }
     bindNudgeHold(
       nudgeStartM,
-      (isRepeat) => {
-        if (editMode === "cut") nudgeSelectedCutout("start", -1, { soft: isRepeat });
-        else setStart(nudgeTrimEdgeSec("start", -1), { immediateSeek: !isRepeat });
+      () => {
+        if (editMode === "cut") nudgeSelectedCutout("start", -1);
+        else setStart(nudgeTrimEdgeSec("start", -1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-start" : "start")
     );
     bindNudgeHold(
       nudgeStartP,
-      (isRepeat) => {
-        if (editMode === "cut") nudgeSelectedCutout("start", 1, { soft: isRepeat });
-        else setStart(nudgeTrimEdgeSec("start", 1), { immediateSeek: !isRepeat });
+      () => {
+        if (editMode === "cut") nudgeSelectedCutout("start", 1);
+        else setStart(nudgeTrimEdgeSec("start", 1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-start" : "start")
     );
     bindNudgeHold(
       nudgeEndM,
-      (isRepeat) => {
-        if (editMode === "cut") nudgeSelectedCutout("end", -1, { soft: isRepeat });
-        else setEnd(nudgeTrimEdgeSec("end", -1), { immediateSeek: !isRepeat });
+      () => {
+        if (editMode === "cut") nudgeSelectedCutout("end", -1);
+        else setEnd(nudgeTrimEdgeSec("end", -1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-end" : "end")
     );
     bindNudgeHold(
       nudgeEndP,
-      (isRepeat) => {
-        if (editMode === "cut") nudgeSelectedCutout("end", 1, { soft: isRepeat });
-        else setEnd(nudgeTrimEdgeSec("end", 1), { immediateSeek: !isRepeat });
+      () => {
+        if (editMode === "cut") nudgeSelectedCutout("end", 1);
+        else setEnd(nudgeTrimEdgeSec("end", 1), { immediateSeek: true });
       },
       () => (editMode === "cut" ? "cut-end" : "end")
     );
@@ -3264,21 +2987,8 @@
       downloadEditedVideo().catch((err) => toast(err?.message || String(err) || "导出失败"));
     });
 
-    /** 按下后极短的 pointercancel：安卓 setPointerCapture 的假取消，手势还在 */
-    function spuriousPointerCancel(e, armedAt) {
-      if (!e || e.type !== "pointercancel") return false;
-      const now = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
-      return now - (Number(armedAt) || 0) < 180;
-    }
-
     function onTimelinePointerDown(e) {
-      if (!(duration > 0)) duration = Number(video.duration) || 0;
-      if (!(duration > 0)) return;
-      // 拖柄前只解冻，勿抬 playWindowGen（否则易卡死后续交互）
-      freezeClockSec = NaN;
-      playWindowLooping = false;
-      parkHoldPause = true;
-      clearParkCutTimer();
+      if (!duration) return;
       try {
         video.pause();
       } catch (_) {}
@@ -3286,19 +2996,17 @@
       const t = ratio * duration;
       const hit = hitKind(ratio, e.target);
       const kind = hit.kind;
-      const armedAt = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
       timeline?.classList.add("is-dragging");
       if (kind === "start") {
-        drag = { kind: "start", pointerId: e.pointerId, samples: [], armedAt };
-        // 先改黄柄再 capture：NotFoundError 不能把 setStart 跳过去
+        drag = { kind: "start", pointerId: e.pointerId, samples: [] };
+        handleStart?.setPointerCapture?.(e.pointerId);
         pushDragSample(t);
         setStart(t);
-        tryPointerCapture(handleStart, e.pointerId);
       } else if (kind === "end") {
-        drag = { kind: "end", pointerId: e.pointerId, samples: [], armedAt };
+        drag = { kind: "end", pointerId: e.pointerId, samples: [] };
+        handleEnd?.setPointerCapture?.(e.pointerId);
         pushDragSample(t);
         setEnd(t);
-        tryPointerCapture(handleEnd, e.pointerId);
       } else if (kind === "window") {
         drag = {
           kind: "window",
@@ -3307,11 +3015,10 @@
           originStart: startSec,
           originEnd: endSec,
           samples: [],
-          armedAt,
         };
         timeline?.classList.add("is-dragging-window");
+        windowEl?.setPointerCapture?.(e.pointerId);
         syncHandleTips();
-        tryPointerCapture(windowEl, e.pointerId);
       } else if (kind === "cut-select") {
         selectedCutout = Number(hit.cutIndex) || 0;
         cutJoinVisit = 0;
@@ -3322,13 +3029,13 @@
         selectedCutout = Number(hit.cutIndex) || 0;
         cutJoinVisit = 0;
         syncCutoutUi();
-        drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout, samples: [], armedAt };
+        drag = { kind, pointerId: e.pointerId, cutIndex: selectedCutout, samples: [] };
+        timeline?.setPointerCapture?.(e.pointerId);
         pushDragSample(t);
         setCutoutEdge(selectedCutout, kind === "cut-end" ? "end" : "start", t);
-        tryPointerCapture(timeline, e.pointerId);
       } else {
         previewSeek(clamp(t, startSec, endKeepSec()));
-        drag = { kind: "seek", pointerId: e.pointerId, samples: [], armedAt };
+        drag = { kind: "seek", pointerId: e.pointerId, samples: [] };
       }
       e.preventDefault();
     }
@@ -3367,29 +3074,8 @@
         setCutoutEdge(drag.cutIndex, drag.kind === "cut-end" ? "end" : "start", t);
       } else previewSeek(clamp(t, startSec, endKeepSec()));
     }
-    function commitCoarseRelease(e) {
-      if (!drag || !timeline || !coarseUi()) return;
-      if (drag.kind === "window") {
-        const rect = timeline.getBoundingClientRect();
-        const deltaSec = ((e.clientX - drag.originX) / Math.max(1, rect.width)) * duration;
-        const span = Math.max(MIN_SPAN, drag.originEnd - drag.originStart);
-        const nextStart = clamp(drag.originStart + deltaSec, 0, Math.max(0, duration - span));
-        pushDragSample(nextStart);
-        return;
-      }
-      const raw = ratioFromClientX(e.clientX) * duration;
-      let t = raw;
-      if (drag.kind === "start") t = snapTrimHandle(raw, "start");
-      else if (drag.kind === "end") t = snapTrimHandle(raw, "end");
-      else if (drag.kind === "cut-start") t = snapTrimHandle(raw, "cut-start");
-      else if (drag.kind === "cut-end") t = snapTrimHandle(raw, "cut-end");
-      else t = clamp(raw, 0, duration);
-      pushDragSample(t);
-    }
     function onTimelinePointerUp(e) {
       if (!drag || drag.pointerId !== e.pointerId) return;
-      if (spuriousPointerCancel(e, drag.armedAt)) return;
-      if (coarseUi()) commitCoarseRelease(e);
       const finishing = finishTrimDrag();
       timeline?.classList.remove("is-dragging-window", "is-dragging");
       drag = null;
@@ -3398,10 +3084,9 @@
       Promise.resolve(finishing).catch(() => {});
     }
     timeline?.addEventListener("pointerdown", onTimelinePointerDown);
-    // 捕获阶段跟指针：capture 被安卓丢掉、手指滑出时间轴时仍能拖
-    window.addEventListener("pointermove", onTimelinePointerMove, true);
-    window.addEventListener("pointerup", onTimelinePointerUp, true);
-    window.addEventListener("pointercancel", onTimelinePointerUp, true);
+    timeline?.addEventListener("pointermove", onTimelinePointerMove);
+    timeline?.addEventListener("pointerup", onTimelinePointerUp);
+    timeline?.addEventListener("pointercancel", onTimelinePointerUp);
     timeline?.addEventListener("animationend", () => timeline.classList.remove("is-pulse"));
 
     function onCropPointerDown(e) {
@@ -3416,10 +3101,9 @@
         startY: e.clientY,
         box: { ...d },
         geom,
-        armedAt: typeof performance !== "undefined" && performance.now ? performance.now() : Date.now(),
       };
+      cropBox.setPointerCapture?.(e.pointerId);
       previewWrap?.classList.add("is-dragging");
-      tryPointerCapture(cropBox, e.pointerId);
       e.preventDefault();
       e.stopPropagation();
     }
@@ -3470,7 +3154,6 @@
     }
     function onCropPointerUp(e) {
       if (!cropDrag || cropDrag.pointerId !== e.pointerId) return;
-      if (spuriousPointerCancel(e, cropDrag.armedAt)) return;
       cropDrag = null;
       previewWrap?.classList.remove("is-dragging");
     }
@@ -3484,34 +3167,21 @@
     window.addEventListener("pointerup", onCropPointerUp);
     window.addEventListener("pointercancel", onCropPointerUp);
 
-    function onPreviewPointerDown(e) {
-      // 预览左右滑 scrub；播放/暂停只用底部按钮（轻点不播放）
+    previewWrap?.addEventListener("pointerdown", (e) => {
+      // 预览只负责左右滑 scrub；播放/暂停只用底部按钮（手机误触点画面不再开播）
       if (!duration || e.target?.closest?.(".vtrim-crop-box")) return;
-      const startT = Number.isFinite(freezeClockSec)
-        ? freezeClockSec
-        : Number(video.currentTime) || startSec;
-      freezeClockSec = NaN;
-      playWindowLooping = false;
-      parkHoldPause = true;
-      clearParkCutTimer();
-      try {
-        video.pause();
-      } catch (_) {}
       previewScrub = {
         pointerId: e.pointerId,
         startX: e.clientX,
-        startT: clamp(startT, startSec, endKeepSec()),
+        startT: video.currentTime || startSec,
         moved: false,
-        armedAt: typeof performance !== "undefined" && performance.now ? performance.now() : Date.now(),
       };
-      // 尽力 capture；丢掉或抛错时靠 window 捕获阶段继续跟
-      tryPointerCapture(previewWrap, e.pointerId);
-    }
-    function onPreviewPointerMove(e) {
+      previewWrap.setPointerCapture?.(e.pointerId);
+    });
+    previewWrap?.addEventListener("pointermove", (e) => {
       if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
       const dx = e.clientX - previewScrub.startX;
-      // 阈值略降：长按后微移也要跟手（原 8px 在部分机上像「长按没反应」）
-      if (Math.abs(dx) > 4) {
+      if (Math.abs(dx) > 8) {
         if (!previewScrub.moved) {
           previewScrub.moved = true;
           try {
@@ -3526,17 +3196,15 @@
       const target = clamp(previewScrub.startT + delta, startSec, endKeepSec());
       scrubSeekWanted = target;
       pumpPreviewScrubSeek();
-    }
-    function onPreviewPointerUp(e) {
+    });
+    previewWrap?.addEventListener("pointerup", (e) => {
       if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
-      if (spuriousPointerCancel(e, previewScrub.armedAt)) return;
       previewScrub = null;
       // 轻点画面不 toggle 播放——与「只点底部播放」一致
-    }
-    previewWrap?.addEventListener("pointerdown", onPreviewPointerDown);
-    window.addEventListener("pointermove", onPreviewPointerMove, true);
-    window.addEventListener("pointerup", onPreviewPointerUp, true);
-    window.addEventListener("pointercancel", onPreviewPointerUp, true);
+    });
+    previewWrap?.addEventListener("pointercancel", () => {
+      previewScrub = null;
+    });
 
     function tickPlayhead() {
       if (closed) {
@@ -3571,8 +3239,6 @@
       paintTimeline();
     });
     video.addEventListener("play", () => {
-      // 踢帧短 play 已钉 parkHoldPause：不要切成「暂停」，也不要开循环
-      if (parkHoldPause) return;
       if (playBtn) playBtn.textContent = "暂停";
       previewWrap?.classList.add("is-playing");
       armFrameWatch();
@@ -3582,30 +3248,23 @@
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", onResize);
 
-    // load file — 先挂监听再设 src。blob 已在外预览解过时 loadedmetadata 会同步结束。
+    // load file
     objectUrl = URL.createObjectURL(file);
+    video.src = objectUrl;
     video.muted = true;
 
     return new Promise((resolve, reject) => {
       resolveOpen = resolve;
-      let metaReady = false;
       const onMeta = () => {
-        const d = Number(video.duration);
-        // readyState 先到、duration 仍是 0：不要摘监听，否则黄柄永远拖不动
-        if (!(d > 0) || !Number.isFinite(d)) return;
-        if (metaReady) return;
-        metaReady = true;
         video.removeEventListener("loadedmetadata", onMeta);
-        video.removeEventListener("durationchange", onMeta);
         video.removeEventListener("error", onErr);
-        duration = d;
+        duration = Number(video.duration) || 0;
         const srcW = video.videoWidth || 1;
         const srcH = video.videoHeight || 1;
         const initial = opts.initial || {};
         // 方案/调用方 fps 先用上；后台探 MP4 stts（更准可覆盖）；无 stts 时不让 rVFC 盖掉已知值
         const knownFps = Number(opts.srcFps) || Number(initial.srcFps) || 0;
         const knownOk = applySourceFps(knownFps);
-        sourceTimelineReady = detectAndApplySourceFps(file, { preferKnown: knownOk }).catch(() => {});
         startSec = clamp(Number(initial.trimStart) || 0, 0, Math.max(0, duration - MIN_SPAN));
         endSec = clamp(Number(initial.trimEnd) || duration, startSec + MIN_SPAN, duration || MIN_SPAN);
         endParkAtSec = endKeepSec();
@@ -3624,11 +3283,13 @@
           // 默认显示裁剪框（自由=整幅）；用户缩框后才真正 cropOn
           if (cropEnable) cropEnable.checked = initial.cropOn !== false;
         }
+        // 须在黄柄/裁剪初值之后：共用表同步装上，收空尾巴要看到真实 endSec
+        sourceTimelineReady = detectAndApplySourceFps(file, { preferKnown: knownOk }).catch(() => {});
         syncMuteUi();
         syncAspectUi();
         syncModeUi();
         // 首帧 = 黄柄所见 = GIF 首帧
-        seekPlayheadExact(startSec).then(() => kickPreviewPaint()).catch(() => previewSeek(startSec));
+        seekPlayheadExact(startSec).catch(() => previewSeek(startSec));
         paintTimeline();
         updateLabels();
         layoutCropBox();
@@ -3644,20 +3305,14 @@
         }
       };
       const onErr = () => {
-        if (metaReady) return;
         video.removeEventListener("loadedmetadata", onMeta);
-        video.removeEventListener("durationchange", onMeta);
         video.removeEventListener("error", onErr);
         cleanup();
         resolveOpen = null;
         reject(new Error("无法读取该视频"));
       };
       video.addEventListener("loadedmetadata", onMeta);
-      video.addEventListener("durationchange", onMeta);
       video.addEventListener("error", onErr);
-      video.src = objectUrl;
-      // blob 已在外预览解过时，loadedmetadata 可能在监听挂上之前就结束，duration 会一直是 0，黄柄/按钮全无反应
-      if (video.readyState >= 1) onMeta();
     });
   }
 
@@ -4516,7 +4171,6 @@
   }
 
   window.DevToolsVtrimEditor = {
-    __rev: EDITOR_REV,
     open: openEditor,
     ensureCss: ensureVtrimCss,
     normalizeCutouts,
@@ -4532,6 +4186,7 @@
     alignTrimSecToSamples,
     contentExclusiveEndSec,
     snapExclusiveEndSec,
+    nudgeKeepEdgeSec,
     resolveKeepFps,
     secToFrame,
     frameToSec,

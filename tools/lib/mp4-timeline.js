@@ -313,6 +313,9 @@
         }
       }
     }
+    // stts+ctts 是解码顺序（B 帧片 CTS 局部倒序）。下标一律当显示帧号用（ffmpeg trim start_frame、
+    // 预览停帧、微调相邻帧、二分查帧），不排序会错 1–3 帧
+    if (ctts.length) ctsSec.sort();
     // ffmpeg demux 后 frame 0 ≡ 第一条 CTS≥0 的采样（editlist 之后）
     let firstPresentIdx = 0;
     while (firstPresentIdx < ctsSec.length && ctsSec[firstPresentIdx] < -1e-6) {

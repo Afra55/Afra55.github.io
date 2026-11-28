@@ -46,11 +46,47 @@ function buildMoov() {
   return box("moov", trak);
 }
 
-function buildFile() {
+function buildFile(moov = buildMoov()) {
   const ftyp = box("ftyp", Buffer.from("isomisomiso2mp41"));
-  const moov = buildMoov();
   const mdat = box("mdat", Buffer.alloc(8));
   return Buffer.concat([ftyp, moov, mdat]);
+}
+
+/** B 帧片：解码序 I0 P3 B1 B2 P6 B4 B5 P9 B7 B8（显示帧号），ctts + elst 延迟 1 帧 */
+function buildMoovBFrames() {
+  const mdhd = Buffer.alloc(24);
+  mdhd.writeUInt32BE(24000, 12);
+  mdhd.writeUInt32BE(10000, 16);
+  const hdlr = Buffer.alloc(12);
+  hdlr.write("vide", 8);
+  const stts = Buffer.alloc(16);
+  stts.writeUInt32BE(1, 4);
+  stts.writeUInt32BE(10, 8);
+  stts.writeUInt32BE(1000, 12);
+  const runs = [
+    [1, 1000],
+    [1, 3000],
+    [2, 0],
+    [1, 3000],
+    [2, 0],
+    [1, 3000],
+    [2, 0],
+  ];
+  const ctts = Buffer.alloc(8 + runs.length * 8);
+  ctts.writeUInt32BE(runs.length, 4);
+  runs.forEach(([count, offset], i) => {
+    ctts.writeUInt32BE(count, 8 + i * 8);
+    ctts.writeUInt32BE(offset, 12 + i * 8);
+  });
+  const elst = Buffer.alloc(20);
+  elst.writeUInt32BE(1, 4);
+  elst.writeUInt32BE(10000, 8);
+  elst.writeInt32BE(1000, 12);
+  elst.writeUInt32BE(0x00010000, 16);
+  const stbl = box("stbl", Buffer.concat([box("stts", stts), box("ctts", ctts)]));
+  const mdia = box("mdia", Buffer.concat([box("mdhd", mdhd), box("hdlr", hdlr), box("minf", stbl)]));
+  const trak = box("trak", Buffer.concat([box("edts", box("elst", elst)), mdia]));
+  return box("moov", trak);
 }
 
 (async () => {
@@ -133,6 +169,24 @@ function buildFile() {
   tl.calibrated = true;
   assert.ok(Math.abs(tl.ctsSec[0] - X) < 1e-9);
   assert.ok(Math.abs(tl.mediaCtsSec[0]) < 1e-9);
+
+  // B 帧：下标 = 显示帧号（≡ ffmpeg trim start_frame），ctsSec 须升序
+  const tlB = await api.probeMp4VideoTimeline(new Blob([buildFile(buildMoovBFrames())], { type: "video/mp4" }));
+  assert.ok(tlB && tlB.ok && tlB.hasCtts, "B 帧 probe ok");
+  for (let i = 0; i < 10; i++) {
+    assert.ok(Math.abs(tlB.ctsSec[i] - i / 24) < 1e-9, `B 帧 ctsSec[${i}]=${tlB.ctsSec[i]} 须为显示序`);
+    assert.ok(Math.abs(tlB.mediaCtsSec[i] - i / 24) < 1e-9, `B 帧 mediaCtsSec[${i}]`);
+  }
+  assert.strictEqual(tlB.firstPresentIdx, 0);
+  const rB = api.sampleRangeForKeep(tlB, 4 / 24, 7 / 24);
+  assert.strictEqual(rB.startF, 4, "B 帧片头帧号");
+  assert.strictEqual(rB.endF, 7, "B 帧片尾半开帧号");
+  for (let k = 0; k < 10; k++) {
+    assert.strictEqual(api.sampleIndexAtSec(tlB, (k + 0.5) / 24), k, `B 帧二分 k=${k}`);
+  }
+  const seekB = api.frameSeekSec(tlB, 3);
+  assert.ok(seekB > 3 / 24 && seekB < 4 / 24, `B 帧 frameSeek3=${seekB}`);
+  assert.strictEqual(api.canFfmpegFirst(tlB), true, "B 帧不是乱序片");
 
   console.log("mp4-timeline.test.js: ok");
 })().catch((e) => {

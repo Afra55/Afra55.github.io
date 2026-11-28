@@ -154,8 +154,7 @@
   gap: 0.35rem;
   width: 100%;
   margin: 0.28rem 0 0;
-  /* none：父级滚动不要把长按连发抢走（manipulation 会 pointercancel） */
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
 }
 .vtrim-nudge .ghost-btn {
@@ -546,14 +545,9 @@ body.vtrim-editor-open {
   z-index: 9200;
   display: grid;
   place-items: stretch;
-  /* 显式可点：避免祖先/boot 残留 pointer-events:none 把整层编辑交互吃掉 */
-  pointer-events: auto;
   background: color-mix(in srgb, var(--bg-0, #0b1220) 72%, transparent);
   padding: max(0.5rem, env(safe-area-inset-top)) max(0.5rem, env(safe-area-inset-right))
     max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
-}
-.vtrim-editor-overlay .vtrim-editor-sheet {
-  pointer-events: auto;
 }
 .vtrim-editor-sheet {
   display: grid;
@@ -579,11 +573,10 @@ body.vtrim-editor-open {
   word-break: break-word;
 }
 .vtrim-editor-build {
-  margin: 0.15rem 0 0;
-  font-size: 0.75rem;
+  margin: 0.1rem 0 0;
+  font-size: 0.72rem;
   line-height: 1.25;
-  color: var(--text, #d5deea);
-  opacity: 0.95;
+  opacity: 0.75;
   user-select: all;
   word-break: break-all;
 }
