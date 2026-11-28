@@ -187,6 +187,7 @@
   5. **已导出编辑片 / exactKeepFrames / speedBaked：禁止 `wantSeg` 再抽**。大文件+倍速会走 accurate libx264 重编码，打乱 `segmentSpans` 依赖的 VFR 时间戳 → 多段删中间后 GIF≠预览（与租约「导出片不建」同理）。
   6. **逐块 delay 必须对准目标秒数**（`forceAlignSpan`）：无倍速 → `n/fps`；压缩时长 → 本块占 `effSpan` 的份额。禁止放行 `round(100/fps)=70ms` 均匀 delay（相对 66.7ms 系统性 +5%，旧 10% 容差会放过 → 成片偏长、同时刻和预览错位）。容差 ≤2%。
   7. **已导出编辑片禁止静止帧合并**：合并后的长 delay 经 gifski 末帧 PTS quirk与分块拼接，会在块界把静帧拖长，GIF 总时长 > keep、和预览错位。
+  8. **已导出编辑片禁止再按 `segmentSpans` 分段采样**（`useSegmented` / `useSegmentedSk`）：mat 已是线性 keep，concat 接点有漂移；再按理想 span 切 → 后块 RGBA 不足、回退 ffmpeg，删中间像没生效（diag `162829` 9 段 + 倍速）。改走整窗全局 `fps`。
 - 测试：`vbb-keep-boundary-hold`（导出段）、`vbb-gif-chunk-frames`（分块按帧号 / `-t` 整窗 / 导出片禁 wantSeg）、`vbb-trim-cutouts-speed`（物化短上报）、`vbb-preview-gif-align`、`vbb-precut-trim`、`vbb-blackbox-fps`。
 
 ### 3.7 交互热路径
@@ -279,5 +280,6 @@
 | GIF 删中间后比预览短 / 后段提前（手机分块） | §3.6 分块：是否又用块头 `trim=start=`；看日志块帧数是否满（旧 bug 第 5 块 56≠72） |
 | gifski「导出的 RGBA 帧不足」回退 ffmpeg，且 GIF≠预览 | §3.6：`-t` 是否整窗；导出片是否又 `抽片段`（禁止 wantSeg） |
 | GIF 总时长略长、同时刻画面比预览「慢半拍」 | §3.6.6：delay 是否对准 `n/fps`；容差是否又放宽到 10% |
+| 删中间像没生效 / gifski「RGBA 帧不足」反复回退 ffmpeg（已物化多段） | §3.6.8：导出片是否又按 `segmentSpans` 切；应走全局 fps |
 | GIF 首尾偏一帧 | parity 文档 §11、时钟文档 |
 | 按钮 / 拖柄没反应 | §3.7 + §5 第 8 条；对照 #724 |

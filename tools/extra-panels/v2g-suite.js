@@ -1326,10 +1326,14 @@
           fps,
           "" // crop 在后面统一接，避免每段重复；无 crop 时分段采样
         );
+        // 已导出编辑片：mat 已是线性 keep 时间轴（concat 有接点漂移）。
+        // 再按理想 segmentSpans 切会偏窗 → 后块 RGBA 不足 / 删中间像没生效（diag 162829）。
         // 有裁画面时分段链需带 crop；上面先探测长度，真正 build 时再带 cropFilter
         const useSegmented =
           Boolean(segmented) &&
           encodeSs <= 0.001 &&
+          !opts.exportedEdit &&
+          !opts.exactKeepFrames &&
           Array.isArray(opts.segmentSpans) &&
           opts.segmentSpans.length > 1;
         if (useSegmented) {
@@ -1833,7 +1837,8 @@
       }
 
       /**
-       * P1：多段 keep 导出片上按段独立 fps=round=up，避免全局网格在接点随机丢帧。
+       * 多段 keep **未导出**源片上按段独立 fps=round=up，避免全局网格在接点随机丢帧。
+       * 已导出 mat（exportedEdit）：禁止调用——mat 已是线性 keep，再按理想 span 切会撞 concat 漂移。
        * segmentSpans 为导出时间轴上各段时长（秒），总和≈span。
        * @returns {{ fc: string, frameCount: number } | null} fc 输出标签 [vseg]
        */
@@ -2503,8 +2508,11 @@
         let encodeSs = Math.max(0, startSec);
         let { encodeT, frameCount, effSpan } = vbbEncodeWindowFromKeepSpan(keepSpanSk, speed, fps, opts);
         const framesCapped = false;
+        // 已导出片禁止再按 segmentSpans 切（见 encodeV2gGifFfmpeg 同注释）
         const useSegmentedSk =
           encodeSs <= 0.001 &&
+          !opts.exportedEdit &&
+          !opts.exactKeepFrames &&
           Array.isArray(opts.segmentSpans) &&
           opts.segmentSpans.length > 1;
         if (useSegmentedSk) {
@@ -2792,10 +2800,14 @@
                 if (isCoarsePointer()) rgbaPreMerge = cached;
               }
             } else {
-            const baseArgs = ["-i", encodeInput];
-            // 帧号取块从片头建整窗网格：-t 必须盖到整窗尾。
+            // 帧号取块从片头建整窗网格：输入 -t 必须盖整窗（放在 -i 前）。
             // 若只盖到块尾，后块 start_frame 超出已解帧 → 出帧不足 → gifski 回退 ffmpeg（diag 125947 块4=23帧）
-            baseArgs.push("-t", String(encodeSs + encodeT + 0.05));
+            // 已导出片：用 span（mat 时长），勿用 (frameCount/fps)*speed 的输出窗去限输入
+            const inputLimitSec =
+              opts.exportedEdit || opts.exactKeepFrames
+                ? Math.max(0.05, Number(opts.span) || encodeT) + 0.05
+                : encodeSs + encodeT + 0.05;
+            const baseArgs = ["-t", String(inputLimitSec), "-i", encodeInput];
             if (usedWm) baseArgs.push("-i", wmName);
             const outArgs = ["-frames:v", String(chunkFrames), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
             const tChunk = Date.now();
