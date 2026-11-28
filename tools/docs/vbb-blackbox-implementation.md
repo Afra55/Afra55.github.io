@@ -174,11 +174,17 @@
 ### 3.6 导出 / GIF
 
 - materialize 默认 `exportKeepVideo` frameRaw：帧号来自 keeps 的 `startF/endF`（经 `toDemuxFrameIndex`），`-vsync passthrough` 保 VFR 时间戳。
-- `segmentSpans` / `duration` = 真实 CTS 跨度（`b.dur`）。只有**无表**的 frameGrid 才用 `帧数 / keepFps`。`vbbMaterializedKeepDuration` 接受报告时长 ≤ keep + 0.05s。
+- `segmentSpans` / `duration` = 真实 CTS 跨度（`b.dur`）。只有**无表**的 frameGrid 才用 `帧数 / keepFps`。
+- `vbbMaterializedKeepDuration`：接受上报 `rep` 当 `keep − shortTol ≤ rep ≤ keep + 0.05`（`shortTol = max(0.25, keep×0.02)`）；上报明显偏短（旧「帧数÷平均 fps」）→ 用 keep，避免 GIF 窗截掉后几段。`finishMat` 打 `[vbb-mat] 方法 上报Xs · keep Ys → 用Zs · N段`。
 - Chrome 兜底：raw H.264 只认 `-r`，VFR 按每个源帧真实时长铺到 `gridFps` 网格（本地帧率 > 平均 ×1.15 时取本地帧率，60 封顶）；静帧重复，比网格密的帧跳过；编码器 `prefer-hardware` 不通再 `no-preference`。
 - 本地 concat 兜底：有表时 `tryPart(..., sampleFrames)` 用 keep 帧号 frameRaw，不按时间换帧号。
 - GIF：`exportedEdit` → 片尾垫 0、exact 帧、不建段租约（parity 文档 §6）。
-- 测试：`vbb-keep-boundary-hold`（导出段）、`vbb-preview-gif-align`、`vbb-precut-trim`、`vbb-blackbox-fps`。
+- **gifski 分块抽 RGBA**（`10-shared-encode.js` `buildRawArgs` / `encodeChunk`）：
+  1. 每块都先出**整窗** fps 网格（多段走 `vbbEncodeSegmentedFpsFilter`，与一次性整段同一前缀）。
+  2. 再按**全局帧号** `trim=start_frame=A:end_frame=A+N` 取本块。
+  3. **禁止**块头按时间 `trim=start=块起点`：块起点前开始、仍在显示的那一帧会被整帧丢掉（VFR 静帧一丢几秒；手机长片≥18s 强压 ×72 时，删中间后 GIF 比预览短且后段提前）。
+  4. demux `-t` 仍盖到块尾；`encodeChunk` 传 `chunkStartFrame`，不再把块起点时间喂给滤镜。
+- 测试：`vbb-keep-boundary-hold`（导出段）、`vbb-gif-chunk-frames`（分块按帧号）、`vbb-trim-cutouts-speed`（物化短上报）、`vbb-preview-gif-align`、`vbb-precut-trim`、`vbb-blackbox-fps`。
 
 ### 3.7 交互热路径
 
@@ -217,6 +223,7 @@
 8. 交互补丁：`parkHoldPause`、在 seek helper 里 bump `playWindowGen`、`stopPropagation`、pointerdown 时暂停、`forcePreviewFrame` / `kickPreviewPaint` / `spuriousPointerCancel` / `commitCoarseRelease`、window 捕获 pointermove、按 BUILD 删模块重载（d26ab253 那一轮把编辑器整个改死，#724 才恢复）。
 9. 分叉 keep 公式（预览一套、导出一套），或 GIF 另算 keeps / 另 probe 表 / 批量漏 `file`。
 10. 差帧时拨导出路径（chrome ↔ ffmpeg-sec ↔ frameRaw）碰运气，或动撞档 / fps 阶梯（与对齐正交）。
+11. gifski 分块块头按时间 `trim=start=`，或「仅首块走分段采样、后续块用全局窗」（VFR 静帧在块界丢失；手机 ×72 强压必现）。
 
 ---
 
@@ -232,6 +239,8 @@
 | `vbb-keep-boundary-hold` | 段末停帧、首帧呈现再播、文件尾暂停不续播、暂停容差、导出真实跨度、Chrome 网格、concat 帧号 |
 | `vbb-end-play-align` | 片尾停 / 播、外预览 pastSlop |
 | `vbb-preview-encode-align` / `vbb-preview-gif-align` | 同表同 keep、materialize、onepass 仅 frameRaw |
+| `vbb-gif-chunk-frames` | 分块 = 整窗网格 + 帧号取块；禁止块头时间 trim；物化打 `[vbb-mat]` |
+| `vbb-trim-cutouts-speed` | 物化短上报 → keep；删中间后倍速按 keep 总和 |
 | `mp4-timeline` | 采样表、`exclusiveEndIndexAtSec` / `sampleSpanSec`、校准 |
 
 改 `40-vbb.js` 后：`node tools/scripts/build-v2g-suite.cjs` + `node tools/scripts/verify-arch.cjs`；功能改动 `node tools/bump-version.cjs`。
@@ -261,6 +270,7 @@
 | 点 ± / 到末帧 / 拖到末尾后自己开播 | §3.5：暂停态是否回绕；`loopFromFileEnd` / `vbbLoopFromFileEnd` / `vbbMediaPlaying` |
 | 接点 / 回绕闪一帧 | §3.5：`keepBoundaryHold` 是否还接在 rVFC 循环里；`expectedDisplayTime` 迟到是否扣了 |
 | 接点少一帧 | `armFramePainted` 是否在 seek **之前**挂上 |
-| GIF 比预览短（VFR） | §3.6：`spanSec` 是否按帧数 / 平均 fps |
+| GIF 比预览短（VFR） | §3.6：`spanSec` 是否按帧数 / 平均 fps；`vbbMaterializedKeepDuration` 是否放过偏短上报 |
+| GIF 删中间后比预览短 / 后段提前（手机分块） | §3.6 分块：是否又用块头 `trim=start=`；看日志块帧数是否满（旧 bug 第 5 块 56≠72） |
 | GIF 首尾偏一帧 | parity 文档 §11、时钟文档 |
 | 按钮 / 拖柄没反应 | §3.7 + §5 第 8 条；对照 #724 |

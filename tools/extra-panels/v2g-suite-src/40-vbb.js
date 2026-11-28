@@ -1062,7 +1062,9 @@
         const rep = Number(reported);
         const full = Math.max(0, Number(fullDuration) || 0);
         // 编码窗不得超过 keep：预裁/拼接上报偏长时若用 rep，GIF 会比预览多几帧
-        if (rep > 0.05 && rep <= keep + 0.05) return rep;
+        // 也不得明显短于 keep：上报若按「帧数÷整片平均 fps」算短，GIF 窗会截掉后几段（宁可少出帧，不丢内容）
+        const shortTol = Math.max(0.25, keep * 0.02);
+        if (rep > 0.05 && rep <= keep + 0.05 && rep >= keep - shortTol) return rep;
         // 禁止：缺 duration / 回退成原片整段 → 倍速按长片算、短拼接片被压得过短
         if (full > 0 && Math.abs(rep - full) < 0.05 && keep < full * 0.9) return keep;
         return keep;
@@ -1208,9 +1210,13 @@
           if (Array.isArray(out.segmentSpans) && out.segmentSpans.length === spanN) {
             segmentSpans = out.segmentSpans.map((s) => Math.max(0.05, Number(s) || 0));
           }
+          const matDur = vbbMaterializedKeepDuration(out.duration, keepSpan, duration);
+          vbbLog(
+            `[vbb-mat] ${out.exportMethod || method} 上报${Number(out.duration).toFixed(3)}s · keep ${keepSpan.toFixed(3)}s → 用${matDur.toFixed(3)}s · ${segmentSpans.length}段`
+          );
           return {
             file: outFile,
-            duration: vbbMaterializedKeepDuration(out.duration, keepSpan, duration),
+            duration: matDur,
             srcW: out.srcW || srcW,
             srcH: out.srcH || srcH,
             materialized: true,

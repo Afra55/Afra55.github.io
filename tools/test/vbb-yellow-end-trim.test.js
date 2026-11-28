@@ -54,7 +54,7 @@ t("palette / gifski 链：源 trim → fps → outTrim → select", () => {
   assert.ok(shared.includes("fps=${fps}:round=up") || /fps=\$\{fps\}:round=up/.test(shared));
   assert.ok(shared.includes("${outTrim}") || shared.includes("outTrim"));
   assert.ok(shared.includes("select='lt(n"));
-  assert.ok(shared.includes("buildRawArgs(useDenoise, dur, chunkFrames, ptsStart)"));
+  assert.ok(shared.includes("buildRawArgs(useDenoise, chunkFrames, chunkStartFrame)"));
 });
 
 t("注释说明根因：凑帧读窗外 + fps EOF flush", () => {
